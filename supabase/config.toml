@@ -1,0 +1,27 @@
+# Supabase CLI project config.
+#
+# NOTE: this must match VITE_SUPABASE_URL in .env, or `supabase functions deploy`
+# / `supabase db push` will target the wrong project.
+project_id = "vvwhausdjzdmsyxekrcl"
+
+# Hosted auth configuration — declared deliberately narrowly.
+#
+# `supabase config push` writes only the properties this file declares and leaves
+# every other hosted setting alone. This is NOT `supabase init`'s full template:
+# pushing that would reset the dashboard's real values (email confirmations, TOTP
+# enrolment, storage analytics) to CLI defaults.
+#
+# site_url is where auth emails (confirmation, password reset, and OAuth
+# callbacks) send the user back to, and `additional_redirect_urls` is the
+# allow-list those links must match. Both still point at local development: update
+# them to the deployed domain before launch, or every reset email links to a site
+# that only exists on your machine. The dev ports here match vite.config.ts (8080)
+# plus Vite's fallback default (5173).
+[auth]
+site_url = "http://localhost:8080"
+additional_redirect_urls = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:5173",
+]
