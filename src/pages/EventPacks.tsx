@@ -238,7 +238,20 @@ const EventPacks = () => {
       setShowBasket(false);
       toast({ title: "Event Packs unlocked 🎉", description: "Lifetime access — they'll restore on any device you sign in to." });
     } catch (e) {
-      toast({ title: "Purchase failed", description: e.message ?? "Please try again", variant: "destructive" });
+      const msg = e instanceof Error ? e.message : String(e ?? "");
+      // claim_event_pack now resolves the price from public.event_packs and
+      // refuses to hand out a paid pack without a verified purchase, so a
+      // basket of priced packs cannot be claimed. Until Play Billing is wired
+      // to this screen, say that plainly rather than reporting a failure that
+      // reads like the user's card was declined.
+      if (/purchase required/i.test(msg)) {
+        toast({
+          title: "Pack purchases aren't live yet",
+          description: "Event Packs will be buyable in a coming update — nothing has been charged.",
+        });
+        return;
+      }
+      toast({ title: "Purchase failed", description: msg || "Please try again", variant: "destructive" });
     }
   };
 

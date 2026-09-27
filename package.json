@@ -12,6 +12,7 @@
     "build:native": "vite build --mode native",
     "gen:money": "node scripts/gen-money-mirror.cjs",
     "gen:avatars": "node scripts/gen-avatar-catalog-sql.cjs",
+    "gen:packs": "node scripts/gen-event-packs-sql.cjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "typecheck": "npm run typecheck:app && npm run typecheck:functions",
