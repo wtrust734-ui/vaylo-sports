@@ -12,7 +12,14 @@ interface Coach { user_id: string; display_name: string; bio?: string; specialti
 export default function HumanCoaches({ currency = "USD" }: { currency?: string }) {
   const { user } = useAuth();
   const [coaches, setCoaches] = useState<Coach[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
+  type CoachBooking = {
+    id: string;
+    starts_at: string;
+    duration_minutes: number;
+    status: string;
+    video_link: string | null;
+  };
+  const [bookings, setBookings] = useState<CoachBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatSports } from "@/lib/profile";
 import AIConnectionTest from "@/components/AIConnectionTest";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
+import PersonalizationSetting from "@/components/settings/PersonalizationSetting";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CosmeticShop from "@/components/profile/CosmeticShop";
 import { cosmeticColor, cosmeticLabel, isAnimated, useCosmetics } from "@/lib/cosmetics";
@@ -212,6 +213,11 @@ const Profile = () => {
 
       <div className="px-5 mb-5">
         <AccountSubscriptionCard />
+      </div>
+
+      {/* Personalisation — one toggle: tailored app vs. everything */}
+      <div className="px-5 mb-5">
+        <PersonalizationSetting />
       </div>
 
       {/* Community — hidden until VITE_DISCORD_INVITE_URL is configured. */}

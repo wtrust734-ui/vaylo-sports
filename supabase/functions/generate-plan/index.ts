@@ -4,6 +4,7 @@ import { MODELS } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import { authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
+import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
 // Prompt-stuffing caps — this function spends real AI budget.
 const MAX_PB_ITEMS = 20;
@@ -76,9 +77,9 @@ Deno.serve(async (req) => {
     let serverCaps: ReturnType<typeof getAgeCaps> | null = null;
     try {
       const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const dossier: Record<string, any> = await fetchAthleteDossier(serviceClient, userId, pbs);
+      const dossier: Record<string, unknown> = await fetchAthleteDossier(serviceClient, userId, pbs);
       dossierText = formatDossierForPrompt(dossier);
-      serverCaps = dossier?.profile?.ageCaps ?? null;
+      serverCaps = ((dossier?.profile as { ageCaps?: ReturnType<typeof getAgeCaps> } | null)?.ageCaps) ?? null;
     } catch (_e) {
       // dossier is best-effort; don't block plan generation
     }
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
       : caps;
 
     // Clamp quiz availability if present
-    let safeQuiz: Record<string, any> = { ...quiz };
+    let safeQuiz: Record<string, unknown> = { ...(quiz as Record<string, unknown> | undefined) };
     if (typeof safeQuiz.daysPerWeek === "number") {
       const maxDays = Math.min(effectiveCaps.maxSessionsPerWeek, Math.max(1, 7 - effectiveCaps.minRestDays));
       safeQuiz = { ...safeQuiz, daysPerWeek: Math.min(safeQuiz.daysPerWeek, maxDays) };
@@ -125,9 +126,13 @@ Deno.serve(async (req) => {
 
     const capsLine = `HARD CAPS (enforced): max ${effectiveCaps.maxSessionsPerWeek} sessions/week, max ${effectiveCaps.maxMinutesPerSession} min/session, RPE ≤${effectiveCaps.maxRPE}, ≥${effectiveCaps.minRestDays} rest days/week, deload every ${effectiveCaps.deloadEvery} weeks. Do NOT exceed these caps even if the quiz asks for more.`;
 
+    // Family voice: the plan structure adapts to what the sport demands.
+    const voiceDirective = coachVoiceDirective(sport);
+
     const system = `You are an elite sports coach generating structured training plans.
 ${ageGuidance}
 ${capsLine}
+${voiceDirective}
 ${dossierText ? `\n${dossierText}\n— Use the dossier to tailor volume, focus and exercise selection to THIS athlete (PBs, injuries, goals, recovery). Avoid movements that aggravate listed injuries.` : ""}
 Return ONLY valid JSON matching this exact schema (no markdown, no prose):
 {
@@ -198,14 +203,14 @@ ${dossierText ? `Athlete dossier already in system prompt — do not ask for it 
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content ?? "{}";
-    let parsed: any;
+    let parsed: { weeks?: unknown } | null = null;
     try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
     catch {
       await refundAndReset();
       return json({ error: "AI returned invalid JSON" }, 502);
     }
 
-    const weeks = Array.isArray(parsed?.weeks) ? parsed.weeks : [];
+    const weeks = Array.isArray(parsed?.weeks) ? (parsed.weeks as unknown[]) : [];
     if (weeks.length === 0) {
       await refundAndReset();
       return json({ error: "AI returned an empty plan" }, 502);

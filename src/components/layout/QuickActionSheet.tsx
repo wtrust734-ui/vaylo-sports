@@ -3,18 +3,22 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, X, Dumbbell, Trophy, HeartPulse, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { usePersonalization } from "@/hooks/usePersonalization";
+import type { FeatureKey } from "@/lib/personalization/features";
 
 const ACTIONS = [
-  { icon: Dumbbell, labelKey: "quickActions.logWorkout", descKey: "quickActions.logWorkoutDesc", path: "/workouts" },
-  { icon: Trophy, labelKey: "quickActions.logResult", descKey: "quickActions.logResultDesc", path: "/events" },
-  { icon: HeartPulse, labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery" },
-  { icon: Pencil, labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr" },
+  { icon: Dumbbell, labelKey: "quickActions.logWorkout", descKey: "quickActions.logWorkoutDesc", path: "/workouts", feature: "training.workouts" as FeatureKey },
+  { icon: Trophy, labelKey: "quickActions.logResult", descKey: "quickActions.logResultDesc", path: "/events", feature: "compete.events" as FeatureKey },
+  { icon: HeartPulse, labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery", feature: "recover.recovery" as FeatureKey },
+  { icon: Pencil, labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr", feature: "perform.vpr" as FeatureKey },
 ] as const;
 
 const QuickActionSheet = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const personalization = usePersonalization();
+  const actions = personalization.visible([...ACTIONS]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };
 
@@ -45,7 +49,7 @@ const QuickActionSheet = () => {
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.07] via-transparent to-transparent" />
         <div className="relative">
-        {ACTIONS.map((a) => (
+        {actions.map((a) => (
           <button
             key={a.path}
             type="button"

@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge } from "@/lib/scoring";
 import { toast } from "sonner";
 import SponsoredSlot from "@/components/sponsor/SponsoredSlot";
+import { orderByFamily } from "@/lib/personalization/challengeSuggestions";
 
 
 interface Challenge {
@@ -32,7 +33,7 @@ const Challenges = () => {
   const [mine, setMine] = useState<Record<string, Participant>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [prefill, setPrefill] = useState<any>(null);
+  const [prefill, setPrefill] = useState<Suggestion | null>(null);
 
 
   const load = async () => {
@@ -156,7 +157,7 @@ const Challenges = () => {
         ))}
         <div className="ml-auto flex items-center gap-1 text-xs shrink-0">
           <Filter size={12} className="text-muted-foreground" />
-          <select value={scope} onChange={e => setScope(e.target.value as ChallengeScope)} className="bg-card border border-border rounded-lg px-2 py-1">
+          <select value={scope} onChange={e => setScope(e.target.value as (typeof SCOPES)[number])} className="bg-card border border-border rounded-lg px-2 py-1">
             {SCOPES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -301,7 +302,7 @@ const FALLBACK: Suggestion[] = [
   { title: "10 workouts this month", icon: "🎯", reason: "Solid monthly base", type: "count", scope: "monthly", sport: null, target_value: 10, target_unit: "workouts" },
 ];
 
-function buildSuggestions(profile: any, items: Challenge[], mine: Record<string, Participant>): Suggestion[] {
+function buildSuggestions(profile: { sport?: string | null; goals?: string[] | null } | null, items: Challenge[], mine: Record<string, Participant>): Suggestion[] {
   const sport = (profile?.sport || "").toLowerCase();
   const goals: string[] = (profile?.goals || []).map((g: string) => g.toLowerCase());
   const list: Suggestion[] = [];
@@ -319,15 +320,19 @@ function buildSuggestions(profile: any, items: Challenge[], mine: Record<string,
   // Deduplicate + filter out titles already present as joined challenges
   const joinedTitles = new Set(Object.keys(mine).map(id => items.find(c => c.id === id)?.title));
   const seen = new Set<string>();
-  return list.filter(s => {
+  const filtered = list.filter(s => {
     if (joinedTitles.has(s.title)) return false;
     if (seen.has(s.title)) return false;
     seen.add(s.title);
     return true;
-  }).slice(0, 3);
+  });
+
+  // Family-aware ordering: distance first for endurance, counts for team/strength.
+  const sports = (profile?.sport || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+  return orderByFamily(filtered, sports).slice(0, 3);
 }
 
-const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose: () => void; onCreated: () => void; userId: string; prefill?: any }) => {
+const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose: () => void; onCreated: () => void; userId: string; prefill?: Suggestion | null }) => {
   const [title, setTitle] = useState(prefill?.title ?? "");
   const [type, setType] = useState(prefill?.type ?? "distance");
   const [scope, setScope] = useState(prefill?.scope ?? "weekly");

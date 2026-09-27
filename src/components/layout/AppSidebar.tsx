@@ -51,6 +51,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatSports } from "@/lib/profile";
 import { discordInviteUrl } from "@/config/community";
+import { usePersonalization } from "@/hooks/usePersonalization";
+import { NAV_CATALOG } from "@/lib/personalization/nav";
 import logo from "@/assets/logo.jpg";
 
 function CommunityLink() {
@@ -184,16 +186,44 @@ function loadExpanded(): Record<string, boolean> {
 }
 
 const AppSidebar = () => {
-  const [open, setOpen] = useState(false);
+  const [open, setShowAllOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { profile, signOut } = useAuth();
+  const personalization = usePersonalization();
+  const setOpen = setShowAllOpen; // keep existing naming intact
+
+  // Personalised nav: same groups/icons, filtered + reordered per athlete.
+  const navGroupsFiltered = useMemo<NavGroup[]>(() => {
+    const iconFor = new Map(navGroups.flatMap((g) => g.items.map((it) => [it.path, it.icon] as const)));
+    const groupIcon = new Map(navGroups.map((g) => [g.titleKey, g.icon] as const));
+    const byTitle = new Map(navGroups.map((g) => [g.titleKey, g] as const));
+
+    return NAV_CATALOG.map((spec) => {
+      const base = byTitle.get(spec.titleKey);
+      if (!base) return null;
+      const items: NavItem[] = personalization
+        .visible(spec.items.map((it) => ({ ...it })))
+        .map(({ labelKey, path }) => ({
+          labelKey,
+          path,
+          icon: iconFor.get(path) ?? base.icon,
+        }));
+      if (items.length === 0) return null; // whole group irrelevant
+      return {
+        titleKey: spec.titleKey,
+        hubPath: spec.hubPath,
+        icon: groupIcon.get(spec.titleKey) ?? base.icon,
+        items,
+      };
+    }).filter((g): g is NavGroup => g !== null);
+  }, [personalization]);
 
   const activeGroupKey = useMemo(() => {
-    const found = navGroups.find((g) => groupContainsPath(g, location.pathname));
+    const found = navGroupsFiltered.find((g) => groupContainsPath(g, location.pathname));
     return found?.titleKey ?? null;
-  }, [location.pathname]);
+  }, [navGroupsFiltered, location.pathname]);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const stored = loadExpanded();
@@ -396,7 +426,7 @@ const AppSidebar = () => {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 pb-4 no-scrollbar" aria-label={t("navigation.sections")}>
-          {navGroups.map((g) => renderGroup(g, "desktop"))}
+          {navGroupsFiltered.map((g) => renderGroup(g, "desktop"))}
         </nav>
         <div className="border-t border-white/[0.06] px-4 py-4">
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-3 flex items-center gap-3">
@@ -457,7 +487,7 @@ const AppSidebar = () => {
                 </button>
               </div>
               <nav className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar" aria-label={t("navigation.sections")}>
-                {navGroups.map((g) => renderGroup(g, "mobile"))}
+                {navGroupsFiltered.map((g) => renderGroup(g, "mobile"))}
               </nav>
               <div className="border-t border-white/[0.06] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <CommunityLink />

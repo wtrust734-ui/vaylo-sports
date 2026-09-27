@@ -5,6 +5,7 @@ import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { throttled } from "../_shared/guard.ts";
+import { coachVoiceDirective, familyForCoach } from "../_shared/coachVoice.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -68,7 +69,8 @@ serve(async (req) => {
       });
     }
     for (const m of messages) {
-      if (!m || typeof m !== "object" || typeof (m as any).content !== "string" || (m as any).content.length > 8000) {
+      const content = (m as { content?: unknown } | null)?.content;
+      if (!m || typeof m !== "object" || typeof content !== "string" || content.length > 8000) {
         return new Response(JSON.stringify({ error: "Invalid message payload" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -101,15 +103,19 @@ serve(async (req) => {
 
     // ---- Full athlete dossier (PBs, VPR history via metrics, goals, injuries, readiness, memories) ----
     let dossierBlock = "";
+    let athleteSport: string | null = null;
     try {
       const dossier = await fetchAthleteDossier(serviceClient, user.id, Array.isArray(pbs) ? pbs : null);
       dossierBlock = formatDossierForPrompt(dossier);
+      athleteSport = ((dossier?.profile as { sport?: string | null } | undefined)?.sport) ?? null;
     } catch (e) {
       console.error("dossier fetch failed", e);
       // Fallback to minimal profile if dossier fails
       const { data: profile } = await serviceClient.from("profiles").select("credits, sport, full_name, date_of_birth, weight_kg, height_cm, goals, experience_level").eq("user_id", user.id).single();
+      athleteSport = profile?.sport ?? null;
       dossierBlock = `ATHLETE PROFILE:\n- Name: ${profile?.full_name || "Unknown"}\n- Sport: ${profile?.sport || "Unknown"}\n- Level: ${profile?.experience_level || "Unknown"}\n- Age: ${profile?.date_of_birth ? Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000) : "Unknown"}\n- Weight: ${profile?.weight_kg ? profile.weight_kg + "kg" : "Unknown"}\n- Height: ${profile?.height_cm ? profile.height_cm + "cm" : "Unknown"}\n- Goals: ${profile?.goals?.join(", ") || "Not set"}`;
     }
+    const voiceDirective = coachVoiceDirective(athleteSport);
 
     const systemPrompt = `You are Vaylo Sports Coach — an elite high-performance sports coach AI inside the Vaylo Sports app.
 
@@ -120,6 +126,8 @@ BEHAVIOUR:
 - Short, sharp responses. Bullet points when useful.
 - After every response, suggest a clear next action.
 - ALWAYS tailor advice to the athlete's dossier below (sport, PBs, injuries, goals, readiness). If injured, never prescribe aggravating movements. If readiness is low, prioritize recovery.
+
+${voiceDirective}
 
 CAPABILITIES:
 1. Training Plans — Generate detailed sessions and weekly plans with EXACT exercises, sets, reps, rest times, and RPE targets. Respect age caps in dossier (max sessions, max RPE). When creating a training plan, provide a FULL structured plan with warmup, main session, and cooldown for EACH day.
