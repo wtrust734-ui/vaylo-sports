@@ -5,21 +5,29 @@ on:
     branches: [main]
     paths:
       - "src/**"
+      - "supabase/**"
       - "android/**"
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
       - "vite.config.ts"
+      - "vitest.config.ts"
+      - "tsconfig*.json"
+      - "eslint.config.js"
       - ".github/workflows/android-debug.yml"
   pull_request:
     branches: [main]
     paths:
       - "src/**"
+      - "supabase/**"
       - "android/**"
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
       - "vite.config.ts"
+      - "vitest.config.ts"
+      - "tsconfig*.json"
+      - "eslint.config.js"
       - ".github/workflows/android-debug.yml"
   workflow_dispatch:
 
@@ -36,17 +44,31 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Must satisfy `@capacitor/cli`'s `engines.node` (>=22.0.0). Its bin
+          # script checks the version and exits 1 before doing anything, which is
+          # how `cap sync` failed instantly on this Node 20 pin.
+          node-version: "22"
           cache: npm
 
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Build web assets
-        run: npm run build
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build web assets for the native shell
+        # `build:native` (base "./") is what ships in the APK; plain `build`
+        # (base "/") only works when the page is served from a root path.
+        run: npm run build:native
 
       - name: Sync Capacitor Android assets
         run: npx cap sync android
