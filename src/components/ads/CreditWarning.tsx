@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, X, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { creditCost } from "@/lib/credits";
+import { requestCreditTopUp } from "@/lib/topUpStore";
 
 const CreditWarning = () => {
   const { profile } = useAuth();
-  const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
@@ -40,11 +40,19 @@ const CreditWarning = () => {
           <p className="text-xs font-semibold text-energy text-center">🎁 Use code LOW15 for 15% off!</p>
         </div>
         <motion.button
-          onClick={() => { setShow(false); setDismissed(true); navigate("/market"); }}
+          onClick={() => {
+            setShow(false); setDismissed(true);
+            // Sell a concrete goal, not a currency: the shortfall to afford the
+            // cheapest premium unlock (e.g. Form Analysis) opens the top-up
+            // sheet with the pack that covers it.
+            const balance = profile?.credits ?? 0;
+            const goal = creditCost("form_analysis_unlock");
+            void requestCreditTopUp({ shortfall: Math.max(1, goal - balance), reasonLabel: "Form Analysis" });
+          }}
           whileTap={{ scale: 0.98 }}
           className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow text-sm"
         >
-          <ShoppingBag size={16} /> Get More Credits
+          <ShoppingBag size={16} /> Top up & unlock Form Analysis
         </motion.button>
       </motion.div>
     </AnimatePresence>

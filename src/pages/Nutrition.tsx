@@ -7,18 +7,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
+import type { Tables } from "@/integrations/supabase/types";
 
 const Nutrition = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const spendWithTopUp = useSpendWithTopUp();
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(3000);
   const [showWaterGoalEdit, setShowWaterGoalEdit] = useState(false);
   const [newWaterGoal, setNewWaterGoal] = useState("3000");
   const [addAmount, setAddAmount] = useState("250");
-  const [meals, setMeals] = useState<any[]>([]);
+  const [meals, setMeals] = useState<Tables<"meal_logs">[]>([]);
   const [showAddMeal, setShowAddMeal] = useState(false);
   const [mealName, setMealName] = useState("");
   const [mealCalories, setMealCalories] = useState("");
@@ -28,7 +31,7 @@ const Nutrition = () => {
   const [mealType, setMealType] = useState<string>("meal");
 
   const [showCreatePlan, setShowCreatePlan] = useState(false);
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<Tables<"nutrition_plans">[]>([]);
   const [planTitle, setPlanTitle] = useState("");
   const [planGoal, setPlanGoal] = useState("Maintain");
   const [planCalories, setPlanCalories] = useState("2200");
@@ -38,7 +41,7 @@ const Nutrition = () => {
   const [planWeeks, setPlanWeeks] = useState("4");
 
   const [showScan, setShowScan] = useState(false);
-  const [scanResult, setScanResult] = useState<any>(null);
+  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,7 +150,7 @@ const Nutrition = () => {
       }
       toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Free with Nutrition Pack." });
       await refreshProfile();
-    } catch (err: any) {
+    } catch (err) {
       toast({ title: "Scan failed", description: err.message, variant: "destructive" });
     } finally {
       setScanning(false);
@@ -192,13 +195,15 @@ const Nutrition = () => {
     if (insertError) { toast({ title: "Couldn't save your plan", description: insertError.message, variant: "destructive" }); return; }
 
     if (cost > 0) {
-      const spend = await spendCredits("nutrition_plan_week", { quantity: weeks, reason: `Nutrition plan: ${planTitle || planGoal} (${weeks} weeks)` });
+      // Insufficient credits open the global top-up sheet; on purchase the same
+      // spend is retried, so the plan (already saved) just completes.
+      const spend = await spendWithTopUp("nutrition_plan_week", { quantity: weeks, reason: `Nutrition plan: ${planTitle || planGoal} (${weeks} weeks)` });
       if (!spend.success) {
         if (created?.id) {
           const { error: rollbackError } = await supabase.from("nutrition_plans").delete().eq("id", created.id);
           if (rollbackError) console.error("nutrition plan rollback failed:", rollbackError.message);
         }
-        toast({ title: "Not enough credits", description: spendErrorMessage("nutrition_plan_week", spend, weeks), variant: "destructive" });
+        if (spend.dismissedTopUp) toast({ title: "Not enough credits", description: spendErrorMessage("nutrition_plan_week", spend, weeks), variant: "destructive" });
         return;
       }
     }

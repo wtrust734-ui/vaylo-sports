@@ -23,6 +23,7 @@ import SubscriptionsSection from "@/components/market/SubscriptionsSection";
 import LifetimeSection from "@/components/market/LifetimeSection";
 import CoachingSection from "@/components/market/CoachingSection";
 import CreditCostsList from "@/components/market/CreditCostsList";
+import FamilyPickBanner from "@/components/market/FamilyPickBanner";
 
 // PHASE 4 — the Market is a four-section shop: Credit Packs, Credit Subscriptions,
 // Lifetime Plans and Human Coaching. Purchase logic (basket + process-purchase) and
@@ -39,7 +40,15 @@ const Market = () => {
     currency: "USD",
     tier_code: "A",
   });
-  const [basket, setBasket] = useState<any[]>([]);
+  type BasketRow = {
+    id: string;
+    product_id: string;
+    product_type: string;
+    product_name: string;
+    price_cents: number;
+    [key: string]: unknown;
+  };
+  const [basket, setBasket] = useState<BasketRow[]>([]);
   const [showBasket, setShowBasket] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -84,7 +93,11 @@ const Market = () => {
   }, [basket]);
 
   const doubleOffer = useMemo(() => getDoubleCreditsOffer(offers), [offers]);
-  const starterOffer = useMemo(() => offers.find((o) => o.offer_type === "starter") ?? null, [offers]);
+  // Starter offers must be live rows: an expired row is hidden, not shown.
+  const starterOffer = useMemo(
+    () => offers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
+    [offers]
+  );
 
   const enhancedPacks = useMemo(
     () => packs.map((p) => (doubleOffer ? applyOffer(p, doubleOffer) : p)),
@@ -286,7 +299,7 @@ const Market = () => {
       <MarketSectionNav active={section} onChange={setSection} />
       <p className="px-5 pb-4 pt-2 text-xs text-muted-foreground">{activeSection.blurb}</p>
 
-      {/* Starter offer (packs only) */}
+      {/* Starter offer (packs only) — totals derived from the linked pack, never hard-coded */}
       {starterOffer && section === "packs" && (
         <div className="mb-4 px-5">
           <motion.button
@@ -296,7 +309,7 @@ const Market = () => {
               name: starterOffer.title,
               price_cents: starterOffer.price_cents ?? 0,
               type: "offer",
-              credits: 120,
+              credits: (packs.find((p) => p.id === starterOffer.pack_id)?.credits ?? 0) + (packs.find((p) => p.id === starterOffer.pack_id)?.bonus ?? 0),
               bonus: starterOffer.bonus_flat,
             })}
             className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-electric-purple via-primary to-electric-purple p-[1px] text-start">
@@ -312,9 +325,13 @@ const Market = () => {
               <div className="flex items-end justify-between">
                 <div className="flex items-baseline gap-2">
                   <Zap size={18} className="text-primary" />
-                  <span className="font-display text-2xl font-bold">120</span>
+                  <span className="font-display text-2xl font-bold">
+                    {(packs.find((p) => p.id === starterOffer.pack_id)?.credits ?? 0) + (packs.find((p) => p.id === starterOffer.pack_id)?.bonus ?? 0)}
+                  </span>
                   <span className="text-xs text-muted-foreground">credits</span>
-                  <span className="ml-1 text-sm font-bold text-energy">+{starterOffer.bonus_flat} bonus</span>
+                  {starterOffer.bonus_flat > 0 && (
+                    <span className="ml-1 text-sm font-bold text-energy">+{starterOffer.bonus_flat} bonus</span>
+                  )}
                 </div>
                 <span className="font-display text-xl font-bold text-gradient-electric">
                   {formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}
@@ -324,6 +341,9 @@ const Market = () => {
           </motion.button>
         </div>
       )}
+
+      {/* Picked for you — one unlock recommendation per sport family */}
+      {section === "packs" && <FamilyPickBanner currency={region.currency} />}
 
       {/* Sections */}
       <AnimatePresence mode="wait">

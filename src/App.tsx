@@ -18,6 +18,7 @@ import PromoPopup from "@/components/ads/PromoPopup";
 import StreakShield from "@/components/ads/StreakShield";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
 import PaywallModal from "@/components/PaywallModal";
+import CreditTopUpSheet from "@/components/market/CreditTopUpSheet";
 const Notifications = lazy(() => import("./pages/Notifications"));
 const ReferralLeaderboard = lazy(() => import("./pages/ReferralLeaderboard"));
 const ChallengeInvite = lazy(() => import("./pages/ChallengeInvite"));
@@ -255,6 +256,7 @@ const App = () => (
             <PaywallModal />
             <PromoPopup />
             <StreakShield />
+            <CreditTopUpSheet />
             <MilestoneCelebration />
           </SubscriptionProvider>
         </AuthProvider>

@@ -10,10 +10,21 @@ import { toast } from "sonner";
 import { creditCost } from "@/lib/credits";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { shortfallFromEdgeError } from "@/lib/shortfall";
+import { requestCreditTopUp } from "@/lib/topUpStore";
 
 const Tactics = () => {
   const { user, profile, refreshProfile } = useAuth();
-  const [plans, setPlans] = useState<any[]>([]);
+  type TacticalPlanRow = {
+    id: string;
+    created_at: string;
+    opponent_style?: string | null;
+    generated_priorities?: string[] | null;
+    warmup_customization?: string | null;
+    psychological_cues?: string | null;
+    risk_notes?: string | null;
+  };
+  const [plans, setPlans] = useState<TacticalPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [briefing, setBriefing] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -22,7 +33,7 @@ const Tactics = () => {
   const load = async () => {
     if (!user) return;
     const { data } = await supabase.from("tactical_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20);
-    setPlans(data || []); setLoading(false);
+    setPlans((data || []) as unknown as TacticalPlanRow[]); setLoading(false);
   };
 
   const generate = async () => {
@@ -48,7 +59,18 @@ const Tactics = () => {
           const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
           // Auth/limit/charge failures must stop the flow — otherwise a free
           // fallback plan would silently replace the paid AI result.
-          if (status === 401 || status === 402 || status === 429) {
+          if (status === 402) {
+            // Charge failure = purchase opportunity: offer a top-up with the
+            // exact shortfall the server reported, then let the athlete retry.
+            const sf = await shortfallFromEdgeError(error);
+            if (sf) {
+              const outcome = await requestCreditTopUp({ shortfall: sf.shortfall, reasonLabel: "Tactical Analysis" });
+              if (outcome.purchased) { setGenerating(false); toast.message("Credits added — tap Generate again."); return; }
+            }
+            toast.error(msg);
+            return;
+          }
+          if (status === 401 || status === 429) {
             toast.error(msg);
             return;
           }
@@ -67,7 +89,7 @@ const Tactics = () => {
             priorities = String(data.result).split("\n").map((s: string) => s.replace(/^[-•\d.\s]+/, "").trim()).filter(Boolean).slice(0, 6);
           }
         }
-      } catch {}
+      } catch { /* AI call failed — fall back to the canned priorities below */ }
 
       if (priorities.length === 0) {
         priorities = [
@@ -94,7 +116,7 @@ const Tactics = () => {
       setBriefing("");
       toast.success("Tactical plan generated");
       load();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(e.message || "Failed to generate");
     } finally { setGenerating(false); }
   };
@@ -134,7 +156,7 @@ const Tactics = () => {
             <div className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</div>
             <div className="font-semibold mt-1 text-sm whitespace-pre-wrap">{p.opponent_style || "General prep"}</div>
             <ul className="mt-3 space-y-1.5 text-sm">
-              {(p.generated_priorities || []).map((pr: string, j: number) => (
+              {(p.generated_priorities ?? []).map((pr: string, j: number) => (
                 <li key={j} className="flex gap-2"><span className="text-primary">▸</span>{pr}</li>
               ))}
             </ul>

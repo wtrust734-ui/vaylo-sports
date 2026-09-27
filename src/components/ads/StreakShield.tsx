@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 
 
 const DISMISS_KEY = "vaylo_shield_dismissed_date";
@@ -20,6 +21,7 @@ const StreakShield = () => {
   const [show, setShow] = useState(false);
   const [buying, setBuying] = useState(false);
   const [atRisk, setAtRisk] = useState(false);
+  const spendWithTopUp = useSpendWithTopUp();
 
   useEffect(() => {
     if (!user) return;
@@ -53,9 +55,11 @@ const StreakShield = () => {
     if (!user) return;
     setBuying(true);
     const todayKey = localDateKey();
-    const spend = await spendCredits("streak_shield", { idempotencyKey: `shield:${user.id}:${todayKey}` });
+    // Insufficient credits open the top-up sheet; a purchase retries the same
+    // idempotent spend, so the shield still lands with one tap.
+    const spend = await spendWithTopUp("streak_shield", { idempotencyKey: `shield:${user.id}:${todayKey}` });
     setBuying(false);
-    if (!spend.success) { toast.error(spendErrorMessage("streak_shield", spend)); return; }
+    if (!spend.success) { if (spend.dismissedTopUp) toast.error(spendErrorMessage("streak_shield", spend)); return; }
     localStorage.setItem(SHIELD_KEY, localDateKey());
     await refreshProfile?.();
     toast.success("🛡️ Streak Shield activated — your streak is safe for today.");
@@ -88,9 +92,9 @@ const StreakShield = () => {
             </div>
             <span className="text-sm font-display font-bold">{SHIELD_COST} credits</span>
           </div>
-          <motion.button whileTap={{ scale: 0.97 }} disabled={buying || !canAfford} onClick={buyShield}
+          <motion.button whileTap={{ scale: 0.97 }} disabled={buying} onClick={buyShield}
             className="w-full mt-4 bg-gradient-to-r from-energy to-energy/70 text-background font-bold py-3 rounded-xl shadow-glow disabled:opacity-50">
-            {buying ? "Activating…" : canAfford ? "Protect my streak" : `Need ${SHIELD_COST - (profile?.credits ?? 0)} more credits`}
+            {buying ? "Activating…" : canAfford ? "Protect my streak" : `Top up ${SHIELD_COST - (profile?.credits ?? 0)} credits & protect`}
           </motion.button>
           <button onClick={dismiss} className="w-full text-xs text-muted-foreground mt-2">Let it break</button>
         </motion.div>

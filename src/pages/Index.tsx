@@ -8,6 +8,8 @@ import { useVprSystem } from "@/lib/vprSystem";
 import VprHero from "@/components/vpr/VprHero";
 import { SectionHeader, Delta, Metric } from "@/components/ui/section";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
+import StarterOfferCard from "@/components/dashboard/StarterOfferCard";
+import { usePersonalization } from "@/hooks/usePersonalization";
 import { supabase } from "@/integrations/supabase/client";
 
 /** VPR factor labels come from the engine in English; map the known ones. */
@@ -158,6 +160,8 @@ const Index = () => {
         </motion.div>
       </header>
 
+      <StarterOfferCard />
+
       <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Your performance">
         <VprHero />
       </section>
@@ -243,13 +247,15 @@ const DailyExtras = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const rows = [
-    { label: t("hub.perform.goals"), desc: t("dashboard.goalsDesc"), path: "/goals" },
-    { label: t("dashboard.feedTitle"), desc: t("dashboard.feedDesc"), path: "/feed" },
-    { label: t("hub.compete.challenges"), desc: t("dashboard.challengesDesc"), path: "/challenges" },
+    { label: t("hub.perform.goals"), desc: t("dashboard.goalsDesc"), path: "/goals", feature: "perform.goals" as const },
+    { label: t("dashboard.feedTitle"), desc: t("dashboard.feedDesc"), path: "/feed", feature: "compete.communities" as const },
+    { label: t("hub.compete.challenges"), desc: t("dashboard.challengesDesc"), path: "/challenges", feature: "compete.challenges" as const },
   ];
+  const personalization = usePersonalization();
+  const visibleRows = personalization.visible(rows);
   return (
     <div className="space-y-2.5">
-      {rows.map((r) => (
+      {visibleRows.map((r) => (
         <button key={r.path} type="button" onClick={() => navigate(r.path)} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
           <span>
             <span className="block text-sm font-semibold">{r.label}</span>

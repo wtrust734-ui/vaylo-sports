@@ -6,7 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
-import { Tables } from "@/integrations/supabase/types";
+import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
+import { edgeErrorMessage } from "@/lib/edgeErrors";
+import { Tables, type Json } from "@/integrations/supabase/types";
 import { useNavigate } from "react-router-dom";
 import { getPrimarySport } from "@/lib/profile";
 import { getAgeCaps, buildClientDossier } from "@/lib/athleteDossier";
@@ -21,6 +23,7 @@ const durationOptions = [4, 6, 8, 12];
 const Training = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const spendWithTopUp = useSpendWithTopUp();
   const navigate = useNavigate();
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -57,7 +60,7 @@ const Training = () => {
   // Limiter test state
   const [limiterStep, setLimiterStep] = useState(0);
   const [limiterAnswers, setLimiterAnswers] = useState<Record<string, number>>({});
-  const [limiterResult, setLimiterResult] = useState<{ limiters: { name: string; score: number }[]; plan: any } | null>(null);
+  const [limiterResult, setLimiterResult] = useState<{ limiters: { name: string; score: number }[]; plan: PlanData | null } | null>(null);
   const [creatingLimiterPlan, setCreatingLimiterPlan] = useState(false);
 
   const limiterQuestions = [
@@ -74,7 +77,8 @@ const Training = () => {
   ];
 
   // Performance log state
-  const [logs, setLogs] = useState<any[]>([]);
+  type PerformanceLog = Tables<"performance_logs">;
+  const [logs, setLogs] = useState<PerformanceLog[]>([]);
   const [showAddLog, setShowAddLog] = useState(false);
   const [logTitle, setLogTitle] = useState("");
   const [logDistance, setLogDistance] = useState("");
@@ -176,7 +180,7 @@ const Training = () => {
         recoveryDays: Math.max(planRecoveryDays, caps.minRestDays),
         ageCaps: caps,
       };
-      let planData: any = null;
+      let planData: PlanData | null = null;
       let chargeError: string | null = null;
       try {
         const { data: aiData, error: aiErr } = await supabase.functions.invoke("generate-plan", {
@@ -199,7 +203,7 @@ const Training = () => {
       const { data: inserted, error: insertError } = await supabase.from("training_plans").insert({
         user_id: user.id, title: title.trim() || `${goal} ${sport} Plan`, sport, goal, level, duration_weeks: duration,
         description: `${duration}-week ${goal.toLowerCase()} plan for ${sport.toLowerCase()} (age ${age}) · ${planDaysPerWeek}d/wk · ${planHoursPerWeek}h/wk · ${planIntensityPref} intensity${planTargetEvent ? ` · targeting ${planTargetEvent}` : ""}`,
-        plan_data: planData,
+        plan_data: planData as unknown as Json,
       }).select("id").single();
       if (insertError) throw insertError;
 
@@ -208,9 +212,39 @@ const Training = () => {
       await refreshProfile();
       toast({ title: "Plan Created! 🎯" });
       setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
-    } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
     finally { setLoading(false); }
   };
+
+  type PlanSession = {
+    day: number;
+    dayName?: string;
+    title: string;
+    type: string;
+    duration_minutes: number;
+    description?: string;
+    exercises?: { name: string; sets: string }[];
+    warmup?: { name: string; sets: string }[];
+    cooldown?: { name: string; sets: string }[];
+    isRest?: boolean;
+    isRecovery?: boolean;
+    skipped?: boolean;
+    originalTitle?: string;
+    originalExercises?: { name: string; sets: string }[];
+    [key: string]: unknown;
+  };
+
+  type PlanWeek = {
+    week: number;
+    sessions: PlanSession[];
+    isDeload?: boolean;
+    isHoliday?: boolean;
+    redistributedFrom?: number;
+    extraNote?: string;
+    [key: string]: unknown;
+  };
+
+  type PlanData = PlanWeek[];
 
   type PlanQuiz = {
     daysPerWeek: number; hoursPerWeek: number; sessionLengthPref: "short" | "standard" | "long";
@@ -659,9 +693,9 @@ const Training = () => {
     if (sessionIdx === -1) return;
     if (editSessionTitle) planData[weekIdx].sessions[sessionIdx].title = editSessionTitle;
     if (editSessionDuration) planData[weekIdx].sessions[sessionIdx].duration_minutes = parseInt(editSessionDuration);
-    const { error } = await supabase.from("training_plans").update({ plan_data: planData }).eq("id", selectedPlan.id);
+    const { error } = await supabase.from("training_plans").update({ plan_data: planData as unknown as Json });
     if (error) { toast({ title: "Couldn't save the session", description: error.message, variant: "destructive" }); return; }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData });
+    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
     setEditingSession(null);
     toast({ title: "Session updated! ✏️" });
   };
@@ -685,7 +719,7 @@ const Training = () => {
         planData[nextWeekIdx].extraNote = `Includes redistributed work from Week ${weekNum} (holiday)`;
       }
       // Replace sessions with light recovery for holiday
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s: any) => {
+      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
         if (s.isRest) return s;
         return {
           ...s, title: "Holiday — Light Movement (optional)", type: "holiday",
@@ -700,7 +734,7 @@ const Training = () => {
       });
     } else {
       // Restore original sessions
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s: any) => {
+      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
         if (s.originalTitle) {
           return { ...s, title: s.originalTitle, exercises: s.originalExercises, type: s.originalTitle.toLowerCase().replace(/[^a-z]/g, "_"), duration_minutes: 40, description: `Restored session` };
         }
@@ -708,9 +742,9 @@ const Training = () => {
       });
     }
     
-    const { error } = await supabase.from("training_plans").update({ plan_data: planData }).eq("id", selectedPlan.id);
+    const { error } = await supabase.from("training_plans").update({ plan_data: planData as unknown as Json });
     if (error) { toast({ title: "Couldn't update your week", description: error.message, variant: "destructive" }); return; }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData });
+    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
     toast({ title: !wasHoliday ? "Week marked as holiday 🏖️ — sessions redistributed to next week" : "Holiday removed — sessions restored" });
   };
 
@@ -722,14 +756,14 @@ const Training = () => {
     const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === dayNum);
     if (sessionIdx === -1) return;
     planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
-    const { error } = await supabase.from("training_plans").update({ plan_data: planData }).eq("id", selectedPlan.id);
+    const { error } = await supabase.from("training_plans").update({ plan_data: planData as unknown as Json });
     if (error) {
       // Put the local state back so the UI can't disagree with the database.
       planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
       toast({ title: "Couldn't update the session", description: error.message, variant: "destructive" });
       return;
     }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData });
+    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
   };
 
   // Limiter test
@@ -762,8 +796,10 @@ const Training = () => {
 
     setCreatingLimiterPlan(true);
     try {
-      const spend = await spendCredits("limiter_fix_plan", { reason: `Limiter Fix Plan (${LIMITER_WEEKS} weeks)` });
-      if (!spend.success) { setCreatingLimiterPlan(false); toast({ title: "Not enough credits", description: spendErrorMessage("limiter_fix_plan", spend), variant: "destructive" }); return; }
+      // Insufficient credits now open the global top-up sheet and retry the
+      // spend automatically after a successful purchase.
+      const spend = await spendWithTopUp("limiter_fix_plan", { reason: `Limiter Fix Plan (${LIMITER_WEEKS} weeks)` });
+      if (!spend.success) { setCreatingLimiterPlan(false); if (spend.dismissedTopUp) toast({ title: "Not enough credits", description: spendErrorMessage("limiter_fix_plan", spend), variant: "destructive" }); return; }
       // Generate plan focused on weakest areas
       const weakAreas = limiterResult.limiters.map(l => l.name);
       const planGoal = `Fix: ${weakAreas.slice(0, 3).join(", ")}`;
@@ -783,7 +819,7 @@ const Training = () => {
       setLimiterStep(0);
       setLimiterAnswers({});
       fetchPlans();
-    } catch (err: any) {
+    } catch (err) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
     setCreatingLimiterPlan(false);
@@ -981,7 +1017,7 @@ const Training = () => {
           </div>
         </div>
         <div className="px-5 space-y-3 mb-8">
-          {planData?.map((week: any) => (
+          {planData?.map((week) => (
             <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === selectedPlan.week_current ? "border-primary/30" : week.isHoliday ? "border-energy/30" : "border-border"}`}>
               <button onClick={() => setExpandedWeek(expandedWeek === week.week ? null : week.week)}
                 className="w-full flex items-center justify-between p-4">
@@ -1004,7 +1040,7 @@ const Training = () => {
                       </motion.button>
                     </div>
                     <div className="space-y-2">
-                      {week.sessions?.map((session: any, si: number) => (
+                      {week.sessions?.map((session, si) => (
                         <div key={si} className={`rounded-lg ${session.skipped ? "opacity-40" : ""} ${session.isRest ? "bg-muted/20 border border-dashed border-border" : session.isRecovery ? "bg-accent/5 border border-accent/10" : "bg-muted/50 border border-border"} overflow-hidden`}>
                           {editingSession?.week === week.week && editingSession?.day === session.day ? (
                             <div className="p-3 space-y-2">
@@ -1041,7 +1077,7 @@ const Training = () => {
                               {session.warmup && !session.skipped && (
                                 <div className="px-3 pb-1">
                                   <p className="text-[10px] font-semibold text-energy uppercase tracking-wider mb-0.5">Warm-up</p>
-                                  {session.warmup.map((ex: any, ei: number) => (
+                                  {session.warmup.map((ex, ei) => (
                                     <div key={ei} className="flex justify-between text-[10px] text-muted-foreground py-0.5">
                                       <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
                                     </div>
@@ -1052,7 +1088,7 @@ const Training = () => {
                               {session.exercises && !session.skipped && (
                                 <div className="px-3 pb-1">
                                   {!session.isRest && !session.isRecovery && <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Main Session</p>}
-                                  {session.exercises.map((ex: any, ei: number) => (
+                                  {session.exercises.map((ex, ei) => (
                                     <div key={ei} className="flex justify-between text-[10px] py-0.5">
                                       <span className="font-medium text-foreground">{ex.name}</span>
                                       <span className="text-muted-foreground text-right ml-2 flex-shrink-0 max-w-[50%]">{ex.sets}</span>
@@ -1064,7 +1100,7 @@ const Training = () => {
                               {session.cooldown && !session.skipped && (
                                 <div className="px-3 pb-2">
                                   <p className="text-[10px] font-semibold text-info uppercase tracking-wider mb-0.5">Cool-down</p>
-                                  {session.cooldown.map((ex: any, ei: number) => (
+                                  {session.cooldown.map((ex, ei) => (
                                     <div key={ei} className="flex justify-between text-[10px] text-muted-foreground py-0.5">
                                       <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
                                     </div>
