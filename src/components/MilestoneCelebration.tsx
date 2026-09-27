@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Share2, X, Volume2, VolumeX } from "lucide-react";
 import { lsGet, lsSet } from "@/lib/localStore";
-import { shareWithInvite } from "@/lib/share";
+import { shareContent, shareWithInvite } from "@/lib/share";
 
 export type MilestoneKey =
   | "first_workout" | "streak_7" | "workouts_50" | "first_pb" | "goal_reached";
@@ -62,7 +62,7 @@ const MilestoneCelebration = () => {
           g.gain.setValueAtTime(0.18, ctx.currentTime);
           g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
           o.start(); o.stop(ctx.currentTime + 0.5);
-        } catch {}
+        } catch { /* audio unavailable (autoplay policy, no device) — silent is fine */ }
       }
     };
     window.addEventListener("vaylo:milestone", fn);
@@ -73,7 +73,7 @@ const MilestoneCelebration = () => {
     if (!active) return;
     const m = MESSAGES[active];
     const text = `🏅 Vaylo Sports milestone: ${m.title}`;
-    await shareContent({ title: m.title, text });
+    await shareWithInvite({ title: m.title, text });
   };
 
   return (

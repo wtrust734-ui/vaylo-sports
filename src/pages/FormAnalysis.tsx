@@ -102,7 +102,7 @@ const FormAnalysis = () => {
       setAnalysisResult(data.result);
       toast({ title: "Analysis complete! 🎯" });
       setAnalyzing(false);
-    } catch (err: any) {
+    } catch (err) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
       setAnalyzing(false);
     }

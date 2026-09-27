@@ -7,6 +7,18 @@ import { joinChallenge } from "@/lib/scoring";
 import { stashPendingJoin } from "@/hooks/usePendingJoin";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
 
+type InviteChallenge = {
+  title: string;
+  description: string | null;
+  sport: string;
+  type: string;
+  target_value: number | string | null;
+  target_unit: string | null;
+  end_date: string;
+  participant_count: number | null;
+  icon: string | null;
+};
+
 /**
  * Public challenge invite page (/c/:id) — the landing surface for shared
  * challenge links. Works logged-out (view + sign-up-to-join) and logged-in
@@ -17,7 +29,7 @@ const ChallengeInvite = () => {
   const { id } = useParams();
   const nav = useNavigate();
   const { user, session } = useAuth();
-  const [ch, setCh] = useState<any>(null);
+  const [ch, setCh] = useState<InviteChallenge | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
@@ -43,9 +55,9 @@ const ChallengeInvite = () => {
         .limit(10);
       if (cancelled) return;
       const list = parts || [];
-      const names = list.length ? await fetchDisplayNames(list.map((p: any) => p.user_id)) : {};
+      const names = list.length ? await fetchDisplayNames(list.map((p) => p.user_id)) : {};
       if (cancelled) return;
-      setRanks(list.map((p: any) => ({ name: names[p.user_id] ?? UNKNOWN_ATHLETE, progress: Number(p.progress) || 0 })));
+      setRanks(list.map((p) => ({ name: names[p.user_id] ?? UNKNOWN_ATHLETE, progress: Number(p.progress) || 0 })));
 
       if (user) {
         const { data: mine } = await supabase
@@ -75,7 +87,7 @@ const ChallengeInvite = () => {
     setJoining(false);
     if (!res.error) {
       setJoined(true);
-      setCh((c: any) => (c ? { ...c, participant_count: (c.participant_count ?? 0) + 1 } : c));
+      setCh((c) => (c ? { ...c, participant_count: (c.participant_count ?? 0) + 1 } : c));
     }
   };
 

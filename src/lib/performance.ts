@@ -130,7 +130,7 @@ export function calculateVPR(metrics: MetricRow[], sport: string, position?: str
     buckets.repeatability.push(Math.max(0, 100 - Math.sqrt(variance) * 2));
   }
   const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-  const scores = {} as Record<string, number>;
+  const scores = {} as VPRScores;
   for (const k of Object.keys(buckets)) scores[k] = Math.round(avg(buckets[k]));
 
   // Renormalize over buckets that have data — adding one bench press shouldn't

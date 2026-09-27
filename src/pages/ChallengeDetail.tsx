@@ -7,14 +7,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge, updateChallengeProgress } from "@/lib/scoring";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
 import { toast } from "sonner";
+import type { Tables } from "@/integrations/supabase/types";
+
+type ChallengeRow = Tables<"challenges">;
+type ParticipantRow = { user_id: string; progress: number | null; status: string | null; completed_at: string | null; joined_at: string | null };
+type RankedParticipant = ParticipantRow & { name: string; rank: number };
 
 const ChallengeDetail = () => {
   const { id } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
-  const [ch, setCh] = useState<any>(null);
-  const [mine, setMine] = useState<any>(null);
-  const [ranks, setRanks] = useState<any[]>([]);
+  const [ch, setCh] = useState<ChallengeRow | null>(null);
+  const [mine, setMine] = useState<ParticipantRow | null>(null);
+  const [ranks, setRanks] = useState<RankedParticipant[]>([]);
   const [delta, setDelta] = useState("1");
 
   const load = async () => {
@@ -28,8 +33,8 @@ const ChallengeDetail = () => {
     // `profiles.full_name` here returned nothing, because profiles is self-read-only
     // under RLS — so every competitor in the ranking list showed as "Athlete".
     const names = ids.length ? await fetchDisplayNames(ids) : {};
-    setRanks(list.map((p: any, i: number) => ({ ...p, name: names[p.user_id] ?? UNKNOWN_ATHLETE, rank: i + 1 })));
-    if (user) setMine(list.find((p: any) => p.user_id === user.id) || null);
+    setRanks(list.map((p, i) => ({ ...p, name: names[p.user_id] ?? UNKNOWN_ATHLETE, rank: i + 1 })));
+    if (user) setMine(list.find((p) => p.user_id === user.id) || null);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id, user?.id]);
 
@@ -43,7 +48,8 @@ const ChallengeDetail = () => {
     if (!n || n <= 0) return toast.error("Enter a positive value");
     const { data, error } = await updateChallengeProgress(ch.id, n);
     if (error) return toast.error(error.message);
-    if (data?.completed) toast.success(`Challenge complete! +${data.reward_points} pts`);
+    const result = (data ?? {}) as { completed?: boolean | null; reward_points?: number | string | null };
+    if (result.completed) toast.success(`Challenge complete! +${result.reward_points} pts`);
     else toast.success(`Logged ${n} ${ch.target_unit}`);
     setDelta("1");
     load();

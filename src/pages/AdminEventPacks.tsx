@@ -90,7 +90,7 @@ export default function AdminEventPacks() {
     if (error) toast.error(error.message); else load();
   };
 
-  const set = (k: keyof Row, v: any) => setDraft((d) => ({ ...d, [k]: v }));
+  const set = <K extends keyof Row>(k: K, v: Row[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   return (
     <div className="min-h-screen bg-background px-5 pb-24 pt-14">

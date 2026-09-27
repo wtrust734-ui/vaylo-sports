@@ -6,6 +6,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
+import type { Tables } from "@/integrations/supabase/types";
+
+type FriendEntry = { user_id: string; name: string };
+type FriendRequestRow = Tables<"friend_requests">;
+type IncomingRequest = FriendRequestRow & { name: string };
 
 const Friends = () => {
   const { user } = useAuth();
@@ -13,9 +18,9 @@ const Friends = () => {
   const [myCode, setMyCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [friendCode, setFriendCode] = useState("");
-  const [friends, setFriends] = useState<any[]>([]);
-  const [pendingIn, setPendingIn] = useState<any[]>([]);
-  const [pendingOut, setPendingOut] = useState<any[]>([]);
+  const [friends, setFriends] = useState<FriendEntry[]>([]);
+  const [pendingIn, setPendingIn] = useState<IncomingRequest[]>([]);
+  const [pendingOut, setPendingOut] = useState<FriendRequestRow[]>([]);
   const friendsRef = useRef(null);
   const friendsInView = useInView(friendsRef, { once: true, margin: "-30px" });
 
@@ -84,7 +89,7 @@ const Friends = () => {
     toast({ title: "Request sent! 🤝" });
   };
 
-  const acceptRequest = async (req: any) => {
+  const acceptRequest = async (req: FriendRequestRow) => {
     if (!user) return;
     const { error: statusError } = await supabase.from("friend_requests").update({ status: "accepted" }).eq("id", req.id);
     if (statusError) { toast({ title: "Couldn't accept request", description: statusError.message, variant: "destructive" }); return; }
@@ -105,7 +110,7 @@ const Friends = () => {
     toast({ title: "Friend added! 🎉" });
   };
 
-  const declineRequest = async (req: any) => {
+  const declineRequest = async (req: FriendRequestRow) => {
     const { error } = await supabase.from("friend_requests").update({ status: "declined" }).eq("id", req.id);
     if (error) { toast({ title: "Couldn't decline request", description: error.message, variant: "destructive" }); return; }
     fetchRequests();

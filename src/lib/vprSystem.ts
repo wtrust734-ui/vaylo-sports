@@ -100,11 +100,14 @@ export function readinessFromLogs(
 export function checkInStreakFromLogs(logs: { log_date: string }[], today: string): number {
   const dates = new Set(logs.map((l) => l.log_date));
   let streak = 0;
-  const d = new Date(today);
+  // Parse as a local calendar day — `new Date("YYYY-MM-DD")` is UTC and would
+  // shift the whole streak a day west of UTC (see lib/dates.ts).
+  const [y, m, dNum] = today.split("-").map(Number);
+  const d = new Date(y, (m ?? 1) - 1, dNum ?? 1);
   // The streak counts back from today; a missing today does not zero yesterday's.
   if (!dates.has(today)) d.setDate(d.getDate() - 1);
   for (;;) {
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     if (!dates.has(key)) break;
     streak++;
     d.setDate(d.getDate() - 1);

@@ -57,7 +57,20 @@ Deno.serve(async (req) => {
       .from("reward_definitions")
       .select("*")
       .eq("active", true);
-    const eligible = (pool ?? []).filter((r: any) =>
+    interface RewardRow {
+      id: string;
+      type: string;
+      name?: string | null;
+      description?: string | null;
+      category?: string | null;
+      rarity: string;
+      icon?: string | null;
+      payload?: { amount?: number | string } | null;
+      available_from?: string | null;
+      available_to?: string | null;
+      weight_override?: number | null;
+    }
+    const eligible = ((pool ?? []) as RewardRow[]).filter((r) =>
       (!r.available_from || r.available_from <= now) &&
       (!r.available_to || r.available_to >= now)
     );
@@ -65,11 +78,11 @@ Deno.serve(async (req) => {
 
     // 4) Weighted rarity roll
     const rarity = rollRarity(probs);
-    let candidates = eligible.filter((r: any) => r.rarity === rarity);
+    let candidates = eligible.filter((r) => r.rarity === rarity);
     if (candidates.length === 0) candidates = eligible; // fallback
 
     // 5) Random reward, apply weight_override if any
-    const totalW = candidates.reduce((s: number, r: any) => s + (r.weight_override ?? 1), 0);
+    const totalW = candidates.reduce((s: number, r) => s + (r.weight_override ?? 1), 0);
     let pick = Math.random() * totalW;
     let chosen = candidates[candidates.length - 1];
     for (const r of candidates) {
@@ -150,9 +163,9 @@ Deno.serve(async (req) => {
       convertedCredits,
       creditsAwarded,
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error("open-chest error", e);
-    return json({ error: e?.message ?? "Unexpected error" }, 500);
+    return json({ error: e instanceof Error ? e.message : "Unexpected error" }, 500);
   }
 });
 

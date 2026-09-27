@@ -3,19 +3,24 @@ import { motion, useInView, AnimatePresence } from "framer-motion";
 import { Calendar, Plus, X, MapPin, Clock, Target, Trophy, ChevronRight, BarChart3, Users, Flag, TrendingUp, Swords, Edit3, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 
 type Tab = "events" | "rivals";
 
+type EventRow = Tables<"events">;
+type RivalRow = Tables<"event_rivals">;
+type RivalWithEvent = RivalRow & { events: { title: string; event_date: string; sport: string } | null };
+
 const Events = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("events");
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
-  const [rivals, setRivals] = useState<any[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
+  const [rivals, setRivals] = useState<RivalRow[]>([]);
   const [showAddRival, setShowAddRival] = useState(false);
   const [rivalName, setRivalName] = useState("");
   const [rivalTime, setRivalTime] = useState("");
@@ -42,7 +47,7 @@ const Events = () => {
   const [editingTactics, setEditingTactics] = useState(false);
   const [tactics, setTactics] = useState("");
 
-  const [allRivals, setAllRivals] = useState<any[]>([]);
+  const [allRivals, setAllRivals] = useState<RivalWithEvent[]>([]);
   const [editingRivalId, setEditingRivalId] = useState<string | null>(null);
   const [editRivalTime, setEditRivalTime] = useState("");
   const [editRivalPos, setEditRivalPos] = useState("");
@@ -67,7 +72,7 @@ const Events = () => {
   const fetchAllRivals = async () => {
     if (!user) return;
     const { data } = await supabase.from("event_rivals").select("*, events(title, event_date, sport)").eq("user_id", user.id).order("created_at", { ascending: false });
-    setAllRivals(data || []);
+    setAllRivals((data as RivalWithEvent[] | null) || []);
   };
 
   const createEvent = async () => {
@@ -181,7 +186,7 @@ const Events = () => {
 
   const getResultsChartData = () => {
     if (!selectedEvent) return [];
-    const data: any[] = [];
+    const data: { name: string; time: string; position: number }[] = [];
     if (selectedEvent.actual_time) {
       data.push({ name: "You", time: selectedEvent.actual_time, position: selectedEvent.actual_position || 0 });
     }
@@ -192,7 +197,7 @@ const Events = () => {
   };
 
   const getUniqueRivals = () => {
-    const names = new Map<string, any[]>();
+    const names = new Map<string, RivalWithEvent[]>();
     allRivals.forEach(r => {
       const existing = names.get(r.rival_name) || [];
       existing.push(r);

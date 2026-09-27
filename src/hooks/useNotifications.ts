@@ -22,7 +22,7 @@ export function useNotifications() {
     const ch = supabase
       .channel(`notif:${user.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload: any) => setItems((prev) => [payload.new as AppNotification, ...prev]))
+        (payload) => setItems((prev) => [payload.new as AppNotification, ...prev]))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);

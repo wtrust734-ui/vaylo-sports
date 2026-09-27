@@ -5,6 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { lsGet, lsSet } from "@/lib/localStore";
 
 interface Step { name: string; seconds: number; cue?: string }
+interface RoutineHistoryEntry { id: string; name: string; completed: string; distance_m?: number }
+
 interface Routine {
   id: string;
   name: string;
@@ -73,7 +75,7 @@ const Routines = () => {
   const [stepIdx, setStepIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
-  const timer = useRef<any>();
+  const timer = useRef<ReturnType<typeof setInterval>>();
 
   // Builder state
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -95,7 +97,7 @@ const Routines = () => {
     if (!active) return;
     if (elapsed >= active.steps[stepIdx].seconds) {
       if (stepIdx + 1 >= active.steps.length) {
-        const hist = lsGet<any[]>(HIST, []);
+        const hist = lsGet<RoutineHistoryEntry[]>(HIST, []);
         lsSet(HIST, [{
           id: active.id, name: active.name, completed: new Date().toISOString(),
           distance_m: active.gps_enabled ? Math.round(gpsDistance) : undefined,
@@ -167,7 +169,7 @@ const Routines = () => {
     if (r.gps_enabled) startGps();
   };
 
-  const history = lsGet<any[]>(HIST, []);
+  const history = lsGet<RoutineHistoryEntry[]>(HIST, []);
 
   return (
     <div className="min-h-screen bg-background pb-24">

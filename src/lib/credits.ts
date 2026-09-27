@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import {
   FEATURE_COSTS,
   FEATURE_LABELS,
@@ -117,7 +118,7 @@ export async function spendCredits(
     p_quantity: quantity,
     p_source: opts.source ?? "app",
     p_idempotency_key: opts.idempotencyKey ?? null,
-    p_metadata: (opts.metadata ?? {}) as Record<string, unknown>,
+    p_metadata: (opts.metadata ?? {}) as unknown as Json,
   });
 
   if (error) {

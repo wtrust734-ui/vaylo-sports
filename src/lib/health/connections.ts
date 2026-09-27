@@ -55,7 +55,7 @@ export async function fetchWearableConnections(userId: string): Promise<Wearable
 
   // --- Cloud / multi-provider rows (new table) ------------------------------
   try {
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("health_connections")
       .select("provider, status, connected, last_sync_at, last_cursor, updated_at")
       .eq("user_id", userId);
@@ -78,7 +78,7 @@ export async function fetchWearableConnections(userId: string): Promise<Wearable
   try {
     const local = readLocalHcState(userId);
     const hasConsent = readLocalHcConsent(userId);
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("health_sync_state")
       .select("connected, last_sync_at, last_incremental_cursor, updated_at")
       .eq("user_id", userId)

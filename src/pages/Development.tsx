@@ -8,7 +8,8 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 
 const Development = () => {
   const { user, profile } = useAuth();
-  const [snaps, setSnaps] = useState<any[]>([]);
+  type SnapshotRow = { created_at: string; overall_vpr: number; speed_index: number; power_index: number; endurance_capacity: number; [key: string]: unknown };
+  const [snaps, setSnaps] = useState<SnapshotRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const age = profile?.date_of_birth ? Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000) : undefined;

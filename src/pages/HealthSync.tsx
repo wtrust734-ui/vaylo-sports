@@ -78,6 +78,35 @@ const fmtHr = (avg: number | string | null, max: number | string | null) => {
   return max != null ? `${a} (max ${Math.round(Number(max))}) bpm` : `${a} bpm`;
 };
 
+type HealthWorkoutRow = {
+  id: string;
+  source: string;
+  title: string | null;
+  activity_type: string | null;
+  start_time: string;
+  end_time: string;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  active_calories: number | null;
+  heart_rate_avg: number | null;
+  heart_rate_max: number | null;
+  heart_rate_min: number | null;
+  steps: number | null;
+};
+
+type HealthSampleRow = {
+  id: string;
+  source: string;
+  metric: string;
+  start_time: string;
+  end_time: string;
+  value: number | string;
+  unit: string | null;
+  stage: string | null;
+};
+
+type BusyProvider = WearableProviderId | "__all__" | null;
+
 const HealthSync = () => {
   const { user } = useAuth();
   const hc = useHealthConnect();
@@ -85,12 +114,12 @@ const HealthSync = () => {
   const hcConnected = hc.status === "connected";
 
   const [manual, setManual] = useState({ type: "run", duration: "", distance: "", calories: "" });
-  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
-  const [recentSamples, setRecentSamples] = useState<any[]>([]);
+  const [recentWorkouts, setRecentWorkouts] = useState<HealthWorkoutRow[]>([]);
+  const [recentSamples, setRecentSamples] = useState<HealthSampleRow[]>([]);
   const [loadingLive, setLoadingLive] = useState(false);
   const [cloudMap, setCloudMap] = useState<WearableConnectionMap>({} as WearableConnectionMap);
   const [cloudLoading, setCloudLoading] = useState(true);
-  const [busyProvider, setBusyProvider] = useState<WearableProviderId | null>(null);
+  const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
   const onAndroid = isAndroid();
@@ -149,8 +178,8 @@ const HealthSync = () => {
     if (!user) return;
     setLoadingLive(true);
     const [{ data: w }, { data: s }] = await Promise.all([
-      (supabase as any).from("health_workouts").select("id, source, title, activity_type, start_time, end_time, duration_seconds, distance_meters, active_calories, heart_rate_avg, heart_rate_max, heart_rate_min, steps").eq("user_id", user.id).eq("deleted", false).order("start_time", { ascending: false }).limit(12),
-      (supabase as any).from("health_samples").select("id, source, metric, start_time, end_time, value, unit, stage").eq("user_id", user.id).eq("deleted", false).order("start_time", { ascending: false }).limit(12),
+      supabase.from("health_workouts").select("id, source, title, activity_type, start_time, end_time, duration_seconds, distance_meters, active_calories, heart_rate_avg, heart_rate_max, heart_rate_min, steps").eq("user_id", user.id).eq("deleted", false).order("start_time", { ascending: false }).limit(12),
+      supabase.from("health_samples").select("id, source, metric, start_time, end_time, value, unit, stage").eq("user_id", user.id).eq("deleted", false).order("start_time", { ascending: false }).limit(12),
     ]);
     setRecentWorkouts(w ?? []);
     setRecentSamples(s ?? []);
@@ -168,7 +197,7 @@ const HealthSync = () => {
       toast.message(`Opening ${WEARABLE_PROVIDERS[provider].label}…`, {
         description: "Complete the grant in your browser, then return here.",
       });
-    } catch (e: any) {
+    } catch (e) {
       const msg = String(e?.message ?? "");
       if (msg.includes("not_configured")) {
         toast.info(`${WEARABLE_PROVIDERS[provider].label} — use Health Connect for now`, {
@@ -188,7 +217,7 @@ const HealthSync = () => {
       await oauthDisconnect(provider);
       toast.success(`${WEARABLE_PROVIDERS[provider].label} disconnected`);
       await refreshCloud();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(String(e?.message ?? "Couldn't disconnect"));
     } finally {
       setBusyProvider(null);
@@ -196,17 +225,17 @@ const HealthSync = () => {
   };
 
   const handleCloudSync = async (provider?: WearableProviderId) => {
-    setBusyProvider(provider ?? ("__all__" as any));
+    setBusyProvider(provider ?? "__all__");
     if (!provider) setSyncingAll(true);
     try {
-      const { error } = await (supabase as any).functions.invoke("wearable-oauth", {
+      const { error } = await supabase.functions.invoke("wearable-oauth", {
         body: { action: "sync", provider: provider ?? undefined },
       });
       if (error) throw new Error(error.message);
       toast.success(provider ? `${WEARABLE_PROVIDERS[provider].label} sync requested` : "Sync requested for all connected wearables");
       await refreshCloud();
       await loadLiveData();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(String(e?.message ?? "Sync failed"));
     } finally {
       setBusyProvider(null);
@@ -215,7 +244,7 @@ const HealthSync = () => {
   };
 
   const connectedCount = useMemo(() => {
-    const cloudConnected = (Object.values(cloudMap) as any[]).filter((c) => c?.connected).length;
+    const cloudConnected = Object.values(cloudMap).filter((c) => c?.connected).length;
     return (hcConnected ? 1 : 0) + cloudConnected;
   }, [hcConnected, cloudMap]);
 
@@ -227,7 +256,7 @@ const HealthSync = () => {
     const isHC = id === "health_connect";
     const isHK = id === "healthkit";
     const isCloud = spec.family === "cloud";
-    const conn = isHC ? null : (cloudMap[id] as any);
+    const conn = isHC ? null : cloudMap[id];
     const connected = isHC ? hcConnected : !!conn?.connected;
     const lastSync = isHC ? hc.syncState.lastSyncAt : (conn?.lastSyncAt ?? null);
     const busy = busyProvider === id;
@@ -389,7 +418,7 @@ const HealthSync = () => {
         <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
           <Watch size={12} /> Watches & bands
           <span className="ml-auto text-[10px] font-semibold normal-case tracking-normal text-muted-foreground/70">
-            {cloudLoading ? "Checking…" : `${Object.values(cloudMap).filter((c: any) => c?.connected).length} connected`}
+            {cloudLoading ? "Checking…" : `${Object.values(cloudMap).filter((c) => c?.connected).length} connected`}
           </span>
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -458,7 +487,7 @@ const HealthSync = () => {
       </motion.div>
 
       {/* ── Synced from your wearables ── */}
-      {(hcConnected || recentWorkouts.length > 0 || recentSamples.length > 0 || Object.values(cloudMap).some((c: any) => c?.connected)) && (
+      {(hcConnected || recentWorkouts.length > 0 || recentSamples.length > 0 || Object.values(cloudMap).some((c) => c?.connected)) && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className="mt-4 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
           <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />

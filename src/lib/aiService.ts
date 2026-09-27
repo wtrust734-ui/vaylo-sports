@@ -109,7 +109,7 @@ export async function fetchAICatalog(): Promise<
 > {
   const { data, error } = await supabase.functions.invoke("ai-service", { method: "GET" });
   if (error) throw new Error(error.message);
-  return (data as { features: any[] }).features;
+  return (data as { features: Array<{ name: AIFeature; label: string; model: string; system: string; maxOutputTokens: number; allowImages: boolean; useHistory: boolean }> }).features;
 }
 
 /* -------- Feature helpers: thin wrappers, all share the one service -------- */

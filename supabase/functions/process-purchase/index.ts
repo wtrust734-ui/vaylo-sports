@@ -1,4 +1,17 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/**
+ * The edge client is intentionally untyped (`createClient` without the Database
+ * generic — the generated types live in the web app, not the functions). These
+ * helpers give the RPCs used here a minimal typed surface instead of `as any`.
+ */
+type LooseClient = Omit<SupabaseClient, "rpc"> & {
+  rpc: (
+    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment",
+    args?: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+const asLoose = (c: SupabaseClient): LooseClient => c as unknown as LooseClient;
 import {
   COIN_GRANTS,
   CREDIT_GRANTS,
@@ -44,6 +57,15 @@ interface RequestBody {
  */
 type BasketItem = { product_id?: string; product_type?: string };
 
+interface SpecialOfferRow {
+  slug: string;
+  offer_type: string;
+  price_cents?: number | null;
+  pack_id?: string | null;
+  bonus_flat?: number | null;
+  bonus_multiplier?: number | null;
+}
+
 /**
  * Verifies a purchase before anything is granted.
  *
@@ -88,16 +110,16 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return new Response(JSON.stringify({ error: "No auth" }), { status: 401, headers: corsHeaders });
 
-    const supabase = createClient(
+    const supabase = asLoose(createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    ));
     // User-scoped client for RPCs that rely on auth.uid() (spend_credits).
-    const userClient = createClient(
+    const userClient = asLoose(createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
-    );
+    ));
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
 
@@ -136,7 +158,7 @@ Deno.serve(async (req) => {
 
     // Fetch live offers for double-credit promo
     const { data: offerRows } = await supabase.from("special_offers").select("*").eq("active", true);
-    const doubleOffer = (offerRows || []).find((o: any) => o.offer_type === "double_credits");
+    const doubleOffer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => o.offer_type === "double_credits");
 
     // PHASE 1: legacy tier subscriptions can no longer be purchased.
     const blocked = (items as BasketItem[]).find((i) =>
@@ -179,7 +201,7 @@ Deno.serve(async (req) => {
       if (priceCents === null && FEATURE_PRODUCTS[productId]) {
         priceCents = 0; // bought with credits, not money
       } else if (priceCents === null && productId.startsWith("offer_")) {
-        const offer = (offerRows || []).find((o: any) => `offer_${o.slug}` === productId);
+        const offer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => `offer_${o.slug}` === productId);
         if (!offer) {
           return new Response(JSON.stringify({ error: `Unknown offer: ${productId}` }), { status: 400, headers: corsHeaders });
         }
@@ -216,7 +238,7 @@ Deno.serve(async (req) => {
       // Spendable with credits: make sure this basket can actually pay for it.
       const featureKeyForCheck = FEATURE_PRODUCTS[productId];
       if (featureKeyForCheck) {
-        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost" as any, { p_feature: featureKeyForCheck });
+        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost", { p_feature: featureKeyForCheck });
         if (costErr || costRow == null) {
           return new Response(
             JSON.stringify({ error: `Could not read the credit price for ${featureKeyForCheck}` }),
@@ -285,7 +307,7 @@ Deno.serve(async (req) => {
       // end users, otherwise any logged-in user could mint coins).
       const coinsGrant = COIN_GRANTS[productId];
       if (coinsGrant) {
-        const { error: coinsErr } = await supabase.rpc("grant_coins" as any, {
+        const { error: coinsErr } = await supabase.rpc("grant_coins", {
           p_user_id: user.id,
           p_amount: coinsGrant,
           p_reason: `Coin bundle: ${productId}`,
@@ -309,7 +331,7 @@ Deno.serve(async (req) => {
       // and this function can never disagree.
       const featureKey = FEATURE_PRODUCTS[productId];
       if (featureKey) {
-        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost" as any, { p_feature: featureKey });
+        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost", { p_feature: featureKey });
         if (costErr || costRow == null) {
           await rollBackPurchase();
           return new Response(
@@ -335,7 +357,7 @@ Deno.serve(async (req) => {
               { status: 402, headers: corsHeaders }
             );
           }
-          const { error: spendErr } = await userClient.rpc("spend_credits" as any, {
+          const { error: spendErr } = await userClient.rpc("spend_credits", {
             p_amount: cost,
             p_reason: `Unlock: ${productId}`,
           });
@@ -350,7 +372,7 @@ Deno.serve(async (req) => {
       // Offers (starter / winback) — the linked pack's credits plus flat bonus.
       if (productId.startsWith("offer_")) {
         const slug = productId.replace("offer_", "");
-        const offer = (offerRows || []).find((o: any) => o.slug === slug);
+        const offer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => o.slug === slug);
         if (offer) {
           const linkedCredits = offer.pack_id ? CREDIT_GRANTS[offer.pack_id] ?? 0 : 0;
           creditsToAdd += linkedCredits;

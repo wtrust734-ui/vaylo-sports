@@ -237,7 +237,7 @@ const EventPacks = () => {
       setBasket([]);
       setShowBasket(false);
       toast({ title: "Event Packs unlocked 🎉", description: "Lifetime access — they'll restore on any device you sign in to." });
-    } catch (e: any) {
+    } catch (e) {
       toast({ title: "Purchase failed", description: e.message ?? "Please try again", variant: "destructive" });
     }
   };

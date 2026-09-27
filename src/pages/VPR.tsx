@@ -34,8 +34,9 @@ const VPRPage = () => {
   const navigate = useNavigate();
   const isPro = isActive;
   const sport = profile?.sport?.split(",")[0]?.trim() || "Running";
+  type SnapshotRow = { created_at: string; overall_vpr: number; [key: string]: unknown };
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [snapshots, setSnapshots] = useState<SnapshotRow[]>([]);
   const [position, setPosition] = useState<string>("");
   const [type, setType] = useState("vertical_jump");
   const [value, setValue] = useState("");

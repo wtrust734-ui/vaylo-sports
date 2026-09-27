@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { ageBand, earliestDob, validateDob } from "@/lib/age";
+import { localDateKey } from "@/lib/dates";
 import CountrySelect from "@/components/geo/CountrySelect";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
 
@@ -153,7 +154,7 @@ export default function Onboarding() {
       await refreshProfile();
       toast.success(complete ? "You're in. Let's go." : "Saved — you can finish this later in Profile.");
       navigate("/");
-    } catch (e: any) {
+    } catch (e) {
       toast.error(e?.message ?? "Couldn't save your profile. Please try again.");
     }
     finally { setBusy(false); }
@@ -257,7 +258,7 @@ export default function Onboarding() {
                   inputMode="numeric"
                   value={data.dob}
                   min={earliestDob()}
-                  max={new Date().toISOString().slice(0, 10)}
+                  max={localDateKey()}
                   onChange={(e) => setData({ ...data, dob: e.target.value })}
                   className="h-12"
                   aria-label="Date of birth"

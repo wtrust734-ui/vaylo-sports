@@ -65,7 +65,7 @@ export default function CreatorMarketplace() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search programs, meal plans, coaches…" className="pl-9 h-11" />
         </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-11 px-3 rounded-md bg-card border border-border text-sm">
+        <select value={sort} onChange={(e) => setSort(e.target.value as "new" | "popular" | "price")} className="h-11 px-3 rounded-md bg-card border border-border text-sm">
           <option value="popular">Popular</option>
           <option value="new">Newest</option>
           <option value="price">Price ↑</option>

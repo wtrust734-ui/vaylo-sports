@@ -1,5 +1,4 @@
-interface PlanSession { day: number; skipped?: boolean; isRest?: boolean; isRecovery?: boolean; [key: string]: unknown }
-interface PlanWeek { week: number; sessions?: PlanSession[]; isHoliday?: boolean; [key: string]: unknown }
+interface PlanWeek { week: number; sessions?: DaySession[]; isHoliday?: boolean; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +25,21 @@ interface DaySession {
   _reason?: string;
 }
 
+type PlanRow = {
+  id: string;
+  plan_data: unknown;
+  week_current: number | null;
+  duration_weeks: number | null;
+  [key: string]: unknown;
+};
+
+type EventRow = {
+  id: string;
+  title: string;
+  event_date: string;
+  [key: string]: unknown;
+};
+
 const getZoneDot = (score: number) => {
   if (score >= 85) return { color: "bg-green-500", label: "GREEN" };
   if (score >= 70) return { color: "bg-primary", label: "NORMAL" };
@@ -36,7 +50,7 @@ const getZoneDot = (score: number) => {
 const DailyTrainingCard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [activePlan, setActivePlan] = useState<any>(null);
+  const [activePlan, setActivePlan] = useState<PlanRow | null>(null);
   const [todaySessions, setTodaySessions] = useState<DaySession[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [showWarmup, setShowWarmup] = useState(false);
@@ -47,7 +61,7 @@ const DailyTrainingCard = () => {
   const [totalCalories, setTotalCalories] = useState(0);
   const [readiness, setReadiness] = useState<number | null>(null);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
-  const [upcomingEvent, setUpcomingEvent] = useState<any>(null);
+  const [upcomingEvent, setUpcomingEvent] = useState<EventRow | null>(null);
   const [isHolidayWeek, setIsHolidayWeek] = useState(false);
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-30px" });
@@ -81,9 +95,9 @@ const DailyTrainingCard = () => {
           } else if (weekData?.sessions) {
             const dayOfWeek = new Date().getDay() || 7;
             if (hasAdjusted) {
-              setTodaySessions([hasAdjusted as DaySession]);
+              setTodaySessions([hasAdjusted as unknown as DaySession]);
             } else {
-              const todaySession = weekData.sessions.find((s: any) => s.day === dayOfWeek && !s.skipped);
+              const todaySession = weekData.sessions.find((s) => s.day === dayOfWeek && !s.skipped);
               if (todaySession) setTodaySessions([todaySession]);
             }
           }

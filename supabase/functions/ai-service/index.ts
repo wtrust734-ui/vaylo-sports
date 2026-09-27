@@ -14,7 +14,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { featureCatalog } from "../_shared/aiModels.ts";
 import { AIServiceError, generateAIResponse } from "../_shared/openai.ts";
-import { fetchAthleteDossier } from "../_shared/athleteDossier.ts";
+import { fetchAthleteDossier, type EdgePB } from "../_shared/athleteDossier.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,9 +81,14 @@ Deno.serve(async (req) => {
       try {
         const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         // If client sent bare pbs, forward them; otherwise dossier fetches purely from DB
-        const clientPBs = Array.isArray(userData?.pbs) ? userData.pbs as any : (Array.isArray((body as any).pbs) ? (body as any).pbs : null);
+        const bodyPbs = (body as { pbs?: unknown }).pbs;
+        const clientPBs = Array.isArray(userData?.pbs)
+          ? (userData.pbs as EdgePB[])
+          : Array.isArray(bodyPbs)
+            ? (bodyPbs as EdgePB[])
+            : null;
         const dossier = await fetchAthleteDossier(serviceClient, auth.userId, clientPBs);
-        userData = { ...(userData || {}), dossier, pbs: (dossier as any).pbs, pbs_text: (dossier as any).pbs_text };
+        userData = { ...(userData || {}), dossier, pbs: dossier.pbs, pbs_text: dossier.pbs_text };
       } catch (e) {
         console.error("[ai-service] dossier enrich failed", e);
         // proceed without dossier
@@ -104,7 +109,7 @@ Deno.serve(async (req) => {
     });
 
     return json(result);
-  } catch (err: any) {
+  } catch (err) {
     if (err instanceof AIServiceError) {
       console.error(`[ai-service] handled status=${err.status} message=${err.message}`);
       return json({ error: err.message }, err.status);

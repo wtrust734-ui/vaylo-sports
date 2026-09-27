@@ -75,7 +75,15 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
     supabase.from("athlete_position").select("position, primary_sport").eq("user_id", user.id).maybeSingle(),
   ]);
 
-  const profile = profileRes.data || {};
+  const profile = (profileRes.data ?? {}) as {
+    sport?: string | null;
+    experience_level?: string | null;
+    date_of_birth?: string | null;
+    weight_kg?: number | null;
+    height_cm?: number | null;
+    goals?: string | null;
+    full_name?: string | null;
+  };
   const metrics = (metricsRes.data as MetricRow[] | null) || [];
   const age = ageFromDOB(profile.date_of_birth ?? null);
   const caps = getAgeCaps(age);

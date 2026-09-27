@@ -58,9 +58,11 @@ const LEVEL_MOD: Record<string, string[]> = {
 
 const KEY = (d: string, uid: string) => `vaylo_challenges_${uid}_${d}`;
 
-const pickPersonalized = (profile: any): string[] => {
+const pickPersonalized = (profile: { sport?: string | null; goals?: string[] | string | null; experience_level?: string | null } | null): string[] => {
   const sport = (profile?.sport || "").toLowerCase();
-  const goals: string[] = (profile?.goals || []).map((g: string) => g.toLowerCase());
+  const goals: string[] = Array.isArray(profile?.goals)
+    ? profile.goals.map((g: string) => g.toLowerCase())
+    : profile?.goals ? [String(profile.goals).toLowerCase()] : [];
   const level = (profile?.experience_level || "").toLowerCase();
 
   const sportPool = Object.entries(SPORT_POOL).find(([k]) => sport.includes(k))?.[1] || [];

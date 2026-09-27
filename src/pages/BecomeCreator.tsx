@@ -29,7 +29,7 @@ export default function BecomeCreator() {
       if (error) throw error;
       toast.success("Welcome to the marketplace!");
       navigate("/market");
-    } catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
+    } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
 
   return (

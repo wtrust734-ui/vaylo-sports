@@ -154,10 +154,10 @@ const Auth = () => {
           description: "You're in. Let’s finish onboarding.",
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
       });
     } finally {
@@ -178,8 +178,8 @@ const Auth = () => {
         title: "Check your inbox",
         description: "If an account exists for that email, a reset link is on its way.",
       });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -201,8 +201,8 @@ const Auth = () => {
       if (error) throw error;
       toast({ title: "Password updated", description: "You're signed in with your new password." });
       navigate("/", { replace: true });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -228,8 +228,8 @@ const Auth = () => {
       setPhoneSentTo(phone);
       setPhoneCode("");
       toast({ title: "Code sent", description: `A 6-digit code is on its way to ${phone}.` });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -247,8 +247,8 @@ const Auth = () => {
       const { error } = await supabase.auth.verifyOtp({ phone: phoneSentTo, token, type: "sms" });
       if (error) throw error;
       // Success resolves with a session; the auth listener redirects.
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -276,8 +276,8 @@ const Auth = () => {
         title: "Check your inbox",
         description: "If that address can sign in, a magic link is on its way. Open it on this device to finish.",
       });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -292,8 +292,8 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithPasskey();
       if (error) throw error;
       // Success resolves with a session; the auth listener redirects.
-    } catch (error: any) {
-      toast({ title: "Passkey sign-in failed", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Passkey sign-in failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -307,8 +307,8 @@ const Auth = () => {
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
       // Web: startOAuth already redirected the page.
-    } catch (error: any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 
@@ -319,8 +319,8 @@ const Auth = () => {
         const { code, flowId } = await awaitOAuthDeepLink(url);
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 
@@ -331,8 +331,8 @@ const Auth = () => {
         const { code, flowId } = await awaitOAuthDeepLink(url);
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 
@@ -343,8 +343,8 @@ const Auth = () => {
         const { code, flowId } = await awaitOAuthDeepLink(url);
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
-    } catch (error: string | any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 
@@ -355,8 +355,8 @@ const Auth = () => {
         const { code, flowId } = await awaitOAuthDeepLink(url);
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 
@@ -367,8 +367,8 @@ const Auth = () => {
         const { code, flowId } = await awaitOAuthDeepLink(url);
         await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: String(error.message ?? error), variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
   };
 

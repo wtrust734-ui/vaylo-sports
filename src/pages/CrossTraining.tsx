@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shuffle, Dumbbell, Heart, Move, Zap, Shield, Clock, Sparkles, AlertTriangle, Target } from "lucide-react";
+import { Shuffle, Dumbbell, Heart, Move, Zap, Shield, Clock, Sparkles, AlertTriangle, Target, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { buildClientDossier, getLocalPBs } from "@/lib/athleteDossier";
 import { calculateVPR } from "@/lib/performance";
@@ -93,7 +93,7 @@ const PHASES = [
   { v: "recovery", l: "Recovery", desc: "Restore everything" },
 ];
 
-const FOCUS_META: Record<string, { icon: any; tone: string }> = {
+const FOCUS_META: Record<string, { icon: LucideIcon; tone: string }> = {
   Aerobic: { icon: Heart, tone: "bg-primary/10 text-primary border-primary/30" },
   Strength: { icon: Dumbbell, tone: "bg-electric-purple/10 text-electric-purple border-electric-purple/30" },
   Power: { icon: Zap, tone: "bg-energy/10 text-energy border-energy/30" },
@@ -122,7 +122,7 @@ const CrossTraining = () => {
   const [sport, setSport] = useState<string>(initialSport);
   const [phase, setPhase] = useState("base");
   const [focus, setFocus] = useState<string | null>(null);
-  const [dossier, setDossier] = useState<any>(null);
+  const [dossier, setDossier] = useState<Record<string, unknown> | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
 
   useEffect(() => {
@@ -139,12 +139,12 @@ const CrossTraining = () => {
   // ——— Personalised “For you” picks ———
   const forYou = useMemo(() => {
     if (!dossier) return null;
-    const injuries: any[] = dossier.injuries || [];
+    const injuries = (dossier.injuries as { status?: string; body_part?: string }[] | undefined) || [];
     const activeInjuries = injuries.filter((i) => i.status !== "resolved");
-    const recovery: any[] = dossier.recovery || [];
-    const readinessAvg = recovery.length ? recovery.reduce((a: number, b: any) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
-    const outcomeGoals: any[] = dossier.outcomeGoals || [];
-    const vpr = dossier.vpr as Record<string, number | undefined> | null;
+    const recovery = (dossier.recovery as { readiness_score?: number | null }[] | undefined) || [];
+    const readinessAvg = recovery.length ? recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
+    const outcomeGoals = (dossier.outcomeGoals as { title: string; category?: string }[] | undefined) || [];
+    const vpr = dossier.vpr as Record<string, number | undefined> | null | undefined;
 
     // weakest buckets
     let weakestBuckets: string[] = [];
@@ -156,7 +156,7 @@ const CrossTraining = () => {
 
     const weakFocuses = new Set(weakestBuckets.flatMap(bucketToFocus));
     // Goals bias
-    const goalText = (outcomeGoals.map((g) => `${g.title} ${g.category}`).join(" ") + " " + (profile?.goals?.join(" ") || "")).toLowerCase();
+    const goalText = (outcomeGoals.map((g) => `${g.title} ${g.category ?? ""}`).join(" ") + " " + (profile?.goals?.join(" ") || "")).toLowerCase();
     if (goalText.includes("strength") || goalText.includes("muscle")) weakFocuses.add("Strength");
     if (goalText.includes("speed") || goalText.includes("sprint") || goalText.includes("power")) weakFocuses.add("Power");
     if (goalText.includes("endurance") || goalText.includes("marathon") || goalText.includes("distance")) weakFocuses.add("Aerobic");
@@ -224,10 +224,10 @@ const CrossTraining = () => {
               {forYou.weakestBuckets.length ? forYou.weakestBuckets.map((b) => (
                 <span key={b} className="text-[10px] px-2 py-1 rounded-full bg-energy/10 text-energy border border-energy/20 flex items-center gap-1"><Target size={10} /> Weak: {b.replace("_", " ")}</span>
               )) : <span className="text-[10px] px-2 py-1 rounded-full bg-muted/40 border border-border">Log metrics to unlock VPR-based picks</span>}
-              {forYou.activeInjuries.slice(0, 2).map((inj: any, i: number) => (
+              {forYou.activeInjuries.slice(0, 2).map((inj, i: number) => (
                 <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1"><AlertTriangle size={10} /> {inj.body_part} · {inj.status}</span>
               ))}
-              {forYou.outcomeGoals.map((g: any) => (
+              {forYou.outcomeGoals.map((g) => (
                 <span key={g.title} className="text-[10px] px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">{g.title}</span>
               ))}
             </div>

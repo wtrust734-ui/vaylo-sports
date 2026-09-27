@@ -47,9 +47,9 @@ export default function PasskeysSetting() {
           "You can now sign in with this device's fingerprint, face or PIN.",
         ),
       });
-    } catch (error: any) {
+    } catch (error) {
       // A cancelled browser prompt is a normal outcome, not an error worth a red toast.
-      const message = String(error?.message ?? error);
+      const message = error instanceof Error ? error.message : String(error);
       if (!/cancel|abort|not allowed/i.test(message)) {
         toast({
           title: t("settings.passkeys.failed", "Couldn't save passkey"),

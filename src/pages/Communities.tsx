@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Plus, Crown, Shield, Bell, BellOff, Lock, Globe, TrendingUp, Sparkles, X, Pin, Search, UserPlus, LogOut, MessageSquare, Settings } from "lucide-react";
+import { Users, Plus, Crown, Shield, Bell, BellOff, Lock, Globe, TrendingUp, Sparkles, X, Pin, Search, UserPlus, LogOut, MessageSquare, Settings, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,7 @@ type Community = {
 type Member = { id: string; user_id: string; role: string; notifications_enabled: boolean; community_id: string };
 type Privacy = { allow_friend_requests: boolean; group_visibility: string; allow_community_posting: boolean; show_avatar_publicly: boolean };
 
-const ROLE_ICON: Record<string, any> = { leader: Crown, moderator: Shield, member: Users };
+const ROLE_ICON: Record<string, LucideIcon> = { leader: Crown, moderator: Shield, member: Users };
 const PRIVACY_OPTS = [
   { value: "public", label: "Public", icon: Globe },
   { value: "private", label: "Private", icon: Lock },
@@ -407,9 +407,15 @@ const GroupDetail = ({ community, membership, onClose, onJoin, onLeave, onToggle
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [members, setMembers] = useState<any[]>([]);
-  const [posts, setPosts] = useState<any[]>([]);
-  const [pinned, setPinned] = useState<any[]>([]);
+  type ProfileRef = { user_id: string; full_name?: string | null };
+  type AvatarRef = { user_id: string; display_name?: string | null; base?: string | null; headgear?: string | null; outfit?: string | null; badge?: string | null };
+  type Enriched<T> = T & { profile?: ProfileRef; avatar?: AvatarRef };
+  type MemberRow = Enriched<{ id: string; user_id: string; role: string }>;
+  type PostRow = Enriched<{ id: string; user_id: string; content: string; created_at: string }>;
+  type PinnedRow = Enriched<{ id: string; user_id: string; position: number }>;
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [pinned, setPinned] = useState<PinnedRow[]>([]);
   const [newPost, setNewPost] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -421,9 +427,9 @@ const GroupDetail = ({ community, membership, onClose, onJoin, onLeave, onToggle
       supabase.from("community_posts").select("*").eq("community_id", community.id).order("created_at", { ascending: false }).limit(20),
       supabase.from("community_pinned_avatars").select("*").eq("community_id", community.id).order("position"),
     ]);
-    const userIds = [...new Set([...(mems || []).map((m: any) => m.user_id), ...(pin || []).map((p: any) => p.user_id)])];
-    const profileMap: Record<string, any> = {};
-    const avatarMap: Record<string, any> = {};
+    const userIds = [...new Set([...(mems || []).map((m) => m.user_id), ...(pin || []).map((p) => p.user_id)])];
+    const profileMap: Record<string, ProfileRef> = {};
+    const avatarMap: Record<string, AvatarRef> = {};
     if (userIds.length > 0) {
       // One query, against the only cross-user table the schema grants to every
       // athlete. The old extra `profiles` lookup was self-read-only, so it always
@@ -434,14 +440,14 @@ const GroupDetail = ({ community, membership, onClose, onJoin, onLeave, onToggle
         .from("avatars")
         .select("user_id, display_name, base, headgear, outfit, badge")
         .in("user_id", userIds);
-      (avs || []).forEach((a: any) => {
+      (avs || []).forEach((a) => {
         avatarMap[a.user_id] = a;
         profileMap[a.user_id] = { user_id: a.user_id, full_name: a.display_name };
       });
     }
-    setMembers((mems || []).map((m: any) => ({ ...m, profile: profileMap[m.user_id], avatar: avatarMap[m.user_id] })));
-    setPosts((ps || []).map((p: any) => ({ ...p, profile: profileMap[p.user_id] })));
-    setPinned((pin || []).map((p: any) => ({ ...p, avatar: avatarMap[p.user_id], profile: profileMap[p.user_id] })));
+    setMembers((mems || []).map((m) => ({ ...m, profile: profileMap[m.user_id], avatar: avatarMap[m.user_id] })));
+    setPosts((ps || []).map((p) => ({ ...p, profile: profileMap[p.user_id] })));
+    setPinned((pin || []).map((p) => ({ ...p, avatar: avatarMap[p.user_id], profile: profileMap[p.user_id] })));
   };
 
   const post = async () => {

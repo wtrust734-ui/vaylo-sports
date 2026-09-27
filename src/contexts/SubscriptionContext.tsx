@@ -121,7 +121,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         unlimited_credits: !!e.unlimited_credits,
         is_lifetime: !!e.is_lifetime,
       });
-      setPurchases((purchRes.data || []).map((p: any) => p.product_id));
+      setPurchases(((purchRes.data ?? []) as { product_id: string }[]).map((p) => p.product_id));
     } catch {
       /* keep previous state */
     }

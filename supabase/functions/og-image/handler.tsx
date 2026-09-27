@@ -70,7 +70,7 @@ async function profileCard(id: string) {
   };
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: Request): Promise<Response | ImageResponse> {
   const url = new URL(req.url);
   const kind = url.searchParams.get("kind") ?? "profile";
   const id = (url.searchParams.get("id") ?? "").trim();

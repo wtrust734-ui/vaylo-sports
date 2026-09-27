@@ -257,7 +257,7 @@ Deno.serve(async (req) => {
     const target = provider || null;
     const q = admin.from("health_connections").select("provider").eq("user_id", userId).eq("connected", true);
     const { data: rows } = target ? await q.eq("provider", target) : await q;
-    const providers: string[] = (rows ?? []).map((r: any) => r.provider);
+    const providers: string[] = (rows ?? []).map((r: { provider: string }) => r.provider);
     if (providers.length === 0) return json({ ok: true, workouts: 0, samples: 0, note: "no_connected_providers" }, 200);
     // Touch last_sync_at so the UI reflects the sync attempt; real import writes
     // health_workouts/health_samples rows when the vendor API is wired.

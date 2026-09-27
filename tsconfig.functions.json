@@ -2,6 +2,7 @@
   "//": "Type-checks the Deno edge functions. Nothing else in this repo covers supabase/functions, which is how a module-level ReferenceError reached production and made every checkout return WORKER_ERROR. Run with `npm run typecheck:functions`.",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
@@ -20,8 +21,10 @@
       "https://esm.sh/@supabase/supabase-js@2": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],
       "https://esm.sh/@supabase/supabase-js@2.100.0": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],
       "https://esm.sh/@supabase/supabase-js@2.45.0": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],
-      "npm:@supabase/supabase-js@2/cors": ["./node_modules/@supabase/supabase-js/dist/cors.d.mts"]
+      "npm:@supabase/supabase-js@2/cors": ["./node_modules/@supabase/supabase-js/dist/cors.d.mts"],
+      "npm:@vercel/og@^0": ["./types/og-shim.d.ts"],
+      "npm:react@^19": ["./types/og-shim.d.ts"]
     }
   },
-  "include": ["supabase/functions/**/*.ts", "types/edge-runtime.d.ts"]
+  "include": ["supabase/functions/**/*.ts", "supabase/functions/**/*.tsx", "types/edge-runtime.d.ts"]
 }

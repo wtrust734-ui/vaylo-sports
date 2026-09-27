@@ -93,8 +93,10 @@ const Injury = () => {
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [loads, setLoads] = useState<LoadRow[]>([]);
-  const [recovery, setRecovery] = useState<any[]>([]);
-  const [injuries, setInjuries] = useState<any[]>([]);
+  type RecoveryRow = { fatigue?: number | null; soreness?: number | null; sleep_quality?: number | null; [key: string]: unknown };
+  type InjuryRow = { id: string; status: string; body_part: string; severity: number; notes?: string | null; recovery_protocol?: string | null; [key: string]: unknown };
+  const [recovery, setRecovery] = useState<RecoveryRow[]>([]);
+  const [injuries, setInjuries] = useState<InjuryRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
   const [unlocked, setUnlocked] = useState(false);
@@ -132,7 +134,7 @@ const Injury = () => {
       await refreshProfile();
       setUnlocked(true);
       toast.success("Injury Management unlocked!");
-    } catch (e: any) {
+    } catch (e) {
       toast.error(e.message || "Failed to unlock");
     } finally { setUnlocking(false); }
   };

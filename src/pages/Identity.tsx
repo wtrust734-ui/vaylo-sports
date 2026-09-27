@@ -8,7 +8,8 @@ import { calculateVPR, detectArchetype, archetypeReadiness, ARCHETYPE_MIN_METRIC
 const Identity = () => {
   const { user, profile } = useAuth();
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
-  const [snaps, setSnaps] = useState<any[]>([]);
+  type SnapshotRow = { created_at: string; archetype?: string | null; [key: string]: unknown };
+  const [snaps, setSnaps] = useState<SnapshotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const sport = profile?.sport?.split(",")[0]?.trim() || "Running";
 

@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const res = await handler(req);
+    const res = (await handler(req)) as Response;
     const headers = new Headers(res.headers);
     headers.set("Access-Control-Allow-Origin", "*");
     headers.set("Cache-Control", "public, max-age=3600, s-maxage=3600");

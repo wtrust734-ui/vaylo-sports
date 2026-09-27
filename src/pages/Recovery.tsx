@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { localDateKey } from "@/lib/dates";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Moon, Battery, Activity, Brain, Check, Info, TrendingUp, TrendingDown, Minus, Zap, Shield, AlertTriangle, Play, Crown, Lock, Flame } from "lucide-react";
+import { Heart, Moon, Battery, Activity, Brain, Check, Info, TrendingUp, TrendingDown, Minus, Zap, Shield, AlertTriangle, Play, Crown, Lock, Flame, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,10 +11,26 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianG
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
-interface RecoveryLog { log_date: string; hrv: number | null; rhr: number | null; sleep_quality: number | null; fatigue: number | null; soreness: number | null; mood: number | null; stress: number | null; energy: number | null; readiness_score: number | null; rest_hours: number | null; adjusted_session: any; notes: string | null }
+interface RecoveryLog { log_date: string; hrv: number | null; rhr: number | null; sleep_quality: number | null; fatigue: number | null; soreness: number | null; mood: number | null; stress: number | null; energy: number | null; readiness_score: number | null; rest_hours: number | null; adjusted_session: unknown; notes: string | null }
 
 // Shape of one week inside training_plans.plan_data (Json column).
-interface PlanSession { day: number; skipped?: boolean; [key: string]: unknown }
+interface PlanExercise { name: string; sets?: string; [key: string]: unknown }
+interface PlanSession {
+  day: number;
+  skipped?: boolean;
+  title?: string;
+  description?: string;
+  duration_minutes?: number;
+  isRest?: boolean;
+  isRecovery?: boolean;
+  exercises?: PlanExercise[];
+  warmup?: PlanExercise[];
+  cooldown?: PlanExercise[];
+  _originalTitle?: string;
+  _zone?: string;
+  _reason?: string;
+  [key: string]: unknown;
+}
 interface PlanWeek { week: number; sessions?: PlanSession[]; [key: string]: unknown }
 
 // ─── READINESS ENGINE ───
@@ -62,7 +78,7 @@ const getZone = (score: number) => {
 };
 
 // ─── TRAINING ADJUSTMENT ENGINE ───
-const adjustSession = (session: any, zone: ReturnType<typeof getZone>): any => {
+const adjustSession = (session: PlanSession, zone: ReturnType<typeof getZone>): PlanSession => {
   if (!session || session.isRest || session.isRecovery) return session;
   const adjusted = JSON.parse(JSON.stringify(session));
   adjusted._originalTitle = session.title;
@@ -72,7 +88,7 @@ const adjustSession = (session: any, zone: ReturnType<typeof getZone>): any => {
   if (zone.label === "GREEN") {
     adjusted.title = `${session.title} (Boosted)`;
     if (adjusted.exercises) {
-      adjusted.exercises = adjusted.exercises.map((ex: any) => {
+      adjusted.exercises = adjusted.exercises.map((ex) => {
         const sets = ex.sets || "";
         const match = sets.match(/^(\d+)/);
         if (match) {
@@ -87,7 +103,7 @@ const adjustSession = (session: any, zone: ReturnType<typeof getZone>): any => {
   } else if (zone.label === "CAUTION") {
     adjusted.title = `${session.title} (Reduced)`;
     if (adjusted.exercises) {
-      adjusted.exercises = adjusted.exercises.map((ex: any) => {
+      adjusted.exercises = adjusted.exercises.map((ex) => {
         const sets = ex.sets || "";
         const match = sets.match(/^(\d+)/);
         if (match) {
@@ -123,7 +139,7 @@ const adjustSession = (session: any, zone: ReturnType<typeof getZone>): any => {
 
 // ─── SLIDER COMPONENT (stable, no re-animation on value change) ───
 const SliderRow = ({ label, icon: Icon, value, onChange, color, lowLabel = "Poor", highLabel = "Excellent", max = 10, idx, disabled }: {
-  label: string; icon: any; value: number; onChange: (v: number) => void; color: string;
+  label: string; icon: LucideIcon; value: number; onChange: (v: number) => void; color: string;
   lowLabel?: string; highLabel?: string; max?: number; idx: number; disabled: boolean;
 }) => (
   <motion.div
@@ -174,8 +190,8 @@ const Recovery = () => {
   const [baselines, setBaselines] = useState<HrvBaseline[]>([]);
   const [currentBaseline, setCurrentBaseline] = useState<number | null>(null);
   const [recentRpeAvg, setRecentRpeAvg] = useState<number | null>(null);
-  const [todaySession, setTodaySession] = useState<any>(null);
-  const [adjustedSession, setAdjustedSession] = useState<any>(null);
+  const [todaySession, setTodaySession] = useState<PlanSession | null>(null);
+  const [adjustedSession, setAdjustedSession] = useState<PlanSession | null>(null);
   const [showHrvGuide, setShowHrvGuide] = useState(false);
 
   // Gamification
@@ -210,7 +226,7 @@ const Recovery = () => {
       setEnergy(d.energy || 6);
       setHrv(d.hrv ? String(d.hrv) : "");
       setRhr(d.rhr ? String(d.rhr) : "");
-      if (d.adjusted_session) setAdjustedSession(d.adjusted_session);
+      if (d.adjusted_session) setAdjustedSession(d.adjusted_session as PlanSession);
     }
 
     const history = historyRes.data || [];
@@ -442,7 +458,7 @@ const Recovery = () => {
                 )}
                 {adjustedSession.exercises && (
                   <div className="space-y-1">
-                    {adjustedSession.exercises.map((ex: any, i: number) => (
+                    {adjustedSession.exercises.map((ex, i) => (
                       <div key={i} className="bg-muted/30 rounded-lg px-3 py-1.5 flex justify-between">
                         <span className="text-[11px] font-medium">{ex.name}</span>
                         <span className="text-[10px] text-primary font-medium">{ex.sets}</span>

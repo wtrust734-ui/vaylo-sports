@@ -21,8 +21,10 @@ import {
   type AvatarItem, type Category, type Rarity,
 } from "@/lib/avatarCatalog";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+import type { Json } from "@/integrations/supabase/types";
 
-const ICONS: Record<string, any> = {
+const ICONS: Record<string, LucideIcon> = {
   Dumbbell, Scissors, Palette, Square, Smile, Eye, Minus, Wind, Droplet,
   Shirt, Layers, Footprints, HardHat, Hand, Sparkles, Award, Image: ImageIcon, Play,
 };
@@ -117,9 +119,9 @@ const Avatar = () => {
   const persistLoadout = async (next: AvatarLoadout, opts: { is_setup?: boolean } = {}) => {
     if (!user) return;
     const legacy = ["skin_tone", "outfit", "headgear", "accessory", "badge", "background", "pose", "display_name", "prestige_level"];
-    const extras: Record<string, any> = {};
+    const extras: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(next)) if (!legacy.includes(k)) extras[k] = v;
-    const payload: any = {
+    const payload = {
       user_id: user.id, base: "athlete_neutral",
       skin_tone: next.skin_tone ?? "tone_4",
       outfit: next.outfit ?? null,
@@ -129,9 +131,9 @@ const Avatar = () => {
       background: next.background ?? "bg_void",
       pose: next.pose ?? "pose_stance",
       display_name: next.display_name ?? null,
-      extras,
+      extras: extras as unknown as Json,
+      ...(opts.is_setup !== undefined ? { is_setup: opts.is_setup } : {}),
     };
-    if (opts.is_setup !== undefined) payload.is_setup = opts.is_setup;
     const { error } = await supabase.from("avatars").upsert(payload, { onConflict: "user_id" });
     if (error) throw error;
   };
@@ -165,7 +167,7 @@ const Avatar = () => {
   const save = async () => {
     setSaving(true);
     try { await persistLoadout(loadout, { is_setup: true }); setIsSetup(true); toast.success("Avatar saved."); }
-    catch (e: any) { toast.error(e.message); }
+    catch (e) { toast.error(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }
   };
 
@@ -187,11 +189,11 @@ const Avatar = () => {
   const live: AvatarLoadout = previewItem ? { ...loadout, [previewItem.category]: previewItem.id } : loadout;
 
   // ------- Drag rotation -------
-  const onDrag = (_: any, info: PanInfo) => {
+  const onDrag = (_: unknown, info: PanInfo) => {
     const next = dragStartR.current + (info.point.x - dragStartX.current) * 0.55;
     setRotY(Math.max(-60, Math.min(60, next)));
   };
-  const onDragStart = (_: any, info: PanInfo) => {
+  const onDragStart = (_: unknown, info: PanInfo) => {
     dragStartX.current = info.point.x;
     dragStartR.current = rotY;
   };

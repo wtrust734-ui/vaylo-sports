@@ -355,7 +355,7 @@ const Arcade = () => {
       });
       await refreshProfile();
       toast({ title: "🏆 New Record!", description: `+${res.granted || promoBonus("arcade_record")} credits — beat it again to earn more.` });
-    } catch (e: any) {
+    } catch (e) {
       toast({ title: "Record set", description: "Couldn't award credits right now." });
     }
   }, [user, bests, refreshProfile, toast]);

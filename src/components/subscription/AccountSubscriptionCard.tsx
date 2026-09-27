@@ -50,8 +50,8 @@ export default function AccountSubscriptionCard({ compact = false }: { compact?:
     try {
       await fn();
       toast({ title: ok });
-    } catch (e: any) {
-      toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Something went wrong", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     }
     setBusy(false);
   };

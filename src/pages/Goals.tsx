@@ -101,7 +101,7 @@ const Goals = () => {
       }
       setAiFeedback(payload.feedback);
       if (payload.balance != null) toast.success(`Review complete${payload.cost ? ` — ${payload.cost} credits used` : ""}.`);
-    } catch (e: any) {
+    } catch (e) {
       const msg = e?.message ?? "Failed";
       if (msg.includes("Not enough credits") || msg.includes("Insufficient") || e?.status === 402) {
         toast.error(msg.includes("credits") ? msg : "Not enough credits for Weekly Coach Review — need 3 credits.");
@@ -349,7 +349,7 @@ const Goals = () => {
   );
 };
 
-const Stat = ({ label, value, suffix, className, icon }: any) => (
+const Stat = ({ label, value, suffix, className, icon }: { label: string; value: number; suffix?: string; className?: string; icon?: React.ReactNode }) => (
   <div className="text-center">
     <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1 flex items-center justify-center gap-1">{icon}{label}</p>
     <p className={`text-2xl font-display font-bold ${className ?? ""}`}>
@@ -369,7 +369,7 @@ const EmptyHint = ({ text }: { text: string }) => (
   <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>
 );
 
-const OutcomeDialog = ({ open, onClose, userId, onSaved }: any) => {
+const OutcomeDialog = ({ open, onClose, userId, onSaved }: { open: boolean; onClose: () => void; userId?: string; onSaved: () => void }) => {
   const [f, setF] = useState({ title: "", category: "performance", target_value: "", metric_unit: "", deadline: "", current_value: "0" });
   const submit = async () => {
     if (!f.title || !userId) return;
@@ -406,7 +406,7 @@ const OutcomeDialog = ({ open, onClose, userId, onSaved }: any) => {
   );
 };
 
-const ProcessDialog = ({ open, outcomeId, onClose, userId, onSaved }: any) => {
+const ProcessDialog = ({ open, outcomeId, onClose, userId, onSaved }: { open: boolean; outcomeId: string | null; onClose: () => void; userId?: string; onSaved: () => void }) => {
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("3");
   const submit = async () => {
@@ -433,7 +433,7 @@ const ProcessDialog = ({ open, outcomeId, onClose, userId, onSaved }: any) => {
   );
 };
 
-const ActionDialog = ({ open, processId, onClose, userId, onSaved }: any) => {
+const ActionDialog = ({ open, processId, onClose, userId, onSaved }: { open: boolean; processId: string | null; onClose: () => void; userId?: string; onSaved: () => void }) => {
   const [title, setTitle] = useState("");
   const submit = async () => {
     if (!title || !userId) return;

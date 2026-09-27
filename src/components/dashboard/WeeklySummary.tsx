@@ -14,9 +14,19 @@ const isoMonday = () => {
   return localDateKey(d);
 };
 
+interface WeeklySummaryData {
+  totalMin: number;
+  planned: number;
+  completed: number;
+  avgRPE: string;
+  load: number;
+  top: { title: string } | null;
+  insight: string;
+}
+
 const WeeklySummary = () => {
   const { user } = useAuth();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<WeeklySummaryData | null>(null);
   const monday = isoMonday();
   const dismissKey = `vaylo_weekly_dismiss_${monday}`;
   const [dismissed, setDismissed] = useState(lsGet<boolean>(dismissKey, false));
@@ -32,11 +42,11 @@ const WeeklySummary = () => {
       ]);
       const workouts = w.data || [];
       const planned = (p.data || []).length;
-      const completed = workouts.filter((x: any) => x.completed).length;
-      const totalMin = workouts.reduce((s: number, x: any) => s + (x.duration_minutes || 0), 0);
+      const completed = workouts.filter((x) => x.completed).length;
+      const totalMin = workouts.reduce((s: number, x) => s + (x.duration_minutes || 0), 0);
       const rpe = getRPE().filter(r => new Date(r.date) >= new Date(monday));
       const avgRPE = rpe.length ? (rpe.reduce((s, r) => s + r.rpe, 0) / rpe.length) : 0;
-      const load = workouts.reduce((s: number, x: any) => s + (x.duration_minutes || 0) * 1.2, 0);
+      const load = workouts.reduce((s: number, x) => s + (x.duration_minutes || 0) * 1.2, 0);
       const top = a.data?.[0];
       const insight = avgRPE > 7.5
         ? "Average RPE is elevated. Schedule one lighter aerobic day before your next hard session."
@@ -78,7 +88,7 @@ const WeeklySummary = () => {
   );
 };
 
-const Stat = ({ label, value }: { label: string; value: any }) => (
+const Stat = ({ label, value }: { label: string; value: string | number }) => (
   <div className="text-center">
     <p className="text-lg font-display font-bold">{value}</p>
     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>

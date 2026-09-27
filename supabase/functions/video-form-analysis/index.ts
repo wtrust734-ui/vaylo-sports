@@ -73,8 +73,16 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     if (!body) return json({ error: "Invalid request body" }, 400);
 
-    const { video_base64, mime_type, sport_type, video_name, save, pbs, userLocale } = body as Record<string, any>;
-    const langDirective = languageDirective(userLocale);
+    const { video_base64, mime_type, sport_type, video_name, save, pbs, userLocale } = body as {
+      video_base64?: unknown;
+      mime_type?: unknown;
+      sport_type?: unknown;
+      video_name?: unknown;
+      save?: unknown;
+      pbs?: unknown;
+      userLocale?: unknown;
+    };
+    const langDirective = languageDirective(typeof userLocale === "string" ? userLocale : undefined);
 
     if (typeof video_base64 !== "string" || video_base64.length < 100)
       return json({ error: "No video received. Please upload an MP4 or MOV file." }, 400);
@@ -91,7 +99,7 @@ Deno.serve(async (req) => {
     // ---- Tier check: free = 1 analysis / 7 days on Flash, premium = unlimited on Pro ----
     const { data: sub } = await admin
       .from("subscriptions")
-      .select("plan_type, status")
+      .select("plan_type, status, is_lifetime, unlimited_credits")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -176,8 +184,9 @@ Deno.serve(async (req) => {
     }
 
     const data = await geminiRes.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ?? "";
-    let result: any;
+    const parts = (data?.candidates?.[0]?.content?.parts ?? []) as { text?: string }[];
+    const text = parts.map((p) => p.text ?? "").join("") ?? "";
+    let result: Record<string, unknown>;
     try {
       result = JSON.parse(text);
     } catch {

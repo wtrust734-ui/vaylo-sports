@@ -7,16 +7,36 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { RARITY_ORDER, type Rarity } from "@/lib/rewards";
 
+interface RewardDefRow {
+  id: string;
+  name: string;
+  type: string;
+  category: string;
+  rarity: Rarity;
+  icon?: string | null;
+  active: boolean;
+  weight_override?: number | null;
+  available_from?: string | null;
+  available_to?: string | null;
+  [key: string]: unknown;
+}
+interface RewardConfigRow {
+  probabilities: Record<string, number>;
+  duplicate_conversion: Record<string, number>;
+  [key: string]: unknown;
+}
+
 export default function AdminRewards() {
-  const [defs, setDefs] = useState<any[]>([]);
-  const [cfg, setCfg] = useState<any>(null);
+  const [defs, setDefs] = useState<RewardDefRow[]>([]);
+  const [cfg, setCfg] = useState<RewardConfigRow | null>(null);
 
   const load = async () => {
     const [{ data: d }, { data: c }] = await Promise.all([
       supabase.from("reward_definitions").select("*").order("rarity"),
       supabase.from("reward_config").select("*").eq("id", 1).maybeSingle(),
     ]);
-    setDefs(d ?? []); setCfg(c);
+    setDefs((d ?? []) as unknown as RewardDefRow[]);
+    setCfg((c ?? null) as unknown as RewardConfigRow | null);
   };
   useEffect(() => { load(); }, []);
 

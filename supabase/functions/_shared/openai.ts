@@ -97,8 +97,10 @@ export function languageDirective(locale?: string): string {
 
 /** Strips the most common prompt-injection phrasings from untrusted text. */
 function sanitize(text: string): string {
+  // The NUL byte is exactly what we strip here — that's the point.
+  const NUL = /[\u0000]/g; // eslint-disable-line no-control-regex
   return text
-    .replace(/\u0000/g, "")
+    .replace(NUL, "")
     .replace(/```+\s*system/gi, "```")
     .replace(/\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)\b/gi, "[removed]")
     .replace(/\b(reveal|print|repeat|show)\s+(your\s+)?(system\s+)?prompt\b/gi, "[removed]")
@@ -168,12 +170,16 @@ export function validate(args: GenerateArgs) {
 }
 
 /** Extracts assistant text from a Responses API payload. */
-function extractText(payload: any): string {
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text.trim();
+function extractText(payload: unknown): string {
+  const p = payload as {
+    output_text?: unknown;
+    output?: { type?: unknown; content?: { text?: unknown }[] }[] | null;
+  } | null;
+  if (typeof p?.output_text === "string" && p.output_text.trim()) {
+    return p.output_text.trim();
   }
   const parts: string[] = [];
-  for (const item of payload?.output ?? []) {
+  for (const item of p?.output ?? []) {
     if (item?.type && item.type !== "message") continue;
     for (const content of item?.content ?? []) {
       if (typeof content?.text === "string") parts.push(content.text);
@@ -191,7 +197,7 @@ function buildRequestBody(v: ReturnType<typeof validate>, userLocale?: string) {
     languageDirective(userLocale),
   ].filter(Boolean).join("\n\n");
 
-  const input: any[] = [];
+  const input: Record<string, unknown>[] = [];
   for (const turn of v.history) {
     input.push({
       role: turn.role,
@@ -199,7 +205,7 @@ function buildRequestBody(v: ReturnType<typeof validate>, userLocale?: string) {
     });
   }
 
-  const userContent: any[] = [{ type: "input_text", text: v.userPrompt }];
+  const userContent: Record<string, unknown>[] = [{ type: "input_text", text: v.userPrompt }];
   if (v.userDataBlock) {
     userContent.push({
       type: "input_text",

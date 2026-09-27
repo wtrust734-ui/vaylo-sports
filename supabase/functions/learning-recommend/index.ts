@@ -39,7 +39,14 @@ Deno.serve(async (req) => {
     const sport = body?.sport ?? "general";
     const goals = body?.goals ?? [];
     const experience = body?.experience ?? "intermediate";
-    const allLessons: any[] = Array.isArray(body?.allLessons) ? body.allLessons.slice(0, MAX_LESSONS) : [];
+    interface LessonSummary {
+      id: string;
+      category: string;
+      title: string;
+      sports?: string[];
+      goals?: string[];
+    }
+    const allLessons: LessonSummary[] = Array.isArray(body?.allLessons) ? (body.allLessons as LessonSummary[]).slice(0, MAX_LESSONS) : [];
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
 
@@ -59,7 +66,7 @@ Athlete:
 - Already completed lessons: ${completedIds.join(", ") || "none"}
 
 Available lessons (id · category · title · sports · goals):
-${remaining.map((l: any) => `${l.id} · ${l.category} · ${l.title} · sports:[${(l.sports || []).join("|") || "any"}] · goals:[${(l.goals || []).join("|") || "any"}]`).join("\n")}
+${remaining.map((l) => `${l.id} · ${l.category} · ${l.title} · sports:[${(l.sports || []).join("|") || "any"}] · goals:[${(l.goals || []).join("|") || "any"}]`).join("\n")}
 
 Selection rules (apply in order):
 1. STRONGLY prefer lessons whose 'sports' array matches the athlete's sport, OR whose 'goals' array matches one of the athlete's stated goals.
@@ -98,7 +105,7 @@ Return exactly 5 lesson IDs from the list above.`;
 
     const data = await resp.json();
     const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    const valid = (args.recommendations || []).filter((id: string) => remaining.some((l: any) => l.id === id));
+    const valid = ((args.recommendations ?? []) as string[]).filter((id: string) => remaining.some((l) => l.id === id));
 
     return new Response(JSON.stringify({ recommendations: valid }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

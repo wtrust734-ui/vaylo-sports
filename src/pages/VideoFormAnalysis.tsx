@@ -86,7 +86,7 @@ const VideoFormAnalysis = () => {
       .eq("saved", true)
       .order("created_at", { ascending: false })
       .limit(30);
-    setHistory((data || []) as HistoryRow[]);
+    setHistory((data || []) as unknown as HistoryRow[]);
   }, [user]);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
@@ -149,7 +149,7 @@ const VideoFormAnalysis = () => {
       setStage("idle");
       loadHistory();
       toast({ title: "Analysis ready 🎯" });
-    } catch (err: any) {
+    } catch (err) {
       setStage("idle");
       setProgress(0);
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });

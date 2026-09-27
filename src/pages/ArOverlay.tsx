@@ -30,8 +30,15 @@ const ArOverlay = () => {
     if (!user) return;
     supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => {
       if (!data) return;
-      const d = data as { ar_overlay_name?: string | null } | null;
-      if (d.ar_persona) setPersona(d.ar_persona);
+      const d = data as {
+        ar_persona?: string | null;
+        ar_metrics?: string[];
+        ar_theme?: string | null;
+        ar_position?: string | null;
+        ar_voice_enabled?: boolean | null;
+      } | null;
+      if (!d) return;
+      if (d.ar_persona && AR_PERSONAS.some((p) => p.id === d.ar_persona)) setPersona(d.ar_persona as ArPersonaId);
       if (Array.isArray(d.ar_metrics)) setMetrics(d.ar_metrics);
       if (d.ar_theme) setTheme(d.ar_theme);
       if (d.ar_position) setPosition(d.ar_position);

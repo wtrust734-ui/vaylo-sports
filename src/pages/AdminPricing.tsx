@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Shield, Save, Plus, Trash2, TrendingUp, DollarSign, Users, Globe2, BarChart3 } from "lucide-react";
+import { Shield, Save, Plus, Trash2, TrendingUp, DollarSign, Users, Globe2, BarChart3, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalPrice } from "@/lib/creditEconomy";
+
+type PackEntry = { id: string; label?: string; credits?: number; price_cents: number; bonus?: number; [key: string]: unknown };
 
 type Tier = {
   id: string;
   code: string;
   name: string;
   description: string | null;
-  packs: any[];
-  infinite: any[];
+  packs: PackEntry[];
+  infinite: PackEntry[];
   active: boolean;
   sort_order: number;
 };
@@ -36,7 +39,13 @@ export default function AdminPricing() {
 
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [countries, setCountries] = useState<CountryRow[]>([]);
-  const [analytics, setAnalytics] = useState<any>({ byCountry: [], byTier: [], segments: [], totals: { rev: 0, purchases: 0, arpu: 0, unlimited: 0 } });
+  type Analytics = {
+    byCountry: { country: string; rev: number; count: number; users: number }[];
+    byTier: { tier: string; rev: number; count: number }[];
+    segments: { segment: string; count: number }[];
+    totals: { rev: number; purchases: number; arpu: number; unlimited: number };
+  };
+  const [analytics, setAnalytics] = useState<Analytics>({ byCountry: [], byTier: [], segments: [], totals: { rev: 0, purchases: 0, arpu: 0, unlimited: 0 } });
   const [savingId, setSavingId] = useState<string | null>(null);
 
   // Check admin role
@@ -61,7 +70,7 @@ export default function AdminPricing() {
         supabase.from("pricing_tiers").select("*").order("sort_order"),
         supabase.from("country_pricing_map").select("*").order("country_name"),
       ]);
-      setTiers(t || []);
+      setTiers((t || []) as unknown as Tier[]);
       setCountries(c || []);
       loadAnalytics();
     })();
@@ -121,8 +130,8 @@ export default function AdminPricing() {
     const { error } = await supabase.from("pricing_tiers").update({
       name: tier.name,
       description: tier.description,
-      packs: tier.packs,
-      infinite: tier.infinite,
+      packs: tier.packs as unknown as Json,
+      infinite: tier.infinite as unknown as Json,
       active: tier.active,
       sort_order: tier.sort_order,
     }).eq("id", tier.id);
@@ -228,7 +237,7 @@ export default function AdminPricing() {
                 <div>
                   <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Credit packs</h4>
                   <div className="space-y-1.5">
-                    {tier.packs.map((p: any, i: number) => (
+                    {tier.packs.map((p, i: number) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
                         <span className="w-20 text-muted-foreground">{p.credits} cr</span>
                         {p.bonus > 0 && <span className="text-energy">+{p.bonus}</span>}
@@ -244,9 +253,9 @@ export default function AdminPricing() {
                 <div>
                   <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Unlimited</h4>
                   <div className="space-y-1.5">
-                    {tier.infinite.map((p: any, i: number) => (
+                    {tier.infinite.map((p, i: number) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
-                        <span className="w-20 text-muted-foreground capitalize">{p.label}</span>
+                        <span className="w-20 text-muted-foreground capitalize">{String(p.label ?? "")}</span>
                         <span className="ml-auto text-muted-foreground">$</span>
                         <input type="number" step="0.01" min="0"
                           value={(p.price_cents/100).toFixed(2)}
@@ -300,19 +309,19 @@ export default function AdminPricing() {
           </div>
 
           <Section title="Revenue by country">
-            {analytics.byCountry.length === 0 ? <Empty /> : analytics.byCountry.map((r: any) => (
+            {analytics.byCountry.length === 0 ? <Empty /> : analytics.byCountry.map((r) => (
               <Row key={r.country} left={r.country} mid={`${r.count} purchases · ${r.users} buyers`} right={`$${(r.rev/100).toFixed(2)}`} />
             ))}
           </Section>
 
           <Section title="Revenue by pricing tier">
-            {analytics.byTier.length === 0 ? <Empty /> : analytics.byTier.map((r: any) => (
+            {analytics.byTier.length === 0 ? <Empty /> : analytics.byTier.map((r) => (
               <Row key={r.tier} left={`Tier ${r.tier}`} mid={`${r.count} purchases`} right={`$${(r.rev/100).toFixed(2)}`} />
             ))}
           </Section>
 
           <Section title="User segments">
-            {analytics.segments.map((s: any) => (
+            {analytics.segments.map((s) => (
               <Row key={s.segment} left={SEG_LABEL[s.segment] || s.segment} mid="" right={String(s.count)} />
             ))}
           </Section>
@@ -322,20 +331,20 @@ export default function AdminPricing() {
   );
 }
 
-const StatCard = ({ icon: Icon, label, value }: any) => (
+const StatCard = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string | number }) => (
   <div className="bg-card border border-border rounded-2xl p-3">
     <Icon size={14} className="text-electric-purple mb-1" />
     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
     <p className="text-xl font-display font-bold">{value}</p>
   </div>
 );
-const Section = ({ title, children }: any) => (
+const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="bg-card border border-border rounded-2xl p-4">
     <h3 className="font-display font-bold text-sm mb-3">{title}</h3>
     <div className="space-y-1.5">{children}</div>
   </div>
 );
-const Row = ({ left, mid, right }: any) => (
+const Row = ({ left, mid, right }: { left: string; mid: React.ReactNode; right: React.ReactNode }) => (
   <div className="flex items-center justify-between text-xs py-1.5 border-b border-border/40 last:border-0">
     <span className="font-semibold">{left}</span>
     <span className="text-muted-foreground">{mid}</span>

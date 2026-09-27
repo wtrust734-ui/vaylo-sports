@@ -47,7 +47,7 @@ const CommandHero = () => {
       if (todays) setReadiness(todays.readiness_score);
       // streak: consecutive logged days from today
       let s = 0;
-      const set = new Set((rRes.data || []).map((r: any) => r.log_date));
+      const set = new Set((rRes.data || []).map((r: { log_date: string }) => r.log_date));
       for (let i = 0; i < 14; i++) {
         const d = new Date(); d.setDate(d.getDate() - i);
         if (set.has(localDateKey(d))) s++; else break;

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import type { Tables } from "@/integrations/supabase/types";
 
 const TYPES = ["shoes", "wearable", "bike", "racquet", "other"];
 
@@ -16,9 +17,9 @@ const MetricsHub = () => {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [loads, setLoads] = useState<LoadRow[]>([]);
-  const [recovery, setRecovery] = useState<any[]>([]);
-  const [meals, setMeals] = useState<any[]>([]);
-  const [equipment, setEquipment] = useState<any[]>([]);
+  const [recovery, setRecovery] = useState<Tables<"recovery_logs">[]>([]);
+  const [meals, setMeals] = useState<Tables<"meal_logs">[]>([]);
+  const [equipment, setEquipment] = useState<Tables<"equipment">[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", type: "shoes", max_km: 800 });
 

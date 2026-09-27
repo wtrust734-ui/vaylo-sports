@@ -3,6 +3,7 @@
 // Local defaults are merged with remote config from `economy_config` table.
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export type CreditPack = {
   id: string;
@@ -97,14 +98,14 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
   try {
     const cached = localStorage.getItem("vaylo:region:v2");
     if (cached) return JSON.parse(cached);
-  } catch {}
+  } catch { /* corrupted cache or storage unavailable — fall through to detection */ }
 
   let country = "US";
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
     const region = (locale.split("-")[1] || "US").toUpperCase();
     if (region) country = region;
-  } catch {}
+  } catch { /* locale API unavailable */ }
 
   const { data: map } = await supabase
     .from("country_pricing_map")
@@ -116,7 +117,7 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
     ? { country, currency: map.currency, tier_code: map.tier_code }
     : { country: "US", currency: "USD", tier_code: "A" };
 
-  try { localStorage.setItem("vaylo:region:v2", JSON.stringify(result)); } catch {}
+  try { localStorage.setItem("vaylo:region:v2", JSON.stringify(result)); } catch { /* storage unavailable */ }
   return result;
 }
 
@@ -148,7 +149,7 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
     supabase.from("special_offers").select("*").eq("active", true).in("region", [region.country, "GLOBAL"]),
   ]);
 
-  const byKey = new Map<string, any>();
+  const byKey = new Map<string, { key: string; region: string; value: unknown }>();
   for (const row of cfgRows || []) {
     // Region-specific overrides global
     const existing = byKey.get(row.key);
@@ -167,18 +168,18 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
     ...(byKey.get("feature_costs")?.value as Record<FeatureCostKey, number> ?? {}),
   };
 
-  const offers: SpecialOffer[] = (offerRows || []).map((o: any) => ({
-    id: o.id,
-    slug: o.slug,
-    title: o.title,
-    description: o.description,
-    offer_type: o.offer_type,
-    pack_id: o.pack_id,
+  const offers: SpecialOffer[] = ((offerRows ?? []) as Array<Record<string, unknown>>).map((o) => ({
+    id: String(o.id),
+    slug: String(o.slug),
+    title: String(o.title),
+    description: o.description == null ? null : String(o.description),
+    offer_type: String(o.offer_type) as SpecialOffer["offer_type"],
+    pack_id: o.pack_id == null ? null : String(o.pack_id),
     bonus_multiplier: Number(o.bonus_multiplier ?? 1),
     bonus_flat: Number(o.bonus_flat ?? 0),
-    price_cents: o.price_cents,
-    target_audience: o.target_audience,
-    ends_at: o.ends_at,
+    price_cents: Number(o.price_cents),
+    target_audience: o.target_audience == null ? null : String(o.target_audience),
+    ends_at: o.ends_at == null ? null : String(o.ends_at),
   }));
 
   return { packs, infinite, featureCosts, offers, region };
@@ -192,7 +193,7 @@ export async function trackEconomyEvent(params: {
   amount_cents?: number;
   credits_granted?: number;
   bonus_granted?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -208,7 +209,7 @@ export async function trackEconomyEvent(params: {
       amount_cents: params.amount_cents ?? 0,
       credits_granted: params.credits_granted ?? 0,
       bonus_granted: params.bonus_granted ?? 0,
-      metadata: params.metadata ?? {},
+      metadata: (params.metadata ?? {}) as unknown as Json,
     });
   } catch {
     // Silent — analytics should never break UX
