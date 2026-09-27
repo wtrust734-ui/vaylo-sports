@@ -10,8 +10,15 @@
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
 
+    <!-- Backup is off: the WebView persists the Supabase session (refresh token)
+         in app-private storage, and platform-default backup would upload it to
+         Google Drive and carry it across device-to-device transfers. See
+         res/xml/data_extraction_rules.xml (API 31+) and full_backup_content.xml
+         (API 30 and lower). -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/full_backup_content"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

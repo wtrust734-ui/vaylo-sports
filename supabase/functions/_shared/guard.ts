@@ -170,23 +170,41 @@ export async function userOwnsProduct(userId: string, product: string): Promise<
 }
 
 /**
- * True when the user has an active subscription or a one-off purchase with the
+ * Statuses that represent a plan the user is currently entitled to. Mirrors the
+ * `status IN (...)` list in public.has_unlimited_credits() — keep the two in
+ * sync, or the browser and the database will disagree about who is paying.
+ */
+const LIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "renewing", "lifetime", "trial"];
+
+/**
+ * True when the user has a live subscription or a one-off purchase with the
  * given product id (used for "unlock"-style features such as form_analysis).
+ *
+ * Two traps this deliberately guards against:
+ *  • `unlimited_credits` is NOT cleared when a plan lapses —
+ *    cancel_my_subscription() leaves the flag set and only flips `status` — so
+ *    the flag alone must never be treated as proof of payment.
+ *  • An `active` row keeps saying `active` after `expires_at` passes, because
+ *    nothing rewrites the row on expiry (get_my_entitlements() only derives an
+ *    'expired' status at read time). Reading the timestamp here is the same
+ *    check that function performs.
  */
 export async function hasEntitlement(userId: string, product: string): Promise<boolean> {
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: sub } = await admin
       .from("subscriptions")
-      .select("status, unlimited_credits, is_lifetime")
+      .select("status, unlimited_credits, is_lifetime, expires_at")
       .eq("user_id", userId)
       .maybeSingle();
-    const active =
-      sub?.is_lifetime === true ||
-      sub?.unlimited_credits === true ||
-      sub?.status === "active" ||
-      sub?.status === "trial";
-    if (active) return true;
+
+    const isLifetime = sub?.is_lifetime === true;
+    const liveStatus = LIVE_SUBSCRIPTION_STATUSES.includes(String(sub?.status ?? ""));
+    const lapsed = !!sub?.expires_at && new Date(sub.expires_at as string).getTime() <= Date.now();
+
+    // A live plan unlocks unlock-style features; a lapsed one does not, even if
+    // its row still carries `unlimited_credits: true` or `status: 'active'`.
+    if (isLifetime || (liveStatus && !lapsed)) return true;
     return await userOwnsProduct(userId, product);
   } catch {
     return false;

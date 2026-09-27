@@ -39,3 +39,21 @@ additional_redirect_urls = [
 # it off in production lets anyone register an address they do not own.
 [auth.email]
 enable_confirmations = false
+
+# ---------------------------------------------------------------------------
+# Edge function JWT verification
+# ---------------------------------------------------------------------------
+# Without these declarations `supabase functions deploy` defaults every
+# function to verify_jwt = true, and the two public endpoints below would start
+# returning 401 to the crawlers and browsers they exist to serve. The flags used
+# to live only in a code comment, which is not something a redeploy reads.
+#
+# Everything else (process-purchase, ai-*, coach-chat, generate-plan,
+# weekly-review, delete-account, manage-subscription, open-chest,
+# video-form-analysis, wearable-oauth) must keep verifying the caller's JWT.
+
+[functions.og-image]
+verify_jwt = false
+
+[functions.link-preview]
+verify_jwt = false

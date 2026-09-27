@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+) backup policy.
+
+  Why this file exists: the app persists the Supabase session (access + refresh
+  token) in WebView storage, which lives under the app's private data
+  directory. With the platform default, that directory is uploaded to the
+  user's Google Drive and is also copied during device-to-device transfer — so
+  a signed-in session would leave the device and could land on a different
+  handset after a restore.
+
+  `android:allowBackup="false"` only covers cloud backup on Android 12+; the
+  <device-transfer> section below is what removes the app from D2D copies.
+  Everything is excluded because Vaylo Sports stores nothing that is worth
+  restoring without the user signing in again.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>
