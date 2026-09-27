@@ -280,8 +280,9 @@ supabase functions deploy coach-chat weekly-review learning-recommend process-pu
 - `coach-chat`, `weekly-review` — refund the 3 credits when an AI call fails
 - `learning-recommend` — now requires a verified user
 - `process-purchase` — validates the basket, records server-side prices, allows
-  one redemption per offer, grants coins through `grant_coins` (and refuses
-  unverified store receipts when `PAYMENT_MODE=store`)
+  one redemption per offer, grants coins through `grant_coins` (and verifies
+  Google Play purchase tokens via `_shared/playBilling.ts` when
+  `PAYMENT_MODE=store`)
 
 Deploy the rest too if this is the first deploy to the new project:
 
@@ -405,10 +406,12 @@ These are known gaps, not oversights — each is tracked in the docs named:
 
 - **AI features** until an `OPENAI_API_KEY` (or a Gemini rewrite of
   `_shared/openai.ts`) is in place.
-- **Payments take no money.** `PAYMENT_MODE=test` keeps checkout working but
-  grants credits and coins **without verifying any payment** — there is no
-  Stripe/RevenueCat/StoreKit integration in the repo. Don't sell anything real
-  until a billing provider is added and `PAYMENT_MODE=store` is switched on.
+- **Payments: Google Play Billing is the chosen provider.** The server-side
+  verifier is implemented (`_shared/playBilling.ts` + `verifyStorePurchase()`),
+  but `PAYMENT_MODE=test` still keeps checkout granting without verification
+  until Play Console products + the service-account secrets are in place and
+  `supabase secrets set PAYMENT_MODE=store` is run. Full runbook:
+  `CAPACITOR.md` §3. Don't sell anything real until that cutover is done.
 - **Sponsored surfaces are empty** by design — no brand rows exist. See
   `SPONSORSHIP.md` for the SQL to add one.
 - **Brand-funded challenge rewards are deliberately off.** `reward_credits` is

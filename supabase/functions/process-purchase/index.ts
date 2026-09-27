@@ -22,6 +22,7 @@ import {
   PRODUCT_PRICES,
   UNLIMITED_PACKS,
 } from "../_shared/moneyCatalog.ts";
+import { verifyPlayPurchase } from "../_shared/playBilling.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,10 +34,11 @@ const corsHeaders = {
 // `node scripts/gen-money-mirror.cjs`. Feature-unlock PRICES come from the
 // database (`public.credit_cost`), which is what actually charges them.
 //
-// NOTE ON PAYMENT VERIFICATION: there is no billing provider wired up yet. The
-// store purchase is verified in `verifyStorePurchase()` below, which currently
-// runs in test mode. That is the single seam to replace with a Capacitor
-// billing plugin (or RevenueCat) — see the notes in MONEY.md / DEPLOY_NOTES.md.
+// NOTE ON PAYMENT VERIFICATION: Google Play Billing is the store provider. In
+// PAYMENT_MODE=store the purchase token from the client is verified in
+// `verifyStorePurchase()` below against the Google Play Developer API
+// (see _shared/playBilling.ts); PAYMENT_MODE=test keeps web checkout trusted.
+// See CAPACITOR.md §3 for the Play Console + secrets runbook.
 
 const PAYMENT_MODE = Deno.env.get("PAYMENT_MODE") ?? "test";
 
@@ -72,11 +74,12 @@ interface SpecialOfferRow {
  * `test` mode (the current default) keeps the web app fully working: the client
  * is trusted and the reference is optional.
  *
- * `PAYMENT_MODE=store` is the native path. The client sends the store
- * transaction id + receipt (see src/lib/billing.ts); this function must then
- * verify it against the App Store Server API / Google Play Developer API (or
- * RevenueCat) and only then return `verified: true`. Until that verifier
- * exists, store mode refuses rather than granting on trust — see CAPACITOR.md.
+ * `PAYMENT_MODE=store` is the native Google Play Billing path. The client buys
+ * through Play Billing and sends the purchase token + a JSON receipt
+ * (see src/lib/billing.ts); the token is then verified against the Google Play
+ * Developer API with the linked service account, and the purchase's productId
+ * must exist in the money catalog. Pending, cancelled/refunded and
+ * unknown-product purchases are refused — nothing is granted on trust.
  */
 async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise<Verification> {
   if (!Array.isArray(items) || items.length === 0) {
@@ -93,14 +96,57 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
     return { verified: false, error: "Missing store purchase verification", status: 402 };
   }
 
-  // TODO(store): verify `body.verification.receipt` with the store, confirm the
-  // product id(s) and amount, and only then grant. Deliberately not implemented:
-  // granting on an unverified receipt is exactly the hole this replaces.
-  return {
-    verified: false,
-    error: "Store receipt verification is not implemented yet. See CAPACITOR.md.",
-    status: 503,
-  };
+  const serviceAccountEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL")?.trim();
+  const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+  const packageName = Deno.env.get("GOOGLE_ANDROID_PACKAGE_NAME")?.trim();
+  if (!serviceAccountEmail || !privateKey || !packageName) {
+    console.error(
+      "PAYMENT_MODE=store requires GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY and GOOGLE_ANDROID_PACKAGE_NAME"
+    );
+    return {
+      verified: false,
+      error: "Play Billing is not fully configured on the server yet. Please try again later.",
+      status: 503,
+    };
+  }
+
+  let receipt: { packageName?: string; productId?: string } | null = null;
+  try {
+    const parsed: unknown = JSON.parse(body.verification.receipt);
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      receipt = {
+        packageName: typeof obj.packageName === "string" ? obj.packageName : undefined,
+        productId: typeof obj.productId === "string" ? obj.productId : undefined,
+      };
+    }
+  } catch {
+    return { verified: false, error: "Malformed store receipt.", status: 400 };
+  }
+
+  const result = await verifyPlayPurchase(reference, receipt, {
+    serviceAccountEmail,
+    privateKey,
+    packageName,
+  });
+  if (!result.ok || !result.purchase) {
+    return { verified: false, error: result.error ?? "Purchase verification failed.", status: 402 };
+  }
+
+  // Cross-check: the Play-verified product must be one the athlete actually
+  // asked for (prevents buying pack_25 and replaying it as pack_500), and the
+  // verified purchase time must not predate the request by more than 48h.
+  const verifiedProductId = result.purchase.productId;
+  const basketIds = (items as { product_id?: unknown }[]).map((i) => String(i?.product_id ?? ""));
+  if (!basketIds.includes(verifiedProductId)) {
+    return {
+      verified: false,
+      error: "Verified purchase does not match the requested product.",
+      status: 400,
+    };
+  }
+
+  return { verified: true, reference };
 }
 
 Deno.serve(async (req) => {

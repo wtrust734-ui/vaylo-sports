@@ -100,38 +100,72 @@ build is unaffected.
 
 ---
 
-## 3. Store billing (the part store review will test)
+## 3. Store billing — Google Play Billing (the part store review will test)
 
-Apple and Google require digital goods — credits, coins, unlocks — to be sold
-through their in-app purchase systems. The code is shaped for that:
+Google requires digital goods — credits, coins, unlocks — to be sold through
+Play Billing in the Android app. The server-side verifier is now implemented
+(`supabase/functions/_shared/playBilling.ts`, wired into `process-purchase`);
+what remains is Play Console setup, the Capacitor plugin, and secrets.
 
-1. **Create the products** in App Store Connect / Google Play Console using the
-   exact product ids from `supabase/functions/_shared/moneyCatalog.ts`
+1. **Create the in-app products** in Google Play Console → Monetize → Products,
+   using the exact product ids from `supabase/functions/_shared/moneyCatalog.ts`
    (`pack_25`…`pack_500`, `coins_120`…`coins_5000`, `coins_first`,
-   `infinite_lifetime`, `infinite_monthly`, `infinite_yearly`).
-2. **Install a store plugin**, e.g. `@capacitor-community/in-app-purchases` or
-   RevenueCat, and implement `storeProvider` in `src/lib/billing.ts`: the call is
-   already written — it purchases `productId`, reads `transactionId` + `receipt`,
-   and forwards them to `process-purchase` as `verification`.
-3. **Set `STORE_BILLING_ENABLED = true`** in `src/lib/billing.ts`.
-4. **Implement the server verifier**: replace the TODO inside
-   `verifyStorePurchase()` in `supabase/functions/process-purchase/index.ts` to
-   check the receipt against the App Store Server API / Google Play Developer API
-   (or RevenueCat) and confirm product + amount. Then:
+   `infinite_lifetime`, `infinite_monthly`, `infinite_yearly`). One-time
+   products only — there are no Play subscriptions in this model.
+
+2. **Link a service account** for the Play Developer API:
+   - Google Cloud Console → create a service account, download the JSON key.
+   - Play Console → Users and permissions → invite the service account's email
+     with **View app information** + **View financial data** + **Manage orders
+     and refunds** (or the "Android Developer" API access preset), and link it
+     in API access.
+   - Note the app id: `com.vaylosports.app` (matches `appId` in
+     `capacitor.config.ts`).
+
+3. **Set the server secrets** (they go to Supabase, not the app bundle):
+   ```bash
+   supabase secrets set GOOGLE_SERVICE_ACCOUNT_EMAIL=...@...iam.gserviceaccount.com
+   supabase secrets set GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+   supabase secrets set GOOGLE_ANDROID_PACKAGE_NAME=com.vaylosports.app
+   ```
+   The private key keeps its literal `\n` sequences.
+
+4. **Install the Capacitor Play Billing plugin**, e.g.
+   `@capacitor-community/in-app-purchases` or RevenueCat, and make its purchase
+   call resolve to the shape `storeProvider` in `src/lib/billing.ts` already
+   consumes: `transactionId` = the Play **purchase token**, `receipt` = a JSON
+   string `{ "packageName": "com.vaylosports.app", "productId": "pack_120" }`.
+   No other client change is needed.
+
+5. **Set `STORE_BILLING_ENABLED = true`** in `src/lib/billing.ts`.
+
+6. **Switch the server on and redeploy the function:**
    ```bash
    supabase secrets set PAYMENT_MODE=store
+   supabase functions deploy process-purchase
    ```
-   Until that verifier exists, `PAYMENT_MODE=store` **refuses** every purchase
-   rather than granting on trust — by design.
-5. **Restore purchases is wired.** `AccountSubscriptionCard` shows a
-   "Restore purchases" button as soon as store billing is active (it is hidden on
-   the web build, where there is nothing to restore) and calls
-   `restorePurchases()` in `src/lib/billing.ts`. The store replays receipts —
-   the **server** must still re-verify each one through `verifyStorePurchase()`,
-   so restoring is not a trust shortcut.
-6. **Replay safety** is handled: a store transaction id is stored on
-   `user_purchases.provider_reference` with a unique index, so retried deliveries
-   return `409 duplicate` instead of granting twice.
+   In store mode nothing is granted until Google answers `purchaseState=0`
+   for the token, the purchase's productId exists in the money catalog, and
+   the productId matches what was in the basket. Pending and refunded
+   purchases are refused with a clear message. If the three `GOOGLE_*`
+   secrets are missing, `process-purchase` returns 503 instead of granting on
+   trust — by design.
+
+7. **Restore purchases is wired.** `AccountSubscriptionCard` shows a
+   "Restore purchases" button as soon as store billing is active (it is hidden
+   on the web build) and calls `restorePurchases()` in `src/lib/billing.ts`.
+   Play replays the purchase tokens — the **server** still re-verifies each
+   one through `verifyStorePurchase()`, so restoring is not a trust shortcut.
+
+8. **Replay safety** is handled: the Play purchase token is stored on
+   `user_purchases.provider_reference` with a unique index, so a retried
+   delivery returns `409 duplicate` instead of granting twice.
+
+9. **Test it** with Play license testers before release: their purchases flow
+   through the same verification (purchaseType is not filtered), so a
+   license-tester purchase that grants credits end-to-end is proof the
+   production path works. Billing must also be configured in Play Console
+   (merchant account) before test purchases work at all.
 
 Web checkout keeps working unchanged in the browser build (`PAYMENT_MODE=test`).
 
@@ -155,8 +189,9 @@ Web checkout keeps working unchanged in the browser build (`PAYMENT_MODE=test`).
 
 ## 5. Store review checklist
 
-- [ ] Account deletion exists in-app (already implemented — `delete-account`) — required by both stores
-- [ ] Restore purchases (see 3.5)
+- [ ] Account deletion exists in-app (already implemented — `delete-account`) — required by Google
+- [ ] Restore purchases (see §3.7)
+- [ ] Play Billing: in-app products created, service account linked, `PAYMENT_MODE=store` verified with a license-tester purchase (see §3)
 - [ ] Privacy policy + data-safety disclosures (health/training data)
 - [ ] Subscription terms and renewal wording if unlimited plans are sold
 - [ ] No external payment links for digital goods

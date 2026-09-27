@@ -1,27 +1,29 @@
-// ============================================================================
-// BILLING — ONE SEAM FOR WEB AND STORE PURCHASES
+//============================================================================
+// BILLING — ONE SEAM FOR WEB AND GOOGLE PLAY BILLING
 // ----------------------------------------------------------------------------
 // Today every purchase goes to the `process-purchase` edge function, which
 // grants credits/coins/unlocks server-side.
 //
-// Store rules for a mobile app: Apple and Google require digital goods to be
-// sold through their in-app purchase systems, so once the Capacitor shell ships
-// the *client* has to collect a store receipt first and the *server* has to
-// verify it. This module is the single place that changes:
+// Store rules: Google requires digital goods in the Android app to be sold
+// through Play Billing, so once the Capacitor shell ships the *client* buys
+// through Play first and the *server* verifies the purchase token against the
+// Google Play Developer API before granting (see
+// supabase/functions/_shared/playBilling.ts). This module is the single place
+// that changes:
 //
 //   web    → invoke process-purchase directly (current behaviour, unchanged)
-//   store  → buy through the store plugin, then invoke process-purchase WITH the
-//            verification payload so the server can check it
+//   store  → buy through the Play Billing plugin, then invoke process-purchase
+//            with the purchase token + receipt so the server can verify it
 //
-// Nothing here pretends the store integration exists: with no plugin installed
-// `storeProvider.available()` is false and the web path is used, exactly as now.
-// See CAPACITOR.md for the wiring steps.
+// Nothing here pretends the plugin is installed: with no plugin present
+// `storeProvider.available()` is false and the web path is used, exactly as
+// now. See CAPACITOR.md §3 for the full Play Billing runbook.
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
 import { getPlatform, isNative, loadPlugin } from "@/lib/platform";
 
-/** Flip to true only once the store plugin + server verifier are in place. */
+/** Flip to true only once the Play Billing plugin + server verifier are in place. */
 export const STORE_BILLING_ENABLED = false;
 
 export interface PurchaseItem {
@@ -33,9 +35,9 @@ export interface PurchaseItem {
 }
 
 export interface PurchaseVerification {
-  /** Store transaction id / purchase token — used for idempotency server-side. */
+  /** Google Play purchase token — used for idempotency server-side. */
   reference: string;
-  /** Raw receipt payload for server-side verification. */
+  /** JSON receipt { packageName, productId } for server-side verification. */
   receipt?: string;
 }
 
@@ -112,7 +114,7 @@ interface StoreBillingPlugin {
 
 const storeProvider: BillingProvider = {
   id: "store",
-  label: "App Store / Play Billing",
+  label: "Google Play Billing",
   available: () => STORE_BILLING_ENABLED && isNative(),
   purchase: async (items) => {
     if (items.length !== 1) {
@@ -128,7 +130,7 @@ const storeProvider: BillingProvider = {
       if (!result?.transactionId) {
         return { ok: false, error: "The store did not return a transaction id." };
       }
-      // The server verifies this receipt before granting anything.
+      // The server verifies this purchase token with Google Play before granting anything.
       return invokePurchase(items, { reference: result.transactionId, receipt: result.receipt });
     } catch (error) {
       return { ok: false, error: describeError(error) };
@@ -154,16 +156,16 @@ export async function purchaseItems(
 }
 
 /**
- * True when purchases go through the store rather than web checkout. UI that
+ * True when purchases go through Play Billing rather than web checkout. UI that
  * only makes sense on a device ("Restore purchases") keys off this.
  */
 export const isStoreBilling = () => storeProvider.available();
 
 /**
- * Asks the store to replay the athlete's previous transactions.
+ * Asks Google Play to replay the athlete's previous transactions.
  *
- * Both stores require a visible restore path for IAP builds. The store replays
- * receipts and the **server** must re-verify them through
+ * Play requires a visible restore path for IAP builds. Play replays the
+ * purchases and the **server** must re-verify each purchase token through
  * `verifyStorePurchase()` before granting anything — restoring is not a trust
  * shortcut, which is why this only reports whether the store call succeeded.
  * Currently unavailable on the web build, where the button is not shown.
