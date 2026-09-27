@@ -20,8 +20,16 @@ import { describe, expect, it } from "vitest";
 // ---------------------------------------------------------------------------
 
 const ROOT = resolve(__dirname, "../..");
-const TYPES = readFileSync(resolve(ROOT, "src/integrations/supabase/types.ts"), "utf8");
-const DELETE_FN = readFileSync(resolve(ROOT, "supabase/functions/delete-account/index.ts"), "utf8");
+
+/**
+ * Windows checkouts are CRLF (`core.autocrlf=true`), which silently defeats the
+ * line-anchored regexes below — `/^ {2}public: \{$/` never matches a line ending
+ * in `\r`. Normalize on read so the guards hold on every platform and in CI.
+ */
+const toLf = (src: string) => src.replace(/\r\n?/g, "\n");
+
+const TYPES = toLf(readFileSync(resolve(ROOT, "src/integrations/supabase/types.ts"), "utf8"));
+const DELETE_FN = toLf(readFileSync(resolve(ROOT, "supabase/functions/delete-account/index.ts"), "utf8"));
 
 /** Columns that identify an athlete's ownership of a row. */
 const USER_KEY = /^(user_id|owner_id|creator_id|coach_id|assigned_to|assigned_by|from_user_id|to_user_id|friend_id|referrer_id|referee_id|athlete_id|requester_id|recipient_id|player_id)$/;

@@ -16,10 +16,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+// Windows checkouts are CRLF (`core.autocrlf=true`); the `indexOf` probe below
+// embeds a newline, so normalize or the guard fails for the wrong reason.
 const SOURCE = readFileSync(
   path.resolve(__dirname, "../../supabase/functions/process-purchase/index.ts"),
   "utf8",
-);
+).replace(/\r\n?/g, "\n");
 
 describe("process-purchase ordering", () => {
   it("checks affordability before writing the entitlement row", () => {
