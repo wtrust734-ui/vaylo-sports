@@ -4,6 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { isOfferLive } from "@/lib/offerWindow";
 
 export type CreditPack = {
   id: string;
@@ -34,6 +35,7 @@ export type SpecialOffer = {
   bonus_flat: number;
   price_cents: number | null;
   target_audience: string;
+  starts_at: string | null;
   ends_at: string | null;
 };
 
@@ -168,19 +170,27 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
     ...(byKey.get("feature_costs")?.value as Record<FeatureCostKey, number> ?? {}),
   };
 
-  const offers: SpecialOffer[] = ((offerRows ?? []) as Array<Record<string, unknown>>).map((o) => ({
-    id: String(o.id),
-    slug: String(o.slug),
-    title: String(o.title),
-    description: o.description == null ? null : String(o.description),
-    offer_type: String(o.offer_type) as SpecialOffer["offer_type"],
-    pack_id: o.pack_id == null ? null : String(o.pack_id),
-    bonus_multiplier: Number(o.bonus_multiplier ?? 1),
-    bonus_flat: Number(o.bonus_flat ?? 0),
-    price_cents: Number(o.price_cents),
-    target_audience: o.target_audience == null ? null : String(o.target_audience),
-    ends_at: o.ends_at == null ? null : String(o.ends_at),
-  }));
+  // Rows outside their own window are dropped here rather than trusted
+  // downstream. The database is authoritative — its SELECT policy hides
+  // out-of-window rows — but a cached or service-role-fetched row must not be
+  // able to drive a bonus either, because nothing ever clears `active` when an
+  // offer's deadline passes.
+  const offers: SpecialOffer[] = ((offerRows ?? []) as Array<Record<string, unknown>>)
+    .map((o) => ({
+      id: String(o.id),
+      slug: String(o.slug),
+      title: String(o.title),
+      description: o.description == null ? null : String(o.description),
+      offer_type: String(o.offer_type) as SpecialOffer["offer_type"],
+      pack_id: o.pack_id == null ? null : String(o.pack_id),
+      bonus_multiplier: Number(o.bonus_multiplier ?? 1),
+      bonus_flat: Number(o.bonus_flat ?? 0),
+      price_cents: Number(o.price_cents),
+      target_audience: o.target_audience == null ? null : String(o.target_audience),
+      starts_at: o.starts_at == null ? null : String(o.starts_at),
+      ends_at: o.ends_at == null ? null : String(o.ends_at),
+    }))
+    .filter((o) => isOfferLive(o));
 
   return { packs, infinite, featureCosts, offers, region };
 }
@@ -218,7 +228,7 @@ export async function trackEconomyEvent(params: {
 
 // --- Apply offer to a pack ---
 export function applyOffer(pack: CreditPack, offer: SpecialOffer | null): CreditPack {
-  if (!offer) return pack;
+  if (!offer || !isOfferLive(offer)) return pack;
   if (offer.pack_id && offer.pack_id !== pack.id) return pack;
 
   const bonus = Math.round(pack.bonus * (offer.bonus_multiplier ?? 1)) + (offer.bonus_flat ?? 0);
@@ -230,5 +240,5 @@ export function applyOffer(pack: CreditPack, offer: SpecialOffer | null): Credit
 }
 
 export function getDoubleCreditsOffer(offers: SpecialOffer[]): SpecialOffer | null {
-  return offers.find((o) => o.offer_type === "double_credits") ?? null;
+  return offers.find((o) => o.offer_type === "double_credits" && isOfferLive(o)) ?? null;
 }

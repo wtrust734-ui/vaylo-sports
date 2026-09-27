@@ -23,6 +23,7 @@ import {
   UNLIMITED_PACKS,
 } from "../_shared/moneyCatalog.ts";
 import { verifyPlayPurchase } from "../_shared/playBilling.ts";
+import { isOfferLive } from "../_shared/offerWindow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,6 +67,8 @@ interface SpecialOfferRow {
   pack_id?: string | null;
   bonus_flat?: number | null;
   bonus_multiplier?: number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
 }
 
 /**
@@ -202,9 +205,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch live offers for double-credit promo
+    // Fetch live offers for double-credit promo.
+    //
+    // Filtered on the window, not just `active`: nothing clears `active` when an
+    // offer's `ends_at` passes, and this function reads with the SERVICE ROLE, so
+    // the RLS policy that hides out-of-window rows does not apply here. Without
+    // this filter an expired promo would still multiply granted credits and an
+    // expired `offer_<slug>` product would still be purchasable.
     const { data: offerRows } = await supabase.from("special_offers").select("*").eq("active", true);
-    const doubleOffer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => o.offer_type === "double_credits");
+    const liveOffers = ((offerRows ?? []) as SpecialOfferRow[]).filter((o) => isOfferLive(o));
+    const doubleOffer = liveOffers.find((o) => o.offer_type === "double_credits");
 
     // PHASE 1: legacy tier subscriptions can no longer be purchased.
     const blocked = (items as BasketItem[]).find((i) =>
@@ -247,7 +257,7 @@ Deno.serve(async (req) => {
       if (priceCents === null && FEATURE_PRODUCTS[productId]) {
         priceCents = 0; // bought with credits, not money
       } else if (priceCents === null && productId.startsWith("offer_")) {
-        const offer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => `offer_${o.slug}` === productId);
+        const offer = liveOffers.find((o) => `offer_${o.slug}` === productId);
         if (!offer) {
           return new Response(JSON.stringify({ error: `Unknown offer: ${productId}` }), { status: 400, headers: corsHeaders });
         }
@@ -418,7 +428,7 @@ Deno.serve(async (req) => {
       // Offers (starter / winback) — the linked pack's credits plus flat bonus.
       if (productId.startsWith("offer_")) {
         const slug = productId.replace("offer_", "");
-        const offer = ((offerRows ?? []) as SpecialOfferRow[]).find((o) => o.slug === slug);
+        const offer = liveOffers.find((o) => o.slug === slug);
         if (offer) {
           const linkedCredits = offer.pack_id ? CREDIT_GRANTS[offer.pack_id] ?? 0 : 0;
           creditsToAdd += linkedCredits;
