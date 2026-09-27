@@ -374,11 +374,11 @@ const AppSidebar = () => {
 
   return (
     <>
-      {/* Mobile hamburger — glass pill */}
+      {/* Mobile hamburger — solid (no blur) for WebView perf */}
       <button
         onClick={() => setOpen(true)}
         aria-label={t("sidebar.openMenu")}
-        className="fixed start-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-card/70 backdrop-blur-xl shadow-soft text-foreground hover:bg-card/90 lg:hidden"
+        className="fixed start-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-card shadow-soft text-foreground hover:bg-card/90 lg:hidden"
       >
         <Menu size={18} />
       </button>
@@ -429,14 +429,14 @@ const AppSidebar = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 bg-[#060712]/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 bg-[#060712]/70 lg:hidden"
             />
             <motion.aside
               initial={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
               transition={{ type: "spring", stiffness: 340, damping: 32 }}
-              className="fixed inset-y-0 start-0 z-50 flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A]/90 backdrop-blur-2xl lg:hidden shadow-2xl"
+              className="fixed inset-y-0 start-0 z-50 flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A] lg:hidden shadow-2xl"
             >
               <div className="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-white/[0.06]">
                 <div className="flex items-center gap-2.5">

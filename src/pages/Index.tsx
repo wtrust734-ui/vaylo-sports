@@ -50,7 +50,7 @@ const Insights = () => {
   }, [user]);
 
   if (sys.loading || !loaded) {
-    return <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur px-3 py-3 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> {t("loading.dashboard")}</div>;
+    return <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> {t("loading.dashboard")}</div>;
   }
 
   const insights: { icon: typeof Sparkles; text: string; cta: string; path: string }[] = [];
@@ -102,7 +102,7 @@ const Insights = () => {
 
   if (insights.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-4">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
         <p className="text-xs leading-relaxed text-muted-foreground">{t("dashboard.unlockInsights")}</p>
       </div>
     );
@@ -118,7 +118,7 @@ const Insights = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.08 }}
           onClick={() => navigate(ins.path)}
-          className="flex w-full items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3.5 py-3.5 text-start transition-all hover:bg-white/[0.07] hover:border-white/[0.10] hover:shadow-soft"
+          className="flex w-full items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-3.5 py-3.5 text-start transition-all hover:bg-white/[0.07] hover:border-white/[0.10]"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-glow border border-white/10 mt-0.5">
             <ins.icon size={16} className="text-primary-foreground" aria-hidden />
@@ -144,54 +144,54 @@ const Index = () => {
 
   return (
     <div className="min-h-screen pb-28">
-      <header className="px-5 pt-12 pb-6">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <header className="px-4 sm:px-5 pt-10 sm:pt-12 pb-5 sm:pb-6">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_hsla(142_76%_36%_/_0.8)]" />
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{greeting}</p>
           </div>
-          <h1 className="mt-3 text-[32px] font-display font-bold tracking-tight leading-none">
+          <h1 className="mt-3 text-[28px] sm:text-[32px] font-display font-bold tracking-tight leading-none">
             <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">{name}</span>
             <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">.</span>
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">Your performance, your plan, your progress — one screen.</p>
+          <p className="mt-1.5 text-[13px] sm:text-sm text-muted-foreground leading-relaxed">Your performance, your plan, your progress — one screen.</p>
         </motion.div>
       </header>
 
-      <section className="px-5 pb-6" aria-label="Your performance">
+      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Your performance">
         <VprHero />
       </section>
 
-      <section className="pb-6" aria-label="Today">
-        <div className="px-5">
+      <section className="pb-5 sm:pb-6" aria-label="Today">
+        <div className="px-4 sm:px-5">
           <SectionHeader title={t("dashboard.today")} onAction={() => navigate("/training")} actionLabel={t("dashboard.plan")} />
         </div>
         <DailyTrainingCard />
       </section>
 
-      <section className="px-5 pb-6" aria-label="Readiness">
+      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Readiness">
         <SectionHeader title={t("dashboard.readiness")} icon={HeartPulse} onAction={() => navigate("/recovery")} actionLabel={t("dashboard.checkIn")} />
         <ReadinessStrip />
       </section>
 
-      <section className="px-5 pb-6" aria-label="Insights">
+      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Insights">
         <SectionHeader title={t("dashboard.coachInsight")} icon={Sparkles} />
         <Insights />
       </section>
 
-      <div className="px-5">
+      <div className="px-4 sm:px-5">
         <button
           type="button"
           onClick={() => setShowExtras(!showExtras)}
           aria-expanded={showExtras}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur py-3.5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground transition-all hover:bg-white/[0.06] hover:text-foreground hover:border-white/[0.12]"
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] py-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground transition-all hover:bg-white/[0.06] hover:text-foreground hover:border-white/[0.12]"
         >
           {showExtras ? t("dashboard.hideExtras") : t("dashboard.moreForToday")}
           <ChevronRight size={14} className={`transition-transform ${showExtras ? "rotate-90" : ""}`} aria-hidden />
         </button>
       </div>
       {showExtras && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4 space-y-3 px-5">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="mt-4 space-y-3 px-4 sm:px-5">
           <DailyExtras />
         </motion.div>
       )}
@@ -209,7 +209,7 @@ const ReadinessStrip = () => {
 
   if (sys.readiness == null) {
     return (
-      <button type="button" onClick={() => navigate("/recovery")} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-4 py-4 text-start hover:bg-white/[0.06] transition-colors">
+      <button type="button" onClick={() => navigate("/recovery")} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-start hover:bg-white/[0.06] transition-colors">
         <div>
           <p className="text-sm font-bold">{t("dashboard.noCheckInToday")}</p>
           <p className="text-xs leading-relaxed text-muted-foreground">{t("dashboard.noCheckInTodayDesc")}</p>
@@ -226,7 +226,7 @@ const ReadinessStrip = () => {
       : t("dashboard.prioritiseRecovery");
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-4 py-4">
+    <div className="flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4">
       <Metric
         label={statement}
         value={sys.readiness}
@@ -250,7 +250,7 @@ const DailyExtras = () => {
   return (
     <div className="space-y-2.5">
       {rows.map((r) => (
-        <button key={r.path} type="button" onClick={() => navigate(r.path)} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
+        <button key={r.path} type="button" onClick={() => navigate(r.path)} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
           <span>
             <span className="block text-sm font-semibold">{r.label}</span>
             <span className="block text-xs leading-relaxed text-muted-foreground">{r.desc}</span>

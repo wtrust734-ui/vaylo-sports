@@ -8,9 +8,12 @@ import AnimatedNumber from "@/components/motion/AnimatedNumber";
 import { Delta, VprFactorBar } from "@/components/ui/section";
 
 const RING_SIZE = 168;
+const RING_SIZE_SM = 132;
 const STROKE = 9;
 const R = (RING_SIZE - STROKE) / 2;
+const R_SM = (RING_SIZE_SM - STROKE) / 2;
 const C = 2 * Math.PI * R;
+const C_SM = 2 * Math.PI * R_SM;
 
 const VprHero = ({ compact = false }: { compact?: boolean }) => {
   const { user, profile } = useAuth();
@@ -30,22 +33,27 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
           ? "hsl(var(--energy))"
           : "hsl(var(--destructive))";
 
+  const isSmall = typeof window !== "undefined" && window.innerWidth < 400;
+  const RS = isSmall ? RING_SIZE_SM : RING_SIZE;
+  const Rr = isSmall ? R_SM : R;
+  const Cc = isSmall ? C_SM : C;
+
   return (
     <div
       ref={ref}
-      className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-5 shadow-card overflow-hidden relative"
+      className="rounded-[22px] border border-white/[0.07] bg-card/60 sm:backdrop-blur-xl p-4 sm:p-5 shadow-card overflow-hidden relative"
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
       <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-40 blur-3xl" style={{ background: "radial-gradient(circle at center, hsla(272 84% 62% / 0.22), transparent 68%)" }} />
       <div className="relative">
-      <div className="flex items-center gap-5">
-        <div className="relative shrink-0" style={{ width: RING_SIZE, height: RING_SIZE }}>
+      <div className="flex items-center gap-3 sm:gap-5 [@media(max-width:360px)]:flex-col [@media(max-width:360px)]:items-start">
+        <div className="relative shrink-0" style={{ width: RS, height: RS }}>
           <div
             aria-hidden
-            className="absolute inset-0 rounded-full blur-2xl opacity-30"
+            className="absolute inset-0 rounded-full blur-2xl opacity-30 hidden sm:block"
             style={{ background: `radial-gradient(circle at 50% 50%, ${ringColor} 0%, transparent 68%)` }}
           />
-          <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90 relative">
+          <svg width={RS} height={RS} className="-rotate-90 relative">
             <defs>
               <linearGradient id="vpr-hero-grad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="hsl(var(--electric-purple))" />
@@ -55,19 +63,19 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
                 <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={ringColor} floodOpacity="0.35" />
               </filter>
             </defs>
-            <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={R} stroke="hsl(var(--border))" strokeWidth={STROKE} fill="none" opacity={0.9} />
+            <circle cx={RS / 2} cy={RS / 2} r={Rr} stroke="hsl(var(--border))" strokeWidth={STROKE} fill="none" opacity={0.9} />
             <motion.circle
-              cx={RING_SIZE / 2}
-              cy={RING_SIZE / 2}
-              r={R}
+              cx={RS / 2}
+              cy={RS / 2}
+              r={Rr}
               stroke="url(#vpr-hero-grad)"
               strokeWidth={STROKE}
               fill="none"
               strokeLinecap="round"
-              strokeDasharray={C}
+              strokeDasharray={Cc}
               filter={overall != null ? "url(#vpr-glow)" : undefined}
-              initial={{ strokeDashoffset: C }}
-              animate={inView && overall != null ? { strokeDashoffset: C - (C * overall) / 100 } : {}}
+              initial={{ strokeDashoffset: Cc }}
+              animate={inView && overall != null ? { strokeDashoffset: Cc - (Cc * overall) / 100 } : {}}
               transition={{ duration: 1.35, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
             />
           </svg>
@@ -78,7 +86,7 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
               <span className="text-3xl font-display font-bold text-muted-foreground">—</span>
             ) : (
               <motion.span
-                className="text-5xl font-display font-bold tabular-nums leading-none tracking-tight"
+                className="text-[38px] sm:text-5xl font-display font-bold tabular-nums leading-none tracking-tight"
                 initial={{ opacity: 0, y: 6 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ delay: 0.5, duration: 0.4 }}
               >
                 <AnimatedNumber value={overall} duration={1.1} />
@@ -89,14 +97,14 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
         </div>
 
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1">
-            <Activity size={12} className="text-primary" aria-hidden />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 max-w-full">
+            <Activity size={12} className="text-primary shrink-0" aria-hidden />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground truncate">
               {sport ?? t("vpr.performance")}
             </span>
           </div>
           <Delta value={sys.delta} unit={sys.snapshotCount < 2 ? t("vpr.trendNeedsTwo") : undefined} className="text-sm" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3">
             {overall == null
               ? t("vpr.logFirstMetric")
               : overall >= 70

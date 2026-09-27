@@ -40,11 +40,11 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
         />
       )}
       <Icon
-        size={20}
+        size={18}
         className={`relative z-10 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}
       />
       <span
-        className={`relative z-10 text-[10px] font-semibold tracking-wide truncate max-w-[72px] ${isActive ? "text-primary" : "text-muted-foreground"}`}
+        className={`relative z-10 text-[9px] font-bold tracking-widest truncate max-w-[64px] ${isActive ? "text-primary" : "text-muted-foreground"}`}
       >
         {label}
       </span>
@@ -59,7 +59,7 @@ const BottomNav = () => {
       aria-label={t("navigation.primaryNav")}
       className="fixed inset-x-3 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 lg:hidden pointer-events-none"
     >
-      <div className="pointer-events-auto mx-auto max-w-[520px] rounded-[22px] border border-white/[0.08] bg-card/75 backdrop-blur-2xl shadow-card supports-[backdrop-filter]:bg-card/70">
+      <div className="pointer-events-auto mx-auto max-w-[520px] rounded-[22px] border border-white/[0.08] bg-card/95 sm:bg-card/75 sm:backdrop-blur-2xl shadow-card">
         <div className="flex items-center justify-around px-2 py-2">
           {LEFT.map((item) => (
             <NavButton key={item.path} item={item} />

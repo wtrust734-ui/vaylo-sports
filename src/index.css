@@ -224,3 +224,41 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Mobile perf: kill the biggest jank sources on phones ─────────────── */
+@media (max-width: 1024px) {
+  body,
+  .app-mesh {
+    background-attachment: scroll;
+  }
+  /* backdrop-blur is the #1 composite cost on low-end Android WebViews.
+     Replace it with a cheap solid fill on mobile — keeps the glass *shape*
+     but drops the blur texture that was stacking 4-6 layers deep. */
+  .glass,
+  .glass-card,
+  .bg-glass {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .glass {
+    background: hsl(var(--card) / 0.96);
+  }
+  .glass-card {
+    background: linear-gradient(180deg, hsl(233 28% 11% / 0.98), hsl(233 28% 8% / 1));
+    box-shadow: 0 4px 20px hsla(232 50% 4% / 0.45), 0 1px 0 hsla(0 0% 100% / 0.05) inset;
+  }
+  /* Every Card / BottomNav instance no longer pays blur cost */
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  /* BottomNav & drawer become opaque so text pops instead of muddy glass */
+  .supports-\[backdrop-filter\]\:bg-card\/70 {
+    background-color: hsl(var(--card) / 0.98) !important;
+  }
+}
+@media (max-width: 768px) {
+  /* crisper type on mobile — Inter at 13px was rendering thin on OLED */
+  body { text-rendering: optimizeSpeed; }
+  h1, h2, h3 { letter-spacing: -0.015em; }
+}

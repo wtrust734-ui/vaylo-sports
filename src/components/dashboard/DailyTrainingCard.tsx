@@ -110,14 +110,14 @@ const DailyTrainingCard = () => {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 20, scale: 0.97 }}
-      animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="mx-5 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl overflow-hidden shadow-card relative"
+      initial={{ opacity: 0, y: 12 }}
+      animate={isInView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="mx-4 sm:mx-5 rounded-[22px] border border-white/[0.07] bg-card/70 sm:bg-card/60 sm:backdrop-blur-xl overflow-hidden shadow-card relative"
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
-      <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl opacity-25" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.35), transparent 68%)" }} />
-      <div className="relative p-5">
+      <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl opacity-20 sm:opacity-25 hidden sm:block" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.35), transparent 68%)" }} />
+      <div className="relative p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-primary shadow-glow animate-pulse-glow" />

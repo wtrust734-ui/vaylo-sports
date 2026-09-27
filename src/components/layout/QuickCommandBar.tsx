@@ -22,7 +22,7 @@ const QuickCommandBar = () => {
       transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 28 }}
       className="fixed bottom-4 left-1/2 hidden -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-md lg:block"
     >
-      <div className="relative rounded-[22px] border border-white/[0.08] bg-card/70 backdrop-blur-2xl shadow-card px-2 py-2 flex items-center justify-between">
+      <div className="relative rounded-[22px] border border-white/[0.08] bg-card/70 sm:backdrop-blur-2xl shadow-card px-2 py-2 flex items-center justify-between">
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.06] to-transparent" />
         {items.map((item) => {
           const isActive = location.pathname === item.path;

@@ -33,14 +33,14 @@ const AppLayout = () => {
       {/* pb-28 clears the floating tab bar; pt-safe-t keeps headers clear of the notch */}
       <main className="relative pt-safe-t pb-28 lg:pl-60">
         <div className="mx-auto w-full max-w-[1100px]">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 10, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              style={{ transformOrigin: "center top", willChange: "transform, opacity" }}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transformOrigin: "center top" }}
             >
               <Outlet />
             </motion.div>

@@ -30,7 +30,7 @@ const QuickActionSheet = () => {
         transition={{ duration: 0.18 }}
         onClick={() => setOpen(false)}
         style={{ pointerEvents: open ? "auto" : "none" }}
-        className="fixed inset-0 z-[55] bg-[#050612]/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[55] bg-[#050612]/60 sm:backdrop-blur-sm"
       />
 
       <motion.div
@@ -41,7 +41,7 @@ const QuickActionSheet = () => {
         animate={{ y: open ? 0 : 24, opacity: open ? 1 : 0 }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         style={{ pointerEvents: open ? "auto" : "none" }}
-        className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card/80 backdrop-blur-2xl p-2 shadow-card overflow-hidden"
+        className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card shadow-card overflow-hidden sm:bg-card/80 sm:backdrop-blur-2xl p-2"
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.07] via-transparent to-transparent" />
         <div className="relative">
