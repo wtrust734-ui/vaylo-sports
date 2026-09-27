@@ -74,7 +74,9 @@ jobs:
         run: npx cap sync android
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # v3 is a Node 20 action, which the runner now forces onto Node 24 and
+        # which fails for that reason; v4 is the current release.
+        uses: android-actions/setup-android@v4
 
       - name: Build debug APK
         working-directory: android
