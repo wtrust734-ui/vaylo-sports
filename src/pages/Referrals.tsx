@@ -16,7 +16,8 @@ function genCode() {
 export default function Referrals() {
   const { user } = useAuth();
   const [code, setCode] = useState<string>("");
-  const [referrals, setReferrals] = useState<any[]>([]);
+  type ReferralRow = { status: string; [key: string]: unknown };
+  const [referrals, setReferrals] = useState<ReferralRow[]>([]);
   const [redeem, setRedeem] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,10 +48,11 @@ export default function Referrals() {
       if (error) throw error;
       // The old copy promised "14 days of Pro" — no plan or Pro days were ever
       // granted. The reward is the configured credit bonus, paid server-side.
-      const granted = Number(data?.referee_credits ?? 0);
+      const result = (data ?? {}) as { referee_credits?: number | string | null };
+      const granted = Number(result.referee_credits ?? 0);
       toast.success(granted > 0 ? `Code applied — ${granted} credits added!` : "Code applied!");
       setRedeem("");
-    } catch (e: any) { toast.error(e.message || "Invalid code"); }
+    } catch (e) { toast.error(e.message || "Invalid code"); }
     finally { setBusy(false); }
   };
 
