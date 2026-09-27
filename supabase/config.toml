@@ -25,3 +25,17 @@ additional_redirect_urls = [
   "http://127.0.0.1:8080",
   "http://127.0.0.1:5173",
 ]
+
+# Email confirmation is OFF while no SMTP provider is configured.
+#
+# Supabase's built-in mail service allows only a handful of messages per hour per
+# project. With confirmations on, the second sign-up attempt in an hour fails with
+# `429 over_email_send_rate_limit` — and GoTrue fails *before* creating the user, so
+# it presents as a broken sign-up page rather than a mail problem. With this off,
+# sign-up completes immediately with a session and no mail is sent at all.
+#
+# BEFORE LAUNCH: configure SMTP (Dashboard → Project Settings → Auth → SMTP), then
+# delete this block (or set it to true) and re-run `supabase config push`. Leaving
+# it off in production lets anyone register an address they do not own.
+[auth.email]
+enable_confirmations = false

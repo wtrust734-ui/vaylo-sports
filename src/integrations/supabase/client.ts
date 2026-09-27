@@ -11,5 +11,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    // Unlocks supabase.auth.signInWithPasskey() / registerPasskey(). The server
+    // side is gated by the project's "passkeys_enabled" auth setting; the
+    // client flag merely makes the API surface callable.
+    experimental: { passkey: true },
   }
 });

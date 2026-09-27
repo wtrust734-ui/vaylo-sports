@@ -76,7 +76,7 @@ const Avatar = () => {
   const dragStartX = useRef(0);
   const dragStartR = useRef(0);
 
-  const coins = (profile as any)?.coins ?? 0;
+  const coins = profile?.coins ?? 0;
   const credits = profile?.credits ?? 0;
 
   // ------- Load avatar -------
@@ -92,7 +92,7 @@ const Avatar = () => {
       setOwned(ownedSet);
 
       if (avatar) {
-        const extras = ((avatar as any).extras as Record<string, string>) || {};
+        const extras = (avatar.extras as Record<string, string> | null) || {};
         setLoadout({
           ...DEFAULT_LOADOUT,
           ...extras,
@@ -106,7 +106,7 @@ const Avatar = () => {
           display_name: avatar.display_name ?? profile?.full_name ?? "",
           prestige_level: avatar.prestige_level,
         });
-        setIsSetup(!!(avatar as any).is_setup);
+        setIsSetup(avatar.is_setup);
       } else {
         setLoadout((p) => ({ ...p, display_name: profile?.full_name ?? "" }));
       }
@@ -150,7 +150,7 @@ const Avatar = () => {
       return;
     }
     setPurchasingId(item.id);
-    const { error } = await supabase.rpc("purchase_avatar_item_coins" as any, {
+    const { error } = await supabase.rpc("purchase_avatar_item_coins", {
       p_item_id: item.id, p_category: item.category, p_rarity: item.rarity, p_cost: item.cost,
     });
     setPurchasingId(null);
@@ -364,7 +364,7 @@ const Avatar = () => {
         <AnimatePresence mode="popLayout">
           {items.map((item, i) => {
             const isOwned = owned.has(item.id);
-            const isEquipped = (loadout as any)[item.category] === item.id;
+            const isEquipped = (loadout as Record<string, string | undefined>)[item.category] === item.id;
             const meta = RARITY_META[item.rarity];
             const canAfford = coins >= item.cost;
             const isColorSwatch = ["skin_tone", "hair_color", "eye_color"].includes(item.category);
@@ -378,7 +378,7 @@ const Avatar = () => {
                 onMouseLeave={() => setPreviewItem(null)}
                 onClick={() => setDetail(item)}
                 className={cn(
-                  "relative rounded-2xl overflow-hidden text-left transition-all",
+                  "relative rounded-2xl overflow-hidden text-start transition-all",
                   "border bg-card/60 backdrop-blur",
                   isEquipped ? "border-primary shadow-glow-electric" : "border-border",
                 )}
@@ -524,7 +524,7 @@ const Avatar = () => {
       </AnimatePresence>
 
       <p className="text-center text-[10px] text-muted-foreground mt-8 px-8">
-        Identity edits are free. Cosmetics unlock with Coins (1 credit = 7.5 Coins) · Get Coins in the Market · Your athlete appears everywhere in Vaylo.
+        Identity edits are free. Cosmetics unlock with Coins (1 credit = 7.5 Coins) · Get Coins in the Market · Your athlete appears everywhere in Vaylo Sports.
       </p>
 
       <CoinTopUpSheet

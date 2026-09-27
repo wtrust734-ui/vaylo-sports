@@ -43,7 +43,7 @@ export default function AdminEventPacks() {
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    const { data, error } = await supabase.from("event_packs" as any).select("*").order("name");
+    const { data, error } = await supabase.from("event_packs").select("*").order("name");
     if (error) toast.error(error.message);
     setRows((data || []) as unknown as Row[]);
   };
@@ -78,15 +78,15 @@ export default function AdminEventPacks() {
     setSaving(true);
     const { id, ...payload } = draft;
     const { error } = await supabase
-      .from("event_packs" as any)
-      .upsert(payload as any, { onConflict: "pack_id" });
+      .from("event_packs")
+      .upsert(payload, { onConflict: "pack_id" });
     setSaving(false);
     if (error) toast.error(error.message);
     else { toast.success("Event Pack saved"); setDraft(blank()); load(); }
   };
 
   const patch = async (pack_id: string, changes: Partial<Row>) => {
-    const { error } = await supabase.from("event_packs" as any).update(changes as any).eq("pack_id", pack_id);
+    const { error } = await supabase.from("event_packs").update(changes).eq("pack_id", pack_id);
     if (error) toast.error(error.message); else load();
   };
 
@@ -110,7 +110,7 @@ export default function AdminEventPacks() {
             <div className="mt-2 space-y-1">
               {builtInMatches.map((p) => (
                 <button key={p.id} onClick={() => importBuiltIn(p.id)}
-                  className="block w-full rounded-lg border border-border px-2 py-1.5 text-left text-[11px]">
+                  className="block w-full rounded-lg border border-border px-2 py-1.5 text-start text-[11px]">
                   {p.name} · {p.sport} · {p.id}
                 </button>
               ))}

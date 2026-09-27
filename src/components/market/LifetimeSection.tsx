@@ -96,7 +96,7 @@ export default function LifetimeSection() {
       <motion.button
         whileTap={{ scale: 0.98 }}
         onClick={() => navigate("/event-packs")}
-        className="w-full rounded-3xl border border-border bg-card p-5 text-left"
+        className="w-full rounded-3xl border border-border bg-card p-5 text-start"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-energy/25 to-primary/15">

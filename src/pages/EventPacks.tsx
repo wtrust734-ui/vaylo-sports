@@ -79,7 +79,7 @@ function PackCard({
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${ds.grad}`} />
       <div className="relative z-10">
         <div className="mb-2 flex items-start justify-between gap-2">
-          <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <button onClick={onOpen} className="min-w-0 flex-1 text-start">
             <h3 className="truncate font-display text-sm font-bold">{pack.name}</h3>
             <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{pack.description}</p>
           </button>
@@ -192,8 +192,8 @@ const EventPacks = () => {
   }, [packs, owned, sport, difficulty, duration, price, search, sort]);
 
   const recommended = useMemo(() => {
-    const mySport = (profile as any)?.sport as string | undefined;
-    const myLevel = ((profile as any)?.experience_level as string | undefined)?.toLowerCase();
+    const mySport = profile?.sport ?? undefined;
+    const myLevel = profile?.experience_level?.toLowerCase();
     const levelMap: Record<string, EventPackDifficulty> = {
       beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", elite: "Elite",
     };
@@ -341,7 +341,7 @@ const EventPacks = () => {
                 <button
                   key={r.id}
                   onClick={() => setDetail(r)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left"
+                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-start"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                     <Package size={15} className="text-primary" />

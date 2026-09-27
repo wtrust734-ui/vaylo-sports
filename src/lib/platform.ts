@@ -59,6 +59,12 @@ export const isAndroid = (): boolean => getPlatform() === "android";
  */
 export async function loadPlugin<T = Record<string, unknown>>(name: string): Promise<T | null> {
   if (!isNative()) return null;
+  const bridge = capacitor();
+  // Custom plugins registered natively (MainActivity.registerPlugin) live on
+  // the injected Plugins proxy with no npm package behind them — prefer that
+  // before attempting a module import that cannot resolve for them.
+  const direct = bridge?.Plugins?.[name];
+  if (direct) return direct as T;
   try {
     const specifier = `@capacitor/${name}`;
     const mod = (await import(/* @vite-ignore */ specifier)) as Record<string, unknown>;

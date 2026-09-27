@@ -39,7 +39,7 @@ export default function Notifications() {
             key={n.id}
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
             onClick={() => { markRead(n.id); if (n.link) navigate(n.link); }}
-            className={`w-full text-left p-4 rounded-2xl border border-border bg-card hover:border-electric-purple/40 transition ${!n.read ? "ring-1 ring-electric-purple/40" : ""}`}
+            className={`w-full text-start p-4 rounded-2xl border border-border bg-card hover:border-electric-purple/40 transition ${!n.read ? "ring-1 ring-electric-purple/40" : ""}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div>

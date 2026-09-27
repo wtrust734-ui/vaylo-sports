@@ -155,6 +155,21 @@ Deno.serve(async (req) => {
     // from those tables, and one-time products are checked against history.
     const resolved: { productId: string; productType: string; priceCents: number }[] = [];
 
+    // Credit-priced products are checked for affordability HERE, before any row
+    // is written. The grant loop below used to insert the `user_purchases` row
+    // first and only then check the balance, so a refused unlock (402) still
+    // left its entitlement behind — and since the apps decide "unlocked" by the
+    // presence of that row, an athlete who could not afford the unlock got it
+    // anyway on the next page load.
+    const { data: balanceRow } = await supabase
+      .from("profiles")
+      .select("credits, infinite_credits")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    let availableCredits = balanceRow?.infinite_credits
+      ? Number.MAX_SAFE_INTEGER
+      : Number(balanceRow?.credits ?? 0);
+
     for (const item of items as BasketItem[]) {
       const productId = String(item.product_id || "");
       const productType = String(item.product_type || "feature");
@@ -198,6 +213,27 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Spendable with credits: make sure this basket can actually pay for it.
+      const featureKeyForCheck = FEATURE_PRODUCTS[productId];
+      if (featureKeyForCheck) {
+        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost" as any, { p_feature: featureKeyForCheck });
+        if (costErr || costRow == null) {
+          return new Response(
+            JSON.stringify({ error: `Could not read the credit price for ${featureKeyForCheck}` }),
+            { status: 500, headers: corsHeaders }
+          );
+        }
+        const cost = Number(costRow);
+        if (cost > availableCredits) {
+          return new Response(
+            JSON.stringify({ error: `Not enough credits for ${productId} (need ${cost}).` }),
+            { status: 402, headers: corsHeaders }
+          );
+        }
+        // Each unlock in the basket costs its own price, so deduct as we go.
+        availableCredits -= cost;
+      }
+
       resolved.push({ productId, productType, priceCents });
     }
 
@@ -207,16 +243,21 @@ Deno.serve(async (req) => {
     let infiniteGrant: { period: string } | null = null;
 
     for (const { productId, productType, priceCents } of resolved) {
-      const { error: purchaseErr } = await supabase.from("user_purchases").insert({
-        user_id: user.id,
-        product_id: productId,
-        product_type: productType,
-        price_cents: priceCents,
-        // Store provenance: a unique index on provider_reference is what makes
-        // the idempotency check above race-proof.
-        provider_reference: body.verification?.reference ?? null,
-        platform: body.platform ?? null,
-      });
+      const { data: purchaseRow, error: purchaseErr } = await supabase
+        .from("user_purchases")
+        .insert({
+          user_id: user.id,
+          product_id: productId,
+          product_type: productType,
+          price_cents: priceCents,
+          // Store provenance: a unique index on provider_reference is what makes
+          // the idempotency check above race-proof.
+          provider_reference: body.verification?.reference ?? null,
+          platform: body.platform ?? null,
+        })
+        .select("id")
+        .maybeSingle();
+      const purchaseId: string | undefined = purchaseRow?.id;
       // 23505 = the unique index rejected a replayed store transaction. Bail
       // before granting, so two concurrent retries can never double-credit.
       if (purchaseErr?.code === "23505") {
@@ -225,6 +266,12 @@ Deno.serve(async (req) => {
           { status: 409, headers: corsHeaders }
         );
       }
+      // An entitlement row must never outlive a payment that did not happen.
+      const rollBackPurchase = async () => {
+        if (!purchaseId) return;
+        const { error } = await supabase.from("user_purchases").delete().eq("id", purchaseId);
+        if (error) console.error("purchase rollback failed:", error.message);
+      };
 
       // Unlimited credits packs
       const unlimited = UNLIMITED_PACKS.find((p) => p.id === productId);
@@ -244,6 +291,7 @@ Deno.serve(async (req) => {
           p_reason: `Coin bundle: ${productId}`,
         });
         if (coinsErr) {
+          await rollBackPurchase();
           return new Response(JSON.stringify({ error: `Coin grant failed: ${coinsErr.message}` }), { status: 500, headers: corsHeaders });
         }
         coinsToAdd += coinsGrant;
@@ -263,6 +311,7 @@ Deno.serve(async (req) => {
       if (featureKey) {
         const { data: costRow, error: costErr } = await supabase.rpc("credit_cost" as any, { p_feature: featureKey });
         if (costErr || costRow == null) {
+          await rollBackPurchase();
           return new Response(
             JSON.stringify({ error: `Could not read the credit price for ${featureKey}` }),
             { status: 500, headers: corsHeaders }
@@ -277,7 +326,10 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (!prof?.infinite_credits) {
+          // The up-front check in the validation pass should already have caught
+          // this; it can still race, so roll the entitlement back if it does.
           if ((prof?.credits ?? 0) < cost) {
+            await rollBackPurchase();
             return new Response(
               JSON.stringify({ error: `Not enough credits for ${productId} (need ${cost}).` }),
               { status: 402, headers: corsHeaders }
@@ -288,6 +340,7 @@ Deno.serve(async (req) => {
             p_reason: `Unlock: ${productId}`,
           });
           if (spendErr) {
+            await rollBackPurchase();
             return new Response(JSON.stringify({ error: `Purchase failed: ${spendErr.message}` }), { status: 500, headers: corsHeaders });
           }
         }

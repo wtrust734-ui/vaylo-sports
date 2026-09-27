@@ -4,7 +4,8 @@ import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Plus, X } from "luci
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeLoads, type LoadRow } from "@/lib/performance";
-import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import { creditCost } from "@/lib/credits";
+import { purchaseItems } from "@/lib/billing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -108,7 +109,7 @@ const Injury = () => {
       supabase.from("injury_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id).eq("product_id", "injury_management").maybeSingle(),
     ]);
-    setLoads((l.data as any) || []);
+    setLoads(l.data || []);
     setRecovery(r.data || []);
     setInjuries(i.data || []);
     setUnlocked(!!u.data);
@@ -119,9 +120,15 @@ const Injury = () => {
     if (!user || !profile) return;
     setUnlocking(true);
     try {
-      const spend = await spendCredits("injury_management_unlock", { idempotencyKey: `unlock:injury_management:${user.id}` });
-      if (!spend.success) { setUnlocking(false); toast.error(spendErrorMessage("injury_management_unlock", spend)); return; }
-      await supabase.from("user_purchases").insert({ user_id: user.id, product_id: "injury_management", product_type: "feature_unlock" } as any);
+      // Entitlements are granted SERVER-side, through the same checkout every
+      // other purchase uses. This previously spent the credits and then inserted
+      // the `user_purchases` row from the browser *ignoring the result*, so the
+      // page reported "unlocked" even when nothing was recorded. Because
+      // `user_purchases` also accepted client inserts for any product id, the
+      // entitlement itself was forgeable without paying. process-purchase reads
+      // the price from the database, spends the credits and records the unlock.
+      const res = await purchaseItems([{ product_id: "injury_management", product_type: "feature_unlock" }]);
+      if (!res.ok) { toast.error(res.error || "Could not unlock Injury Management"); return; }
       await refreshProfile();
       setUnlocked(true);
       toast.success("Injury Management unlocked!");
@@ -268,7 +275,7 @@ const Injury = () => {
             <Textarea placeholder="Notes / how it happened" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             <div className="text-[11px] text-muted-foreground p-2 rounded-lg bg-energy/5 border border-energy/20 flex gap-2">
               <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
-              <span><strong>Not medical advice.</strong> Vaylo generates a generic return-to-play scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
+              <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-play scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
             </div>
             <Button onClick={submitInjury} className="w-full">Save & generate plan</Button>
           </motion.div>

@@ -103,7 +103,7 @@ export default function CoinTopUpSheet({
       type="button"
       onClick={() => buy(offer)}
       disabled={busy !== null}
-      className={`w-full rounded-2xl border p-3.5 text-left transition-colors active:scale-[0.99] disabled:opacity-60 ${
+      className={`w-full rounded-2xl border p-3.5 text-start transition-colors active:scale-[0.99] disabled:opacity-60 ${
         highlight === "cheapest"
           ? "border-energy/50 bg-energy/10"
           : "border-border bg-card/60 hover:border-energy/40"
@@ -167,7 +167,7 @@ export default function CoinTopUpSheet({
                 type="button"
                 onClick={convert}
                 disabled={busy !== null}
-                className="mt-2 flex w-full items-center gap-2 rounded-2xl border border-border bg-card/60 p-3.5 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
+                className="mt-2 flex w-full items-center gap-2 rounded-2xl border border-border bg-card/60 p-3.5 text-start transition-colors hover:border-primary/40 disabled:opacity-60"
               >
                 <ArrowRightLeft size={15} className="shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">

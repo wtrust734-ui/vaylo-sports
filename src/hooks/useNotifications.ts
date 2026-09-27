@@ -19,12 +19,12 @@ export function useNotifications() {
 
   useEffect(() => {
     if (!user) return;
-    const ch = (supabase as any)
+    const ch = supabase
       .channel(`notif:${user.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
         (payload: any) => setItems((prev) => [payload.new as AppNotification, ...prev]))
       .subscribe();
-    return () => { (supabase as any).removeChannel(ch); };
+    return () => { supabase.removeChannel(ch); };
   }, [user]);
 
   const unread = items.filter((i) => !i.read).length;

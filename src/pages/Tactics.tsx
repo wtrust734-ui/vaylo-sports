@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Swords, Loader2, Sparkles } from "lucide-react";
@@ -6,7 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import { creditCost } from "@/lib/credits";
+import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { getLocalPBs } from "@/lib/athleteDossier";
 
 const Tactics = () => {
@@ -28,9 +30,8 @@ const Tactics = () => {
     if (!briefing.trim() || briefing.trim().length < 20) { toast.error("Give the AI more detail — at least a couple of sentences."); return; }
     setGenerating(true);
     try {
-      const spend = await spendCredits("tactical_prep", { reason: "Tactical Analysis generation" });
-      if (!spend.success) { setGenerating(false); toast.error(spendErrorMessage("tactical_prep", spend)); return; }
-
+      // The ai-analyze function charges tactical_prep credits server-side
+      // (with auto-refund if the AI call fails).
       // Try AI generation, fall back to a structured scaffold if unavailable
       let priorities: string[] = [];
       let warmup = "Extended dynamic warmup + 3× sport-specific bursts at 70–85% effort. Include sport-specific movement patterns for 6–8 min.";
@@ -40,9 +41,20 @@ const Tactics = () => {
 
       try {
         const { data, error } = await supabase.functions.invoke("ai-analyze", {
-          body: { type: "tactical_prep", briefing, sport: profile.sport || "General", pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+          body: { type: "tactical_prep", briefing, userLocale: getAiLocale(), sport: profile.sport || "General", pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
         });
-        if (!error && data?.result) {
+        if (error) {
+          const msg = await edgeErrorMessage(error);
+          const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
+          // Auth/limit/charge failures must stop the flow — otherwise a free
+          // fallback plan would silently replace the paid AI result.
+          if (status === 401 || status === 402 || status === 429) {
+            toast.error(msg);
+            return;
+          }
+          // Other AI errors: fall through to the offline scaffold below.
+          console.warn("tactical AI unavailable, using fallback:", msg);
+        } else if (data?.result) {
           try {
             const parsed = JSON.parse(data.result);
             priorities = parsed.priorities || [];
@@ -80,7 +92,7 @@ const Tactics = () => {
 
       await refreshProfile();
       setBriefing("");
-      toast.success(`Tactical plan generated — ${creditCost("tactical_prep")} credits used`);
+      toast.success("Tactical plan generated");
       load();
     } catch (e: any) {
       toast.error(e.message || "Failed to generate");

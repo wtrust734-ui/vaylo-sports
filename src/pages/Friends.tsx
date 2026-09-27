@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion, useInView } from "framer-motion";
-import { Users, UserPlus, Copy, Check, Clock, X, Search, Gift, Share2 } from "lucide-react";
+import { Users, UserPlus, Copy, Check, Clock, X, Gift, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { publicAppUrl, shareContent } from "@/lib/share";
+import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
 
 const Friends = () => {
   const { user } = useAuth();
@@ -40,26 +41,26 @@ const Friends = () => {
 
   const fetchFriends = async () => {
     if (!user) return;
-    const { data } = await supabase.from("friendships").select("*").or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
-    // Get profiles for friends
+    const { data } = await supabase.from("friendships").select("user_id, friend_id").or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
     const friendIds = (data || []).map(f => f.user_id === user.id ? f.friend_id : f.user_id);
-    if (friendIds.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, sport, experience_level").in("user_id", friendIds);
-      setFriends(profiles || []);
-    } else {
-      setFriends([]);
-    }
+    if (friendIds.length === 0) { setFriends([]); return; }
+    // Names come from `avatars` — the only cross-user table the schema grants to
+    // every athlete. The old code read `profiles.full_name` (plus `sport` and
+    // `experience_level`), but `profiles` is self-read-only under RLS, so every
+    // friend rendered as "Athlete" with a blank sport.
+    const names = await fetchDisplayNames(friendIds);
+    setFriends(friendIds.map(id => ({ user_id: id, name: names[id] ?? UNKNOWN_ATHLETE })));
   };
 
   const fetchRequests = async () => {
     if (!user) return;
     const { data: incoming } = await supabase.from("friend_requests").select("*").eq("to_user_id", user.id).eq("status", "pending");
     const { data: outgoing } = await supabase.from("friend_requests").select("*").eq("from_user_id", user.id).eq("status", "pending");
-    // Get names for incoming
+    // Get names for incoming — `avatars`, not `profiles` (see fetchFriends).
     const inIds = (incoming || []).map(r => r.from_user_id);
     if (inIds.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", inIds);
-      setPendingIn((incoming || []).map(r => ({ ...r, name: profiles?.find(p => p.user_id === r.from_user_id)?.full_name || "Unknown" })));
+      const names = await fetchDisplayNames(inIds);
+      setPendingIn((incoming || []).map(r => ({ ...r, name: names[r.from_user_id] ?? UNKNOWN_ATHLETE })));
     } else {
       setPendingIn([]);
     }
@@ -71,7 +72,7 @@ const Friends = () => {
     const code = friendCode.trim().toUpperCase();
     // Friend codes resolve server-side by exact match only — the table is no
     // longer readable in bulk by clients.
-    const { data: foundUserId, error: lookupError } = await supabase.rpc("find_user_by_friend_code" as any, { p_code: code });
+    const { data: foundUserId, error: lookupError } = await supabase.rpc("find_user_by_friend_code", { p_code: code });
     if (lookupError) { toast({ title: "Lookup failed", description: lookupError.message, variant: "destructive" }); return; }
     if (!foundUserId) { toast({ title: "Code not found", variant: "destructive" }); return; }
     if (foundUserId === user.id) { toast({ title: "That's your own code!", variant: "destructive" }); return; }
@@ -140,42 +141,25 @@ const Friends = () => {
         </motion.button>
       </motion.div>
 
-      {/* Refer & Earn */}
+      {/* Refer & Earn — points at the real referral system.
+          This card used to restate the referral economics itself ("3 credits per
+          friend", credits = friends x 3) and share the FRIEND code as a referral
+          link. Both were wrong: the live rates come from economy_config and a
+          referral code is a different code entirely. The Referrals page owns the
+          numbers, the share link and the redemption, so this is now just a door. */}
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="mx-5 mb-5 bg-gradient-card border border-electric-purple/30 rounded-2xl p-4 shadow-card">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-9 h-9 rounded-xl bg-electric-purple/15 flex items-center justify-center">
+        className="mx-5 mb-5">
+        <Link to="/referrals"
+          className="flex items-center gap-3 bg-gradient-card border border-electric-purple/30 rounded-2xl p-4 shadow-card active:scale-[0.99] transition-transform">
+          <div className="w-9 h-9 rounded-xl bg-electric-purple/15 flex items-center justify-center shrink-0">
             <Gift size={16} className="text-electric-purple" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-display font-bold">Refer & Earn</p>
-            <p className="text-[11px] text-muted-foreground">Earn 3 credits per friend who hits a 5-day streak</p>
+            <p className="text-[11px] text-muted-foreground">Invite athletes and earn credits for both of you</p>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 my-3">
-          <div className="bg-muted/40 rounded-xl p-2.5 text-center">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Referred</p>
-            <p className="text-xl font-display font-bold text-electric-purple">{friends.length}</p>
-          </div>
-          <div className="bg-muted/40 rounded-xl p-2.5 text-center">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Credits Earned</p>
-            <p className="text-xl font-display font-bold text-energy">{friends.length * 3}</p>
-          </div>
-        </div>
-        <motion.button whileTap={{ scale: 0.97 }} onClick={() => {
-          const link = publicAppUrl(`/auth?ref=${myCode}`);
-          void shareContent({ title: "Join me on Vaylo Sports", text: "Train with me on Vaylo Sports", url: link })
-            .then((result) => {
-              if (result === "copied") toast({ title: "Referral link copied!" });
-              if (result === "unsupported") toast({ title: "Referral link", description: link, variant: "destructive" });
-            });
-        }}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-electric-purple to-primary text-primary-foreground font-semibold py-2.5 rounded-xl text-sm shadow-glow">
-          <Share2 size={14} /> Share referral link
-        </motion.button>
-        <p className="text-[10px] text-muted-foreground mt-2 text-center">
-          Reward auto-credits when your referral logs 5 days in a row.
-        </p>
+          <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+        </Link>
       </motion.div>
 
 
@@ -227,15 +211,17 @@ const Friends = () => {
         <div className="space-y-3">
           {friends.map((f, i) => (
             <motion.div key={f.user_id} initial={{ opacity: 0, x: -15 }} animate={friendsInView ? { opacity: 1, x: 0 } : {}}
-              transition={{ delay: i * 0.06 }}
-              className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors duration-300">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                <Users size={18} className="text-primary" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm">{f.full_name || "Athlete"}</h4>
-                <p className="text-xs text-muted-foreground">{f.sport || "Multi-sport"} · {f.experience_level || "—"}</p>
-              </div>
+              transition={{ delay: i * 0.06 }}>
+              <Link to={`/profile/${f.user_id}`}
+                className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/20 transition-colors duration-300">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                  <Users size={18} className="text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-sm truncate">{f.name}</h4>
+                  <p className="text-xs text-muted-foreground">View athlete profile</p>
+                </div>
+              </Link>
             </motion.div>
           ))}
         </div>

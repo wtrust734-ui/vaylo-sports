@@ -41,9 +41,9 @@ const CommandHero = () => {
       supabase.from("performance_metrics").select("*").eq("user_id", user.id),
       supabase.from("recovery_logs").select("readiness_score, log_date").eq("user_id", user.id).order("log_date", { ascending: false }).limit(14),
     ]).then(([mRes, rRes]) => {
-      const sport = (profile as any)?.sport || "default";
-      if (mRes.data?.length) setVpr(calculateVPR(mRes.data as any, Array.isArray(sport) ? sport[0] : sport));
-      const todays = rRes.data?.find((r: any) => r.log_date === today);
+      const sport = profile?.sport || "default";
+      if (mRes.data?.length) setVpr(calculateVPR(mRes.data, Array.isArray(sport) ? sport[0] : sport));
+      const todays = rRes.data?.find((r) => r.log_date === today);
       if (todays) setReadiness(todays.readiness_score);
       // streak: consecutive logged days from today
       let s = 0;
@@ -139,7 +139,7 @@ const CommandHero = () => {
             <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
               <Play size={18} className="text-primary fill-primary ml-0.5" />
             </div>
-            <div className="text-left">
+            <div className="text-start">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Today's Mission</p>
               <p className="text-sm font-bold">Start Training</p>
             </div>

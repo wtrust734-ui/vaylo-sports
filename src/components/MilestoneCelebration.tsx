@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Share2, X, Volume2, VolumeX } from "lucide-react";
 import { lsGet, lsSet } from "@/lib/localStore";
-import { shareContent } from "@/lib/share";
+import { shareWithInvite } from "@/lib/share";
 
 export type MilestoneKey =
   | "first_workout" | "streak_7" | "workouts_50" | "first_pb" | "goal_reached";
@@ -54,7 +54,7 @@ const MilestoneCelebration = () => {
       lsSet(SEEN_KEY, Array.from(new Set([...seen, key])));
       if (!muted) {
         try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const ctx = new (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
           const o = ctx.createOscillator(); const g = ctx.createGain();
           o.connect(g); g.connect(ctx.destination);
           o.frequency.setValueAtTime(523, ctx.currentTime);

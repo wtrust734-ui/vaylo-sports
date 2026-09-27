@@ -459,7 +459,7 @@ const Events = () => {
                   {records.filter(r => r.position).length > 0 && (
                     <div className="mb-3">
                       <ResponsiveContainer width="100%" height={120}>
-                        <BarChart data={records.map(r => ({ event: (r.events as any)?.title?.slice(0, 10) || "Event", position: r.position || 0 }))}>
+                        <BarChart data={records.map(r => ({ event: r.events?.title?.slice(0, 10) || "Event", position: r.position || 0 }))}>
                           <XAxis dataKey="event" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} />
                           <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} reversed />
                           <Bar dataKey="position" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
@@ -477,7 +477,7 @@ const Events = () => {
                         <div key={r.id} className="bg-muted/30 rounded-lg px-3 py-2">
                           <div className="flex items-center justify-between text-xs">
                             <div>
-                              <span className="font-medium">{(r.events as any)?.title || "Event"}</span>
+                              <span className="font-medium">{r.events?.title || "Event"}</span>
                               <span className="text-muted-foreground ml-2">{r.result_time || "No time"}</span>
                             </div>
                             <div className="flex items-center gap-2">

@@ -29,6 +29,21 @@ function periodStart(p: LeaderboardPeriod): Date | null {
   return null;
 }
 
+const PERIOD_DAYS: Record<Exclude<LeaderboardPeriod, "all">, number> = { week: 7, month: 30 };
+
+/**
+ * The window immediately before the current one, so a leaderboard can show a
+ * real rank change. Returns null for "all" (there is no earlier period).
+ */
+export function previousPeriodWindow(p: LeaderboardPeriod): { from: Date; to: Date } | null {
+  if (p === "all") return null;
+  const days = PERIOD_DAYS[p];
+  const now = new Date();
+  const to = new Date(now); to.setDate(to.getDate() - days);
+  const from = new Date(to); from.setDate(from.getDate() - days);
+  return { from, to };
+}
+
 export interface LeaderboardRow {
   user_id: string;
   points: number;
@@ -36,16 +51,24 @@ export interface LeaderboardRow {
   rank: number;
 }
 
-export async function fetchLeaderboard(opts: { period: LeaderboardPeriod; sport?: string | null; limit?: number }): Promise<LeaderboardRow[]> {
-  const client = supabase as any;
-  let q = client.from("points_events").select("user_id,points,sport,occurred_at");
-  const start = periodStart(opts.period);
+export async function fetchLeaderboard(opts: {
+  period: LeaderboardPeriod;
+  sport?: string | null;
+  limit?: number;
+  /** Override the window start (used to fetch the previous period). */
+  from?: Date;
+  /** Exclusive window end (used to fetch the previous period). */
+  to?: Date;
+}): Promise<LeaderboardRow[]> {
+  let q = supabase.from("points_events").select("user_id,points,sport,occurred_at");
+  const start = opts.from ?? periodStart(opts.period);
   if (start) q = q.gte("occurred_at", start.toISOString());
+  if (opts.to) q = q.lt("occurred_at", opts.to.toISOString());
   if (opts.sport && opts.sport !== "all") q = q.eq("sport", opts.sport);
   const { data, error } = await q.limit(5000);
   if (error) throw error;
   const totals: Record<string, { pts: number; sport?: string | null }> = {};
-  (data || []).forEach((r: any) => {
+  (data || []).forEach((r) => {
     if (!totals[r.user_id]) totals[r.user_id] = { pts: 0, sport: r.sport };
     totals[r.user_id].pts += r.points || 0;
   });
@@ -60,36 +83,34 @@ export async function fetchLeaderboard(opts: { period: LeaderboardPeriod; sport?
 // These return the Supabase result (so callers keep working) but never fail
 // silently — every RPC error is logged, and surfaced to any caller that checks.
 export async function awardPoints(points: number, source: string, sport?: string | null) {
-  const client = supabase as any;
-  const res = await client.rpc("award_points", { p_points: points, p_source: source, p_sport: sport ?? null });
-  if (res?.error) console.error("awardPoints failed:", res.error.message);
+  const res = await supabase.rpc("award_points", { p_points: points, p_source: source, p_sport: sport ?? null });
+  if (res.error) console.error("awardPoints failed:", res.error.message);
   return res;
 }
 
 // Challenge helpers
 export async function joinChallenge(id: string) {
-  const res = await (supabase as any).rpc("join_challenge", { p_challenge: id });
-  if (res?.error) console.error("joinChallenge failed:", res.error.message);
+  const res = await supabase.rpc("join_challenge", { p_challenge: id });
+  if (res.error) console.error("joinChallenge failed:", res.error.message);
   return res;
 }
 export async function leaveChallenge(id: string) {
-  const res = await (supabase as any).rpc("leave_challenge", { p_challenge: id });
-  if (res?.error) console.error("leaveChallenge failed:", res.error.message);
+  const res = await supabase.rpc("leave_challenge", { p_challenge: id });
+  if (res.error) console.error("leaveChallenge failed:", res.error.message);
   return res;
 }
 export async function updateChallengeProgress(id: string, delta: number) {
-  const res = await (supabase as any).rpc("update_challenge_progress", { p_challenge: id, p_delta: delta });
-  if (res?.error) console.error("updateChallengeProgress failed:", res.error.message);
+  const res = await supabase.rpc("update_challenge_progress", { p_challenge: id, p_delta: delta });
+  if (res.error) console.error("updateChallengeProgress failed:", res.error.message);
   return res;
 }
 
 // Achievement auto-award helper (streaks / distance milestones)
 export async function checkAndAwardMilestones(userId: string) {
-  const client = supabase as any;
-  const { data: existing } = await client.from("achievements").select("title").eq("user_id", userId);
-  const owned = new Set((existing || []).map((e: any) => e.title));
-  const { data: pts } = await client.from("points_events").select("points").eq("user_id", userId);
-  const total = (pts || []).reduce((s: number, r: any) => s + (r.points || 0), 0);
+  const { data: existing } = await supabase.from("achievements").select("title").eq("user_id", userId);
+  const owned = new Set((existing || []).map((e) => e.title));
+  const { data: pts } = await supabase.from("points_events").select("points").eq("user_id", userId);
+  const total = (pts || []).reduce((s, r) => s + (r.points || 0), 0);
   const tiers: [number, string, string][] = [
     [500, "Rising Star", "Earned 500 points"],
     [2500, "Contender", "Earned 2,500 points"],
@@ -98,7 +119,7 @@ export async function checkAndAwardMilestones(userId: string) {
   ];
   for (const [t, title, desc] of tiers) {
     if (total >= t && !owned.has(title)) {
-      const { error } = await client.from("achievements").insert({ user_id: userId, type: "points", title, description: desc, icon: "star" });
+      const { error } = await supabase.from("achievements").insert({ user_id: userId, type: "points", title, description: desc, icon: "star" });
       // 23505 = awarded by another tab in the meantime.
       if (error && error.code !== "23505") console.error("milestone award failed:", error.message);
     }

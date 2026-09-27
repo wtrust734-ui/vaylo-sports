@@ -14,7 +14,9 @@ Repository: this folder. CLI: `supabase` 2.117.0, already linked to that project
 |---|---|
 | Frontend → backend wiring | **Done.** `.env` points at `vvwhausdjzdmsyxekrcl`; zero Lovable references remain anywhere in `src`, `supabase/functions` or `index.html` |
 | Supabase schema | **33 migrations applied** (the 29 Lovable-era ones + 4 newer: `learning_discovery`, `learning_feedback`, `fix_coin_rate_1_25`, `weekly_coach_review_cost`) |
-| Hardening migrations | **All 8 applied** 2026-09-21 via `supabase db push --linked`, no errors. Live-verified: `coins_per_credit()` returns 7.5, and `viewer_is_adult()` / `sponsored_placements()` are unreachable by an unauthenticated caller |
+| Hardening migrations | **All applied** (2026-09-21, then `20260922090000_entitlement_and_referral_fixes.sql` on 2026-09-22) via `supabase db push --linked`, no errors. Live-verified: `coins_per_credit()` returns 7.5, and `viewer_is_adult()` / `sponsored_placements()` are unreachable by an unauthenticated caller |
+| Audit round 2026-09-22 | Four user-facing defects found and fixed (broken cross-user names, two phantom-column queries, a forgeable/free entitlement, referral rewards that were never paid). Full detail and the live proof: `supabase/DEPLOY_NOTES.md` §"Audit round, 2026-09-22" |
+| Geo + sharing + deletion 2026-09-22 | `20260922091000_geo_scopes_and_activity_sharing.sql` (public country, `shared_activities`, `activity_hypes`) and `20260922092000_user_region_public_read.sql` (reverts a column-level grant that broke `upsert`). Country/continental leaderboards, opt-in activity sharing instead of reading friends' private training, and account deletion rebuilt to cover 79 tables and **verify** the wipe. 25/25 live checks + 7 planted rows in the previously-missed tables. Detail: `supabase/DEPLOY_NOTES.md` §"Geo, sharing and deletion — 2026-09-22 (later)" |
 | Tables | 87 in `public`, every one with RLS enabled |
 | User data in Supabase | **None.** Every user table is 0 rows |
 | Seeded content | `reward_definitions` 64, `country_pricing_map` 36, `subscription_plans` 6, `pricing_tiers` 4, `special_offers` 3, `economy_config` 7, `reward_config` 1 — all inserted by migrations |
@@ -209,13 +211,25 @@ confusing failures.
    each provider. Until then the corresponding button does not render, because
    the app asks GoTrue which providers it has
    (`src/hooks/use-auth-providers.ts`) instead of offering a button that errors.
-3. **Email confirmation.** The hosted default requires users to confirm their
-   address before signing in. Decide deliberately: keep it on for real launch,
-   turn it off (Authentication → Sign In / Providers → Email) while you're
-   testing, so test accounts don't get stuck waiting for mail.
-4. **Email delivery.** Supabase's built-in mail service is rate-limited and not
-   meant for production. Add your own SMTP before launch or confirmation and
-   reset emails will silently drop.
+3. **Email confirmation — currently OFF, on purpose.** Pushed from
+   `supabase/config.toml` (`[auth.email] enable_confirmations = false`) on
+   2026-09-21, because Supabase's built-in mail service allows only a handful of
+   messages per hour per project. With confirmations on, the *second* sign-up in
+   an hour fails with `429 over_email_send_rate_limit` — and GoTrue fails before
+   inserting the user, so it presents as a broken sign-up page rather than a mail
+   problem. With it off, sign-up completes immediately with a session and no mail
+   is sent. Verified live afterwards: `200` + session + auto-confirmed +
+   `handle_new_user()` bootstrapping a profile with 20 starter credits.
+
+   **Before launch, do both:** configure SMTP (item 4), then delete the
+   `[auth.email]` block (or set it to `true`) and re-run `supabase config push`.
+   Leaving it off in production lets anyone register an address they do not own —
+   and site configs sent to that address go nowhere.
+4. **Email delivery.** Still unconfigured, and it is needed even with confirmations
+   off: password resets go through the same rate-limited mailer, so
+   "Forgot password?" hits the same `429` until real SMTP is in place
+   (Dashboard → Project Settings → Auth → SMTP; Resend/Postmark/SendGrid all have
+   free tiers). Supabase's built-in service is explicitly not for production.
 5. **Expected consequence of section 2:** the 9 Lovable-era accounts do not
    exist here, so those athletes would register fresh. Nobody loses paid access,
    because none of them had any.

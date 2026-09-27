@@ -376,7 +376,7 @@ const Arcade = () => {
     <div className="min-h-screen bg-background">
       <div className="px-5 pt-14 pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">
-          <Gamepad2 size={24} className="inline mr-2 text-primary" />Vaylo Arcade
+          <Gamepad2 size={24} className="inline mr-2 text-primary" />Vaylo Sports Arcade
         </motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Train your brain, sharpen your game.</motion.p>
       </div>
@@ -401,7 +401,7 @@ const Arcade = () => {
                 initial={{ opacity: 0, y: 20, scale: 0.9 }} animate={gamesInView ? { opacity: 1, y: 0, scale: 1 } : {}}
                 transition={{ delay: i * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 whileHover={{ scale: 1.05, y: -4 }} whileTap={{ scale: 0.95 }}
-                className="bg-card border border-border rounded-xl p-4 text-left hover:border-primary/20 transition-colors duration-300">
+                className="bg-card border border-border rounded-xl p-4 text-start hover:border-primary/20 transition-colors duration-300">
                 <div className={`p-2.5 rounded-xl ${game.bg} w-fit mb-3`}><game.icon size={22} className={game.color} /></div>
                 <h4 className="font-semibold text-sm mb-1">{game.title}</h4>
                 <p className="text-[11px] text-muted-foreground leading-tight">{game.desc}</p>

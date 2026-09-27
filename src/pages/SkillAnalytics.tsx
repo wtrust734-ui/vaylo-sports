@@ -15,7 +15,7 @@ const SkillAnalytics = () => {
   const load = async () => {
     if (!user) return;
     const { data } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).order("log_date", { ascending: true }).limit(300);
-    setMetrics((data as any) || []); setLoading(false);
+    setMetrics(data || []); setLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;

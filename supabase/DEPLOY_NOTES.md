@@ -135,6 +135,7 @@ work and were deliberately left alone.
 | 6 | `20260921090500_profile_cosmetics.sql` | Profile cosmetics go on sale for Coins (`reward_definitions.coin_cost`), adds `purchase_cosmetic` / `equip_cosmetic` / `unequip_cosmetic`, and stops clients writing ownership/equipped state directly |
 | 7 | `20260921090600_iap_readiness.sql` | `user_purchases.provider_reference` + `platform`, with a unique index so a retried store transaction can never grant twice |
 | 8 | `20260921090700_sponsored_age_gate.sql` | Brand/sponsorship tables plus a **server-enforced 18+ gate** for sponsored content (`viewer_is_adult()`, `sponsored_placements()`, `record_brand_event()`); sponsored challenges hidden from under-18s. See `SPONSORSHIP.md` |
+| 9 | `20260922090000_entitlement_and_referral_fixes.sql` | **Applied 2026-09-22.** Drops the client `INSERT` on `user_purchases` (entitlements were forgeable) and makes `redeem_referral()` actually pay the configured credits to both sides |
 
 Order matters: migration 4 replaces functions that read `avatar_catalog`, and
 migration 1 adds the `find_user_by_friend_code` RPC the current client calls.
@@ -155,7 +156,9 @@ supabase functions deploy coach-chat weekly-review learning-recommend process-pu
 - `coach-chat`, `weekly-review` — refund the 3 credits when the AI call fails
 - `learning-recommend` — now requires a verified user
 - `process-purchase` — validates the basket, records server prices, one
-  redemption per offer, grants coins through `grant_coins`
+  redemption per offer, grants coins through `grant_coins`, checks that a
+  credit-priced unlock is affordable **before** writing its entitlement row, and
+  rolls that row back if the grant fails (§"Audit round, 2026-09-22")
 
 ## Money model (solved)
 
@@ -226,3 +229,175 @@ verifying any payment** — there is no Stripe/RevenueCat/StoreKit integration i
 the repository. The basket is now validated and priced server-side, but a
 logged-in user can still call the function and receive credits for free. Real
 verification needs a billing provider.
+
+---
+
+## Audit round, 2026-09-22 — what was broken and what changed
+
+A full read-through of the app, cross-checked against the live schema. Four
+defects were real; the rest of the surface held up.
+
+### 1. The entire social layer could not resolve another athlete's name
+`profiles` is protected by self-only RLS (`auth.uid() = user_id`). Leaderboard,
+Feed, Friends, Communities, ChallengeDetail and PublicProfile all selected
+`profiles.full_name` for *other* users, so every name fell back to "Athlete" —
+or, on PublicProfile, never resolved at all. `avatars` is the table the schema
+deliberately makes readable to every athlete and it carries `display_name`, so
+all cross-user naming now goes through the new `src/lib/publicIdentity.ts`.
+Nothing new is exposed: it reads a column already granted to every signed-in
+user, and no private column (`date_of_birth`, `credits`, `coins`, `weight_kg`,
+`sex`) is touched.
+
+### 2. Two pages queried columns that do not exist
+PostgREST rejects the whole request, so:
+- `Workouts.tsx` selected `user_settings.ar_overlay_name` → the athlete's saved
+  AR metrics never loaded.
+- `Leaderboard.tsx` selected `profiles.region` / `profiles.city` → the request
+  400'd. Its "Regional" scope was removed too: the only country a client may
+  read belongs to the signed-in user, so that tab could never match a row.
+  Reinstating geo rankings needs a publicly readable country column plus the
+  athlete's consent — a product decision, recorded in the audit report.
+
+`scripts/audit-columns.cjs` cross-references column references in `src/` against
+the live schema; run it after any schema change.
+
+### 3. Paid entitlements were forgeable — and one was granted without paying
+`user_purchases` granted `INSERT` to `authenticated`, and `Injury.tsx` was the
+only client that used it: it spent the credits, then inserted the entitlement
+and **ignored the insert result**, reporting "unlocked" even when nothing was
+recorded. Any signed-in athlete could insert any product id and unlock a paid
+feature for free. Two fixes:
+- The page now goes through `process-purchase`, like every other purchase.
+- Migration 9 drops the client insert; entitlements are written by the service
+  role only.
+
+Separately, `process-purchase` wrote the entitlement row **before** checking the
+balance, so a refused 402 unlock still left its row behind — and since the apps
+treat "a row exists" as proof of purchase, an athlete who could not afford the
+unlock got it on the next load. A live test caught this (a 20-credit account was
+refused at 29 credits, then showed two `injury_management` rows). The
+affordability check now runs before anything is written, in the validation pass,
+and the insert's failure paths roll the row back. `src/lib/purchaseSequence.test.ts`
+asserts that ordering so it cannot silently regress.
+
+### 4. Referral rewards were never paid
+The share links (`/auth?ref=CODE`) were dead — nothing in the app read the `ref`
+parameter. `redeem_referral()` recorded attribution as `status = 'granted'` with
+`reward_granted_at = now()` but granted nothing, and the UI advertised "14 days
+of Pro" and "3 credits per friend" — neither of which existed. Now:
+- `redeem_referral()` pays both sides from `economy_config.promo_bonuses`
+  through the shared `credits_grant`, with idempotency keys derived from the
+  referee id (`referrals.referee_id` is UNIQUE, so one payout per athlete).
+- `Auth.tsx` parks the `ref` code from the URL and redeems it once a session
+  exists, so invite links work end to end.
+- `Referrals.tsx` and `Friends.tsx` state the real credit amounts. The duplicate
+  "Refer & Earn" card in Friends (which invented its own numbers and shared the
+  *friend* code as a referral link) is now a link to the Referrals page.
+
+### Verified live (not just typechecked)
+8/8 checks on two disposable accounts: client insert into `user_purchases` →
+**403**; `redeem_referral` → referee +10, referrer +15; replay → refused;
+balances exactly right. 7/7 on the unlock path: unaffordable → **402** with no
+credits taken and **no entitlement row**, `pack_25` → +25, unlock → exactly the
+29-credit database price, entitlement recorded once. Both accounts removed
+through the app's own `delete-account`.
+
+Also removed: `src/components/_archive/` (11 files, zero imports anywhere — it
+shadowed real components like `ui/toast.tsx`). Recoverable from git.
+
+### Closed since (see "Geo, sharing and deletion" below)
+- ~~**Feed shows only your own activity.**~~ Replaced by explicit per-activity
+  sharing — friends' private training is no longer read by anything.
+- ~~**Geo leaderboards** (country / continent) need a public country column.~~
+  Country is now collected at signup and the boards exist.
+
+### Still open (needs you, not code)
+- **The creator store is paused.** Its sidebar entry (`/marketplace`) is gone, so
+  "You" now shows one store surface (`/market`) instead of two overlapping ones.
+  The route and the pages are untouched — restore the one nav line to bring it back.
+- Several disposable test accounts left **anonymous** `account_deletion_events`
+  audit rows. That is the app's intended post-deletion trace (no personal data);
+  clearing them needs SQL access, which this environment does not have.
+
+## Geo, sharing and deletion — 2026-09-22 (later)
+
+Three product changes, each needing schema work. Migrations
+`20260922091000_geo_scopes_and_activity_sharing.sql` and
+`20260922092000_user_region_public_read.sql`, both applied.
+
+### Country rankings (world / continental / country)
+`user_region` already existed for exactly this — `country` + `currency` per
+athlete — but nothing had ever written to it, and its only policy was self-only,
+which is why the geo scope had to be removed earlier. Now:
+
+- Country is collected as its own onboarding step (searchable picker, ~210
+  countries) and is editable in Profile → Settings.
+- `user_region` is publicly readable, so a leaderboard can resolve every ranked
+  athlete's country. Continent comes from the UN M49 mapping in `src/lib/geo.ts`
+  — an objective standard, so no athlete's board placement is a judgement call.
+  (Türkiye, Israel, Cyprus, Georgia, Armenia and Azerbaijan are Western Asia;
+  Russia is Eastern Europe.)
+- A `^[A-Z]{2}$` CHECK constraint rejects a malformed country at the database,
+  and an unrecognised value resolves to `null` rather than a guessed default —
+  a wrong guess would silently file an athlete on the wrong board.
+
+**The first attempt was wrong and is documented here on purpose.** It narrowed
+the SELECT grant to `(user_id, country)` to keep `currency` private. Live testing
+showed that breaks ordinary writes: PostgREST implements `upsert()` as
+`INSERT ... ON CONFLICT DO UPDATE`, and Postgres needs SELECT on every column the
+`DO UPDATE` set list reads — so saving your own country failed with *permission
+denied for table user_region*. The narrowing is reverted in the second migration.
+The privacy argument was weak anyway: `country` must be public for these boards,
+and `currency` is derived from it through the public `country_pricing_map`.
+
+### Activity sharing replaces reading friends' private training
+The feed aggregated `workouts`, `achievements` and `outcome_goals` across a
+friendship graph. All three are self-read-only under RLS, so it only ever showed
+the signed-in athlete their own rows — and relaxing RLS would have exposed every
+athlete's training and health data. Now:
+
+- `shared_activities` holds exactly the rows an athlete chose to publish, with a
+  partial unique index making re-sharing the same workout idempotent.
+- **Nothing reads friends' private training any more.** The friendship-based
+  aggregation is gone from the feed entirely.
+- Share buttons live on completed workouts and on each feed item, and the button
+  reports the real result of the write before the UI changes.
+- `activity_hypes` makes hype counts real. They were previously stored in
+  `localStorage`, so every athlete saw their own numbers and a shared post's
+  "Hype · 3" meant nothing. A trigger now also refuses self-hype, so a count
+  presented as social proof can't be inflated by its own author.
+
+### Account deletion: it did not delete everything
+Two defects, both invisible at runtime:
+
+1. **Tables missing from the delete list.** `event_pack_ownership`,
+   `fair_usage_events` and `learning_feedback` were never deleted — rows that
+   would have survived account deletion permanently.
+2. **Deletes aimed at columns that do not exist.** `challenges` and
+   `marketplace_listings` are keyed by `creator_id` (not `user_id`) and
+   `team_assignments` by `assigned_to`/`assigned_by`. Those deletes errored, the
+   error was logged and ignored, and the function still answered
+   `success: true`.
+
+The registry is now built by cross-referencing every table in the schema for a
+user-identifying column (79 tables), dependent rows of owned containers
+(team/community/challenge/group) are removed by container id first, failures are
+collected instead of swallowed, and after the identity is gone the function
+**counts every table again** and returns HTTP 500 with the residuals rather than
+claiming success. `src/lib/accountDeletionCoverage.test.ts` fails the build if a
+user-keyed table is added without being handled, or if the registry names a
+column that doesn't exist.
+
+### Verified live, on the real project
+- **25/25** checks with two disposable accounts: country writes; B reads A's
+  country but **not** A's private workouts; sharing; re-share rejected as a
+  duplicate (23505); spoofed shares and spoofed hypes refused (42501); self-hype
+  refused by the trigger; real shared hype count.
+- **Deletion, aimed at the old gaps:** 7 rows planted in the exact places the old
+  registry missed (`learning_feedback`, `event_pack_ownership`, `challenges`,
+  `marketplace_listings`, `team_assignments` ×2, `shared_activities`) → deletion
+  returned `verified: true`, 79 tables checked, **zero residuals, zero failures**.
+  `fair_usage_events` is service-role-only, so a row can't be planted from a
+  client; it is in the registry and is counted by the verification pass.
+- The guard test was itself tested: removing an entry, or renaming a column to one
+  that doesn't exist, makes it fail with the exact table named.

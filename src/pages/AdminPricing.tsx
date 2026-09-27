@@ -44,7 +44,7 @@ export default function AdminPricing() {
     if (!user) { setIsAdmin(false); return; }
     (async () => {
       const { data } = await supabase
-        .from("user_roles" as any)
+        .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("role", "admin")
@@ -58,22 +58,22 @@ export default function AdminPricing() {
     if (!isAdmin) return;
     (async () => {
       const [{ data: t }, { data: c }] = await Promise.all([
-        supabase.from("pricing_tiers" as any).select("*").order("sort_order"),
-        supabase.from("country_pricing_map" as any).select("*").order("country_name"),
+        supabase.from("pricing_tiers").select("*").order("sort_order"),
+        supabase.from("country_pricing_map").select("*").order("country_name"),
       ]);
-      setTiers((t as any) || []);
-      setCountries((c as any) || []);
+      setTiers(t || []);
+      setCountries(c || []);
       loadAnalytics();
     })();
   }, [isAdmin]);
 
   const loadAnalytics = async () => {
     const { data: purchases } = await supabase
-      .from("purchase_analytics" as any)
+      .from("purchase_analytics")
       .select("region,currency,amount_cents,event_type,pack_id,user_id")
       .eq("event_type", "purchase");
 
-    const rows = (purchases as any[]) || [];
+    const rows = purchases || [];
     const byCountryMap = new Map<string, { country: string; rev: number; count: number; users: Set<string> }>();
     const byTierMap = new Map<string, { tier: string; rev: number; count: number }>();
     const tierByCountry: Record<string, string> = {};
@@ -99,9 +99,9 @@ export default function AdminPricing() {
       byTierMap.set(tier, bt);
     }
 
-    const { data: segs } = await supabase.from("user_segments" as any).select("segment");
+    const { data: segs } = await supabase.from("user_segments").select("segment");
     const segCount: Record<string, number> = { new: 0, casual: 0, active: 0, vip: 0 };
-    ((segs as any[]) || []).forEach((s) => { segCount[s.segment] = (segCount[s.segment] || 0) + 1; });
+    (segs || []).forEach((s) => { segCount[s.segment] = (segCount[s.segment] || 0) + 1; });
 
     setAnalytics({
       byCountry: Array.from(byCountryMap.values()).map((v) => ({ ...v, users: v.users.size })).sort((a, b) => b.rev - a.rev),
@@ -118,7 +118,7 @@ export default function AdminPricing() {
 
   const saveTier = async (tier: Tier) => {
     setSavingId(tier.id);
-    const { error } = await supabase.from("pricing_tiers" as any).update({
+    const { error } = await supabase.from("pricing_tiers").update({
       name: tier.name,
       description: tier.description,
       packs: tier.packs,
@@ -150,7 +150,7 @@ export default function AdminPricing() {
 
   const updateCountryTier = async (code: string, newTier: string) => {
     setCountries((prev) => prev.map((c) => (c.country_code === code ? { ...c, tier_code: newTier } : c)));
-    const { error } = await supabase.from("country_pricing_map" as any).update({ tier_code: newTier }).eq("country_code", code);
+    const { error } = await supabase.from("country_pricing_map").update({ tier_code: newTier }).eq("country_code", code);
     if (error) toast({ title: "Update failed", description: error.message, variant: "destructive" });
   };
 
@@ -160,16 +160,16 @@ export default function AdminPricing() {
     const name = prompt("Country name") || code;
     const tier_code = prompt("Tier code (A/B/C/D)")?.toUpperCase() || "A";
     const currency = prompt("Currency code (e.g. EUR)")?.toUpperCase() || "USD";
-    const { error, data } = await supabase.from("country_pricing_map" as any)
+    const { error, data } = await supabase.from("country_pricing_map")
       .insert({ country_code: code, country_name: name, tier_code, currency })
       .select().single();
     if (error) return toast({ title: "Add failed", description: error.message, variant: "destructive" });
-    setCountries((p) => [...p, data as any].sort((a, b) => a.country_name.localeCompare(b.country_name)));
+    setCountries((p) => [...p, data].sort((a, b) => a.country_name.localeCompare(b.country_name)));
   };
 
   const removeCountry = async (code: string) => {
     if (!confirm(`Remove ${code}?`)) return;
-    const { error } = await supabase.from("country_pricing_map" as any).delete().eq("country_code", code);
+    const { error } = await supabase.from("country_pricing_map").delete().eq("country_code", code);
     if (error) return toast({ title: "Remove failed", description: error.message, variant: "destructive" });
     setCountries((p) => p.filter((c) => c.country_code !== code));
   };

@@ -5,9 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake } from "lucide-react";
+import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { ageBand, earliestDob, validateDob } from "@/lib/age";
+import CountrySelect from "@/components/geo/CountrySelect";
+import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
 
 const SPORTS = ["Running", "Cycling", "Football", "Basketball", "Tennis", "Swimming", "Weightlifting", "Triathlon", "Climbing", "MMA / Boxing", "Other"];
 const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
@@ -23,8 +25,8 @@ const DAYS = [2, 3, 4, 5, 6, 7];
 
 const DRAFT_KEY = "vaylo:onboarding-draft";
 
-type Draft = { sport: string; level: string; goal: string; days: number; name: string; dob: string };
-const EMPTY: Draft = { sport: "", level: "", goal: "", days: 4, name: "", dob: "" };
+type Draft = { sport: string; level: string; goal: string; days: number; name: string; dob: string; country: string };
+const EMPTY: Draft = { sport: "", level: "", goal: "", days: 4, name: "", dob: "", country: "" };
 
 function loadDraft(): Draft {
   try {
@@ -59,12 +61,31 @@ export default function Onboarding() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* ignore */ }
   }, [data]);
 
+  // Country lives in `user_region`, not `profiles`. Read the athlete's own row so
+  // returning to this screen shows what they already picked.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data: row } = await supabase
+        .from("user_region")
+        .select("country")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled && row?.country) {
+        setData((prev) => ({ ...prev, country: prev.country || row.country }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
   const steps = [
     { key: "sport", title: "What's your sport?", subtitle: "We'll tailor everything to it." },
     { key: "level", title: "How experienced are you?", subtitle: "We start where you are." },
     { key: "goal", title: "What's your main goal?", subtitle: "We'll build your plan around it." },
     { key: "days", title: "Training days per week?", subtitle: "Be realistic — consistency beats heroics." },
     { key: "age", title: "When were you born?", subtitle: "We use your age to keep training loads sensible. Sponsored content is only shown to over-18s." },
+    { key: "country", title: "Where are you based?", subtitle: "This puts you on your country and continental leaderboards. Your country is public on the board — nothing else about you is." },
     { key: "preview", title: "Your dashboard is ready", subtitle: "Here's a quick preview of what's waiting." },
   ];
 
@@ -79,6 +100,7 @@ export default function Onboarding() {
     // Date of birth is optional — no age means no sponsored content, which is
     // the safe default. An entered date must be plausible to continue.
     if (cur.key === "age") return !validateDob(data.dob);
+    if (cur.key === "country") return !!normaliseCountryCode(data.country);
     return true;
   };
 
@@ -93,7 +115,7 @@ export default function Onboarding() {
         .select("extended_profile")
         .eq("user_id", user.id)
         .maybeSingle();
-      const existingExtended = ((current?.extended_profile as any) ?? {}) as Record<string, unknown>;
+      const existingExtended = (current?.extended_profile ?? {}) as Record<string, unknown>;
 
       const { error } = await supabase.from("profiles").update({
         sport: data.sport || undefined,
@@ -103,13 +125,30 @@ export default function Onboarding() {
         // Stored as a date of birth rather than an age so it never goes stale,
         // and so the 18+ gate can be derived server-side (see src/lib/age.ts).
         date_of_birth: data.dob || undefined,
-        extended_profile: { ...existingExtended, training_days_per_week: data.days } as any,
+        extended_profile: { ...existingExtended, training_days_per_week: data.days },
         onboarding_complete: complete,
       }).eq("user_id", user.id);
 
       // Supabase returns errors rather than throwing, so this check is what
       // stops us telling the athlete "you're in" when nothing was saved.
       if (error) throw error;
+
+      // Country drives the country/continental leaderboards, so it is stored in
+      // `user_region` (which is what the boards read) rather than in the profile
+      // JSON. Only the country code and its currency seed are written.
+      const countryCode = normaliseCountryCode(data.country);
+      if (countryCode) {
+        const { error: regionError } = await supabase.from("user_region").upsert(
+          {
+            user_id: user.id,
+            country: countryCode,
+            currency: currencyFor(countryCode) ?? "USD",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+        if (regionError) throw regionError;
+      }
 
       await refreshProfile();
       toast.success(complete ? "You're in. Let's go." : "Saved — you can finish this later in Profile.");
@@ -161,6 +200,7 @@ export default function Onboarding() {
               {cur.key === "goal" && <Target className="h-5 w-5" />}
               {cur.key === "days" && <Calendar className="h-5 w-5" />}
               {cur.key === "age" && <Cake className="h-5 w-5" />}
+              {cur.key === "country" && <MapPin className="h-5 w-5" />}
               {cur.key === "preview" && <Rocket className="h-5 w-5" />}
             </div>
             <h1 className="text-2xl font-bold mb-1">{cur.title}</h1>
@@ -181,7 +221,7 @@ export default function Onboarding() {
               <div className="space-y-2">
                 {LEVELS.map((l) => (
                   <button key={l} onClick={() => setData({ ...data, level: l })}
-                    className={`w-full p-4 rounded-xl border text-left font-medium transition ${data.level === l ? "bg-electric-purple/20 border-electric-purple" : "border-border bg-card hover:border-electric-purple/40"}`}>
+                    className={`w-full p-4 rounded-xl border text-start font-medium transition ${data.level === l ? "bg-electric-purple/20 border-electric-purple" : "border-border bg-card hover:border-electric-purple/40"}`}>
                     {l}
                   </button>
                 ))}
@@ -243,6 +283,25 @@ export default function Onboarding() {
               </div>
             )}
 
+            {cur.key === "country" && (
+              <div className="space-y-3">
+                <CountrySelect
+                  value={normaliseCountryCode(data.country)}
+                  onChange={(code) => setData({ ...data, country: code ?? "" })}
+                  allowClear={false}
+                />
+                {normaliseCountryCode(data.country) && (
+                  <p className="text-xs text-muted-foreground">
+                    {countryName(data.country)} · {continentFor(data.country)}. You'll rank on both boards.
+                  </p>
+                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Your country is shown next to your name on leaderboards. Your exact location is never
+                  collected, and you can change this in Profile at any time.
+                </p>
+              </div>
+            )}
+
             {cur.key === "preview" && (
               <div className="space-y-3">
                 <Input placeholder="Your name (optional)" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} className="h-12" />
@@ -253,6 +312,9 @@ export default function Onboarding() {
                     <div className="flex justify-between"><span className="text-muted-foreground">Level</span><span className="font-medium">{data.level}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Goal</span><span className="font-medium">{data.goal}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Days/week</span><span className="font-medium">{data.days}</span></div>
+                    {normaliseCountryCode(data.country) && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Country</span><span className="font-medium">{countryName(data.country)}</span></div>
+                    )}
                     {data.dob && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Age</span>
@@ -281,7 +343,7 @@ export default function Onboarding() {
           disabled={!canContinue() || busy}
           className="flex-1 h-12 bg-gradient-to-r from-electric-purple to-energy font-semibold"
         >
-          {step === total - 1 ? (busy ? "Setting up..." : "Enter Vaylo") : "Continue"}
+          {step === total - 1 ? (busy ? "Setting up..." : "Enter Vaylo Sports") : "Continue"}
           {step < total - 1 && <ChevronRight className="h-4 w-4 ml-1" />}
         </Button>
       </div>

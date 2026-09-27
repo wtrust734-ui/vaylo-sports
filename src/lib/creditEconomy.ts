@@ -107,13 +107,13 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
   } catch {}
 
   const { data: map } = await supabase
-    .from("country_pricing_map" as any)
+    .from("country_pricing_map")
     .select("country_code, tier_code, currency")
     .eq("country_code", country)
     .maybeSingle();
 
   const result = map
-    ? { country, currency: (map as any).currency, tier_code: (map as any).tier_code }
+    ? { country, currency: map.currency, tier_code: map.tier_code }
     : { country: "US", currency: "USD", tier_code: "A" };
 
   try { localStorage.setItem("vaylo:region:v2", JSON.stringify(result)); } catch {}
@@ -143,13 +143,13 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
   const region = await detectRegion();
 
   const [{ data: tierRow }, { data: cfgRows }, { data: offerRows }] = await Promise.all([
-    supabase.from("pricing_tiers" as any).select("*").eq("code", region.tier_code).eq("active", true).maybeSingle(),
-    supabase.from("economy_config" as any).select("*").in("region", [region.country, "GLOBAL"]).eq("active", true),
-    supabase.from("special_offers" as any).select("*").eq("active", true).in("region", [region.country, "GLOBAL"]),
+    supabase.from("pricing_tiers").select("*").eq("code", region.tier_code).eq("active", true).maybeSingle(),
+    supabase.from("economy_config").select("*").in("region", [region.country, "GLOBAL"]).eq("active", true),
+    supabase.from("special_offers").select("*").eq("active", true).in("region", [region.country, "GLOBAL"]),
   ]);
 
   const byKey = new Map<string, any>();
-  for (const row of (cfgRows || []) as any[]) {
+  for (const row of cfgRows || []) {
     // Region-specific overrides global
     const existing = byKey.get(row.key);
     if (!existing || (existing.region === "GLOBAL" && row.region !== "GLOBAL")) {
@@ -158,8 +158,8 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
   }
 
   // Tiered pricing takes precedence over global economy_config rows
-  const tierPacks = (tierRow as any)?.packs as CreditPack[] | undefined;
-  const tierInfinite = (tierRow as any)?.infinite as InfinitePack[] | undefined;
+  const tierPacks = tierRow?.packs as CreditPack[] | undefined;
+  const tierInfinite = tierRow?.infinite as InfinitePack[] | undefined;
   const packs = tierPacks ?? (byKey.get("credit_packs")?.value as CreditPack[]) ?? DEFAULT_PACKS;
   const infinite = tierInfinite ?? (byKey.get("infinite_packs")?.value as InfinitePack[]) ?? DEFAULT_INFINITE;
   const featureCosts = {
@@ -198,7 +198,7 @@ export async function trackEconomyEvent(params: {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const region = await detectRegion();
-    await supabase.from("purchase_analytics" as any).insert({
+    await supabase.from("purchase_analytics").insert({
       user_id: user.id,
       event_type: params.event_type,
       pack_id: params.pack_id ?? null,

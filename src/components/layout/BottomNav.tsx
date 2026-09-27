@@ -1,66 +1,74 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, Dumbbell, GraduationCap, MessageSquare, User } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Home, Dumbbell, Gauge, User } from "lucide-react";
 import { motion } from "framer-motion";
+import QuickActionSheet from "./QuickActionSheet";
 
-/**
- * Mobile tab bar. Rendered by AppLayout on small screens only — it gives
- * thumb-reachable access to the five destinations athletes use most, which is
- * what the app needs once it ships as a mobile build.
- */
-const navItems = [
-  { icon: Home, label: "Home", path: "/" },
-  { icon: Dumbbell, label: "Train", path: "/training" },
-  { icon: GraduationCap, label: "Learn", path: "/learning" },
-  { icon: MessageSquare, label: "Coach", path: "/coach" },
-  { icon: User, label: "Profile", path: "/profile" },
-];
+const LEFT = [
+  { icon: Home, labelKey: "navigation.home", path: "/", exact: true },
+  { icon: Dumbbell, labelKey: "navigation.train", path: "/train", exact: false },
+] as const;
+const RIGHT = [
+  { icon: Gauge, labelKey: "navigation.perform", path: "/perform", exact: false },
+  { icon: User, labelKey: "navigation.profile", path: "/profile", exact: true },
+] as const;
 
-const BottomNav = () => {
+const isActivePath = (item: { path: string; exact: boolean }, pathname: string) =>
+  item.exact ? pathname === item.path : pathname.startsWith(item.path);
+
+const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[number] }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const isActive = isActivePath(item, location.pathname);
+  const Icon = item.icon;
+  const label = t(item.labelKey);
 
   return (
-    <nav
-      aria-label="Primary"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border lg:hidden"
+    <button
+      type="button"
+      aria-label={label}
+      aria-current={isActive ? "page" : undefined}
+      onClick={() => navigate(item.path)}
+      className="relative flex min-w-[56px] min-h-[48px] flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-2xl transition-[transform,background,color] duration-200 active:scale-95"
     >
-      <div className="flex items-center justify-around px-2 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
-        {navItems.map((item) => {
-          const isActive = item.path === "/"
-            ? location.pathname === "/"
-            : location.pathname.startsWith(item.path);
-          return (
-            <button
-              key={item.path}
-              type="button"
-              aria-label={item.label}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(item.path)}
-              className="relative flex min-w-[56px] min-h-[48px] flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors active:scale-95"
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="nav-indicator"
-                  className="absolute inset-0 bg-electric-purple/10 rounded-xl"
-                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                />
-              )}
-              <item.icon
-                size={22}
-                className={`relative z-10 transition-colors ${
-                  isActive ? "text-electric-purple" : "text-muted-foreground"
-                }`}
-              />
-              <span
-                className={`relative z-10 text-[10px] font-medium transition-colors ${
-                  isActive ? "text-electric-purple" : "text-muted-foreground"
-                }`}
-              >
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
+      {isActive && (
+        <motion.div
+          layoutId="nav-indicator"
+          className="absolute inset-0 rounded-2xl bg-primary/10 border border-primary/15"
+          transition={{ type: "spring", stiffness: 420, damping: 30 }}
+        />
+      )}
+      <Icon
+        size={20}
+        className={`relative z-10 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"}`}
+      />
+      <span
+        className={`relative z-10 text-[10px] font-semibold tracking-wide truncate max-w-[72px] ${isActive ? "text-primary" : "text-muted-foreground"}`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+};
+
+const BottomNav = () => {
+  const { t } = useTranslation();
+  return (
+    <nav
+      aria-label={t("navigation.primaryNav")}
+      className="fixed inset-x-3 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 lg:hidden pointer-events-none"
+    >
+      <div className="pointer-events-auto mx-auto max-w-[520px] rounded-[22px] border border-white/[0.08] bg-card/75 backdrop-blur-2xl shadow-card supports-[backdrop-filter]:bg-card/70">
+        <div className="flex items-center justify-around px-2 py-2">
+          {LEFT.map((item) => (
+            <NavButton key={item.path} item={item} />
+          ))}
+          <QuickActionSheet />
+          {RIGHT.map((item) => (
+            <NavButton key={item.path} item={item} />
+          ))}
+        </div>
       </div>
     </nav>
   );

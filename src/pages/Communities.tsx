@@ -123,7 +123,7 @@ const Communities = () => {
     if (!user || !friendCode.trim()) return;
     const code = friendCode.trim().toUpperCase();
     // Server-side exact-match lookup — friend codes are not enumerable by clients.
-    const { data: foundUserId, error: lookupError } = await supabase.rpc("find_user_by_friend_code" as any, { p_code: code });
+    const { data: foundUserId, error: lookupError } = await supabase.rpc("find_user_by_friend_code", { p_code: code });
     if (lookupError) { toast({ title: "Lookup failed", description: lookupError.message, variant: "destructive" }); return; }
     if (!foundUserId) { toast({ title: "Code not found", variant: "destructive" }); return; }
     if (foundUserId === user.id) { toast({ title: "That's your code!", variant: "destructive" }); return; }
@@ -285,9 +285,9 @@ const Communities = () => {
                 <p className="text-sm font-semibold">{opt.label}</p>
                 <p className="text-xs text-muted-foreground">{opt.desc}</p>
               </div>
-              <button onClick={() => savePrivacy({ [opt.key]: !(privacy as any)[opt.key] } as any)}
-                className={`w-11 h-6 rounded-full transition-all relative ${(privacy as any)[opt.key] ? "bg-primary" : "bg-muted"}`}>
-                <motion.div layout className={`absolute top-0.5 w-5 h-5 bg-background rounded-full shadow ${(privacy as any)[opt.key] ? "right-0.5" : "left-0.5"}`} />
+              <button onClick={() => savePrivacy({ [opt.key]: !privacy[opt.key] })}
+                className={`w-11 h-6 rounded-full transition-all relative ${privacy[opt.key] ? "bg-primary" : "bg-muted"}`}>
+                <motion.div layout className={`absolute top-0.5 w-5 h-5 bg-background rounded-full shadow ${privacy[opt.key] ? "right-0.5" : "left-0.5"}`} />
               </button>
             </div>
           ))}
@@ -422,15 +422,22 @@ const GroupDetail = ({ community, membership, onClose, onJoin, onLeave, onToggle
       supabase.from("community_pinned_avatars").select("*").eq("community_id", community.id).order("position"),
     ]);
     const userIds = [...new Set([...(mems || []).map((m: any) => m.user_id), ...(pin || []).map((p: any) => p.user_id)])];
-    let profileMap: Record<string, any> = {};
-    let avatarMap: Record<string, any> = {};
+    const profileMap: Record<string, any> = {};
+    const avatarMap: Record<string, any> = {};
     if (userIds.length > 0) {
-      const [{ data: profs }, { data: avs }] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name").in("user_id", userIds),
-        supabase.from("avatars").select("user_id, display_name, base, headgear, outfit, badge").in("user_id", userIds),
-      ]);
-      (profs || []).forEach((p: any) => profileMap[p.user_id] = p);
-      (avs || []).forEach((a: any) => avatarMap[a.user_id] = a);
+      // One query, against the only cross-user table the schema grants to every
+      // athlete. The old extra `profiles` lookup was self-read-only, so it always
+      // came back empty and members/posts/pins fell back to "Athlete". The public
+      // name lives on `avatars.display_name`; keep the profileMap shape so the
+      // render code (profile?.full_name) stays untouched.
+      const { data: avs } = await supabase
+        .from("avatars")
+        .select("user_id, display_name, base, headgear, outfit, badge")
+        .in("user_id", userIds);
+      (avs || []).forEach((a: any) => {
+        avatarMap[a.user_id] = a;
+        profileMap[a.user_id] = { user_id: a.user_id, full_name: a.display_name };
+      });
     }
     setMembers((mems || []).map((m: any) => ({ ...m, profile: profileMap[m.user_id], avatar: avatarMap[m.user_id] })));
     setPosts((ps || []).map((p: any) => ({ ...p, profile: profileMap[p.user_id] })));

@@ -22,7 +22,7 @@ export default function NotificationPrefs() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await (supabase as any).from("notification_prefs").select("*").eq("user_id", user.id).maybeSingle();
+      const { data } = await supabase.from("notification_prefs").select("*").eq("user_id", user.id).maybeSingle();
       setPrefs(data || KEYS.reduce((a, k) => ({ ...a, [k.key]: true }), {}));
       setLoading(false);
     })();
@@ -32,7 +32,7 @@ export default function NotificationPrefs() {
     if (!user) return;
     const next = { ...prefs, [key]: value };
     setPrefs(next);
-    const { error } = await (supabase as any).from("notification_prefs").upsert({ user_id: user.id, ...next }, { onConflict: "user_id" });
+    const { error } = await supabase.from("notification_prefs").upsert({ user_id: user.id, ...next }, { onConflict: "user_id" });
     if (error) toast.error(error.message); else toast.success("Saved");
   };
 

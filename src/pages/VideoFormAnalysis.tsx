@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -78,7 +79,7 @@ const VideoFormAnalysis = () => {
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("video_form_analyses")
       .select("id, sport_type, video_name, overall_score, model_used, created_at, result")
       .eq("user_id", user.id)
@@ -129,20 +130,22 @@ const VideoFormAnalysis = () => {
       setStage("analysing");
 
       const { data, error } = await supabase.functions.invoke("video-form-analysis", {
-        body: { video_base64: base64, mime_type: file.type, sport_type: sport, video_name: file.name, pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+        body: { video_base64: base64, mime_type: file.type, sport_type: sport, video_name: file.name, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
       });
 
       if (error) {
         let msg = error.message;
-        try { const ctx = (error as any).context; if (ctx?.text) { const parsed = JSON.parse(await ctx.text()); msg = parsed.error || msg; } } catch { /* ignore */ }
+        const err = error as { context?: { text?: () => Promise<string> } };
+        try { const ctx = err.context; if (ctx?.text) { const parsed = JSON.parse(await ctx.text()); msg = parsed.error || msg; } } catch { /* ignore */ }
         throw new Error(msg);
       }
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const payload = (data ?? {}) as { error?: string; result?: AnalysisResult; model?: string; saved_id?: string | null };
+      if (payload.error) throw new Error(payload.error);
 
       setProgress(100);
-      setResult((data as any).result as AnalysisResult);
-      setModelUsed((data as any).model);
-      setLastId((data as any).saved_id ?? null);
+      setResult(payload.result as AnalysisResult);
+      setModelUsed(payload.model);
+      setLastId(payload.saved_id ?? null);
       setStage("idle");
       loadHistory();
       toast({ title: "Analysis ready 🎯" });
@@ -155,7 +158,7 @@ const VideoFormAnalysis = () => {
 
   const discardAnalysis = async () => {
     if (lastId) {
-      const { error } = await (supabase as any).from("video_form_analyses").update({ saved: false }).eq("id", lastId);
+      const { error } = await supabase.from("video_form_analyses").update({ saved: false }).eq("id", lastId);
       if (error) { toast({ title: "Couldn't discard the analysis", description: error.message, variant: "destructive" }); return; }
     }
     loadHistory();
@@ -164,7 +167,7 @@ const VideoFormAnalysis = () => {
   };
 
   const deleteHistory = async (id: string) => {
-    const { error } = await (supabase as any).from("video_form_analyses").delete().eq("id", id);
+    const { error } = await supabase.from("video_form_analyses").delete().eq("id", id);
     if (error) { toast({ title: "Couldn't delete the analysis", description: error.message, variant: "destructive" }); return; }
     setHistory((h) => h.filter((r) => r.id !== id));
   };
@@ -286,7 +289,7 @@ const VideoFormAnalysis = () => {
                     <motion.div className="h-full bg-gradient-primary" initial={{ width: 0 }}
                       animate={{ width: `${result.overall_score}%` }} transition={{ duration: 0.8 }} />
                   </div>
-                  {modelUsed && <p className="text-[10px] text-muted-foreground mt-2">Analysed with Vaylo AI vision</p>}
+                  {modelUsed && <p className="text-[10px] text-muted-foreground mt-2">Analysed with Vaylo Sports AI vision</p>}
                 </div>
 
                 {/* Coach summary */}
@@ -354,7 +357,7 @@ const VideoFormAnalysis = () => {
           {history.map((row) => (
             <div key={row.id} className="bg-card border border-border rounded-xl overflow-hidden">
               <button onClick={() => setOpenHistory(openHistory === row.id ? null : row.id)}
-                className="w-full p-3 flex items-center gap-3 text-left">
+                className="w-full p-3 flex items-center gap-3 text-start">
                 <div className={`text-xl font-display font-bold ${scoreColor(row.overall_score || 0)}`}>{row.overall_score ?? "–"}</div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold capitalize">{row.sport_type} analysis</p>

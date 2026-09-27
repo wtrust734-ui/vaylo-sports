@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert } from "lucide-react";
 import { fetchAICatalog, runAIDetailed, testAIConnection, type AIFeature, type AIResult } from "@/lib/aiService";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 type CatalogEntry = Awaited<ReturnType<typeof fetchAICatalog>>[number];
 
-/** Developer-only AI testing console. Route: /ai-dev */
+/** Developer-only AI testing console. Route: /ai-dev — gated to admins. */
 const AIDev = () => {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [feature, setFeature] = useState<AIFeature | "">("");
   const [prompt, setPrompt] = useState("");
@@ -17,14 +21,30 @@ const AIDev = () => {
   const [error, setError] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
+  // Admin gate — this console burns AI tokens and reveals prompts, so it must
+  // never be reachable by regular users (mirrors AdminPricing's check).
   useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      setIsAdmin(!!data);
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (isAdmin === false) return;
     fetchAICatalog()
       .then((f) => {
         setCatalog(f);
         setFeature((prev) => prev || (f[0]?.name ?? ""));
       })
       .catch((e) => setCatalogError(e instanceof Error ? e.message : "Could not load AI catalog"));
-  }, []);
+  }, [isAdmin]);
 
   const selected = useMemo(() => catalog.find((f) => f.name === feature), [catalog, feature]);
 
@@ -58,6 +78,21 @@ const AIDev = () => {
         userData: parsed,
       });
     });
+
+  if (isAdmin === null) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Checking access…</div>;
+  }
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <ShieldAlert size={28} className="text-destructive" />
+        <h1 className="text-lg font-semibold">Access restricted</h1>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          This is a developer-only console and requires admin access.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24">

@@ -24,8 +24,8 @@ const PerformanceGrid = () => {
     if (!user) return;
     supabase.from("performance_metrics").select("*").eq("user_id", user.id).then(({ data }) => {
       if (data?.length) {
-        const sport = (profile as any)?.sport || "default";
-        setVpr(calculateVPR(data as any, Array.isArray(sport) ? sport[0] : sport));
+        const sport = profile?.sport || "default";
+        setVpr(calculateVPR(data, Array.isArray(sport) ? sport[0] : sport));
       }
     });
   }, [user, profile]);
@@ -50,7 +50,7 @@ const PerformanceGrid = () => {
               transition={{ delay: i * 0.07, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.97 }}
-              className="text-left bg-gradient-card border border-border rounded-2xl p-3.5 hover:border-primary/30 transition-all relative overflow-hidden"
+              className="text-start bg-gradient-card border border-border rounded-2xl p-3.5 hover:border-primary/30 transition-all relative overflow-hidden"
             >
               <div
                 className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-10 blur-2xl"

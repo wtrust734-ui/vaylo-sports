@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { create } from "zustand";
 import { SUBSCRIPTION_PLANS, formatPence, PERIOD_LABEL } from "@/config/subscriptionPlans";
+import TrialButton from "@/components/ads/TrialButton";
 
 // PHASE 2: the paywall offers the two real plans (Credit / Unlimited) plus
 // one-off credits. No tier names (Pro / Elite / Minimum / Premium) anywhere.
@@ -55,7 +56,7 @@ export default function PaywallModal() {
             <p className="text-sm text-muted-foreground text-center mb-6">
               This feature is unlocked with credits. Choose how you want to get them.
             </p>
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2 mb-4">
               {SUBSCRIPTION_PLANS.map((plan) => {
                 const Icon = ICONS[plan.plan_key as "credit" | "unlimited"];
                 const monthly = plan.options.find((o) => o.period === "month")!;
@@ -63,7 +64,7 @@ export default function PaywallModal() {
                   <button
                     key={plan.plan_key}
                     onClick={() => { hide(); navigate("/subscription"); }}
-                    className="w-full text-left flex items-start gap-3 rounded-2xl border border-border p-3 hover:bg-muted/40 transition-colors"
+                    className="w-full text-start flex items-start gap-3 rounded-2xl border border-border p-3 hover:bg-muted/40 transition-colors"
                   >
                     <Icon className="h-4 w-4 text-energy mt-0.5 shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -78,6 +79,9 @@ export default function PaywallModal() {
                 );
               })}
             </div>
+            {/* No-commitment option at the moment of desire — one trial per
+                account, enforced server-side by grant_unlimited_trial(). */}
+            <TrialButton className="mb-4" onSuccess={hide} />
             <Button
               onClick={() => { hide(); navigate("/market"); }}
               className="w-full h-12 bg-gradient-to-r from-electric-purple to-energy hover:opacity-90 text-white font-semibold"

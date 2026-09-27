@@ -144,13 +144,13 @@ const CrossTraining = () => {
     const recovery: any[] = dossier.recovery || [];
     const readinessAvg = recovery.length ? recovery.reduce((a: number, b: any) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
     const outcomeGoals: any[] = dossier.outcomeGoals || [];
-    const vpr = dossier.vpr as any;
+    const vpr = dossier.vpr as Record<string, number | undefined> | null;
 
     // weakest buckets
     let weakestBuckets: string[] = [];
     if (vpr && typeof vpr === "object") {
       const buckets = ["speed_index", "power_index", "endurance_capacity", "skill_consistency", "reaction_efficiency", "repeatability"] as const;
-      const entries = buckets.map((b) => ({ b, v: Number((vpr as any)[b] ?? 50) })).sort((a, b) => a.v - b.v);
+      const entries = buckets.map((b) => ({ b, v: Number(vpr?.[b] ?? 50) })).sort((a, b) => a.v - b.v);
       weakestBuckets = entries.slice(0, 2).map((e) => e.b);
     }
 
@@ -173,7 +173,7 @@ const CrossTraining = () => {
 
     const scored = extended.map((e) => {
       let score = 0;
-      let reasons: string[] = [];
+      const reasons: string[] = [];
       if (weakFocuses.has(e.focus)) { score += 3; reasons.push(`Targets weak spot: ${e.focus}`); }
       if (readinessAvg < 55 && (e.focus === "Mobility" || e.focus === "Recovery" || e.phase.includes("recovery"))) { score += 2; reasons.push("Low readiness — recovery priority"); }
       if (e.phase.includes(phase)) { score += 1; }
@@ -283,7 +283,7 @@ const CrossTraining = () => {
         className="grid grid-cols-2 md:grid-cols-5 gap-2">
         {PHASES.map((p) => (
           <button key={p.v} onClick={() => setPhase(p.v)}
-            className={`p-3 rounded-xl border text-left transition-all ${
+            className={`p-3 rounded-xl border text-start transition-all ${
               phase === p.v
                 ? "border-primary/60 bg-primary/10"
                 : "border-border bg-card/40 hover:border-primary/30"

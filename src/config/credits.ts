@@ -8,7 +8,7 @@
 // ============================================================================
 
 /** Credits granted to a brand-new account (mirrors DB `starting_credits()`). */
-export const STARTING_CREDITS = 20;
+export const STARTING_CREDITS = 50;
 
 // ---------------------------------------------------------------------------
 // Feature costs — the ONLY place client-side costs are declared
@@ -66,7 +66,7 @@ export const FEATURE_LABELS: Record<FeatureCostKey, string> = {
   nutrition_plan_week: "Nutrition Plan (per week)",
   nutrition_pack_unlock: "Nutrition Pack unlock",
   mental_gym_unlock: "Mental Gym unlock",
-  vaylo_coach_message: "Vaylo Coach message",
+  vaylo_coach_message: "Vaylo Sports Coach message",
   weekly_coach_review: "Weekly Coach Review",
   tactical_prep: "Tactical Analysis",
   learning_unlock: "Learning Hub unlock",
@@ -132,8 +132,8 @@ export type PromoBonusKey =
   | "winback";
 
 export const PROMO_BONUSES: Record<PromoBonusKey, number> = {
-  referral_referrer: 15,
-  referral_referee: 10,
+  referral_referrer: 50,
+  referral_referee: 25,
   arcade_record: 10,
   winback: 20,
 };

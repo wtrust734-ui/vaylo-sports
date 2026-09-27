@@ -67,7 +67,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
                 description: `${plan.name} · ${PERIOD_LABEL[o.period]} (${formatPence(o.price_pence)}) will be purchasable once billing is connected.`,
               })
             }
-            className={`w-full text-left rounded-2xl border px-4 py-3 flex items-center justify-between transition-colors ${
+            className={`w-full text-start rounded-2xl border px-4 py-3 flex items-center justify-between transition-colors ${
               o.best_value
                 ? "border-energy/60 bg-energy/5 hover:bg-energy/10"
                 : "border-border hover:bg-muted/40"

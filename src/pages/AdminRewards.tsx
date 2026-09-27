@@ -72,7 +72,7 @@ export default function AdminRewards() {
         <h2 className="mb-3 font-semibold">Rewards ({defs.length})</h2>
         <div className="max-h-[600px] overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
+            <thead className="text-start text-xs text-muted-foreground">
               <tr><th className="p-2">Name</th><th>Type</th><th>Category</th><th>Rarity</th><th>Active</th></tr>
             </thead>
             <tbody>

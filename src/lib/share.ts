@@ -19,6 +19,7 @@
 // ============================================================================
 
 import { isNativeShell, loadPlugin } from "@/lib/platform";
+import { supabase } from "@/integrations/supabase/client";
 
 export type ShareResult = "shared" | "copied" | "unsupported";
 
@@ -110,4 +111,55 @@ export async function shareContent(payload: {
   }
 
   return "unsupported";
+}
+
+// ---------------------------------------------------------------------------
+// Invite-aware sharing — every share doubles as a referral
+// ---------------------------------------------------------------------------
+
+let cachedReferralCode: string | null = null;
+
+/**
+ * The signed-in athlete's referral code, or null when logged out / offline.
+ * Cached for the session — a user has exactly one code.
+ */
+export async function myInviteLink(): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    if (cachedReferralCode) return inviteUrl(cachedReferralCode, user.id);
+    const { data } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
+    if (!data?.code) return null;
+    cachedReferralCode = data.code;
+    return inviteUrl(data.code, user.id);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Invite links point at the link-preview edge function, not the app origin:
+ * it serves crawler-facing og:* tags (rendered card from og-image) and then
+ * redirects the human to /auth?ref=CODE. Works from any surface — including
+ * the native shell — because it lives on the Supabase project domain.
+ */
+function inviteUrl(code: string, userId: string): string | null {
+  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/functions/v1/link-preview?kind=profile&id=${userId}&ref=${encodeURIComponent(code)}`;
+}
+
+/**
+ * shareContent + the athlete's referral link. When there is no public base URL
+ * (native shell without VITE_PUBLIC_APP_URL) the referral code is appended to
+ * the text itself so attribution still survives a copy/paste.
+ */
+export async function shareWithInvite(payload: {
+  title?: string;
+  text?: string;
+  url?: string;
+}): Promise<ShareResult> {
+  const invite = await myInviteLink();
+  if (payload.url || !invite) return shareContent(payload);
+  return shareContent({ ...payload, url: invite });
 }

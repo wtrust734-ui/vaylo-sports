@@ -26,7 +26,7 @@ export default function DailyRewardsCard() {
     const touch = async () => {
       // Supabase returns errors instead of throwing, so check the result.
       // `p_date` keeps the streak on the athlete's local calendar day.
-      const { error } = await (supabase as any).rpc("touch_streak", { p_date: localDateKey() });
+      const { error } = await supabase.rpc("touch_streak", { p_date: localDateKey() });
       if (error && !/offline|fetch/i.test(error.message ?? "")) console.warn("touch_streak", error);
       if (!alive) return;
       await refresh();

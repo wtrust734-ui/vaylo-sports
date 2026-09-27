@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { localDateKey } from "@/lib/dates";
 import { motion, useInView } from "framer-motion";
@@ -7,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { edgeErrorMessage } from "@/lib/edgeErrors";
 
 const Nutrition = () => {
   const { user, profile, refreshProfile } = useAuth();
@@ -117,41 +119,37 @@ const Nutrition = () => {
   const handleScanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !profile) return;
-    // Nutrition Pack owners scan free
-    const { data: hasPack } = await supabase.from("user_purchases").select("product_id").eq("user_id", user.id).eq("product_id", "nutrition_pack").maybeSingle();
-    const cost = hasPack ? 0 : creditCost("calorie_scan");
-
+    // The server verifies Nutrition Pack ownership, charges credits and refunds
+    // on failure — nothing is charged or validated from the client.
     const url = URL.createObjectURL(file);
     setScanPreview(url);
     setScanning(true);
     setScanResult(null);
 
     try {
-      if (cost > 0) {
-        const spend = await spendCredits("calorie_scan", { reason: "Calorie scan (AI image)" });
-        if (!spend.success) { setScanning(false); setScanPreview(null); toast({ title: "Not enough credits", description: spendErrorMessage("calorie_scan", spend), variant: "destructive" }); return; }
-      }
-      await refreshProfile();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Couldn't read the image file."));
+        reader.readAsDataURL(file);
+      });
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const { data, error } = await supabase.functions.invoke("ai-analyze", {
-          body: { type: "calorie_scan", image_base64: base64, pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
-        });
-        if (error) throw error;
-        try {
-          const parsed = JSON.parse(data.result);
-          setScanResult(parsed);
-        } catch {
-          setScanResult({ name: "Scanned Meal", calories: 300, protein: 15, carbs: 35, fat: 12, description: data.result });
-        }
-        setScanning(false);
-        toast({ title: "Scan complete! 📸", description: cost ? `${cost} credits used.` : "Free with Nutrition Pack." });
-      };
-      reader.readAsDataURL(file);
+      const { data, error } = await supabase.functions.invoke("ai-analyze", {
+        body: { type: "calorie_scan", image_base64: base64, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+      });
+      if (error) throw new Error(await edgeErrorMessage(error));
+      const payload = (data ?? {}) as { result?: string; cost?: number; balance?: number | null };
+      try {
+        const parsed = JSON.parse(payload.result ?? "");
+        setScanResult(parsed);
+      } catch {
+        setScanResult({ name: "Scanned Meal", calories: 300, protein: 15, carbs: 35, fat: 12, description: payload.result });
+      }
+      toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Free with Nutrition Pack." });
+      await refreshProfile();
     } catch (err: any) {
       toast({ title: "Scan failed", description: err.message, variant: "destructive" });
+    } finally {
       setScanning(false);
     }
   };

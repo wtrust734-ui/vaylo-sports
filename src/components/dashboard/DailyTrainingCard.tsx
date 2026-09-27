@@ -1,3 +1,5 @@
+interface PlanSession { day: number; skipped?: boolean; isRest?: boolean; isRecovery?: boolean; [key: string]: unknown }
+interface PlanWeek { week: number; sessions?: PlanSession[]; isHoliday?: boolean; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,7 +63,7 @@ const DailyTrainingCard = () => {
       supabase.from("recovery_logs").select("readiness_score, adjusted_session").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
       supabase.from("events").select("*").eq("user_id", user.id).gte("event_date", new Date().toISOString()).order("event_date", { ascending: true }).limit(1),
     ]).then(([planRes, waterRes, settingsRes, mealRes, recoveryRes, eventRes]) => {
-      const recoveryData = recoveryRes.data as any;
+      const recoveryData = recoveryRes.data;
       const hasAdjusted = recoveryData?.adjusted_session;
 
       if (recoveryData?.readiness_score) {
@@ -73,13 +75,11 @@ const DailyTrainingCard = () => {
         const plan = planRes.data[0];
         setActivePlan(plan);
         if (plan.plan_data && Array.isArray(plan.plan_data)) {
-          const weekData = (plan.plan_data as any[]).find((w: any) => w.week === plan.week_current);
+          const weekData = (plan.plan_data as PlanWeek[]).find((w) => w.week === plan.week_current);
           if (weekData?.isHoliday) {
             setIsHolidayWeek(true);
           } else if (weekData?.sessions) {
             const dayOfWeek = new Date().getDay() || 7;
-
-            // Use adjusted session if available
             if (hasAdjusted) {
               setTodaySessions([hasAdjusted as DaySession]);
             } else {
@@ -113,148 +113,148 @@ const DailyTrainingCard = () => {
       initial={{ opacity: 0, y: 20, scale: 0.97 }}
       animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="mx-5 rounded-2xl bg-gradient-card border border-primary/20 overflow-hidden shadow-card"
+      className="mx-5 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl overflow-hidden shadow-card relative"
     >
-      <div className="p-4">
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+      <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl opacity-25" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.35), transparent 68%)" }} />
+      <div className="relative p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">Today's Schedule</span>
+            <span className="h-2 w-2 rounded-full bg-primary shadow-glow animate-pulse-glow" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Today's Schedule</span>
             {zoneDot && (
-              <div className="flex items-center gap-1 ml-1">
-                <div className={`w-2 h-2 rounded-full ${zoneDot.color}`} />
-                <span className="text-[9px] font-bold text-muted-foreground">{readiness}/100</span>
-              </div>
+              <span className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                <span className={`h-2 w-2 rounded-full ${zoneDot.color}`} />
+                <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{readiness}/100</span>
+              </span>
             )}
           </div>
-          {activePlan && <span className="text-[10px] text-muted-foreground">Week {activePlan.week_current}/{activePlan.duration_weeks}</span>}
+          {activePlan && <span className="text-[10px] font-medium tabular-nums text-muted-foreground">Week {activePlan.week_current}/{activePlan.duration_weeks}</span>}
         </div>
 
-        {/* Morning check-in prompt */}
         {!hasCheckedIn && activePlan && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
             onClick={() => navigate("/recovery")}
-            className="mb-3 bg-primary/5 border border-primary/20 rounded-lg p-2.5 flex items-center gap-2 cursor-pointer hover:bg-primary/10 transition-colors">
-            <Heart size={14} className="text-primary" />
-            <div className="flex-1">
-              <p className="text-[11px] font-semibold">Morning Check-In</p>
-              <p className="text-[9px] text-muted-foreground">Log your HRV & recovery to optimise today's training</p>
+            className="mb-3 rounded-2xl border border-primary/20 bg-primary/[0.07] backdrop-blur p-3 flex items-center gap-2.5 cursor-pointer hover:bg-primary/[0.10] transition-colors">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
+              <Heart size={14} className="text-primary-foreground" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold leading-none">Morning Check-In</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">Log your HRV & recovery to optimise today's training</p>
             </div>
-            <span className="text-[10px] text-primary font-semibold">Go →</span>
+            <span className="text-[11px] font-bold text-primary shrink-0">Go →</span>
           </motion.div>
         )}
 
-        {/* Adjusted session badge */}
         {session?._zone && (
-          <div className="mb-2 flex items-center gap-1.5">
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1">
             <Zap size={10} className="text-primary" />
-            <span className="text-[9px] font-bold text-primary">Auto-adjusted</span>
+            <span className="text-[10px] font-bold tracking-wide text-primary">Auto-adjusted</span>
             {session._originalTitle && (
-              <span className="text-[9px] text-muted-foreground line-through ml-1">{session._originalTitle}</span>
+              <span className="text-[10px] text-muted-foreground line-through ml-1">{session._originalTitle}</span>
             )}
           </div>
         )}
 
-        {/* No plan */}
         {!activePlan && (
-          <div className="text-center py-2">
+          <div className="text-center py-3">
             <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-              <Dumbbell size={28} className="mx-auto text-primary mb-2" />
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-primary shadow-glow border border-white/10">
+                <Dumbbell size={20} className="text-primary-foreground" />
+              </span>
             </motion.div>
-            <h3 className="font-display font-bold text-lg mb-1">No Training Plan Yet</h3>
-            <p className="text-xs text-muted-foreground mb-3">Create a plan to see your daily schedule</p>
+            <h3 className="font-display font-bold text-lg mt-3">No Training Plan Yet</h3>
+            <p className="text-xs text-muted-foreground mt-1 mb-4">Create a plan to see your daily schedule</p>
             <motion.button onClick={() => navigate("/training")} whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow text-sm">
+              className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow border border-white/10 text-sm">
               <Zap size={16} /> Create Plan
             </motion.button>
           </div>
         )}
 
-        {/* Holiday Week */}
         {isHolidayWeek && activePlan && (
           <>
-            <h3 className="font-display font-bold text-lg mb-1">🏖️ Holiday Week</h3>
-            <p className="text-xs text-muted-foreground mb-2">This week is marked as a holiday. Sessions have been redistributed.</p>
-            <div className="bg-muted/30 rounded-lg p-3 mb-3 space-y-1">
+            <h3 className="font-display font-bold text-lg">Holiday Week</h3>
+            <p className="text-xs text-muted-foreground mb-3">This week is marked as a holiday. Sessions have been redistributed.</p>
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-3 mb-3 space-y-1">
               <p className="text-[11px] font-semibold">Recommended today:</p>
-              <p className="text-[10px] text-muted-foreground">• Light walk or swim (15-20 min)</p>
-              <p className="text-[10px] text-muted-foreground">• Stretching & foam rolling</p>
-              <p className="text-[10px] text-muted-foreground">• Hydrate well — {(waterGoal/1000).toFixed(1)}L+</p>
-              <p className="text-[10px] text-muted-foreground">• Sleep 8-9 hours</p>
+              <p className="text-[11px] text-muted-foreground">• Light walk or swim (15-20 min)</p>
+              <p className="text-[11px] text-muted-foreground">• Stretching & foam rolling</p>
+              <p className="text-[11px] text-muted-foreground">• Hydrate well — {(waterGoal/1000).toFixed(1)}L+</p>
+              <p className="text-[11px] text-muted-foreground">• Sleep 8-9 hours</p>
             </div>
             <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 bg-accent/10 text-accent-foreground font-semibold py-2.5 rounded-xl text-sm">
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] text-foreground font-semibold py-3 text-sm backdrop-blur">
               <Moon size={16} /> Log Recovery
             </motion.button>
           </>
         )}
 
-        {/* Rest Day */}
         {(isRestDay || noSession) && (
           <>
-            <h3 className="font-display font-bold text-lg mb-1">🛌 Rest & Recovery Day</h3>
-            <p className="text-xs text-muted-foreground mb-2">No training scheduled. Focus on recovery.</p>
-            <div className="bg-muted/30 rounded-lg p-3 mb-3 space-y-1">
+            <h3 className="font-display font-bold text-lg">Rest & Recovery Day</h3>
+            <p className="text-xs text-muted-foreground mb-3">No training scheduled. Focus on recovery.</p>
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
               <p className="text-[11px] font-semibold">What to do today:</p>
               {session?.exercises ? session.exercises.map((ex, i) => (
-                <p key={i} className="text-[10px] text-muted-foreground">• {ex.name} — {ex.sets}</p>
+                <p key={i} className="text-[11px] text-muted-foreground">• {ex.name} — {ex.sets}</p>
               )) : (
                 <>
-                  <p className="text-[10px] text-muted-foreground">• Light stretching or yoga (15-20 min)</p>
-                  <p className="text-[10px] text-muted-foreground">• Foam rolling major muscle groups</p>
-                  <p className="text-[10px] text-muted-foreground">• 7-9 hours sleep tonight</p>
-                  <p className="text-[10px] text-muted-foreground">• Stay hydrated — target {(waterGoal/1000).toFixed(1)}L+</p>
+                  <p className="text-[11px] text-muted-foreground">• Light stretching or yoga (15-20 min)</p>
+                  <p className="text-[11px] text-muted-foreground">• Foam rolling major muscle groups</p>
+                  <p className="text-[11px] text-muted-foreground">• 7-9 hours sleep tonight</p>
+                  <p className="text-[11px] text-muted-foreground">• Stay hydrated — target {(waterGoal/1000).toFixed(1)}L+</p>
                 </>
               )}
             </div>
             <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 bg-primary/10 text-primary font-semibold py-2.5 rounded-xl text-sm">
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary/15 bg-primary/10 text-primary font-semibold py-3 text-sm">
               <Moon size={16} /> Log Recovery
             </motion.button>
           </>
         )}
 
-        {/* Recovery Day */}
         {isRecoveryDay && (
           <>
-            <h3 className="font-display font-bold text-lg mb-0.5">🧘 Active Recovery</h3>
+            <h3 className="font-display font-bold text-lg mb-0.5">Active Recovery</h3>
             <p className="text-xs text-muted-foreground mb-3">{session.description}</p>
-            <div className="bg-muted/30 rounded-lg p-3 mb-3 space-y-1">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
               <p className="text-[11px] font-semibold">Today's recovery session ({session.duration_minutes} min):</p>
               {session.exercises?.map((ex, i) => (
-                <div key={i} className="flex justify-between text-[10px] text-muted-foreground py-0.5">
+                <div key={i} className="flex justify-between text-[11px] text-muted-foreground py-0.5">
                   <span>• {ex.name}</span><span>{ex.sets}</span>
                 </div>
               ))}
             </div>
             <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 bg-primary/10 text-primary font-semibold py-2.5 rounded-xl text-sm">
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary/15 bg-primary/10 text-primary font-semibold py-3 text-sm">
               <Moon size={16} /> Log Recovery
             </motion.button>
           </>
         )}
 
-        {/* Training Day */}
         {isTrainingDay && (
           <>
-            <h3 className="font-display font-bold text-lg mb-0.5">{session.dayName ? `${session.dayName}: ` : ""}{session.title}</h3>
-            <p className="text-xs text-muted-foreground mb-3">{session.description}</p>
+            <h3 className="font-display font-bold text-[17px] leading-tight">{session.dayName ? `${session.dayName}: ` : ""}{session.title}</h3>
+            <p className="text-xs leading-relaxed text-muted-foreground mt-1 mb-3">{session.description}</p>
 
-            {/* Warm-up */}
             {session.warmup && session.warmup.length > 0 && (
-              <div className="mb-1.5">
+              <div className="mb-2">
                 <button onClick={() => setShowWarmup(!showWarmup)}
-                  className="w-full flex items-center gap-2 bg-accent/5 rounded-lg px-3 py-1.5 border border-accent/10">
-                  <Sun size={12} className="text-accent-foreground" />
-                  <span className="text-[11px] font-medium flex-1 text-left">Warm-up ({session.warmup.length} exercises)</span>
-                  <span className="text-[10px] text-muted-foreground mr-1">10 min</span>
-                  {showWarmup ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
+                  className="w-full flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.06]">
+                    <Sun size={12} className="text-foreground" />
+                  </span>
+                  <span className="text-[12px] font-semibold flex-1 text-start">Warm-up ({session.warmup.length})</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground mr-1">10 min</span>
+                  {showWarmup ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                 </button>
                 {showWarmup && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1 space-y-0.5 pl-3">
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
                     {session.warmup.map((ex, i) => (
-                      <div key={i} className="flex justify-between text-[10px] text-muted-foreground py-0.5">
-                        <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
+                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[11px] text-muted-foreground">
+                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
@@ -262,34 +262,34 @@ const DailyTrainingCard = () => {
               </div>
             )}
 
-            {/* Main Session */}
-            <div className="bg-primary/5 rounded-lg px-3 py-2 border border-primary/10 mb-1.5">
-              <div className="flex items-center gap-2 mb-1">
-                <Flame size={12} className="text-primary" />
-                <span className="text-[11px] font-semibold text-primary flex-1">{session.title}</span>
-                <span className="text-[10px] text-muted-foreground">{session.duration_minutes} min</span>
+            <div className="rounded-2xl border border-primary/15 bg-primary/[0.08] backdrop-blur px-3 py-3 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
+                  <Flame size={13} className="text-primary-foreground" />
+                </span>
+                <span className="text-[12px] font-bold text-primary flex-1">{session.title}</span>
+                <span className="text-[11px] tabular-nums text-muted-foreground border border-white/[0.06] bg-white/[0.04] rounded-full px-2 py-0.5">{session.duration_minutes} min</span>
               </div>
               {session.description && (
-                <p className="text-[10px] text-muted-foreground leading-relaxed">{session.description}</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">{session.description}</p>
               )}
               {session.exercises && session.exercises.length > 0 && !expanded && (
-                <p className="text-[10px] text-primary/70 mt-1">{session.exercises.length} exercises · Tap below for details</p>
+                <p className="text-[11px] text-primary/75 mt-2 font-medium">{session.exercises.length} exercises · Tap below for details</p>
               )}
             </div>
 
-            {/* Exercises expandable */}
             {session.exercises && session.exercises.length > 0 && (
               <>
-                <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs text-primary font-semibold mb-1.5 ml-1">
+                <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs font-bold text-primary mb-2 ml-1">
                   {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   {expanded ? "Hide" : "View"} Exercises ({session.exercises.length})
                 </button>
                 {expanded && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-1 mb-2">
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-1.5 mb-3">
                     {session.exercises.map((ex, i) => (
-                      <div key={i} className="bg-muted/30 rounded-lg px-3 py-2">
-                        <span className="text-[11px] font-medium block">{ex.name}</span>
-                        <span className="text-[10px] text-primary">{ex.sets}</span>
+                      <div key={i} className="rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3 py-2.5">
+                        <span className="text-[12px] font-semibold block leading-tight">{ex.name}</span>
+                        <span className="text-[11px] text-primary font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
@@ -297,21 +297,22 @@ const DailyTrainingCard = () => {
               </>
             )}
 
-            {/* Cool-down */}
             {session.cooldown && session.cooldown.length > 0 && (
               <div className="mb-3">
                 <button onClick={() => setShowCooldown(!showCooldown)}
-                  className="w-full flex items-center gap-2 bg-secondary/5 rounded-lg px-3 py-1.5 border border-secondary/10">
-                  <StretchHorizontal size={12} className="text-secondary-foreground" />
-                  <span className="text-[11px] font-medium flex-1 text-left">Cool-down ({session.cooldown.length} exercises)</span>
-                  <span className="text-[10px] text-muted-foreground mr-1">10 min</span>
-                  {showCooldown ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
+                  className="w-full flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.06]">
+                    <StretchHorizontal size={12} className="text-foreground" />
+                  </span>
+                  <span className="text-[12px] font-semibold flex-1 text-start">Cool-down ({session.cooldown.length})</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground mr-1">10 min</span>
+                  {showCooldown ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                 </button>
                 {showCooldown && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1 space-y-0.5 pl-3">
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
                     {session.cooldown.map((ex, i) => (
-                      <div key={i} className="flex justify-between text-[10px] text-muted-foreground py-0.5">
-                        <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
+                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[11px] text-muted-foreground">
+                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
@@ -321,50 +322,50 @@ const DailyTrainingCard = () => {
 
             <div className="flex gap-2">
               <motion.button onClick={() => navigate("/workouts")} whileTap={{ scale: 0.98 }}
-                className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow text-sm">
-                <Play size={16} /> Start Training
+                className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold py-3 rounded-xl shadow-glow border border-white/10 text-sm">
+                <Play size={16} className="fill-primary-foreground" /> Start Training
               </motion.button>
-              <motion.button onClick={() => navigate("/training")} whileTap={{ scale: 0.98 }}
-                className="flex items-center justify-center bg-card border border-border px-3 py-2.5 rounded-xl hover:border-primary/20 transition-colors">
-                <Edit3 size={14} />
+              <motion.button onClick={() => navigate("/training")} whileTap={{ scale: 0.98 }} aria-label="Edit plan"
+                className="flex items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3.5 py-3 hover:bg-white/[0.07] transition-colors">
+                <Edit3 size={15} className="text-muted-foreground" />
               </motion.button>
             </div>
           </>
         )}
 
-        {/* Daily Overview Stats */}
-        <div className="mt-3 pt-3 border-t border-border grid grid-cols-4 gap-2">
-          <div className="text-center">
-            <Droplets size={12} className="mx-auto text-primary mb-0.5" />
-            <p className="text-[10px] text-muted-foreground">Water</p>
-            <p className="text-xs font-bold">{waterMl > 0 ? `${(waterMl/1000).toFixed(1)}L` : "—"}</p>
+        <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-4 gap-2">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
+            <Droplets size={13} className="mx-auto text-primary mb-1" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Water</p>
+            <p className="text-[11px] font-bold tabular-nums">{waterMl > 0 ? `${(waterMl/1000).toFixed(1)}L` : "—"}</p>
           </div>
-          <div className="text-center">
-            <Apple size={12} className="mx-auto text-accent-foreground mb-0.5" />
-            <p className="text-[10px] text-muted-foreground">Meals</p>
-            <p className="text-xs font-bold">{mealCount > 0 ? `${mealCount} · ${totalCalories}kcal` : "—"}</p>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
+            <Apple size={13} className="mx-auto text-emerald-400 mb-1" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Meals</p>
+            <p className="text-[11px] font-bold tabular-nums">{mealCount > 0 ? `${mealCount} · ${totalCalories}` : "—"}</p>
           </div>
-          <div className="text-center cursor-pointer" onClick={() => navigate("/recovery")}>
-            <Heart size={12} className="mx-auto text-destructive mb-0.5" />
-            <p className="text-[10px] text-muted-foreground">Readiness</p>
-            <p className="text-xs font-bold">{readiness !== null ? `${readiness}/100` : "—"}</p>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center cursor-pointer hover:bg-white/[0.06] transition-colors" onClick={() => navigate("/recovery")}>
+            <Heart size={13} className="mx-auto text-destructive mb-1" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Readiness</p>
+            <p className="text-[11px] font-bold tabular-nums">{readiness !== null ? `${readiness}` : "—"}</p>
           </div>
-          <div className="text-center">
-            <Clock size={12} className="mx-auto text-primary mb-0.5" />
-            <p className="text-[10px] text-muted-foreground">Total</p>
-            <p className="text-xs font-bold">{totalDayMinutes > 0 ? `${totalDayMinutes}m` : "Rest"}</p>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
+            <Clock size={13} className="mx-auto text-primary mb-1" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Total</p>
+            <p className="text-[11px] font-bold tabular-nums">{totalDayMinutes > 0 ? `${totalDayMinutes}m` : "Rest"}</p>
           </div>
         </div>
 
-        {/* Upcoming Event */}
         {upcomingEvent && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
             onClick={() => navigate("/events")}
-            className="mt-3 pt-3 border-t border-border flex items-center gap-2 cursor-pointer">
-            <Calendar size={14} className="text-primary" />
-            <div className="flex-1">
-              <p className="text-[11px] font-semibold">{upcomingEvent.title}</p>
-              <p className="text-[10px] text-muted-foreground">
+            className="mt-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur flex items-center gap-2.5 p-3 cursor-pointer hover:bg-white/[0.06] transition-colors">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.06] border border-white/[0.06]">
+              <Calendar size={14} className="text-primary" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold leading-tight truncate">{upcomingEvent.title}</p>
+              <p className="text-[11px] text-muted-foreground">
                 {(() => {
                   const diff = new Date(upcomingEvent.event_date).getTime() - Date.now();
                   const days = Math.floor(diff / 86400000);
@@ -372,7 +373,7 @@ const DailyTrainingCard = () => {
                 })()}
               </p>
             </div>
-            <span className="text-[10px] text-primary font-semibold">View →</span>
+            <span className="text-[11px] font-bold text-primary shrink-0">View →</span>
           </motion.div>
         )}
       </div>

@@ -5,6 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { useTranslation } from "react-i18next";
+import { isCurrentLanguageRtl } from "@/i18n";
 import ReactMarkdown from "react-markdown";
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -12,6 +14,13 @@ type Conv = { id: string; title: string; updated_at: string };
 type Memory = { id: string; category: string; key: string; value: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/coach-chat`;
+
+/**
+ * Slide-in offset for end-anchored drawers. Physical x transforms don't
+ * follow the RTL anchor swap, so the direction is read from the live
+ * document instead of caching it — the drawer always slides from its edge.
+ */
+const drawerSlide = () => (document.documentElement.dir === "rtl" ? "-100%" : "100%");
 
 const Coach = () => {
   const { user, profile, refreshProfile } = useAuth();
@@ -202,7 +211,7 @@ const Coach = () => {
       await refreshProfile();
     } catch (e) {
       console.error(e);
-      toast({ title: "Error", description: "Failed to connect to Vaylo Coach", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to connect to Vaylo Sports Coach", variant: "destructive" });
     }
     setLoading(false);
   };
@@ -217,7 +226,7 @@ const Coach = () => {
       <div className="min-h-screen bg-background pb-24">
         <div className="px-5 pb-3 pt-14 flex items-center justify-between">
           <div>
-            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-display font-bold">Vaylo Coach</motion.h1>
+            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-display font-bold">Vaylo Sports Coach</motion.h1>
             <p className="text-xs text-muted-foreground">3 credits per prompt · {profile?.credits ?? 0} credits</p>
           </div>
           <div className="flex gap-2">
@@ -344,9 +353,9 @@ const ConvSidebar = ({ open, onClose, convs, onSelect, onDelete, onNew, editingT
       <>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50" onClick={onClose} />
-        <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+        <motion.div initial={{ x: drawerSlide() }} animate={{ x: 0 }} exit={{ x: drawerSlide() }}
           transition={{ type: "spring", stiffness: 400, damping: 35 }}
-          className="fixed right-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-l border-border z-50 flex flex-col">
+          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-50 flex flex-col">
           <div className="p-4 border-b border-border flex items-center justify-between">
             <span className="font-display font-bold text-sm">Conversations</span>
             <button onClick={onClose}><X size={18} className="text-muted-foreground" /></button>
@@ -366,7 +375,7 @@ const ConvSidebar = ({ open, onClose, convs, onSelect, onDelete, onNew, editingT
                     className="flex-1 bg-muted border border-border rounded-lg px-2 py-1.5 text-xs" />
                 ) : (
                   <button onClick={() => onSelect(c.id)}
-                    className="flex-1 text-left text-xs py-2 px-2 rounded-lg hover:bg-muted truncate">{c.title}</button>
+                    className="flex-1 text-start text-xs py-2 px-2 rounded-lg hover:bg-muted truncate">{c.title}</button>
                 )}
                 <button onClick={() => { setEditingTitle(c.id); setNewTitle(c.title); }}
                   className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground"><Edit3 size={12} /></button>
@@ -389,9 +398,9 @@ const MemoryPanel = ({ open, onClose, memories, onDelete }: {
       <>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50" onClick={onClose} />
-        <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+        <motion.div initial={{ x: drawerSlide() }} animate={{ x: 0 }} exit={{ x: drawerSlide() }}
           transition={{ type: "spring", stiffness: 400, damping: 35 }}
-          className="fixed right-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-l border-border z-50 flex flex-col">
+          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-50 flex flex-col">
           <div className="p-4 border-b border-border flex items-center justify-between">
             <span className="font-display font-bold text-sm">Memory Bank</span>
             <button onClick={onClose}><X size={18} className="text-muted-foreground" /></button>

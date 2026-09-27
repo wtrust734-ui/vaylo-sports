@@ -1,4 +1,4 @@
-# Vaylo sports
+# Vaylo Sports
 
 Create a modern, high-performance mobile app called Vaylo Sports — an all-in-one sports performance and training platform designed for athletes across all sports (running, gym, football, basketball, etc.).
 

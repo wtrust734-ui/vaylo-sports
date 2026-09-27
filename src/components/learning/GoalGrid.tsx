@@ -18,7 +18,7 @@ export function GoalGrid({ selected, onSelect }: { selected: string | null; onSe
             whileTap={{ scale: 0.98 }}
             onClick={() => onSelect(active ? null : goal.id)}
             aria-pressed={active}
-            className={`press rounded-2xl border p-5 text-left transition-colors ${
+            className={`press rounded-2xl border p-5 text-start transition-colors ${
               active ? "border-electric-purple bg-electric-purple/10" : "border-border bg-card hover:border-electric-purple/40"
             }`}
           >

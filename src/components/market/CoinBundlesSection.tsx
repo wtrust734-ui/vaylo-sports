@@ -15,7 +15,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
   const [converting, setConverting] = useState(false);
 
   const credits = profile?.credits ?? 0;
-  const coins = (profile as any)?.coins ?? 0;
+  const coins = profile?.coins ?? 0;
 
   // The one-time first-purchase bundle is only shown while it is unused.
   const [firstBundleAvailable, setFirstBundleAvailable] = useState(false);
@@ -40,10 +40,10 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
     if (!n || n <= 0) { toast({ title: "Enter a valid credit amount", variant: "destructive" }); return; }
     if (n > credits) { toast({ title: `Not enough credits (you have ${credits})`, variant: "destructive" }); return; }
     setConverting(true);
-    const { data, error } = await supabase.rpc("convert_credits_to_coins" as any, { p_credits: n });
+    const { data, error } = await supabase.rpc("convert_credits_to_coins", { p_credits: n });
     setConverting(false);
     if (error) { toast({ title: "Conversion failed", description: error.message, variant: "destructive" }); return; }
-    const awarded = (data as any)?.awarded ?? creditsToCoins(n);
+    const awarded = (data as { awarded?: number } | null)?.awarded ?? creditsToCoins(n);
     await refreshProfile();
     toast({ title: `Converted ${n} credits → ${awarded} Coins`, description: `Rate: 1 credit = ${COINS_PER_CREDIT} Coins.` });
   };
@@ -214,7 +214,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                   expires="Never expires"
                   renews="One-off purchase — nothing renews"
                   lifetime="Coins stay until you spend them on avatar items"
-                  designedFor="Athletes customising their Vaylo avatar"
+                  designedFor="Athletes customising their Vaylo Sports avatar"
                 />
                 <motion.button
                   whileTap={{ scale: 0.97 }}

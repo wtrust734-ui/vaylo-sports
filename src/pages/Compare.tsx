@@ -36,7 +36,7 @@ const Compare = () => {
   const load = async () => {
     if (!user) return;
     const { data } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200);
-    setMetrics((data as any) || []);
+    setMetrics(data || []);
     setLoading(false);
   };
 

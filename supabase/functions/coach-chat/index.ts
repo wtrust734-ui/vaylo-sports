@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { languageDirective } from "../_shared/openai.ts";
+import { throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +13,11 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   // The athlete is charged up-front; remember the charge so a failed AI call
   // (or a crash after charging) can be refunded.
@@ -35,13 +42,37 @@ serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (throttled(user.id)) {
+      return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const body = await req.json();
-    const { messages, conversationId, pbs } = body;
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { messages, conversationId, pbs, userLocale } = body;
+    const langDirective = languageDirective(userLocale);
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    // Prompt-stuffing caps: bound conversation size before it hits the model.
+    if (messages.length > 40) {
+      return new Response(JSON.stringify({ error: "Too many messages in one request" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    for (const m of messages) {
+      if (!m || typeof m !== "object" || typeof (m as any).content !== "string" || (m as any).content.length > 8000) {
+        return new Response(JSON.stringify({ error: "Invalid message payload" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Credits — single shared deduction path
@@ -49,7 +80,7 @@ serve(async (req) => {
 
     const { data: spend, error: spendErr } = await supabase.rpc("credits_spend", {
       p_feature: "vaylo_coach_message",
-      p_reason: "Vaylo Coach prompt",
+      p_reason: "Vaylo Sports Coach prompt",
       p_source: "coach-chat",
     });
     if (spendErr) {
@@ -80,7 +111,7 @@ serve(async (req) => {
       dossierBlock = `ATHLETE PROFILE:\n- Name: ${profile?.full_name || "Unknown"}\n- Sport: ${profile?.sport || "Unknown"}\n- Level: ${profile?.experience_level || "Unknown"}\n- Age: ${profile?.date_of_birth ? Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000) : "Unknown"}\n- Weight: ${profile?.weight_kg ? profile.weight_kg + "kg" : "Unknown"}\n- Height: ${profile?.height_cm ? profile.height_cm + "cm" : "Unknown"}\n- Goals: ${profile?.goals?.join(", ") || "Not set"}`;
     }
 
-    const systemPrompt = `You are Vaylo Coach — an elite high-performance sports coach AI inside the Vaylo Sports app.
+    const systemPrompt = `You are Vaylo Sports Coach — an elite high-performance sports coach AI inside the Vaylo Sports app.
 
 BEHAVIOUR:
 - Direct, honest, analytical. Never generic or motivational fluff.
@@ -135,7 +166,7 @@ ${dossierBlock}`;
       body: JSON.stringify({
         model: MODELS.CHAT.MINI,
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt + (langDirective ? "\n\n" + langDirective : "") },
           ...messages,
         ],
         stream: true,

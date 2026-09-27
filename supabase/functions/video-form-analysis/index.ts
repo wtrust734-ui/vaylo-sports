@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
+import { languageDirective } from "../_shared/openai.ts";
+import { throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +12,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 // Gemini models: Flash for free tier, Pro for premium
-const FLASH_MODEL = "gemini-3.6-flash";
+const FLASH_MODEL = "gemini-3.8-flash";
 const PRO_MODEL = "gemini-3.1-pro-preview";
 
 const MAX_BYTES = 18 * 1024 * 1024; // ~18MB inline video limit
@@ -66,11 +68,13 @@ Deno.serve(async (req) => {
       error: authError,
     } = await admin.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
+    if (throttled(user.id)) return json({ error: "Too many requests. Wait a moment and try again." }, 429);
 
     const body = await req.json().catch(() => null);
     if (!body) return json({ error: "Invalid request body" }, 400);
 
-    const { video_base64, mime_type, sport_type, video_name, save, pbs } = body as Record<string, any>;
+    const { video_base64, mime_type, sport_type, video_name, save, pbs, userLocale } = body as Record<string, any>;
+    const langDirective = languageDirective(userLocale);
 
     if (typeof video_base64 !== "string" || video_base64.length < 100)
       return json({ error: "No video received. Please upload an MP4 or MOV file." }, 400);
@@ -91,8 +95,14 @@ Deno.serve(async (req) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
+    // Premium = any active subscription (incl. trial, lifetime, Unlimited Plan).
+    // Deliberately does NOT depend on plan_type — Unlimited/lifetime rows carry
+    // no legacy tier name but still include video analysis.
     const isPremium =
-      sub?.status === "active" && ["minimum", "pro", "elite"].includes(String(sub?.plan_type));
+      sub?.is_lifetime === true ||
+      sub?.unlimited_credits === true ||
+      sub?.status === "active" ||
+      sub?.status === "trial";
 
     if (!isPremium) {
       const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -142,7 +152,7 @@ Deno.serve(async (req) => {
             {
               role: "user",
               parts: [
-                { text: `${ANALYSIS_PROMPT}\n\n${sportContext}${dossierBlock}` },
+                { text: `${ANALYSIS_PROMPT}\n\n${sportContext}${dossierBlock}${langDirective ? "\n\n" + langDirective : ""}` },
                 { inlineData: { mimeType: mime_type, data: base64 } },
               ],
             },

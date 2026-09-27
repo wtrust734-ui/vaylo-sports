@@ -1,5 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { MODELS } from "../_shared/aiModels.ts";
+import { authenticate, readJsonBody, throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,25 +16,24 @@ Deno.serve(async (req) => {
   try {
     // Auth: the public anon key is itself a valid JWT, so identity MUST be
     // verified here or anyone could spend the AI budget.
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const userId = await authenticate(req);
+    if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const sb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user }, error: authError } = await sb.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (throttled(userId)) {
+      return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const body = await req.json();
+    const body = await readJsonBody(req);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const completedIds: string[] = Array.isArray(body?.completedIds) ? body.completedIds.slice(0, MAX_COMPLETED) : [];
     const masteryByCategory = body?.masteryByCategory ?? {};
     const sport = body?.sport ?? "general";

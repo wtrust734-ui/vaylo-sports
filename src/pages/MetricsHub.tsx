@@ -32,7 +32,7 @@ const MetricsHub = () => {
       supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today),
       supabase.from("equipment").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     ]);
-    setLoads((l.data as any) || []);
+    setLoads(l.data || []);
     setRecovery(r.data || []);
     setMeals(m.data || []);
     setEquipment(e.data || []);

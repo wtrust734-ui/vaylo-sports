@@ -13,6 +13,10 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianG
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
 interface RecoveryLog { log_date: string; hrv: number | null; rhr: number | null; sleep_quality: number | null; fatigue: number | null; soreness: number | null; mood: number | null; stress: number | null; energy: number | null; readiness_score: number | null; rest_hours: number | null; adjusted_session: any; notes: string | null }
 
+// Shape of one week inside training_plans.plan_data (Json column).
+interface PlanSession { day: number; skipped?: boolean; [key: string]: unknown }
+interface PlanWeek { week: number; sessions?: PlanSession[]; [key: string]: unknown }
+
 // ─── READINESS ENGINE ───
 const calcReadiness100 = (
   hrv: number | null, hrvBaseline: number | null,
@@ -194,7 +198,7 @@ const Recovery = () => {
     ]);
 
     if (recoveryRes.data) {
-      const d = recoveryRes.data as any;
+      const d = recoveryRes.data;
       setLogged(true);
       setStep("result");
       setReadiness(d.readiness_score);
@@ -209,23 +213,23 @@ const Recovery = () => {
       if (d.adjusted_session) setAdjustedSession(d.adjusted_session);
     }
 
-    const history = (historyRes.data || []) as any[];
+    const history = historyRes.data || [];
     setHrvHistory(history);
 
-    const bl = (baselinesRes.data || []) as any[];
+    const bl = baselinesRes.data || [];
     setBaselines(bl);
     if (bl.length > 0 && bl[0].hrv_7day_avg) setCurrentBaseline(Number(bl[0].hrv_7day_avg));
 
-    const rpeVals = (rpeRes.data || []).map((r: any) => r.perceived_exertion).filter(Boolean);
-    if (rpeVals.length > 0) setRecentRpeAvg(rpeVals.reduce((a: number, b: number) => a + b, 0) / rpeVals.length);
+    const rpeVals = (rpeRes.data || []).map((r) => r.perceived_exertion).filter(Boolean);
+    if (rpeVals.length > 0) setRecentRpeAvg(rpeVals.reduce((a, b) => a + b, 0) / rpeVals.length);
 
     if (planRes.data && planRes.data.length > 0) {
-      const plan = planRes.data[0] as any;
+      const plan = planRes.data[0];
       if (plan.plan_data && Array.isArray(plan.plan_data)) {
-        const weekData = (plan.plan_data as any[]).find((w: any) => w.week === plan.week_current);
+        const weekData = (plan.plan_data as PlanWeek[]).find((w) => w.week === plan.week_current);
         if (weekData?.sessions) {
           const dow = new Date().getDay() || 7;
-          const s = weekData.sessions.find((s: any) => s.day === dow && !s.skipped);
+          const s = weekData.sessions.find((s: PlanSession) => s.day === dow && !s.skipped);
           if (s) setTodaySession(s);
         }
       }
@@ -294,7 +298,7 @@ const Recovery = () => {
       readiness_score: score,
       adjusted_session: adjusted,
       notes: notesFull,
-    } as any, { onConflict: "user_id,log_date" });
+    }, { onConflict: "user_id,log_date" });
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -319,7 +323,7 @@ const Recovery = () => {
         hrv_7day_avg: avg7,
         rhr_7day_avg: rhrAvg,
         trend,
-      } as any, { onConflict: "user_id,date" });
+      }, { onConflict: "user_id,date" });
       if (baselineError) {
         toast({ title: "Couldn't save your HRV baseline", description: baselineError.message, variant: "destructive" });
       }

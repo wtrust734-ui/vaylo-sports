@@ -316,7 +316,7 @@ export default function LearningArticle() {
                             key={option}
                             onClick={() => answer(questionIndex, optionIndex)}
                             disabled={revealed}
-                            className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
+                            className={`rounded-xl border px-4 py-3 text-start text-sm font-medium transition-colors ${
                               revealed && isCorrect
                                 ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
                                 : revealed && isChosen

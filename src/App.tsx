@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { isNativeShell, loadPlugin } from "@/lib/platform";
+import { isFlagOn } from "@/config/featureFlags";
 import { consumeBackPress } from "@/lib/backButton";
 // Single toast renderer: sonner. The shadcn <Toaster/> and the reducer behind it
 // were removed — src/hooks/use-toast.ts now forwards to sonner.
@@ -18,6 +19,9 @@ import StreakShield from "@/components/ads/StreakShield";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
 import PaywallModal from "@/components/PaywallModal";
 const Notifications = lazy(() => import("./pages/Notifications"));
+const ReferralLeaderboard = lazy(() => import("./pages/ReferralLeaderboard"));
+const ChallengeInvite = lazy(() => import("./pages/ChallengeInvite"));
+const DiscordCommunity = lazy(() => import("./pages/DiscordCommunity"));
 const NotificationPrefs = lazy(() => import("./pages/NotificationPrefs"));
 const Referrals = lazy(() => import("./pages/Referrals"));
 const CreatorMarketplace = lazy(() => import("./pages/CreatorMarketplace"));
@@ -46,6 +50,10 @@ const Subscription = lazy(() => import("./pages/Subscription"));
 const EventPacks = lazy(() => import("./pages/EventPacks"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const VPR = lazy(() => import("./pages/VPR"));
+const Train = lazy(() => import("./pages/Train"));
+const Perform = lazy(() => import("./pages/Perform"));
+const Recover = lazy(() => import("./pages/Recover"));
+const Compete = lazy(() => import("./pages/Compete"));
 const SkillAnalytics = lazy(() => import("./pages/SkillAnalytics"));
 const Tactics = lazy(() => import("./pages/Tactics"));
 const Development = lazy(() => import("./pages/Development"));
@@ -72,6 +80,7 @@ const Opponents = lazy(() => import("./pages/Opponents"));
 const AdminPricing = lazy(() => import("./pages/AdminPricing"));
 const AdminRewards = lazy(() => import("./pages/AdminRewards"));
 const AdminEventPacks = lazy(() => import("./pages/AdminEventPacks"));
+const EventPackLanding = lazy(() => import("./pages/EventPackLanding"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const ChallengeDetail = lazy(() => import("./pages/ChallengeDetail"));
 const Collection = lazy(() => import("./pages/Collection"));
@@ -149,8 +158,20 @@ const App = () => (
               <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/onboarding" element={<Onboarding />} />
+              {/* Public viral surfaces — must render without a session (they
+                  carry the join / signup CTAs). Shared links reach them via the
+                  link-preview function's redirect. */}
+              <Route path="/c/:id" element={<ChallengeInvite />} />
+              <Route path="/referral-leaderboard" element={<ReferralLeaderboard />} />
+              <Route path="/discord" element={<DiscordCommunity />} />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Index />} />
+                {/* Information-architecture hubs: every tile navigates to an
+                    existing page; these only group destinations. */}
+                <Route path="/train" element={<Train />} />
+                <Route path="/perform" element={<Perform />} />
+                <Route path="/recover" element={<Recover />} />
+                <Route path="/compete" element={<Compete />} />
                 <Route path="/training" element={<Training />} />
                 <Route path="/workouts" element={<Workouts />} />
                 <Route path="/nutrition" element={<Nutrition />} />
@@ -168,6 +189,7 @@ const App = () => (
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/subscription" element={<Subscription />} />
                 <Route path="/event-packs" element={<EventPacks />} />
+                <Route path="/packs/:packId" element={<EventPackLanding />} />
                 <Route path="/achievements" element={<Achievements />} />
                 <Route path="/vpr" element={<VPR />} />
                 <Route path="/skills" element={<SkillAnalytics />} />
@@ -200,8 +222,19 @@ const App = () => (
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/profile/notifications" element={<NotificationPrefs />} />
                 <Route path="/referrals" element={<Referrals />} />
-                <Route path="/market/become-creator" element={<BecomeCreator />} />
-                <Route path="/marketplace" element={<CreatorMarketplace />} />
+                {/* Coach marketplace is launch-gated (featureFlags.ts). When off,
+                    both routes redirect to the Market so old links never 404. */}
+                {isFlagOn("coachMarketplace") ? (
+                  <>
+                    <Route path="/market/become-creator" element={<BecomeCreator />} />
+                    <Route path="/marketplace" element={<CreatorMarketplace />} />
+                  </>
+                ) : (
+                  <>
+                    <Route path="/market/become-creator" element={<Navigate to="/market" replace />} />
+                    <Route path="/marketplace" element={<Navigate to="/market" replace />} />
+                  </>
+                )}
                 
                 <Route path="/admin/pricing" element={<AdminPricing />} />
                 <Route path="/admin/rewards" element={<AdminRewards />} />

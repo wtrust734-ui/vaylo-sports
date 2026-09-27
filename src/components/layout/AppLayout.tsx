@@ -11,12 +11,13 @@ const AppLayout = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen app-mesh bg-background flex flex-col items-center justify-center gap-4">
         <motion.div
-          className="w-10 h-10 border-2 border-electric-purple border-t-transparent rounded-full"
+          className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full shadow-glow"
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
         />
+        <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">Vaylo Sports</p>
       </div>
     );
   }
@@ -25,26 +26,28 @@ const AppLayout = () => {
   if (profile && !profile.onboarding_complete) return <Navigate to="/onboarding" replace />;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-mesh bg-background text-foreground antialiased">
+      {/* Subtle top hairline + mesh stays fixed via body, but this adds a soft vignette on large screens */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 hidden lg:block" style={{ background: "radial-gradient(900px 500px at 50% -10%, hsla(217 100% 60% / 0.06), transparent 70%)" }} />
       <AppSidebar />
-      {/* pb-28 clears the tab bar; pt-safe-t keeps page headers clear of the notch
-          and status bar (it is 0 in a browser, so the web layout is unchanged). */}
-      <main className="pt-safe-t pb-28">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            style={{ transformOrigin: "center top", willChange: "transform, opacity" }}
-          >
-            <Outlet />
-          </motion.div>
-        </AnimatePresence>
+      {/* pb-28 clears the floating tab bar; pt-safe-t keeps headers clear of the notch */}
+      <main className="relative pt-safe-t pb-28 lg:pl-60">
+        <div className="mx-auto w-full max-w-[1100px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transformOrigin: "center top", willChange: "transform, opacity" }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </main>
       <QuickCommandBar />
-      {/* Thumb-reachable navigation on phones (hidden on large screens). */}
       <BottomNav />
     </div>
   );

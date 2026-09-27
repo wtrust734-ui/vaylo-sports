@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Trophy, Users, Clock, Target, Flag, Plus } from "lucide-react";
+import { ArrowLeft, Trophy, Users, Clock, Target, Flag, Plus, Share2 } from "lucide-react";
+import { shareWithInvite } from "@/lib/share";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge, updateChallengeProgress } from "@/lib/scoring";
+import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
 import { toast } from "sonner";
 
 const ChallengeDetail = () => {
@@ -17,18 +19,16 @@ const ChallengeDetail = () => {
 
   const load = async () => {
     if (!id) return;
-    const client = supabase as any;
-    const { data: c } = await client.from("challenges").select("*").eq("id", id).maybeSingle();
+    const { data: c } = await supabase.from("challenges").select("*").eq("id", id).maybeSingle();
     setCh(c);
-    const { data: parts } = await client.from("challenge_participants").select("user_id,progress,status,completed_at,joined_at").eq("challenge_id", id).order("progress", { ascending: false });
+    const { data: parts } = await supabase.from("challenge_participants").select("user_id,progress,status,completed_at,joined_at").eq("challenge_id", id).order("progress", { ascending: false });
     const list = parts || [];
-    const ids = list.map((p: any) => p.user_id);
-    let profs: Record<string, string> = {};
-    if (ids.length) {
-      const { data: pf } = await client.from("profiles").select("user_id,full_name").in("user_id", ids);
-      (pf || []).forEach((p: any) => { profs[p.user_id] = p.full_name || "Athlete"; });
-    }
-    setRanks(list.map((p: any, i: number) => ({ ...p, name: profs[p.user_id] || "Athlete", rank: i + 1 })));
+    const ids = list.map((p) => p.user_id);
+    // Names come from `avatars` (the publicly-readable identity table). Reading
+    // `profiles.full_name` here returned nothing, because profiles is self-read-only
+    // under RLS — so every competitor in the ranking list showed as "Athlete".
+    const names = ids.length ? await fetchDisplayNames(ids) : {};
+    setRanks(list.map((p: any, i: number) => ({ ...p, name: names[p.user_id] ?? UNKNOWN_ATHLETE, rank: i + 1 })));
     if (user) setMine(list.find((p: any) => p.user_id === user.id) || null);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id, user?.id]);
@@ -41,7 +41,7 @@ const ChallengeDetail = () => {
   const handleLog = async () => {
     const n = Number(delta);
     if (!n || n <= 0) return toast.error("Enter a positive value");
-    const { data, error } = await updateChallengeProgress(ch.id, n) as any;
+    const { data, error } = await updateChallengeProgress(ch.id, n);
     if (error) return toast.error(error.message);
     if (data?.completed) toast.success(`Challenge complete! +${data.reward_points} pts`);
     else toast.success(`Logged ${n} ${ch.target_unit}`);
@@ -67,6 +67,20 @@ const ChallengeDetail = () => {
           <div className="bg-card border border-border rounded-xl p-2"><Users className="w-3 h-3 mx-auto text-muted-foreground"/><p className="font-semibold mt-1">{ch.participant_count} joined</p></div>
           <div className="bg-card border border-border rounded-xl p-2"><Trophy className="w-3 h-3 mx-auto text-energy"/><p className="font-semibold mt-1">+{ch.reward_points} pts</p></div>
         </div>
+
+        {/* Viral loop: a shared challenge link lands on the public invite page,
+            where the friend sees this head-to-head and a signup CTA. */}
+        <button
+          onClick={() => {
+            void shareWithInvite({
+              title: ch.title || "Vaylo Sports challenge",
+              text: `I'm in "${ch.title}" on Vaylo Sports — think you can beat me?`,
+            });
+          }}
+          className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl border border-energy/40 bg-energy/10 py-2.5 text-sm font-semibold text-energy"
+        >
+          <Share2 size={14} /> Challenge a friend
+        </button>
 
         <div className="mt-4 bg-card border border-border rounded-2xl p-4">
           <div className="flex items-center justify-between mb-2">

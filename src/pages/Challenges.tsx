@@ -37,13 +37,12 @@ const Challenges = () => {
 
   const load = async () => {
     setLoading(true);
-    const client = supabase as any;
-    const { data: ch } = await client.from("challenges").select("*").order("start_date", { ascending: false }).limit(200);
+    const { data: ch } = await supabase.from("challenges").select("*").order("start_date", { ascending: false }).limit(200);
     setItems(ch || []);
     if (user) {
-      const { data: parts } = await client.from("challenge_participants").select("*").eq("user_id", user.id);
+      const { data: parts } = await supabase.from("challenge_participants").select("*").eq("user_id", user.id);
       const map: Record<string, Participant> = {};
-      (parts || []).forEach((p: any) => { map[p.challenge_id] = p; });
+      (parts || []).forEach((p) => { map[p.challenge_id] = p; });
       setMine(map);
     }
     setLoading(false);
@@ -126,7 +125,7 @@ const Challenges = () => {
             {suggestions.map((s, i) => (
               <motion.button key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                 onClick={() => { setPrefill(s); setCreating(true); }}
-                className="text-left bg-gradient-to-r from-card to-primary/5 border border-primary/20 rounded-xl p-3 hover:border-primary/60 hover:shadow-glow transition-all">
+                className="text-start bg-gradient-to-r from-card to-primary/5 border border-primary/20 rounded-xl p-3 hover:border-primary/60 hover:shadow-glow transition-all">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center text-lg shrink-0">{s.icon}</div>
@@ -157,7 +156,7 @@ const Challenges = () => {
         ))}
         <div className="ml-auto flex items-center gap-1 text-xs shrink-0">
           <Filter size={12} className="text-muted-foreground" />
-          <select value={scope} onChange={e => setScope(e.target.value as any)} className="bg-card border border-border rounded-lg px-2 py-1">
+          <select value={scope} onChange={e => setScope(e.target.value as ChallengeScope)} className="bg-card border border-border rounded-lg px-2 py-1">
             {SCOPES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -189,7 +188,7 @@ const Challenges = () => {
                 }`}>
                 {done && <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-2xl rounded-full pointer-events-none" />}
                 <div className="relative flex items-start justify-between gap-2">
-                  <button onClick={() => nav(`/challenges/${c.id}`)} className="text-left flex-1 min-w-0 flex items-start gap-3">
+                  <button onClick={() => nav(`/challenges/${c.id}`)} className="text-start flex-1 min-w-0 flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
                       done ? "bg-primary/20" : "bg-muted"
                     }`}>{c.icon || "🏆"}</div>
@@ -340,7 +339,7 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
     if (!title) return toast.error("Title required");
     const days = scope === "weekly" ? 7 : scope === "monthly" ? 30 : 14;
     const end = new Date(); end.setDate(end.getDate() + days);
-    const { error } = await (supabase as any).from("challenges").insert({
+    const { error } = await supabase.from("challenges").insert({
       creator_id: userId, title, description: `${type} challenge`, type, sport: sport || null, scope,
       target_value: Number(target), target_unit: unit, start_date: localDateKey(),
       end_date: localDateKey(end), reward_points: 0, reward_credits: 0, icon: prefill?.icon ?? "🏁",

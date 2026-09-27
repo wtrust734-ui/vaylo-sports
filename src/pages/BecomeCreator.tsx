@@ -19,7 +19,7 @@ export default function BecomeCreator() {
     if (!user) return;
     setBusy(true);
     try {
-      const { error } = await (supabase as any).from("creator_profiles").upsert({
+      const { error } = await supabase.from("creator_profiles").upsert({
         user_id: user.id,
         display_name: data.display_name,
         bio: data.bio,
@@ -39,7 +39,7 @@ export default function BecomeCreator() {
           <Sparkles className="h-7 w-7 text-white" />
         </div>
         <h1 className="text-2xl font-bold mb-1">Become a creator</h1>
-        <p className="text-sm text-muted-foreground mb-6">Sell programs, meal plans, and 1-on-1 sessions. You keep 80% — Vaylo's fee is 20%.</p>
+        <p className="text-sm text-muted-foreground mb-6">Sell programs, meal plans, and 1-on-1 sessions. You keep 80% — Vaylo Sports's fee is 20%.</p>
 
         <div className="space-y-3 mb-6">
           <Input placeholder="Display name" value={data.display_name} onChange={(e) => setData({ ...data, display_name: e.target.value })} className="h-12" />

@@ -103,7 +103,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     }
     try {
       const [entRes, purchRes] = await Promise.all([
-        (supabase as any).rpc("get_my_entitlements"),
+        supabase.rpc("get_my_entitlements"),
         supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
       ]);
       const e = (entRes?.data || {}) as Partial<Entitlements>;
@@ -145,7 +145,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     if (!due) return;
     (async () => {
       try {
-        await (supabase as any).rpc("apply_credit_refill", { p_user: user.id });
+        await supabase.rpc("apply_credit_refill", { p_user: user.id });
         refresh();
       } catch {
         /* ignore */
@@ -156,13 +156,13 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
 
   const claimRefill = useCallback(async () => {
     if (!user) return;
-    const { error } = await (supabase as any).rpc("apply_credit_refill", { p_user: user.id });
+    const { error } = await supabase.rpc("apply_credit_refill", { p_user: user.id });
     if (error) throw new Error(error.message);
     await refresh();
   }, [user, refresh]);
 
   const cancel = useCallback(async () => {
-    const { error } = await (supabase as any).rpc("cancel_my_subscription");
+    const { error } = await supabase.rpc("cancel_my_subscription");
     if (error) throw new Error(error.message);
     await refresh();
   }, [refresh]);

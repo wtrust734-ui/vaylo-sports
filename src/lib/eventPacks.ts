@@ -72,7 +72,7 @@ export async function loadEventPacks(): Promise<EventPack[]> {
   for (const p of BUILT_IN_EVENT_PACKS) byId.set(p.id, p);
 
   try {
-    const { data } = await supabase.from("event_packs" as any).select("*");
+    const { data } = await supabase.from("event_packs").select("*");
     for (const row of ((data || []) as unknown as AdminRow[])) {
       byId.set(row.pack_id, mergeRow(byId.get(row.pack_id) ?? null, row));
     }
@@ -88,15 +88,15 @@ export async function loadOwnedPackIds(): Promise<string[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   const { data } = await supabase
-    .from("event_pack_ownership" as any)
+    .from("event_pack_ownership")
     .select("pack_id")
     .eq("user_id", user.id);
-  return ((data || []) as any[]).map((r) => r.pack_id as string);
+  return (data || []).map((r) => r.pack_id);
 }
 
 /** Records permanent ownership. Duplicates are ignored. */
 export async function claimEventPack(pack: EventPack): Promise<{ duplicate: boolean }> {
-  const { data, error } = await supabase.rpc("claim_event_pack" as any, {
+  const { data, error } = await supabase.rpc("claim_event_pack", {
     p_pack_id: pack.id,
     p_pack_name: pack.name,
     p_sport: pack.sport,
@@ -104,7 +104,7 @@ export async function claimEventPack(pack: EventPack): Promise<{ duplicate: bool
     p_version: pack.version,
   });
   if (error) throw error;
-  return { duplicate: !!(data as any)?.duplicate };
+  return { duplicate: !!(data as { duplicate?: boolean } | null)?.duplicate };
 }
 
 /** Similar packs: same target event first, then same sport/category. */
@@ -126,7 +126,7 @@ export function relatedPacks(pack: EventPack, all: EventPack[], limit = 4): Even
 
 export const SECTION_LABELS: { key: EventPackSection; label: string; blurb: string }[] = [
   { key: "recommended", label: "Recommended For You", blurb: "Matched to your sport and level" },
-  { key: "featured", label: "Featured", blurb: "Hand-picked by the Vaylo coaching team" },
+  { key: "featured", label: "Featured", blurb: "Hand-picked by the Vaylo Sports coaching team" },
   { key: "popular", label: "Most Popular", blurb: "Bought most often by athletes like you" },
   { key: "beginner", label: "Beginner Friendly", blurb: "Great first structured plan" },
   { key: "new", label: "New", blurb: "Recently added to the catalogue" },

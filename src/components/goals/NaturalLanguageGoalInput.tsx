@@ -76,7 +76,7 @@ const NaturalLanguageGoalInput = ({ onCreated }: { onCreated?: () => void }) => 
       target_value: parsed.target_value,
       current_value: parsed.start_value ?? 0,
       deadline: parsed.deadline,
-    } as any);
+    });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Goal locked in with auto-plan.");

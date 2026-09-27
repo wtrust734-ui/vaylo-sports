@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# TypeScript incremental build info (written by `tsc -b`)
+*.tsbuildinfo
+
 # Environment — never commit real values. .env.example is the tracked template.
 .env
 .env.*
@@ -27,6 +30,10 @@ pg_backup_*
 .supabase/
 supabase/.temp/
 supabase/.branches/
+
+# Scratch artifacts from scripts/audit-columns.cjs (a schema dump of column names,
+# regenerated on demand — see the script header for the shape it expects)
+schema-audit.tmp.json
 
 # Editor directories and files
 .vscode/*

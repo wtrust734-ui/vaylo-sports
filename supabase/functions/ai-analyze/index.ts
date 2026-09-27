@@ -1,39 +1,103 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
+import { languageDirective } from "../_shared/openai.ts";
+import { refundCredits } from "../_shared/refund.ts";
+import {
+  authenticate,
+  hasEntitlement,
+  json,
+  readJsonBody,
+  spendForUser,
+  throttled,
+  userOwnsProduct,
+  validImagePayload,
+} from "../_shared/guard.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Prompt-stuffing caps — this function spends real AI budget.
+const MAX_PB_ITEMS = 20;
+const MAX_TEXT_LEN = 4_000;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  // Charged up-front — remembered so a failed AI call can be refunded.
+  let charged = 0;
+  let chargedUserId: string | null = null;
 
   try {
-    const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return new Response(JSON.stringify({ error: "No auth" }), { status: 401, headers: corsHeaders });
-    const { data: { user }, error: authError } = await serviceClient.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    const userId = await authenticate(req);
+    if (!userId) return json({ error: "Unauthorized" }, 401);
+    if (throttled(userId)) return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
 
-    const body = await req.json();
-    const { type, image_base64, prompt, summary, briefing, sport, pbs, stats_summary } = body;
+    const body = await readJsonBody(req);
+    if (!body) return json({ error: "Invalid JSON body" }, 400);
+
+    const type = typeof body.type === "string" ? body.type : "";
+    const userLocale = typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined;
+    const langDirective = languageDirective(userLocale);
+    const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, MAX_TEXT_LEN) : "";
+    const summary = typeof body.summary === "string" ? body.summary.slice(0, MAX_TEXT_LEN) : "";
+    const briefing = typeof body.briefing === "string" ? body.briefing.slice(0, MAX_TEXT_LEN) : "";
+    const sport = typeof body.sport === "string" ? body.sport.slice(0, 40) : "";
+    const pbs = Array.isArray(body.pbs) ? body.pbs.slice(0, MAX_PB_ITEMS) : null;
+
+    // Images: data-URL only, image/* MIME allowlist, 8MB decoded cap.
+    const image = validImagePayload(body.image_base64);
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) return new Response(JSON.stringify({ error: "API key not configured" }), { status: 500, headers: corsHeaders });
+    if (!OPENAI_API_KEY) return json({ error: "API key not configured" }, 500);
+
+    if (type !== "form_analysis" && type !== "calorie_scan" && type !== "stats_insight" && type !== "tactical_prep") {
+      return json({ error: "Invalid type" }, 400);
+    }
+    if ((type === "form_analysis" || type === "calorie_scan") && !image) {
+      return json({ error: "A valid image is required for this analysis (JPEG, PNG, WebP or HEIC up to 8MB)." }, 400);
+    }
+
+    // ---- Server-side charging (authoritative; honours Unlimited subscriptions) ----
+    let chargeFeature: string | null = null;
+    if (type === "calorie_scan") {
+      // Nutrition Pack owners scan free — verified server-side, not client-side.
+      chargeFeature = (await userOwnsProduct(userId, "nutrition_pack")) ? null : "calorie_scan";
+    } else if (type === "tactical_prep") {
+      chargeFeature = "tactical_prep";
+    } else if (type === "form_analysis") {
+      // Unlock-style feature: active subscription or one-off "form_analysis" purchase.
+      chargeFeature = (await hasEntitlement(userId, "form_analysis")) ? null : "form_analysis";
+    } // stats_insight is free — never carried a client-side cost.
+
+    let spend: Awaited<ReturnType<typeof spendForUser>> | null = null;
+    if (chargeFeature) {
+      spend = await spendForUser(userId, chargeFeature, `AI ${type}`, { source: "ai-analyze" });
+      if (!spend.success) {
+        const shortfall = spend.shortfall ?? 0;
+        return json({
+          error: spend.error || `Not enough credits. You need ${spend.cost} credits — you are ${shortfall} short.`,
+          shortfall,
+          cost: spend.cost,
+          balance: spend.balance,
+        }, 402);
+      }
+      if (!spend.unlimited && spend.cost > 0) {
+        charged = spend.cost;
+        chargedUserId = userId;
+      }
+    }
 
     // ---- Authoritative dossier (PBs from client supplement DB) ----
     let dossierText = "";
     try {
-      const dossier = await fetchAthleteDossier(serviceClient, user.id, Array.isArray(pbs) ? pbs : null);
+      const serviceClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const dossier = await fetchAthleteDossier(serviceClient, userId, pbs);
       dossierText = formatDossierForPrompt(dossier);
     } catch (e) {
       console.error("dossier fetch failed", e);
     }
 
     let systemPrompt = "";
-    let userContent: any[] = [];
+    let userContent: { type: string; text?: string; image_url?: { url: string } }[] = [];
 
     if (type === "form_analysis") {
       systemPrompt = `You are an elite sports biomechanics and form analysis expert for Vaylo Sports. Analyze the uploaded image of an athlete and provide extremely detailed, actionable feedback. Cover:
@@ -48,7 +112,7 @@ Be detailed, specific, and encouraging. Tailor to the athlete's sport and level 
 ${dossierText}`;
       userContent = [
         { type: "text", text: prompt || "Analyze this athlete's form in detail." },
-        ...(image_base64 ? [{ type: "image_url", image_url: { url: image_base64 } }] : []),
+        ...(image ? [{ type: "image_url", image_url: { url: image } }] : []),
       ];
     } else if (type === "calorie_scan") {
       systemPrompt = `You are a certified sports dietitian analysing a food photo for Vaylo Sports. Accuracy matters — an athlete will log this.
@@ -69,7 +133,7 @@ Return ONLY valid JSON, no markdown, no prose outside JSON:
 Do NOT under-report calories on calorie-dense foods (oils, cheese, nuts, sauces, fried items). Include oil absorbed in frying (~10% of item weight). Include dressings and sauces visible on the plate.`;
       userContent = [
         { type: "text", text: "Analyse this food photo. Identify every component, estimate grams from visual cues, and return the JSON schema exactly." },
-        ...(image_base64 ? [{ type: "image_url", image_url: { url: image_base64 } }] : []),
+        ...(image ? [{ type: "image_url", image_url: { url: image } }] : []),
       ];
     } else if (type === "stats_insight") {
       systemPrompt = `You are an elite performance analyst for Vaylo Sports. Given the athlete's performance summary data, provide a comprehensive analysis covering:
@@ -86,9 +150,10 @@ Use dossier to personalize (PBs, goals, injuries, readiness). Be direct, analyti
 
 ${dossierText}`;
       userContent = [
-        { type: "text", text: `Here is the athlete's performance data summary:\n${summary ?? stats_summary ?? ""}\n\nProvide a detailed performance analysis with actionable insights.` },
+        { type: "text", text: `Here is the athlete's performance data summary:\n${summary || ""}\n\nProvide a detailed performance analysis with actionable insights.` },
       ];
-    } else if (type === "tactical_prep") {
+    } else {
+      // tactical_prep
       systemPrompt = `You are an elite tactical analyst for Vaylo Sports. Given the athlete's briefing and dossier, produce a concise tactical plan as JSON:
 {"priorities":["..."],"warmup":"...","mindset":"...","adjustments":"...","risks":"..."}
 - priorities: 4-6 bullet priorities, sport-specific and opponent-aware
@@ -100,10 +165,8 @@ Tailor to dossier sport/position, do not contradict injuries. Be direct, no fluf
 
 ${dossierText}`;
       userContent = [
-        { type: "text", text: `Briefing: ${briefing || prompt || ""}\nSport hint: ${sport || "unknown"}\nGenerate the tactical JSON now.` },
+        { type: "text", text: `Briefing: ${briefing || prompt}\nSport hint: ${sport || "unknown"}\nGenerate the tactical JSON now.` },
       ];
-    } else {
-      return new Response(JSON.stringify({ error: "Invalid type" }), { status: 400, headers: corsHeaders });
     }
 
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -112,29 +175,50 @@ ${dossierText}`;
       body: JSON.stringify({
         model: MODELS.CHAT.MINI,
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt + (langDirective ? "\n\n" + langDirective : "") },
           { role: "user", content: userContent },
         ],
       }),
     });
 
     if (!aiResponse.ok) {
+      // Charged but nothing delivered — refund before reporting the failure.
+      if (chargedUserId) {
+        await refundCredits({
+          supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+          serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          userId: chargedUserId,
+          amount: charged,
+          reason: `AI ${type} failed — auto refund`,
+        });
+        chargedUserId = null;
+      }
       if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited. Please try again in a moment." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return json({ error: "Rate limited. Please try again in a moment." }, 429);
       }
       if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return json({ error: "AI credits exhausted." }, 402);
       }
       const t = await aiResponse.text();
       console.error("AI error:", aiResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI analysis failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return json({ error: "AI analysis failed" }, 500);
     }
 
     const aiData = await aiResponse.json();
     const result = aiData.choices?.[0]?.message?.content || "Analysis unavailable.";
 
-    return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    return json({ result, cost: spend?.cost ?? 0, balance: spend?.balance ?? null });
+  } catch (err: unknown) {
+    if (chargedUserId) {
+      await refundCredits({
+        supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        userId: chargedUserId,
+        amount: charged,
+        reason: "AI analysis failed — server error (auto refund)",
+      }).catch(() => undefined);
+      chargedUserId = null;
+    }
+    return json({ error: err instanceof Error ? err.message : "Unexpected server error" }, 500);
   }
 });

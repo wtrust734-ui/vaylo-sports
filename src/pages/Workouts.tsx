@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Tables } from "@/integrations/supabase/types";
 import RPEModal from "@/components/RPEModal";
 import { triggerMilestone } from "@/components/MilestoneCelebration";
+import ShareActivityButton from "@/components/feed/ShareActivityButton";
+import { fetchMyShareKeys, shareKey, workoutShareInput } from "@/lib/activitySharing";
 
 type Workout = Tables<"workouts">;
 
@@ -38,20 +40,27 @@ const Workouts = () => {
   const historyInView = useInView(historyRef, { once: true, margin: "-30px" });
 
   const [rpePending, setRpePending] = useState<{ id: string; type: string; duration: number } | null>(null);
+  // Which of these sessions the athlete has already published to the feed.
+  const [sharedKeys, setSharedKeys] = useState<Set<string>>(new Set());
   const DEFAULT_AR = ["pace", "heart_rate", "distance", "duration", "cadence", "power"];
   const [arMetrics, setArMetrics] = useState<string[]>(DEFAULT_AR);
-  const [arOverlayName, setArOverlayName] = useState<string>("Live Overlay");
   const [liveHR, setLiveHR] = useState<number>(0);
 
-  useEffect(() => { if (user) { fetchWorkouts(); fetchArSettings(); } }, [user]);
+  useEffect(() => { if (user) { fetchWorkouts(); fetchArSettings(); fetchSharedKeys(); } }, [user]);
+
+  const fetchSharedKeys = async () => {
+    if (!user) return;
+    setSharedKeys(await fetchMyShareKeys(user.id));
+  };
 
   const fetchArSettings = async () => {
     if (!user) return;
-    const { data } = await supabase.from("user_settings").select("ar_metrics, ar_overlay_name" as any).eq("user_id", user.id).maybeSingle();
+    // Only select columns that exist. Selecting a nonexistent column makes PostgREST
+    // reject the entire request, which meant saved AR metrics never loaded at all.
+    const { data } = await supabase.from("user_settings").select("ar_metrics").eq("user_id", user.id).maybeSingle();
     if (data) {
-      const d = data as any;
+      const d = data as { ar_metrics?: string[] | null };
       if (Array.isArray(d.ar_metrics) && d.ar_metrics.length > 0) setArMetrics(d.ar_metrics);
-      if (d.ar_overlay_name) setArOverlayName(d.ar_overlay_name);
     }
   };
   useEffect(() => {
@@ -141,15 +150,17 @@ const Workouts = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4">
+    <div className="min-h-screen app-mesh bg-background">
+      <div className="px-5 pt-12 pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Workouts</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Track every session.</motion.p>
       </div>
 
       {activeWorkout && (
         <motion.div initial={{ opacity: 0, y: 15, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="mx-5 mb-5 bg-gradient-card border border-primary/30 rounded-2xl p-5 shadow-card">
+          className="mx-5 mb-5 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card overflow-hidden p-5 relative">
+          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+          <div className="relative">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">Active</span>
@@ -166,9 +177,9 @@ const Workouts = () => {
           )}
 
           {arMetrics.length > 0 && (
-            <div className="mt-4 p-3 rounded-xl border border-primary/30 bg-background/40">
+            <div className="mt-4 p-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1"><Eye size={11} /> Overlay {arOverlayName ? `· ${arOverlayName}` : ""}</span>
+                <span className="text-[10px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1"><Eye size={11} /> Overlay</span>
                 <button onClick={() => navigate(`/ar-overlay?workout=${activeWorkout.id}&type=${activeWorkout.type || "run"}`)}
                   className="text-[10px] text-primary underline">Fullscreen</button>
               </div>
@@ -183,7 +194,7 @@ const Workouts = () => {
                     : "—";
                   const unit = m === "pace" ? "min/km" : m === "heart_rate" ? "bpm" : m === "distance" ? "km" : m === "cadence" ? "spm" : m === "power" ? "W" : "";
                   return (
-                    <div key={m} className="bg-card/60 rounded-lg py-2 border border-border">
+                    <div key={m} className="rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur py-2">
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{m.replace("_", " ")}</div>
                       <div className="font-display font-bold text-sm text-primary">{val}</div>
                       <div className="text-[9px] text-muted-foreground">{unit}</div>
@@ -197,13 +208,14 @@ const Workouts = () => {
             <div className="mt-4">
               <label className="text-xs text-muted-foreground mb-1 block">Distance (km)</label>
               <input type="number" step="0.01" placeholder="0.00" value={distance} onChange={(e) => setDistance(e.target.value)}
-                className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-300" />
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/30 transition-colors" />
             </div>
           )}
           <motion.button onClick={stopWorkout} whileTap={{ scale: 0.98 }}
             className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground font-semibold py-3 rounded-xl mt-4">
             <Square size={18} /> Stop & Save
           </motion.button>
+          </div>
         </motion.div>
       )}
 
@@ -216,7 +228,9 @@ const Workouts = () => {
             </motion.button>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="bg-gradient-card border border-border rounded-2xl p-4 shadow-card space-y-3">
+              className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-4 space-y-3 overflow-hidden relative">
+              <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+              <div className="relative space-y-3">
               <div className="grid grid-cols-3 gap-2">
                 {workoutTypes.map((w) => (
                   <motion.button key={w.value} onClick={() => setType(w.value)} whileTap={{ scale: 0.93 }}
@@ -230,11 +244,12 @@ const Workouts = () => {
                 <Navigation size={14} /> Track with GPS
               </label>
               <div className="flex gap-2">
-                <button onClick={() => setShowNew(false)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                <button onClick={() => setShowNew(false)} className="px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
                 <motion.button onClick={startWorkout} whileTap={{ scale: 0.98 }}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow">
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow border border-white/10">
                   <Play size={16} /> Start
                 </motion.button>
+              </div>
               </div>
             </motion.div>
           )}
@@ -249,7 +264,7 @@ const Workouts = () => {
             <motion.div key={w.id} initial={{ opacity: 0, x: -15 }} animate={historyInView ? { opacity: 1, x: 0 } : {}}
               transition={{ delay: i * 0.06, duration: 0.4 }}
               whileHover={{ x: 4, transition: { duration: 0.2 } }}
-              className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
+              className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-4 hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold text-sm">{w.title}</h4>
@@ -260,6 +275,20 @@ const Workouts = () => {
                 </div>
                 <span className="text-xs text-muted-foreground">{new Date(w.created_at).toLocaleDateString()}</span>
               </div>
+              {w.completed && (
+                <div className="mt-3">
+                  <ShareActivityButton
+                    input={workoutShareInput(w)}
+                    shared={sharedKeys.has(shareKey("workout", w.id))}
+                    onToggle={(shared) => setSharedKeys(prev => {
+                      const next = new Set(prev);
+                      if (shared) next.add(shareKey("workout", w.id));
+                      else next.delete(shareKey("workout", w.id));
+                      return next;
+                    })}
+                  />
+                </div>
+              )}
             </motion.div>
           ))}
         </div>

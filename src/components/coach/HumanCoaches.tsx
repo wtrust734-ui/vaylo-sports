@@ -17,10 +17,10 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
 
   useEffect(() => {
     (async () => {
-      const { data } = await (supabase as any).from("creator_profiles").select("*");
+      const { data } = await supabase.from("creator_profiles").select("*");
       setCoaches((data || []) as Coach[]);
       if (user) {
-        const { data: b } = await (supabase as any).from("coach_bookings").select("*").eq("client_id", user.id);
+        const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
         setBookings(b || []);
       }
       setLoading(false);
@@ -31,13 +31,13 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
     if (!user) return;
     const starts_at = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
     const price_cents = minutes === 30 ? 4500 : 8000;
-    const { error } = await (supabase as any).from("coach_bookings").insert({
+    const { error } = await supabase.from("coach_bookings").insert({
       coach_id: coach.user_id, client_id: user.id, starts_at, duration_minutes: minutes,
       price_cents, status: "pending", video_link: `https://meet.vaylo.app/${crypto.randomUUID().slice(0, 8)}`,
     });
     if (error) { toast.error(error.message); return; }
     toast.success(`Booked ${minutes}-min session with ${coach.display_name}`);
-    const { data: b } = await (supabase as any).from("coach_bookings").select("*").eq("client_id", user.id);
+    const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
     setBookings(b || []);
   };
 
@@ -69,7 +69,7 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
         {loading ? <p className="text-sm text-muted-foreground">Loading…</p> :
          coaches.length === 0 ? (
           <div className="p-8 rounded-2xl border border-border bg-card text-center text-sm text-muted-foreground">
-            No human coaches are taking bookings yet. Verified coaches are being onboarded — check back soon, or keep training with Vaylo Coach in the meantime.
+            No human coaches are taking bookings yet. Verified coaches are being onboarded — check back soon, or keep training with Vaylo Sports Coach in the meantime.
           </div>
          ) : (
           <div className="grid gap-3 sm:grid-cols-2">

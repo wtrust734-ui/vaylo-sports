@@ -8,26 +8,29 @@
 
 /** Available OpenAI models (Responses API ids). */
 export const MODELS = {
-  /** Flagship reasoning model — deep analysis, plans, technique, strategy. */
-  PRIMARY: "gpt-5.5",
   /**
-   * Lightweight model — motivation, check-ins, summaries, short chat.
-   * Note: OpenAI does not publish a "gpt-5.5-mini"; gpt-5.4-mini is the
-   * current mini-class equivalent available on this account.
+   * GPT-6 Sol — the intelligence/cost balance tier. Handles deep analysis,
+   * planning and technique work at $2/$10 per MTok (vs $5/$30 for the
+   * previous gpt-5.5 flagship — newer AND 2.5x cheaper).
    */
-  MINI: "gpt-5.4-mini",
+  PRIMARY: "gpt-6-sol",
+  /**
+   * GPT-6 Luna — the cost-sensitive, high-volume tier at $0.10/$0.50 per
+   * MTok. Powers ignition messages, check-ins, summaries and light chat.
+   */
+  MINI: "gpt-6-luna",
   /**
    * Chat Completions API ids — used by edge functions that speak the
    * OpenAI-compatible chat protocol directly (streaming coach chat, JSON
    * plan generation, vision analysis, tool-call recommendations).
-   * gpt-5.x reasoning models are Responses-API-only, so those functions
-   * route to these chat-class models instead.
+   * GPT-6 reasoning models are Responses-API-only, so those functions
+   * route to these chat-class equivalents.
    */
   CHAT: {
-    /** Chat-class flagship — structured JSON plans, heavy vision analysis. */
-    PRIMARY: "gpt-4.1",
-    /** Chat-class lightweight — streaming chat, quick analysis, recommendations. */
-    MINI: "gpt-4.1-mini",
+    /** Chat-class balance tier — structured JSON plans, heavy vision analysis. */
+    PRIMARY: "gpt-6-sol",
+    /** Chat-class efficient tier — streaming chat, quick analysis, recommendations. */
+    MINI: "gpt-6-luna",
   },
 } as const;
 
@@ -44,7 +47,7 @@ type LeafValues<T> = T extends string ? T : { [K in keyof T]: LeafValues<T[K]> }
 export type ModelName = LeafValues<typeof MODELS>;
 
 /** Models that reject the `temperature` parameter (reasoning-class models). */
-const NO_TEMPERATURE: string[] = [MODELS.PRIMARY];
+const NO_TEMPERATURE: string[] = [MODELS.PRIMARY, MODELS.MINI];
 
 export const supportsTemperature = (model: string) => !NO_TEMPERATURE.includes(model);
 
@@ -59,8 +62,8 @@ export interface FeatureConfig {
   maxOutputTokens: number;
   /** Only applied to models that support it. */
   temperature?: number;
-  /** Reasoning effort for reasoning-class models: minimal | low | medium | high. */
-  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  /** Reasoning effort for reasoning-class models: low | medium | high. */
+  reasoningEffort?: "low" | "medium" | "high";
   /** Feature accepts image input (data URLs). */
   allowImages?: boolean;
   /** Feature uses multi-turn conversation history. */
@@ -70,7 +73,7 @@ export interface FeatureConfig {
 }
 
 const COACH_VOICE =
-  "You are Vaylo Coach, the elite performance coach inside the Vaylo Sports app. " +
+  "You are Vaylo Sports Coach, the elite performance coach inside the Vaylo Sports app. " +
   "Be direct, analytical and specific. No motivational filler. Never invent statistics, " +
   "records or data you were not given. If key data is missing, say exactly what you need. " +
   "Use tight markdown: short headers, bullets, numbers with units.";
@@ -88,7 +91,7 @@ const base = (body: string) => `${COACH_VOICE}\n${INJECTION_GUARD}\n\n${body}`;
 
 /**
  * Feature registry. Key = feature name passed to generateAIResponse().
- * GPT-5.5 handles analysis/planning; the mini model handles light, high-volume copy.
+ * GPT-6 Sol handles analysis/planning; GPT-6 Luna handles light, high-volume copy.
  */
 export const AI_FEATURES: Record<string, FeatureConfig> = {
   // ---------------------------------------------------------------- PRIMARY
@@ -260,7 +263,7 @@ End with: "Educational guidance only — not a medical diagnosis. See a qualifie
     model: MODELS.PRIMARY,
     system: `You select the most useful next lessons for an athlete. Prefer lessons matching their sport or stated goals, then their weakest category. Return ONLY a JSON array of lesson ids, e.g. ["a","b","c","d","e"]. No prose.`,
     maxOutputTokens: 600,
-    reasoningEffort: "minimal",
+    reasoningEffort: "low",
     jsonOnly: true,
   },
 

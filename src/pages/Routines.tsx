@@ -244,7 +244,7 @@ const Routines = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Type</label>
-                    <select value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as any })}
+                    <select value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as Routine["type"] })}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mt-1">
                       <option value="warmup">Warmup</option>
                       <option value="cooldown">Cooldown</option>

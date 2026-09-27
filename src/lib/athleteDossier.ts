@@ -75,7 +75,7 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
     supabase.from("athlete_position").select("position, primary_sport").eq("user_id", user.id).maybeSingle(),
   ]);
 
-  const profile: any = profileRes.data || {};
+  const profile = profileRes.data || {};
   const metrics = (metricsRes.data as MetricRow[] | null) || [];
   const age = ageFromDOB(profile.date_of_birth ?? null);
   const caps = getAgeCaps(age);
@@ -86,7 +86,7 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
   try {
     if (metrics.length) {
       const sport = (profile.sport || "").split(",")[0]?.trim() || "Running";
-      const position = (positionRes.data as any)?.position || undefined;
+      const position = positionRes.data?.position || undefined;
       const scores = calculateVPR(metrics, sport, position);
       vpr = scores;
       archetype = detectArchetype(scores);
@@ -102,7 +102,7 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
       weight_kg: profile.weight_kg ?? null,
       height_cm: profile.height_cm ?? null,
       goals: profile.goals ?? null,
-      position: (positionRes.data as any)?.position ?? null,
+      position: positionRes.data?.position ?? null,
     },
     pbs: pbs.slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })),
     pbs_text: formatPBsForAI(pbs),
@@ -120,13 +120,13 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
 
 /** Small helper to get a one-line summary for non-AI UI (e.g. Cross-Training header) */
 export function dossierSummary(dossier: Record<string, unknown>): string {
-  const p = dossier.profile as any;
-  const vpr: any = dossier.vpr;
+  const p = dossier.profile as { sport?: string; age?: number } | undefined;
+  const vpr = dossier.vpr as { overall_vpr?: number } | undefined;
   const parts: string[] = [];
   if (p?.sport) parts.push(String(p.sport).split(",")[0]);
   if (p?.age) parts.push(`${p.age}yo`);
   if (vpr?.overall_vpr) parts.push(`VPR ${vpr.overall_vpr}`);
-  const pbs: any[] = (dossier.pbs as any[]) || [];
+  const pbs = (dossier.pbs as { metric: string }[] | undefined) || [];
   if (pbs.length) parts.push(`${pbs.length} PBs`);
   return parts.join(" · ") || "Athlete dossier";
 }

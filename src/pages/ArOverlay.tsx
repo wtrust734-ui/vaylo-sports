@@ -30,7 +30,7 @@ const ArOverlay = () => {
     if (!user) return;
     supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => {
       if (!data) return;
-      const d = data as any;
+      const d = data as { ar_overlay_name?: string | null } | null;
       if (d.ar_persona) setPersona(d.ar_persona);
       if (Array.isArray(d.ar_metrics)) setMetrics(d.ar_metrics);
       if (d.ar_theme) setTheme(d.ar_theme);
@@ -72,7 +72,7 @@ const ArOverlay = () => {
       ar_position: position,
       ar_voice_enabled: voice,
     };
-    const { error } = await supabase.from("user_settings").upsert(payload as any, { onConflict: "user_id" });
+    const { error } = await supabase.from("user_settings").upsert(payload, { onConflict: "user_id" });
     setSaving(false);
     if (error) { toast.error("Couldn't save AR preferences"); return; }
     toast.success("AR overlay saved");
@@ -168,7 +168,7 @@ const ArOverlay = () => {
                 key={p.id}
                 onClick={() => setPersona(p.id)}
                 whileTap={{ scale: 0.97 }}
-                className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden ${active ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"}`}
+                className={`text-start p-3 rounded-xl border transition-all relative overflow-hidden ${active ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"}`}
               >
                 <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full opacity-15 blur-2xl" style={{ background: p.accent }} />
                 <div className="flex items-center gap-2 mb-1.5 relative">
@@ -259,7 +259,7 @@ const ArOverlay = () => {
           >
             <div className="flex items-center gap-2.5">
               {voice ? <Mic size={16} className="text-primary" /> : <MicOff size={16} className="text-muted-foreground" />}
-              <div className="text-left">
+              <div className="text-start">
                 <p className="text-sm font-semibold">Voice cues</p>
                 <p className="text-[10px] text-muted-foreground">Persona speaks during sessions</p>
               </div>

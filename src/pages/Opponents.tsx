@@ -55,7 +55,7 @@ const Opponents = () => {
         {list.length === 0 && <p className="text-sm text-muted-foreground text-center py-8 col-span-2">No opponent dossiers yet.</p>}
         {list.map(o => (
           <motion.button key={o.id} onClick={() => setEditing(o)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="text-left bg-card border border-border rounded-2xl p-4 hover:border-destructive/30">
+            className="text-start bg-card border border-border rounded-2xl p-4 hover:border-destructive/30">
             <p className="text-[11px] text-muted-foreground">{o.team || "—"}</p>
             <h3 className="font-display font-bold">{o.name}</h3>
             <p className="text-xs text-muted-foreground mt-1">{o.sport || "—"}</p>

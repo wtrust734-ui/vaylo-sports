@@ -56,7 +56,7 @@ export default function NotificationBell() {
                           if (n.link) navigate(n.link);
                           setOpen(false);
                         }}
-                        className={`w-full text-left p-3 hover:bg-muted/30 transition ${!n.read ? "bg-electric-purple/5" : ""}`}
+                        className={`w-full text-start p-3 hover:bg-muted/30 transition ${!n.read ? "bg-electric-purple/5" : ""}`}
                       >
                         <div className="flex items-start gap-2">
                           {!n.read && <span className="mt-1.5 h-2 w-2 rounded-full bg-electric-purple shrink-0" />}

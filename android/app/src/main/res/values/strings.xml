@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VAYLO Sports</string>
+    <string name="title_activity_main">VAYLO Sports</string>
+    <string name="package_name">com.vaylosports.app</string>
+    <string name="custom_url_scheme">com.vaylosports.app</string>
+</resources>

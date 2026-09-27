@@ -6,69 +6,71 @@
 
 @layer base {
   :root {
-    --background: 222 30% 3%;
-    --foreground: 210 40% 96%;
+    --background: 232 30% 6%;
+    --foreground: 210 40% 97%;
 
-    --card: 222 28% 7%;
-    --card-foreground: 210 40% 96%;
+    --card: 233 28% 9%;
+    --card-foreground: 210 40% 97%;
 
-    --popover: 222 28% 7%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 233 28% 9%;
+    --popover-foreground: 210 40% 97%;
 
-    --primary: 217 100% 58%;
+    --primary: 217 100% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 25% 12%;
-    --secondary-foreground: 210 30% 80%;
+    --secondary: 233 20% 13%;
+    --secondary-foreground: 210 28% 82%;
 
-    --muted: 222 20% 10%;
-    --muted-foreground: 217 15% 50%;
+    --muted: 232 18% 11%;
+    --muted-foreground: 225 14% 56%;
 
-    --accent: 217 100% 58%;
+    --accent: 217 100% 60%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 95%;
+    --destructive: 0 74% 56%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 222 20% 14%;
-    --input: 222 20% 14%;
-    --ring: 217 100% 58%;
+    --border: 232 18% 15%;
+    --input: 232 18% 15%;
+    --ring: 217 100% 60%;
 
-    --radius: 0.75rem;
+    --radius: 0.9rem;
 
-    --energy: 38 100% 55%;
-    --energy-foreground: 222 30% 3%;
+    --energy: 38 100% 57%;
+    --energy-foreground: 232 30% 6%;
 
-    --warning: 38 92% 50%;
-    --info: 222 62% 28%;
-    --success: 160 70% 45%;
+    --warning: 38 92% 52%;
+    --info: 232 62% 26%;
+    --success: 160 72% 46%;
 
-    --electric: 217 100% 58%;
-    --electric-glow: 210 100% 65%;
-    --electric-purple: 270 80% 60%;
-    --electric-purple-glow: 280 90% 70%;
-    --navy: 222 47% 15%;
-    --navy-deep: 222 50% 8%;
+    --electric: 217 100% 60%;
+    --electric-glow: 212 100% 68%;
+    --electric-purple: 272 84% 62%;
+    --electric-purple-glow: 281 90% 72%;
+    --navy: 230 47% 14%;
+    --navy-deep: 232 50% 7%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(270 70% 35%), hsl(217 100% 58%));
-    --gradient-energy: linear-gradient(135deg, hsl(38 100% 55%), hsl(25 100% 50%));
-    --gradient-card: linear-gradient(180deg, hsl(222 28% 9%), hsl(222 28% 5%));
-    --gradient-glass: linear-gradient(135deg, hsla(270 80% 60% / 0.08), hsla(217 100% 58% / 0.04));
-    --gradient-electric: linear-gradient(135deg, hsl(270 80% 50%), hsl(217 100% 58%), hsl(280 90% 65%));
-    --gradient-purple: linear-gradient(135deg, hsl(270 80% 60%), hsl(280 90% 70%));
+    --gradient-primary: linear-gradient(135deg, hsl(272 82% 44%) 0%, hsl(246 84% 62%) 52%, hsl(217 100% 60%) 100%);
+    --gradient-energy: linear-gradient(135deg, hsl(38 100% 57%) 0%, hsl(28 100% 54%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(233 28% 11% / 0.96), hsl(233 28% 7% / 0.98));
+    --gradient-glass: linear-gradient(135deg, hsla(272 84% 62% / 0.10), hsla(217 100% 60% / 0.06));
+    --gradient-electric: linear-gradient(135deg, hsl(272 84% 56%), hsl(246 84% 62%), hsl(280 90% 68%));
+    --gradient-purple: linear-gradient(135deg, hsl(272 84% 62%), hsl(281 90% 72%));
+    --gradient-mesh: radial-gradient(900px 600px at 18% -8%, hsla(272 84% 62% / 0.18), transparent 62%), radial-gradient(760px 520px at 88% 0%, hsla(217 100% 60% / 0.16), transparent 62%), radial-gradient(980px 640px at 50% 118%, hsla(38 100% 57% / 0.08), transparent 66%);
 
-    --shadow-glow: 0 0 30px hsla(217 100% 58% / 0.2);
-    --shadow-card: 0 4px 24px hsla(222 50% 3% / 0.5);
-    --shadow-electric: 0 0 40px hsla(217 100% 58% / 0.3);
+    --shadow-glow: 0 0 28px hsla(217 100% 60% / 0.22);
+    --shadow-card: 0 10px 36px hsla(232 50% 4% / 0.55), 0 1px 0 hsla(0 0% 100% / 0.06) inset;
+    --shadow-electric: 0 0 42px hsla(217 100% 60% / 0.32);
+    --shadow-soft: 0 8px 30px hsla(232 30% 3% / 0.45);
 
-    --sidebar-background: 222 28% 7%;
-    --sidebar-foreground: 210 30% 80%;
-    --sidebar-primary: 217 100% 58%;
+    --sidebar-background: 233 28% 7%;
+    --sidebar-foreground: 210 28% 82%;
+    --sidebar-primary: 217 100% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 25% 12%;
-    --sidebar-accent-foreground: 210 30% 80%;
-    --sidebar-border: 222 20% 14%;
-    --sidebar-ring: 217 100% 58%;
+    --sidebar-accent: 233 20% 13%;
+    --sidebar-accent-foreground: 210 28% 82%;
+    --sidebar-border: 232 18% 15%;
+    --sidebar-ring: 217 100% 60%;
   }
 }
 
@@ -77,23 +79,55 @@
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: hsl(var(--background));
+    background-image: var(--gradient-mesh);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    text-rendering: optimizeLegibility;
   }
 
-  html {
-    scroll-behavior: smooth;
-  }
+  /* Selection + focus */
+  ::selection { background: hsla(217 100% 60% / 0.28); }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
 @layer utilities {
+  .app-mesh {
+    background-image: var(--gradient-mesh);
+    background-attachment: fixed;
+  }
+  .hairline-top { box-shadow: 0 1px 0 hsla(0 0% 100% / 0.06) inset; }
+  .hairline-bottom { box-shadow: 0 -1px 0 hsla(0 0% 100% / 0.06) inset; }
+  .glass {
+    background: linear-gradient(180deg, hsla(0 0% 100% / 0.08), hsla(0 0% 100% / 0.03));
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    border: 1px solid hsla(0 0% 100% / 0.08);
+  }
+  .glass-card {
+    background: linear-gradient(180deg, hsla(233 28% 11% / 0.88), hsla(233 28% 7% / 0.94));
+    backdrop-filter: blur(16px) saturate(1.08);
+    -webkit-backdrop-filter: blur(16px) saturate(1.08);
+    border: 1px solid hsla(0 0% 100% / 0.07);
+    box-shadow: var(--shadow-card);
+  }
+  .ring-focus:focus-visible { box-shadow: 0 0 0 4px hsla(217 100% 60% / 0.18); }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -174,6 +208,12 @@
   .icon-tap {
     @apply transition-transform duration-150 ease-out active:scale-90;
   }
+}
+
+/* RTL: mirror chevrons/arrows that imply "forward" direction. Applied to the
+   icons on list rows and links; layout itself uses logical properties. */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
 }
 
 @media (prefers-reduced-motion: reduce) {

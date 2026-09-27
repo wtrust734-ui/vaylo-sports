@@ -29,7 +29,7 @@ export default function BigRewardChest({ open, onClose, onClaimed }: Props) {
   const openChest = async () => {
     setError(null); setStage("shaking");
     // Haptics
-    try { (navigator as any).vibrate?.([30, 60, 30, 60, 200]); } catch { /* noop */ }
+    try { navigator.vibrate?.([30, 60, 30, 60, 200]); } catch { /* noop */ }
     // Premium chest opening sound (synth chime)
     try { playChime(); } catch { /* noop */ }
 
@@ -39,15 +39,16 @@ export default function BigRewardChest({ open, onClose, onClaimed }: Props) {
       wait(2000),
     ]);
 
-    if (fnErr || !data || !(data as any).ok) {
-      const msg = (fnErr as any)?.message ?? (data as any)?.error ?? "Failed to open chest";
+    const payload = data as { ok?: boolean; error?: string } | null;
+    if (fnErr || !data || !payload?.ok) {
+      const msg = (fnErr as { message?: string } | null)?.message ?? payload?.error ?? "Failed to open chest";
       setError(msg); setStage("idle");
       toast.error(msg);
       return;
     }
     setResult(data);
     setStage("bursting");
-    try { (navigator as any).vibrate?.(400); } catch { /* noop */ }
+    try { navigator.vibrate?.(400); } catch { /* noop */ }
     await wait(500);
     setStage("revealing");
     await wait(900);
@@ -250,7 +251,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Simple WebAudio "chime" — avoids shipping an audio file
 function playChime() {
-  const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AC) return;
   const ctx = new AC();
   const notes = [523.25, 659.25, 783.99, 1046.5];

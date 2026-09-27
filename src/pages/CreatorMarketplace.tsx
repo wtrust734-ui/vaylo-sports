@@ -27,7 +27,7 @@ export default function CreatorMarketplace() {
 
   useEffect(() => {
     (async () => {
-      let q = (supabase as any).from("marketplace_listings").select("*").eq("active", true);
+      const q = supabase.from("marketplace_listings").select("*").eq("active", true);
       const { data } = await q;
       setListings((data || []) as Listing[]);
       setLoading(false);
@@ -65,7 +65,7 @@ export default function CreatorMarketplace() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search programs, meal plans, coaches…" className="pl-9 h-11" />
         </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="h-11 px-3 rounded-md bg-card border border-border text-sm">
+        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-11 px-3 rounded-md bg-card border border-border text-sm">
           <option value="popular">Popular</option>
           <option value="new">Newest</option>
           <option value="price">Price ↑</option>
@@ -113,7 +113,7 @@ export default function CreatorMarketplace() {
         </div>
        )}
 
-      <p className="text-[10px] text-muted-foreground mt-6 text-center">Vaylo charges a 20% platform fee on creator sales.</p>
+      <p className="text-[10px] text-muted-foreground mt-6 text-center">Vaylo Sports charges a 20% platform fee on creator sales.</p>
     </div>
   );
 }

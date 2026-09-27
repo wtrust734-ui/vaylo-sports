@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { languageDirective } from "../_shared/openai.ts";
+import { throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,6 +35,11 @@ serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (throttled(user.id)) {
+      return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Charge 3 credits per review — single authoritative deduction via credits_spend().
     // The client must pass no amount; cost is resolved server-side from economy_config.
@@ -59,8 +66,13 @@ serve(async (req) => {
     chargedUrl = supabaseUrl;
 
     const body = await req.json().catch(() => ({}));
-    const stats = body?.stats ?? {};
+    // Cap what the athlete can inject into the prompt (abuse guard).
+    const statsRaw = body?.stats;
+    const stats = statsRaw && typeof statsRaw === "object" ? statsRaw : {};
+    const statsJson = JSON.stringify(stats, null, 2).slice(0, 20_000);
     const pbs = body?.pbs;
+    const userLocale = typeof body?.userLocale === "string" ? body.userLocale : undefined;
+    const langDirective = languageDirective(userLocale);
 
     let dossierText = "";
     try {
@@ -71,7 +83,7 @@ serve(async (req) => {
       console.error("dossier fetch failed", e);
     }
 
-    const prompt = `You are Vaylo Coach, a brutally honest performance coach. Give a weekly accountability review based on the athlete data below. Be direct, no fluff. 5 short sections in markdown:
+    const prompt = `You are Vaylo Sports Coach, a brutally honest performance coach. Give a weekly accountability review based on the athlete data below. Be direct, no fluff. 5 short sections in markdown:
 1. **Verdict** (one line)
 2. **What worked**
 3. **What broke** (call out missed actions)
@@ -79,7 +91,7 @@ serve(async (req) => {
 5. **Effort → result** (link consistency to outcomes)
 
 Athlete data (last 7 days):
-${JSON.stringify(stats, null, 2)}
+${statsJson}
 
 ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, injuries, recovery, metrics):\n${dossierText}` : ""}`;
 
@@ -89,7 +101,7 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
       body: JSON.stringify({
         model: MODELS.CHAT.MINI,
         messages: [
-          { role: "system", content: "You are a direct, performance-focused coach. No motivational fluff. Always personalize using the athlete dossier — injuries, goals, PBs, readiness." },
+          { role: "system", content: "You are a direct, performance-focused coach. No motivational fluff. Always personalize using the athlete dossier — injuries, goals, PBs, readiness." + (langDirective ? "\n\n" + langDirective : "") },
           { role: "user", content: prompt },
         ],
       }),
@@ -115,7 +127,7 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
     }
     const data = await r.json();
     const feedback = data?.choices?.[0]?.message?.content ?? "No feedback generated.";
-    return new Response(JSON.stringify({ feedback, balance: spend?.balance ?? null }), {
+    return new Response(JSON.stringify({ feedback, balance: spend?.balance ?? null, cost: spend?.cost ?? 3 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

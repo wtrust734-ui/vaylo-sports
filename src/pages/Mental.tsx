@@ -129,7 +129,7 @@ const Mental = () => {
                 whileTap={{ scale: 0.97 }}
                 className="w-full bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/30 transition-colors">
                 <div className="p-2.5 rounded-lg bg-primary/10"><t.icon size={18} className="text-primary" /></div>
-                <div className="text-left">
+                <div className="text-start">
                   <p className="text-sm font-semibold">{t.label}</p>
                   <p className="text-xs text-muted-foreground">{t.desc}</p>
                 </div>

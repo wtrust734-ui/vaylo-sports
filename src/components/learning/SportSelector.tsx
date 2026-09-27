@@ -45,7 +45,7 @@ export function CategoryGrid({ counts, onSelect }: { counts: Record<string, numb
             transition={{ delay: index * 0.03, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             whileTap={{ scale: 0.97 }}
             onClick={() => onSelect(category.id)}
-            className="press min-h-40 rounded-2xl border border-border bg-card/70 p-4 text-left transition-colors hover:border-electric-purple/50"
+            className="press min-h-40 rounded-2xl border border-border bg-card/70 p-4 text-start transition-colors hover:border-electric-purple/50"
           >
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-electric-purple/10">
               <Icon size={18} className="text-electric-purple" />

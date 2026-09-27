@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,10 +47,10 @@ const Goals = () => {
       supabase.from("daily_action_logs").select("*").eq("user_id", user.id)
         .gte("log_date", isoDate(new Date(Date.now() - 30 * 86400000))),
     ]);
-    setOutcomes((o.data as any) ?? []);
-    setProcesses((p.data as any) ?? []);
-    setActions((a.data as any) ?? []);
-    setLogs((l.data as any) ?? []);
+    setOutcomes(o.data ?? []);
+    setProcesses(p.data ?? []);
+    setActions(a.data ?? []);
+    setLogs(l.data ?? []);
     setLoading(false);
   };
 
@@ -91,14 +92,15 @@ const Goals = () => {
           return { title: pg.title, target: w.target, done: w.done, pct: w.pct };
         }),
       };
-      const { data, error } = await supabase.functions.invoke("weekly-review", { body: { stats, pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) } });
+      const { data, error } = await supabase.functions.invoke("weekly-review", { body: { stats, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) } });
       if (error) throw error;
-      if ((data as any)?.error && (data as any)?.error.includes("Not enough credits")) {
-        toast.error((data as any).error);
+      const payload = (data ?? {}) as { error?: string; feedback?: string; balance?: number | null; cost?: number };
+      if (payload.error && payload.error.includes("Not enough credits")) {
+        toast.error(payload.error);
         return;
       }
-      setAiFeedback((data as any).feedback);
-      if ((data as any)?.balance != null) toast.success("Review complete — 3 credits used.");
+      setAiFeedback(payload.feedback);
+      if (payload.balance != null) toast.success(`Review complete${payload.cost ? ` — ${payload.cost} credits used` : ""}.`);
     } catch (e: any) {
       const msg = e?.message ?? "Failed";
       if (msg.includes("Not enough credits") || msg.includes("Insufficient") || e?.status === 402) {
@@ -274,7 +276,7 @@ const Goals = () => {
                   <button
                     key={a.id}
                     onClick={() => handleToggle(a)}
-                    className={`w-full flex items-center gap-3 px-3 py-3 text-left transition ${
+                    className={`w-full flex items-center gap-3 px-3 py-3 text-start transition ${
                       done ? "bg-success/5" : ""
                     }`}>
                     <div className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition ${

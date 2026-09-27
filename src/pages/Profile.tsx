@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
-import { User, Medal, Settings, ChevronRight, Zap, Users, Globe, LogOut, Ruler, Weight, Target, Heart, Calendar, Trash2 } from "lucide-react";
+import { User, Medal, Settings, ChevronRight, Zap, Users, Globe, LogOut, Ruler, Weight, Target, Heart, Calendar, Trash2, MapPin, MessageCircle } from "lucide-react";
+import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +13,10 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import CosmeticShop from "@/components/profile/CosmeticShop";
 import { cosmeticColor, cosmeticLabel, isAnimated, useCosmetics } from "@/lib/cosmetics";
 import { Sparkles } from "lucide-react";
+import CountrySelect from "@/components/geo/CountrySelect";
+import LanguageSetting from "@/components/settings/LanguageSetting";
+import PasskeysSetting from "@/components/settings/PasskeysSetting";
+import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
 
 
 const currencies = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD"];
@@ -34,6 +39,8 @@ const Profile = () => {
   const [showCosmetics, setShowCosmetics] = useState(false);
   const { equippedDefs } = useCosmetics();
   const [currency, setCurrency] = useState("USD");
+  // ISO alpha-2, stored in `user_region` — the table the leaderboards read.
+  const [country, setCountry] = useState<string | null>(null);
   const [waterGoal, setWaterGoal] = useState("3000");
   const [showWaterEdit, setShowWaterEdit] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -55,6 +62,8 @@ const Profile = () => {
           if (data?.currency) setCurrency(data.currency);
           if (data?.water_goal_ml) setWaterGoal(String(data.water_goal_ml));
         });
+      supabase.from("user_region").select("country").eq("user_id", user.id).maybeSingle()
+        .then(({ data }) => { if (data?.country) setCountry(data.country); });
     }
   }, [user]);
 
@@ -75,6 +84,31 @@ const Profile = () => {
     const { error } = await supabase.from("user_settings").upsert({ user_id: user.id, currency: val }, { onConflict: "user_id" });
     if (error) { toast({ title: "Couldn't save your currency", description: error.message, variant: "destructive" }); return; }
     toast({ title: `Currency set to ${val}` });
+  };
+
+  const saveCountry = async (code: string | null) => {
+    if (!user) return;
+    const normalised = normaliseCountryCode(code);
+    if (!normalised) { toast({ title: "Pick a country from the list", variant: "destructive" }); return; }
+    const previous = country;
+    setCountry(normalised);
+    // `currency` here is the pricing tier that follows the country, and is a
+    // different thing from the display currency in Settings above.
+    const { error } = await supabase.from("user_region").upsert({
+      user_id: user.id,
+      country: normalised,
+      currency: currencyFor(normalised) ?? "USD",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (error) {
+      setCountry(previous);
+      toast({ title: "Couldn't save your country", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: `${countryName(normalised)} saved`,
+      description: `You now rank on the ${countryName(normalised)} and ${continentFor(normalised)} leaderboards.`,
+    });
   };
 
   const saveWaterGoal = async () => {
@@ -180,6 +214,22 @@ const Profile = () => {
         <AccountSubscriptionCard />
       </div>
 
+      {/* Community — hidden until VITE_DISCORD_INVITE_URL is configured. */}
+      {discordInviteUrl() && (
+        <div className="px-5 mb-5">
+          <button
+            onClick={() => navigate("/discord")}
+            className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-electric-purple/20 transition-colors duration-300"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-[#5865F2]/10"><MessageCircle size={18} className="text-[#5865F2]" /></div>
+              <div className="text-left"><h4 className="font-semibold text-sm">Community</h4><p className="text-xs text-muted-foreground">Train together on Discord</p></div>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+          </button>
+        </div>
+      )}
+
       {/* Edit Profile */}
       <div className="px-5 mb-5">
         <motion.button onClick={() => setShowEditProfile(!showEditProfile)} whileTap={{ scale: 0.98 }}
@@ -188,7 +238,7 @@ const Profile = () => {
             <div className="p-2 rounded-lg bg-electric-purple/10"><User size={18} className="text-electric-purple" /></div>
             <div><h4 className="font-semibold text-sm">Edit Profile</h4><p className="text-xs text-muted-foreground">Weight, height, goals, sport, DOB</p></div>
           </div>
-          <motion.div animate={{ rotate: showEditProfile ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground" /></motion.div>
+          <motion.div animate={{ rotate: showEditProfile ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground rtl-flip" /></motion.div>
         </motion.button>
         {showEditProfile && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
@@ -249,13 +299,26 @@ const Profile = () => {
           className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-primary/20 transition-colors duration-300">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-secondary"><Settings size={18} className="text-foreground" /></div>
-            <div><h4 className="font-semibold text-sm">Settings</h4><p className="text-xs text-muted-foreground">Currency, water goal</p></div>
+            <div><h4 className="font-semibold text-sm">Settings</h4><p className="text-xs text-muted-foreground">Country, currency, water goal</p></div>
           </div>
-          <motion.div animate={{ rotate: showSettings ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground" /></motion.div>
+          <motion.div animate={{ rotate: showSettings ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground rtl-flip" /></motion.div>
         </motion.button>
         {showSettings && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
             className="bg-card border border-border rounded-xl p-4 mt-2 space-y-4">
+            <div>
+              <LanguageSetting />
+            </div>
+            <PasskeysSetting />
+            <div>
+              <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><MapPin size={12} /> Country</label>
+              <CountrySelect value={country} onChange={saveCountry} />
+              <p className="text-[11px] text-muted-foreground mt-2">
+                {country
+                  ? `${countryName(country)} · ${continentFor(country)}. Shown next to your name on leaderboards.`
+                  : "Set this to appear on your country and continental leaderboards."}
+              </p>
+            </div>
             <div>
               <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><Globe size={12} /> Currency</label>
               <div className="flex flex-wrap gap-1.5">
@@ -301,7 +364,7 @@ const Profile = () => {
               <div className="p-2 rounded-lg bg-secondary"><item.icon size={18} className="text-foreground" /></div>
               <div><h4 className="font-semibold text-sm">{item.label}</h4><p className="text-xs text-muted-foreground">{item.desc}</p></div>
             </div>
-            <ChevronRight size={16} className="text-muted-foreground" />
+            <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
           </motion.div>
         ))}
       </div>

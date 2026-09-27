@@ -19,7 +19,7 @@ const Identity = () => {
       supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200),
       supabase.from("vpr_snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
     ]);
-    setMetrics((m.data as any) || []); setSnaps(s.data || []); setLoading(false);
+    setMetrics(m.data || []); setSnaps(s.data || []); setLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;

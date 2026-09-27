@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { Dumbbell, TrendingUp, Zap, ChevronRight, Play, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle } from "lucide-react";
@@ -159,9 +160,9 @@ const Training = () => {
 
     setLoading(true);
     try {
-      const spend = await spendCredits("training_plan_week", { quantity: duration, reason: `Training plan: ${title.trim() || `${goal} ${sport}`} (${duration}w)` });
-      if (!spend.success) { setLoading(false); toast({ title: "Not enough credits", description: spendErrorMessage("training_plan_week", spend, duration), variant: "destructive" }); return; }
-      const dossier = await buildClientDossier().catch(() => null as any);
+      // The generate-plan function verifies auth, throttles and charges
+      // training_plan_week credits server-side (with auto-refund on failure).
+      const dossier = await buildClientDossier().catch(() => null);
       const quiz = {
         daysPerWeek: clampedDays,
         hoursPerWeek: cappedHours,
@@ -175,16 +176,24 @@ const Training = () => {
         recoveryDays: Math.max(planRecoveryDays, caps.minRestDays),
         ageCaps: caps,
       };
-      // Try AI generation first, fall back to heuristic if it fails.
       let planData: any = null;
+      let chargeError: string | null = null;
       try {
         const { data: aiData, error: aiErr } = await supabase.functions.invoke("generate-plan", {
-          body: { sport, goal, level, duration_weeks: duration, age, quiz, pbs: (dossier as any)?.pbs ?? null, dossier: dossier ? { pbs_text: (dossier as any).pbs_text, outcomeGoals: (dossier as any).outcomeGoals, injuries: (dossier as any).injuries } : null },
+          body: { sport, goal, level, duration_weeks: duration, age, quiz, userLocale: getAiLocale(), pbs: dossier?.pbs ?? null, dossier: dossier ? { pbs_text: dossier.pbs_text, outcomeGoals: dossier.outcomeGoals, injuries: dossier.injuries } : null },
         });
-        if (!aiErr && aiData?.plan_data && Array.isArray(aiData.plan_data) && aiData.plan_data.length > 0) {
+        if (aiErr) {
+          chargeError = await edgeErrorMessage(aiErr);
+        } else if (aiData?.plan_data && Array.isArray(aiData.plan_data) && aiData.plan_data.length > 0) {
           planData = aiData.plan_data;
+          if (aiData.cost) await refreshProfile();
         }
       } catch { /* fall through to heuristic */ }
+      if (chargeError) {
+        setLoading(false);
+        toast({ title: "Plan not created", description: chargeError, variant: "destructive" });
+        return;
+      }
       if (!planData) planData = generatePlanData(sport, goal, level, duration, age, quiz);
 
       const { data: inserted, error: insertError } = await supabase.from("training_plans").insert({
@@ -197,8 +206,6 @@ const Training = () => {
       // Periodisation calendar removed — no block linking.
 
       await refreshProfile();
-      // NOTE: plan generation is currently free — nothing charges credits for it,
-      // so the toast must not claim credits were spent.
       toast({ title: "Plan Created! 🎯" });
       setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
@@ -645,10 +652,10 @@ const Training = () => {
   // Edit plan session
   const saveSessionEdit = async () => {
     if (!selectedPlan || !editingSession) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as any[];
-    const weekIdx = planData.findIndex((w: any) => w.week === editingSession.week);
+    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
+    const weekIdx = planData.findIndex((w) => w.week === editingSession.week);
     if (weekIdx === -1) return;
-    const sessionIdx = planData[weekIdx].sessions.findIndex((s: any) => s.day === editingSession.day);
+    const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === editingSession.day);
     if (sessionIdx === -1) return;
     if (editSessionTitle) planData[weekIdx].sessions[sessionIdx].title = editSessionTitle;
     if (editSessionDuration) planData[weekIdx].sessions[sessionIdx].duration_minutes = parseInt(editSessionDuration);
@@ -661,17 +668,17 @@ const Training = () => {
 
   const toggleWeekHoliday = async (weekNum: number) => {
     if (!selectedPlan) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as any[];
-    const weekIdx = planData.findIndex((w: any) => w.week === weekNum);
+    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
+    const weekIdx = planData.findIndex((w) => w.week === weekNum);
     if (weekIdx === -1) return;
     const wasHoliday = planData[weekIdx].isHoliday;
     planData[weekIdx].isHoliday = !wasHoliday;
     
     // If marking as holiday, redistribute sessions to next non-holiday week
     if (!wasHoliday) {
-      const holidaySessions = planData[weekIdx].sessions.filter((s: any) => !s.isRest && !s.isRecovery);
+      const holidaySessions = planData[weekIdx].sessions.filter((s) => !s.isRest && !s.isRecovery);
       // Find next non-holiday week
-      const nextWeekIdx = planData.findIndex((w: any, i: number) => i > weekIdx && !w.isHoliday);
+      const nextWeekIdx = planData.findIndex((w, i) => i > weekIdx && !w.isHoliday);
       if (nextWeekIdx !== -1 && holidaySessions.length > 0) {
         // Add key sessions to next week as extra work
         planData[nextWeekIdx].redistributedFrom = weekNum;
@@ -709,10 +716,10 @@ const Training = () => {
 
   const skipSession = async (weekNum: number, dayNum: number) => {
     if (!selectedPlan) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as any[];
-    const weekIdx = planData.findIndex((w: any) => w.week === weekNum);
+    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
+    const weekIdx = planData.findIndex((w) => w.week === weekNum);
     if (weekIdx === -1) return;
-    const sessionIdx = planData[weekIdx].sessions.findIndex((s: any) => s.day === dayNum);
+    const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === dayNum);
     if (sessionIdx === -1) return;
     planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
     const { error } = await supabase.from("training_plans").update({ plan_data: planData }).eq("id", selectedPlan.id);
@@ -757,7 +764,6 @@ const Training = () => {
     try {
       const spend = await spendCredits("limiter_fix_plan", { reason: `Limiter Fix Plan (${LIMITER_WEEKS} weeks)` });
       if (!spend.success) { setCreatingLimiterPlan(false); toast({ title: "Not enough credits", description: spendErrorMessage("limiter_fix_plan", spend), variant: "destructive" }); return; }
-      
       // Generate plan focused on weakest areas
       const weakAreas = limiterResult.limiters.map(l => l.name);
       const planGoal = `Fix: ${weakAreas.slice(0, 3).join(", ")}`;
@@ -951,7 +957,7 @@ const Training = () => {
 
   // === PLAN DETAIL VIEW ===
   if (activeView === "planDetail" && selectedPlan) {
-    const planData = selectedPlan.plan_data as any[] | null;
+    const planData = selectedPlan.plan_data as PlanData | null;
     return (
       <div className="min-h-screen bg-background">
         <div className="px-5 pt-14 pb-4 flex items-center gap-3">

@@ -20,6 +20,27 @@ import {
 
 export type { FeatureCostKey } from "@/config/credits";
 
+
+// --- RPC result shapes ----------------------------------------------------
+// The credits routines return `Json`; these shapes describe the contract with
+// the database functions (see supabase/migrations for the authoritative SQL).
+type SpendRpcResult = {
+  success?: boolean;
+  duplicate?: boolean;
+  cost?: number;
+  balance?: number;
+  unlimited?: boolean;
+  error?: string;
+  shortfall?: number;
+};
+
+type ClaimRewardRpcResult = {
+  success?: boolean;
+  granted?: number;
+  balance?: number;
+  duplicate?: boolean;
+};
+
 // --- Remote cost cache (economy_config overrides the local defaults) -------
 let remoteCosts: Partial<Record<FeatureCostKey, number>> | null = null;
 let remoteLoaded: Promise<void> | null = null;
@@ -28,14 +49,16 @@ export async function loadFeatureCosts(): Promise<Record<FeatureCostKey, number>
   if (!remoteLoaded) {
     remoteLoaded = (async () => {
       const { data } = await supabase
-        .from("economy_config" as any)
+        .from("economy_config")
         .select("value")
         .eq("key", "feature_costs")
         .eq("region", "GLOBAL")
         .eq("active", true)
         .maybeSingle();
-      const value = (data as any)?.value;
-      if (value && typeof value === "object") remoteCosts = value;
+      const value = data?.value;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        remoteCosts = value as Partial<Record<FeatureCostKey, number>>;
+      }
     })().catch(() => { /* fall back to local defaults */ });
   }
   await remoteLoaded;
@@ -88,13 +111,13 @@ export async function spendCredits(
   opts: SpendOptions = {},
 ): Promise<SpendResult> {
   const quantity = Math.max(1, opts.quantity ?? 1);
-  const { data, error } = await supabase.rpc("credits_spend" as any, {
+  const { data, error } = await supabase.rpc("credits_spend", {
     p_feature: feature,
     p_reason: opts.reason ?? featureLabel(feature),
     p_quantity: quantity,
     p_source: opts.source ?? "app",
     p_idempotency_key: opts.idempotencyKey ?? null,
-    p_metadata: (opts.metadata ?? {}) as any,
+    p_metadata: (opts.metadata ?? {}) as Record<string, unknown>,
   });
 
   if (error) {
@@ -104,7 +127,7 @@ export async function spendCredits(
     };
   }
 
-  const r = (data ?? {}) as any;
+  const r = (data ?? {}) as SpendRpcResult;
   return {
     success: !!r.success,
     duplicate: !!r.duplicate,
@@ -133,13 +156,13 @@ export async function claimCreditReward(
   kind: PromoBonusKey,
   opts: { reason?: string; idempotencyKey?: string } = {},
 ): Promise<{ success: boolean; granted: number; balance: number; duplicate: boolean; error?: string }> {
-  const { data, error } = await supabase.rpc("credits_claim_reward" as any, {
+  const { data, error } = await supabase.rpc("credits_claim_reward", {
     p_kind: kind,
     p_reason: opts.reason ?? null,
     p_idempotency_key: opts.idempotencyKey ?? null,
   });
   if (error) return { success: false, granted: 0, balance: 0, duplicate: false, error: error.message };
-  const r = (data ?? {}) as any;
+  const r = (data ?? {}) as ClaimRewardRpcResult;
   return {
     success: !!r.success,
     granted: Number(r.granted ?? 0),
@@ -161,9 +184,9 @@ export type CreditTransaction = {
 
 export async function fetchCreditHistory(limit = 50): Promise<CreditTransaction[]> {
   const { data } = await supabase
-    .from("credit_transactions" as any)
+    .from("credit_transactions")
     .select("id, amount, reason, feature, source, balance_after, created_at")
     .order("created_at", { ascending: false })
     .limit(limit);
-  return (data ?? []) as any as CreditTransaction[];
+  return data ?? [];
 }

@@ -1,3 +1,4 @@
+import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
 import { ScanLine, Lock, ChevronRight, Dumbbell, Eye, Target, RotateCcw, Footprints, Bike, PersonStanding, ArrowUp, Camera, Upload, Loader2, Video } from "lucide-react";
@@ -7,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { edgeErrorMessage } from "@/lib/edgeErrors";
 
 const drillCategories = [
   {
@@ -78,18 +80,28 @@ const FormAnalysis = () => {
 
     try {
       // Convert to base64
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const { data, error } = await supabase.functions.invoke("ai-analyze", {
-          body: { type: "form_analysis", image_base64: base64, prompt: "Analyze this athlete's form, posture, and technique in detail.", pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
-        });
-        if (error) throw error;
-        setAnalysisResult(data.result);
-        toast({ title: "Analysis complete! 🎯" });
-        setAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Couldn't read the image file."));
+        reader.readAsDataURL(file);
+      });
+      const { data, error } = await supabase.functions.invoke("ai-analyze", {
+        body: { type: "form_analysis", image_base64: base64, prompt: "Analyze this athlete's form, posture, and technique in detail.", userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+      });
+      if (error) {
+        const msg = await edgeErrorMessage(error);
+        const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
+        if (status === 402 || status === 401 || status === 429) {
+          toast({ title: msg, variant: "destructive" });
+          setAnalyzing(false);
+          return;
+        }
+        throw new Error(msg);
+      }
+      setAnalysisResult(data.result);
+      toast({ title: "Analysis complete! 🎯" });
+      setAnalyzing(false);
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
       setAnalyzing(false);
@@ -107,7 +119,7 @@ const FormAnalysis = () => {
       {/* AI Video Form Analysis entry */}
       <motion.button whileTap={{ scale: 0.99 }} onClick={() => navigate("/form/video")}
         initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-        className="mx-5 mb-4 w-[calc(100%-2.5rem)] text-left bg-gradient-card border border-electric-blue/25 rounded-2xl p-4 shadow-card">
+        className="mx-5 mb-4 w-[calc(100%-2.5rem)] text-start bg-gradient-card border border-electric-blue/25 rounded-2xl p-4 shadow-card">
         <div className="flex items-center gap-2 mb-2">
           <Video size={16} className="text-electric-blue" />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-electric-blue">AI Video Analysis</span>
@@ -207,7 +219,7 @@ const FormAnalysis = () => {
                           className="w-full p-3 flex items-center justify-between" whileTap={{ scale: 0.99 }}>
                           <div className="flex items-center gap-3">
                             <div className="p-1.5 rounded-lg bg-electric-purple/10"><drill.icon size={16} className="text-electric-purple" /></div>
-                            <div className="text-left"><h4 className="font-semibold text-sm">{drill.title}</h4><p className="text-[11px] text-muted-foreground">{drill.desc}</p></div>
+                            <div className="text-start"><h4 className="font-semibold text-sm">{drill.title}</h4><p className="text-[11px] text-muted-foreground">{drill.desc}</p></div>
                           </div>
                           <motion.div animate={{ rotate: expandedDrill === key ? 90 : 0 }}><ChevronRight size={14} className="text-muted-foreground" /></motion.div>
                         </motion.button>

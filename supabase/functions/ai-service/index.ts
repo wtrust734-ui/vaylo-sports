@@ -98,6 +98,9 @@ Deno.serve(async (req) => {
       history: body.history,
       images: body.images,
       maxOutputTokens: body.maxOutputTokens,
+      // The athlete's UI language — the AI answers in it (validated inside
+      // generateAIResponse; unknown values degrade to a plain language name).
+      userLocale: typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined,
     });
 
     return json(result);

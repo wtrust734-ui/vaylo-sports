@@ -16,6 +16,7 @@ import {
   type SpecialOffer,
 } from "@/lib/creditEconomy";
 import MarketSectionNav, { MARKET_SECTIONS, type MarketSection } from "@/components/market/MarketSectionNav";
+import { isFlagOn } from "@/config/featureFlags";
 import CreditPacksSection from "@/components/market/CreditPacksSection";
 import CoinBundlesSection from "@/components/market/CoinBundlesSection";
 import SubscriptionsSection from "@/components/market/SubscriptionsSection";
@@ -78,8 +79,8 @@ const Market = () => {
       });
       setShowBasket(true);
     };
-    window.addEventListener("vaylo:add-coin-bundle" as any, handler);
-    return () => window.removeEventListener("vaylo:add-coin-bundle" as any, handler);
+    window.addEventListener("vaylo:add-coin-bundle", handler);
+    return () => window.removeEventListener("vaylo:add-coin-bundle", handler);
   }, [basket]);
 
   const doubleOffer = useMemo(() => getDoubleCreditsOffer(offers), [offers]);
@@ -209,8 +210,8 @@ const Market = () => {
             className="flex w-fit flex-wrap items-center gap-3 rounded-xl border border-border bg-card/60 px-4 py-2.5 backdrop-blur">
             <span className="inline-flex items-center gap-1.5"><Zap size={16} className="text-primary" /><span className="text-sm font-bold text-primary">{profile?.credits ?? 0}</span><span className="text-xs text-muted-foreground">credits</span></span>
             <span className="h-4 w-px bg-border" />
-            <span className="inline-flex items-center gap-1.5"><Coins size={16} className="text-energy" /><span className="text-sm font-bold text-energy">{(profile as any)?.coins ?? 0}</span><span className="text-xs text-muted-foreground">Coins</span></span>
-            {(profile as any)?.infinite_credits && (
+            <span className="inline-flex items-center gap-1.5"><Coins size={16} className="text-energy" /><span className="text-sm font-bold text-energy">{profile?.coins ?? 0}</span><span className="text-xs text-muted-foreground">Coins</span></span>
+            {profile?.infinite_credits && (
               <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-electric-purple/10 px-2 py-0.5 text-[10px] font-bold text-electric-purple">
                 <InfinityIcon size={10} /> UNLIMITED
               </span>
@@ -298,7 +299,7 @@ const Market = () => {
               credits: 120,
               bonus: starterOffer.bonus_flat,
             })}
-            className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-electric-purple via-primary to-electric-purple p-[1px] text-left">
+            className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-electric-purple via-primary to-electric-purple p-[1px] text-start">
             <div className="rounded-[22px] bg-card p-5">
               <div className="mb-2 flex items-center justify-between">
                 <span className="rounded-full bg-electric-purple/15 px-2 py-1 text-[10px] font-bold text-electric-purple">
@@ -342,7 +343,7 @@ const Market = () => {
           {section === "coins" && <CoinBundlesSection currency={region.currency} />}
           {section === "subscriptions" && <SubscriptionsSection />}
           {section === "lifetime" && <LifetimeSection />}
-          {section === "coaching" && <CoachingSection currency={region.currency} />}
+          {section === "coaching" && isFlagOn("coachMarketplace") && <CoachingSection currency={region.currency} />}
         </motion.div>
       </AnimatePresence>
 

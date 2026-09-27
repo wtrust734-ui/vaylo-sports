@@ -108,7 +108,7 @@ export function ContinueCard({ lesson, onOpen }: { lesson: Lesson; onOpen: (less
   return (
     <button
       onClick={() => onOpen(lesson)}
-      className="press-card rounded-2xl border border-border bg-card p-4 text-left hover:border-electric-purple/40"
+      className="press-card rounded-2xl border border-border bg-card p-4 text-start hover:border-electric-purple/40"
     >
       <p className="text-[10px] font-bold uppercase tracking-wider text-electric-purple">{categoryFor(lesson)}</p>
       <p className="mt-2 text-sm font-bold leading-snug">{lesson.title}</p>

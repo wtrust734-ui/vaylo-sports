@@ -90,7 +90,7 @@ export function SearchBar({ query, onQueryChange, suggestions, lessonsById, onOp
                   <button onClick={() => { clearRecentSearches(); setRecents([]); }} className="text-[10px] font-semibold text-electric-purple">Clear</button>
                 </div>
                 {recents.map((recent) => (
-                  <button key={recent} onClick={() => choose(recent)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-muted/70">
+                  <button key={recent} onClick={() => choose(recent)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-start text-sm hover:bg-muted/70">
                     <Clock3 size={13} className="shrink-0 text-muted-foreground" /> {recent}
                   </button>
                 ))}
@@ -101,7 +101,7 @@ export function SearchBar({ query, onQueryChange, suggestions, lessonsById, onOp
                 {suggestions.map((suggestion) => {
                   const lesson = lessonsById.get(suggestion.lessonId);
                   return (
-                    <button key={suggestion.label} onClick={() => choose(suggestion.label, suggestion.lessonId)} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-muted/70">
+                    <button key={suggestion.label} onClick={() => choose(suggestion.label, suggestion.lessonId)} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-start hover:bg-muted/70">
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold">{suggestion.label}</span>
                         {lesson && <span className="text-xs text-muted-foreground">{categoryFor(lesson)} · {lesson.duration}</span>}

@@ -128,7 +128,7 @@ const DailyChallenges = () => {
       <div className="space-y-2">
         {list.map(c => (
           <button key={c.id} onClick={() => toggle(c.id)}
-            className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left text-sm transition-all ${
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border text-start text-sm transition-all ${
               c.done ? "bg-success/10 border-success/30 text-success line-through" : "bg-muted border-border hover:border-primary/30"
             }`}>
             <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${c.done ? "bg-success border-success" : "border-border"}`}>

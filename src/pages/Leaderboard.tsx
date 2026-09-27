@@ -1,10 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Search, TrendingUp, TrendingDown, Minus, Globe2, MapPin, Flag } from "lucide-react";
+import { Trophy, Search, TrendingUp, TrendingDown, Minus, Globe, MapPin, Map as MapIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { fetchLeaderboard, LeaderboardPeriod, LeaderboardRow } from "@/lib/scoring";
+import { supabase } from "@/integrations/supabase/client";
+import { fetchLeaderboard, previousPeriodWindow, LeaderboardPeriod, LeaderboardRow } from "@/lib/scoring";
+import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
+import { continentFor, countryFlag, countryName, type Continent } from "@/lib/geo";
+
+// ---------------------------------------------------------------------------
+// Rankings scopes: World, your continent, and your country.
+//
+// Country comes from `user_region`, which is publicly readable for exactly two
+// columns — `user_id` and `country`. Continent is derived from the country with
+// the UN M49 mapping in `src/lib/geo.ts`, so no per-athlete guesswork happens at
+// read time. An athlete who has not set a country still ranks worldwide; the
+// geo scopes stay disabled until they pick one, rather than silently filing them
+// under a default country they never chose.
+//
+// Note: rows are fetched as a worldwide top-N (500) and then filtered by scope.
+// A very deep country board could miss an athlete outside that cut — fine at
+// current scale, worth revisiting if a country board needs to be exhaustive.
+// ---------------------------------------------------------------------------
 
 const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "week", label: "Weekly" },
@@ -12,94 +29,142 @@ const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "all", label: "All-time" },
 ];
 
-type Geo = "worldwide" | "continental" | "national" | "regional";
+type Scope = "world" | "continent" | "country";
 
-const GEO_TABS: { key: Geo; label: string; icon: any }[] = [
-  { key: "worldwide", label: "World", icon: Globe2 },
-  { key: "continental", label: "Continent", icon: Globe2 },
-  { key: "national", label: "National", icon: Flag },
-  { key: "regional", label: "Regional", icon: MapPin },
-];
+interface Enriched extends LeaderboardRow {
+  name: string;
+  country: string | null;
+  sportLabel?: string;
+  prevRank?: number;
+}
 
-// Minimal ISO country → continent map (extend as needed)
-const CONTINENT: Record<string, string> = {
-  US: "NA", CA: "NA", MX: "NA",
-  BR: "SA", AR: "SA", CL: "SA", CO: "SA", PE: "SA", UY: "SA",
-  GB: "EU", IE: "EU", FR: "EU", DE: "EU", ES: "EU", IT: "EU", PT: "EU", NL: "EU", BE: "EU", SE: "EU", NO: "EU", DK: "EU", FI: "EU", PL: "EU", CH: "EU", AT: "EU", GR: "EU", CZ: "EU", RO: "EU", HU: "EU", UA: "EU",
-  ZA: "AF", NG: "AF", KE: "AF", EG: "AF", MA: "AF", GH: "AF", ET: "AF", TN: "AF", DZ: "AF",
-  CN: "AS", JP: "AS", KR: "AS", IN: "AS", PK: "AS", ID: "AS", TH: "AS", VN: "AS", PH: "AS", MY: "AS", SG: "AS", AE: "AS", SA: "AS", IL: "AS", TR: "AS",
-  AU: "OC", NZ: "OC", FJ: "OC",
+/** `points_events.sport` can hold a comma-separated list; show the first. */
+const primarySport = (sport: string | null | undefined): string | undefined => {
+  const first = (sport || "").split(",").map(s => s.trim()).filter(Boolean)[0];
+  return first || undefined;
 };
-const CONTINENT_NAME: Record<string, string> = { NA: "North America", SA: "South America", EU: "Europe", AF: "Africa", AS: "Asia", OC: "Oceania" };
 
-interface Enriched extends LeaderboardRow { name: string; country?: string; region?: string; prevRank?: number; }
+/**
+ * Ranks must be recomputed inside a scope, or a country board would show gaps.
+ * Generic so the enriched fields (name, country) survive the re-rank.
+ */
+const rankRows = <T extends LeaderboardRow>(rows: T[]): T[] =>
+  [...rows]
+    .sort((a, b) => b.points - a.points)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
 
 const Leaderboard = () => {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const nav = useNavigate();
   const [period, setPeriod] = useState<LeaderboardPeriod>("week");
-  const [geo, setGeo] = useState<Geo>("worldwide");
   const [sport, setSport] = useState("all");
+  const [scope, setScope] = useState<Scope>("world");
   const [rows, setRows] = useState<Enriched[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [sports, setSports] = useState<string[]>([]);
+  const [myCountry, setMyCountry] = useState<string | null>(null);
+  // Previous-window rows (with their countries) kept in a ref so changing the
+  // scope can re-rank both sides without refetching. Must be a ref: a plain
+  // object would be recreated on every render and lose the data.
+  const prevRows = useRef<(LeaderboardRow & { country: string | null })[]>([]);
 
-  const myCountry = (profile as any)?.country || "";
-  const myRegion = (profile as any)?.region || (profile as any)?.city || "";
-  const myContinent = CONTINENT[myCountry?.toUpperCase()] || "";
+  // Own country (own row of user_region).
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("user_region")
+        .select("country")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled) setMyCountry(data?.country ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       setLoading(true);
-      const current = await fetchLeaderboard({ period, sport, limit: 500 });
-      const prev = period === "all" ? [] : await fetchLeaderboard({ period, sport, limit: 500 });
-      const prevMap: Record<string, number> = {};
-      prev.forEach(r => { prevMap[r.user_id] = r.rank; });
-      const ids = current.map(r => r.user_id);
-      const { data: profiles } = await (supabase as any)
-        .from("profiles")
-        .select("user_id,full_name,country,region,city,sport")
-        .in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
-      const pm: Record<string, any> = {};
-      (profiles || []).forEach((p: any) => { pm[p.user_id] = p; });
-      const uniqueSports = new Set<string>();
-      (profiles || []).forEach((p: any) => (p.sport || "").split(",").map((s: string) => s.trim()).filter(Boolean).forEach((s: string) => uniqueSports.add(s)));
-      setSports(Array.from(uniqueSports));
-      setRows(current.map(r => ({
-        ...r,
-        name: pm[r.user_id]?.full_name || "Athlete",
-        country: pm[r.user_id]?.country,
-        region: pm[r.user_id]?.region || pm[r.user_id]?.city,
-        prevRank: prevMap[r.user_id],
-      })));
-      setLoading(false);
+      try {
+        const current = await fetchLeaderboard({ period, sport, limit: 500 });
+
+        // Rank change needs the PREVIOUS window. Fetching the same period twice
+        // pinned every trend arrow at zero.
+        const prevWindow = previousPeriodWindow(period);
+        const prev = prevWindow
+          ? await fetchLeaderboard({ period, sport, limit: 500, from: prevWindow.from, to: prevWindow.to })
+          : [];
+
+        // Public data only. Names come from `avatars` and country from the
+        // publicly-readable columns of `user_region` — `profiles` stays private.
+        const ids = Array.from(new Set([...current, ...prev].map(r => r.user_id)));
+        const [names, regions] = await Promise.all([
+          fetchDisplayNames(ids),
+          ids.length
+            ? supabase.from("user_region").select("user_id, country").in("user_id", ids)
+            : Promise.resolve({ data: [] as { user_id: string; country: string | null }[] }),
+        ]);
+
+        const countryOf = new Map<string, string | null>();
+        for (const r of (regions.data ?? []) as { user_id: string; country: string | null }[]) {
+          countryOf.set(r.user_id, r.country);
+        }
+
+        const uniqueSports = new Set<string>();
+        current.forEach(r => (r.sport || "").split(",").map(s => s.trim()).filter(Boolean).forEach(s => uniqueSports.add(s)));
+
+        if (cancelled) return;
+        setSports(Array.from(uniqueSports).sort());
+
+        // Keep the previous-window rows and their countries so a scope change can
+        // recompute both sides consistently without another network round trip.
+        prevRows.current = prev.map(r => ({ ...r, country: countryOf.get(r.user_id) ?? null }));
+        setRows(current.map(r => ({
+          ...r,
+          name: names[r.user_id] ?? UNKNOWN_ATHLETE,
+          country: countryOf.get(r.user_id) ?? null,
+          sportLabel: primarySport(r.sport),
+        })));
+      } catch (e) {
+        console.error("Leaderboard failed to load:", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, [period, sport]);
 
-  const scoped = useMemo(() => {
-    const list = rows.filter(r => {
-      if (geo === "worldwide") return true;
-      if (geo === "national") return myCountry && r.country && r.country.toUpperCase() === myCountry.toUpperCase();
-      if (geo === "regional") return myRegion && r.region && r.region.toLowerCase() === myRegion.toLowerCase();
-      if (geo === "continental") return myContinent && r.country && CONTINENT[r.country.toUpperCase()] === myContinent;
-      return true;
-    });
-    // rerank inside scope
-    return list.sort((a, b) => b.points - a.points).map((r, i) => ({ ...r, rank: i + 1 }));
-  }, [rows, geo, myCountry, myRegion, myContinent]);
+  const myContinent: Continent | null = continentFor(myCountry);
 
-  const filtered = useMemo(() => scoped.filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase())), [scoped, search]);
+  const scoped = useMemo(() => {
+    const inScope = <T extends { country: string | null }>(r: T) =>
+      scope === "world" ? true
+        : scope === "continent" ? continentFor(r.country) === myContinent && !!myContinent
+        : r.country === myCountry && !!myCountry;
+
+    const current = rankRows(rows.filter(inScope));
+    const previous = rankRows(prevRows.current.filter(inScope));
+    const prevMap: Record<string, number> = {};
+    previous.forEach(r => { prevMap[r.user_id] = r.rank; });
+    return current.map(r => ({ ...r, prevRank: prevMap[r.user_id] }));
+  }, [rows, scope, myCountry, myContinent]);
+
+  const filtered = useMemo(
+    () => scoped.filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase())),
+    [scoped, search],
+  );
   const podium = filtered.slice(0, 3);
   const rest = filtered.slice(3);
-  const me = scoped.find(r => r.user_id === user?.id);
+  const me = filtered.find(r => r.user_id === user?.id);
 
-  const geoLabel: Record<Geo, string> = {
-    worldwide: "Worldwide",
-    continental: myContinent ? CONTINENT_NAME[myContinent] : "Set country in profile",
-    national: myCountry || "Set country in profile",
-    regional: myRegion || "Set region in profile",
-  };
+  const SCOPES: { key: Scope; label: string; icon: typeof Globe; enabled: boolean }[] = [
+    { key: "world", label: "World", icon: Globe, enabled: true },
+    { key: "continent", label: myContinent ?? "Continent", icon: MapIcon, enabled: !!myContinent },
+    { key: "country", label: countryName(myCountry) ?? "Country", icon: MapPin, enabled: !!myCountry },
+  ];
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -109,25 +174,32 @@ const Leaderboard = () => {
         <p className="text-sm text-muted-foreground mt-1">Points from workouts, intensity, consistency & challenges.</p>
       </div>
 
-      {/* Geo scope */}
-      <div className="px-5 mb-3">
-        <div className="grid grid-cols-4 gap-1.5 bg-card border border-border rounded-xl p-1">
-          {GEO_TABS.map(g => {
-            const Icon = g.icon;
-            const active = geo === g.key;
-            return (
-              <button key={g.key} onClick={() => setGeo(g.key)}
-                className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[10px] font-semibold transition-all ${
-                  active ? "bg-gradient-to-br from-primary to-electric-purple text-primary-foreground shadow-glow" : "text-muted-foreground hover:text-foreground"
-                }`}>
-                <Icon size={13} />
-                {g.label}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">{geoLabel[geo]}</p>
+      {/* Scope */}
+      <div className="px-5 flex gap-1.5 mb-2">
+        {SCOPES.map(s => {
+          const Icon = s.icon;
+          return (
+            <button key={s.key} onClick={() => s.enabled && setScope(s.key)} disabled={!s.enabled}
+              title={s.enabled ? undefined : "Set your country in Profile to unlock this board"}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors truncate ${
+                !s.enabled ? "bg-muted/40 border-border text-muted-foreground/50 cursor-not-allowed"
+                  : scope === s.key ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card border-border text-muted-foreground"
+              }`}>
+              <Icon size={12} /> <span className="truncate">{s.label}</span>
+            </button>
+          );
+        })}
       </div>
+
+      {!myCountry && (
+        <div className="px-5 mb-3">
+          <button onClick={() => nav("/profile")}
+            className="w-full text-start text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2">
+            Add your country in Profile to unlock your country and continental boards →
+          </button>
+        </div>
+      )}
 
       {/* Period */}
       <div className="px-5 flex gap-1.5 mb-3">
@@ -172,8 +244,8 @@ const Leaderboard = () => {
                         <p className="font-display font-bold text-primary text-lg">{p.points}</p>
                         <p className="text-[9px] uppercase text-muted-foreground">pts</p>
                       </div>
-                      <p className="text-[11px] font-semibold truncate mt-1">{p.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{p.country || "—"}</p>
+                      <p className="text-[11px] font-semibold truncate mt-1">{countryFlag(p.country)} {p.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{p.sportLabel || "—"}</p>
                     </motion.button>
                   );
                 })}
@@ -188,7 +260,7 @@ const Leaderboard = () => {
               return (
                 <motion.button key={r.user_id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.015 }}
                   onClick={() => nav(`/profile/${r.user_id}`)}
-                  className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
+                  className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-start transition-all ${
                     isMe ? "bg-primary/10 border-primary shadow-glow" : "bg-card border-border hover:border-primary/40"
                   }`}>
                   <div className="w-8 text-center font-display font-bold text-muted-foreground">#{r.rank}</div>
@@ -196,10 +268,10 @@ const Leaderboard = () => {
                     {r.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{r.name}{isMe && <span className="ml-1 text-[10px] text-primary">· you</span>}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{r.country || "—"}{r.region ? ` · ${r.region}` : ""}</p>
+                    <p className="text-sm font-semibold truncate">{countryFlag(r.country)} {r.name}{isMe && <span className="ml-1 text-[10px] text-primary">· you</span>}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{r.sportLabel || "Multi-sport"}</p>
                   </div>
-                  <div className="flex items-center gap-1 text-[10px]">
+                  <div className="flex items-center gap-1 text-[10px]" title={r.prevRank ? `Was #${r.prevRank} last period` : "New this period"}>
                     {change > 0 ? <><TrendingUp size={10} className="text-primary"/> <span className="text-primary">+{change}</span></>
                       : change < 0 ? <><TrendingDown size={10} className="text-destructive"/> <span className="text-destructive">{change}</span></>
                       : <Minus size={10} className="text-muted-foreground"/>}
@@ -214,10 +286,11 @@ const Leaderboard = () => {
             {filtered.length === 0 && (
               <div className="text-center py-10">
                 <Trophy className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                <p className="text-sm text-muted-foreground">No athletes in this scope yet.</p>
-                {(geo === "national" || geo === "regional" || geo === "continental") && !myCountry && (
-                  <p className="text-xs text-muted-foreground mt-1">Add your country in Profile to unlock geo rankings.</p>
-                )}
+                <p className="text-sm text-muted-foreground">
+                  {scope === "world"
+                    ? "No ranked athletes yet. Log a workout to open the board."
+                    : `No ranked athletes in ${scope === "country" ? countryName(myCountry) : myContinent} yet.`}
+                </p>
               </div>
             )}
           </div>
@@ -225,7 +298,7 @@ const Leaderboard = () => {
           {me && me.rank > 3 && (
             <div className="fixed bottom-24 left-4 right-4 bg-gradient-to-r from-primary to-electric-purple text-primary-foreground rounded-2xl p-3 flex items-center gap-3 shadow-lg z-40">
               <div className="text-sm font-bold">#{me.rank}</div>
-              <p className="flex-1 text-sm font-semibold truncate">You · {geoLabel[geo]}</p>
+              <p className="flex-1 text-sm font-semibold truncate">You</p>
               <p className="text-sm font-display font-bold">{me.points} pts</p>
             </div>
           )}

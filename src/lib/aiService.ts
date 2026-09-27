@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getAiLocale } from "@/i18n";
 
 /**
  * Client wrapper for the central AI service (`ai-service` edge function).
@@ -75,12 +76,16 @@ export async function runAIDetailed(options: RunAIOptions): Promise<AIResult> {
     try {
       const { buildClientDossier } = await import("./athleteDossier");
       const dossier = await buildClientDossier();
-      enrichedUserData = { ...(enrichedUserData || {}), dossier, pbs: (dossier as any).pbs, pbs_text: (dossier as any).pbs_text };
+      const d = dossier as { pbs?: unknown; pbs_text?: string };
+      enrichedUserData = { ...(enrichedUserData || {}), dossier, pbs: d.pbs, pbs_text: d.pbs_text };
     } catch { /* best-effort */ }
   }
 
+  // The athlete's UI language rides along with every AI request so generated
+  // coaching, plans and insights come back in that language. The edge function
+  // injects it into the system prompt; English requests are unaffected.
   const { data, error } = await supabase.functions.invoke("ai-service", {
-    body: { ...options, userData: enrichedUserData, userPrompt: prompt },
+    body: { ...options, userData: enrichedUserData, userPrompt: prompt, userLocale: getAiLocale() },
   });
 
   if (error) {

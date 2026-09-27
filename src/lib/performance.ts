@@ -1,4 +1,4 @@
-// Vaylo Performance Intelligence — pure calculation engines.
+// Vaylo Sports Performance Intelligence — pure calculation engines.
 // All functions are deterministic and run client-side.
 
 export type Sport = string;
@@ -54,7 +54,7 @@ export function getSportWeights(sport: string, position?: string): Record<keyof 
   if (bias) for (const k of Object.keys(bias)) base[k] = (base[k] ?? 0.15) * (bias[k] ?? 1);
   // Normalize
   const sum = Object.values(base).reduce((a, b) => a + b, 0);
-  const normalized: any = {};
+  const normalized: Record<string, number> = {};
   for (const k of Object.keys(base)) normalized[k] = base[k] / sum;
   // Ensure all 6 keys exist
   const keys = ["speed_index","power_index","endurance_capacity","repeatability","skill_consistency","reaction_efficiency"];
@@ -130,16 +130,16 @@ export function calculateVPR(metrics: MetricRow[], sport: string, position?: str
     buckets.repeatability.push(Math.max(0, 100 - Math.sqrt(variance) * 2));
   }
   const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-  const scores: any = {};
+  const scores = {} as Record<string, number>;
   for (const k of Object.keys(buckets)) scores[k] = Math.round(avg(buckets[k]));
 
   // Renormalize over buckets that have data — adding one bench press shouldn't
   // drag the score down just because endurance/skill buckets are still empty.
   const w = getSportWeights(sport, position);
   const presentKeys = Object.keys(buckets).filter((k) => buckets[k].length > 0);
-  const weightSum = presentKeys.reduce((a, k) => a + ((w as any)[k] ?? 0), 0) || 1;
+  const weightSum = presentKeys.reduce((a, k) => a + (w[k] ?? 0), 0) || 1;
   const weighted = presentKeys.reduce(
-    (a, k) => a + scores[k] * (((w as any)[k] ?? 0) / weightSum),
+    (a, k) => a + scores[k] * ((w[k] ?? 0) / weightSum),
     0,
   );
 
