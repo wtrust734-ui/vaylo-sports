@@ -46,10 +46,20 @@ const ChallengeDetail = () => {
   const handleLog = async () => {
     const n = Number(delta);
     if (!n || n <= 0) return toast.error("Enter a positive value");
+    if (!Number.isInteger(n)) return toast.error("Enter a whole number");
     const { data, error } = await updateChallengeProgress(ch.id, n);
     if (error) return toast.error(error.message);
-    const result = (data ?? {}) as { completed?: boolean | null; reward_points?: number | string | null };
+    const result = (data ?? {}) as {
+      completed?: boolean | null;
+      reward_points?: number | string | null;
+      progress?: number | null;
+      clamped?: boolean;
+    };
+    // The server clamps a single entry to the challenge target, so saying
+    // "Logged 9999 km" when it recorded 100 would be a lie the athlete cannot
+    // see through. Say what was recorded instead.
     if (result.completed) toast.success(`Challenge complete! +${result.reward_points} pts`);
+    else if (result.clamped) toast.success(`Logged ${result.progress} ${ch.target_unit} (the most this challenge can count)`);
     else toast.success(`Logged ${n} ${ch.target_unit}`);
     setDelta("1");
     load();

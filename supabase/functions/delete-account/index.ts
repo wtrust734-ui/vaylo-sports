@@ -175,6 +175,34 @@ Deno.serve(async (req) => {
       return json({ error: "reauth_required" }, 403);
     }
 
+    // An explicit confirmation is required, and it is required in the BODY.
+    //
+    // This function has no action parameter and no dry run: before this, any
+    // authenticated POST with a fresh token deleted the account, including one
+    // with a malformed or unexpected body. That is one stray client bug, one
+    // replayed request, or one careless probe away from destroying an account
+    // that cannot be recovered. The client-side confirmation screen is a
+    // courtesy to the athlete, not a control on the server.
+    //
+    // `dry_run` answers with what would be removed, which is what a deletion
+    // screen should be able to show and what makes this endpoint safe to probe.
+    let dryRun = false;
+    try {
+      const parsed = (await req.clone().json()) as { confirm?: unknown; dry_run?: unknown };
+      dryRun = parsed.dry_run === true;
+      if (parsed.confirm !== true && !dryRun) {
+        return json(
+          { error: "confirmation_required", message: "Send { confirm: true } to delete the account." },
+          400
+        );
+      }
+    } catch {
+      return json(
+        { error: "confirmation_required", message: "Send { confirm: true } to delete the account." },
+        400
+      );
+    }
+
     if (inFlight.has(userId)) {
       return json({ error: "in_progress", message: "A deletion request is already being processed." }, 429);
     }
@@ -195,6 +223,19 @@ Deno.serve(async (req) => {
     }
 
     const failures: string[] = [];
+
+    // Nothing above this line has touched a row, so a dry run can stop here and
+    // report the shape of the deletion without performing any of it.
+    if (dryRun) {
+      inFlight.delete(userId);
+      return json({
+        success: true,
+        dry_run: true,
+        tables_checked: USER_TABLES.length,
+        dependent_relations: CONTAINER_CHILDREN.length,
+        message: "Nothing was deleted. Send { confirm: true } to proceed.",
+      });
+    }
 
     // --- 1. Dependent rows of containers this athlete owns -------------------
     for (const { child, childColumn, parent, parentColumn } of CONTAINER_CHILDREN) {

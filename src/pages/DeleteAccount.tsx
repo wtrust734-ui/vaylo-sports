@@ -82,7 +82,12 @@ export default function DeleteAccount() {
   const performDelete = async () => {
     setDeleting(true);
     try {
-      const { error } = await supabase.functions.invoke("delete-account");
+      // The server requires an explicit confirmation in the body. Without it
+      // this endpoint deletes the account on any authenticated POST, so a
+      // malformed request or a stray retry would be irreversible.
+      const { error } = await supabase.functions.invoke("delete-account", {
+        body: { confirm: true },
+      });
       if (error) throw error;
       setShowFinal(false);
       setDone(true);
