@@ -264,7 +264,7 @@ const Routines = () => {
                   <input type="checkbox" checked={!!editing.gps_enabled}
                     onChange={(e) => setEditing({ ...editing, gps_enabled: e.target.checked })} />
                   <MapPin size={14} className="text-primary" />
-                  <span>Enable GPS tracking (distance + route)</span>
+                  <span>Enable GPS tracking (distance only)</span>
                 </label>
 
                 <div>

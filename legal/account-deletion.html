@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Delete your account — Vaylo Sports</title>
+<!--
+  Play requires a deletion route that works for someone who no longer has the app
+  installed, so this page carries an email path as well as the in-app steps. It is
+  also the URL entered in Play Console under "Data deletion".
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 30px 20px 64px; background: #05070f; color: #e8ecf6;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .mark { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, hsl(217 100% 60%), hsl(265 90% 62%)); }
+  .brand span { font-weight: 700; letter-spacing: -0.01em; }
+  h1 { font-size: 1.55rem; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h2 { font-size: 1.06rem; margin: 32px 0 10px; color: #fff; }
+  p, li { color: #c9d2e4; }
+  ol, ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  a { color: hsl(217 100% 72%); }
+  .meta { color: #8b97ae; font-size: 0.86rem; margin: 0 0 2px; }
+  .card { background: #0c1120; border: 1px solid #1b2438; border-radius: 14px; padding: 16px 20px; margin: 18px 0; }
+  .card h2 { margin-top: 0; }
+  .cta {
+    display: inline-block; margin: 6px 0 0; padding: 13px 18px; border-radius: 12px;
+    background: hsl(217 100% 60%); color: #05070f; font-weight: 700; text-decoration: none;
+  }
+  .kept { background: #0c1120; border: 1px solid #1b2438; border-left: 3px solid #f0b429; border-radius: 12px; padding: 14px 18px; margin: 18px 0; }
+  .kept strong { color: #fff; }
+  .nav { margin-top: 40px; padding-top: 18px; border-top: 1px solid #1b2438; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
+
+  <h1>Delete your account</h1>
+  <p class="meta">Last updated 28 September 2026</p>
+  <p class="meta">Vaylo Sports is operated by %%OPERATOR_NAME%%. Contact: <a href="mailto:%%CONTACT_EMAIL%%">%%CONTACT_EMAIL%%</a></p>
+
+  <p>
+    You can delete your Vaylo Sports account and all of its data yourself, at any
+    time. There is no waiting period, no charge, and you do not need to contact us.
+  </p>
+
+  <div class="card">
+    <h2>If you still have the app</h2>
+    <ol>
+      <li>Open Vaylo Sports and sign in.</li>
+      <li>Go to the <strong>Profile</strong> tab.</li>
+      <li>Tap <strong>Settings</strong> to expand it, then <strong>Delete Account</strong>. The same button also sits under Sign Out.</li>
+      <li>Confirm. Deletion runs immediately.</li>
+    </ol>
+    <p style="margin-bottom:0">
+      The app then verifies the deletion by checking every table that can hold your
+      data and tells you whether it completed. If anything could not be removed you
+      will see it reported rather than a false success.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>If you no longer have the app</h2>
+    <p>
+      Email us from the address on the account, or tell us the account's email
+      address, and ask for deletion. We will action it and confirm within 30 days,
+      usually much sooner.
+    </p>
+    <a class="cta" href="mailto:%%CONTACT_EMAIL%%?subject=Delete%20my%20Vaylo%20Sports%20account">Email %%CONTACT_EMAIL%%</a>
+  </div>
+
+  <h2>What gets deleted</h2>
+  <p>Deleting your account removes:</p>
+  <ul>
+    <li>Your profile, name, date of birth, country, height, weight and preferences</li>
+    <li>All training and activity history, including distances measured by GPS</li>
+    <li>Health and fitness data synced from Health Connect or a connected wearable</li>
+    <li>Coaching conversations, generated plans and video form analyses</li>
+    <li>Posts, comments, messages, challenges, community membership and your profile photo</li>
+    <li>Credits, coins, Event Pack access, achievement and points history</li>
+    <li>Your login itself, so the account can never be signed into again</li>
+  </ul>
+
+  <div class="kept">
+    <strong>What is kept, and why.</strong>
+    <ul style="margin-bottom:0">
+      <li>
+        <strong>Purchase and refund records</strong> that tax and accounting law
+        requires us to retain. These are held separately from your profile and are
+        not used for anything else.
+      </li>
+      <li>
+        <strong>One anonymous deletion record</strong> — a salted hash of your user
+        id, a status and a timestamp. It contains no name, no email and nothing that
+        identifies you; it exists only to prove the deletion happened. You can read
+        the same statement in
+        <a href="privacy.html#keep">the privacy policy</a>.
+      </li>
+    </ul>
+  </div>
+
+  <h2>Before you delete</h2>
+  <p>
+    Deletion cannot be undone. If you have an active subscription, cancel it in the
+    Play Store under <em>Payments &amp; subscriptions</em> — deleting your Vaylo
+    Sports account does not cancel a Google Play subscription. Unspent credits and
+    coins are lost, and if you want a copy of your data, ask us first.
+  </p>
+
+  <div class="nav">
+    <a href="privacy.html">Privacy Policy</a> &middot;
+    <a href="terms.html">Terms of Service</a> &middot;
+    <a href="health-rationale.html">Health Connect permissions</a>
+  </div>
+</main>
+</body>
+</html>
