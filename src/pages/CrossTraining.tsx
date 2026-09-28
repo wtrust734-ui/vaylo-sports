@@ -206,12 +206,20 @@ const CrossTraining = () => {
     };
   }, [dossier, sport, phase, profile?.goals]);
 
+  // The "For you" rail and the library below drew from the same pool, so an
+  // athlete with no metrics logged — where the picks fall back to the first
+  // matches — saw the top three exercises twice on one screen.
+  const library = useMemo(
+    () => (forYou ? filtered.filter((e) => !forYou.picks.some((p) => p.e.name === e.name)) : filtered),
+    [filtered, forYou],
+  );
+
   return (
     <div className="min-h-screen p-6 pt-20 pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Shuffle size={14} /> Cross-Training Library</div>
         <h1 className="text-4xl font-display font-bold mt-2">Smart <span className="text-gradient-electric">Cross-Training</span></h1>
-        <p className="text-muted-foreground mt-1 text-sm">Sport-specific transfer work, dialled into your training phase — now tailored to your gaps, goals and recovery.</p>
+        <p className="text-muted-foreground mt-1 text-sm">Sport-specific transfer work, dialed into your training phase — now tailored to your gaps, goals and recovery.</p>
       </motion.div>
 
       {/* For You — personalised */}
@@ -318,7 +326,7 @@ const CrossTraining = () => {
         <motion.div key={`${sport}-${phase}-${focus}`}
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
           className="grid md:grid-cols-2 gap-3">
-          {filtered.map((e, idx) => {
+          {library.map((e, idx) => {
             const meta = FOCUS_META[e.focus] ?? FOCUS_META.Prehab;
             const Icon = meta.icon;
             return (
@@ -337,7 +345,7 @@ const CrossTraining = () => {
               </motion.div>
             );
           })}
-          {filtered.length === 0 && (
+          {library.length === 0 && (
             <div className="col-span-2 p-8 text-center text-muted-foreground">
               Nothing in this combo. Try another phase or focus.
             </div>

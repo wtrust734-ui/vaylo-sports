@@ -6,10 +6,12 @@ import {
   BadgeCheck, SlidersHorizontal, Trophy, Clock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { formatLocalPrice, loadEconomyConfig } from "@/lib/creditEconomy";
 import { useToast } from "@/hooks/use-toast";
 import {
   loadEventPacks, loadOwnedPackIds, claimEventPack, relatedPacks, SECTION_LABELS,
-  type EventPack,
+  type EventPack, type EventPackSection,
 } from "@/lib/eventPacks";
 import { EVENT_PACK_SPORTS, EVENT_PACK_DIFFICULTIES, type EventPackDifficulty } from "@/config/eventPacks";
 import { requestCreditTopUp } from "@/lib/topUpStore";
@@ -46,7 +48,17 @@ const diffStyle = (d: string) =>
     Elite: { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/30", grad: "from-destructive/15 to-transparent" },
   }[d] || { bg: "bg-muted", text: "text-foreground", border: "border-border", grad: "from-muted to-transparent" });
 
-const badgeFor = (pack: EventPack) => {
+const badgeFor = (pack: EventPack, sectionKey?: EventPackSection) => {
+  // A card in a sectioned rail does not need a badge: the rail heading already
+  // says why it is there. It was worse than redundant — every card in the
+  // recommended rail wore the same "Most Popular" badge, which reads as an
+  // automated stamp rather than a fact about that pack. Badges stay where a
+  // card appears in a mixed list: search results and "All Event Packs".
+  if (sectionKey) return null;
+  return rawBadgeFor(pack);
+};
+
+const rawBadgeFor = (pack: EventPack) => {
   if (pack.sections.includes("featured")) return { label: "Featured", icon: Award, color: "bg-energy text-background" };
   if (pack.sections.includes("popular")) return { label: "Most Popular", icon: TrendingUp, color: "bg-electric-purple text-primary-foreground" };
   if (pack.sections.includes("new")) return { label: "New", icon: Sparkles, color: "bg-primary text-primary-foreground" };
@@ -63,13 +75,14 @@ function LifetimeBadge() {
 }
 
 function PackCard({
-  pack, owned, inBasket, onOpen, onAdd,
+  pack, owned, inBasket, onOpen, onAdd, currency, sectionKey,
 }: {
   pack: EventPack; owned: boolean; inBasket: boolean;
   onOpen: () => void; onAdd: () => void;
+  currency: string; sectionKey?: EventPackSection;
 }) {
   const ds = diffStyle(pack.difficulty);
-  const badge = badgeFor(pack);
+  const badge = badgeFor(pack, sectionKey);
   return (
     <motion.div
       layout
@@ -107,7 +120,7 @@ function PackCard({
             <p className="font-display text-base font-bold text-primary">
               {pack.creditPrice.toLocaleString()}<span className="text-[10px] font-semibold"> credits</span>
             </p>
-            <p className="text-[9px] text-muted-foreground">or {pack.price} · v{pack.version}</p>
+            <p className="text-[9px] text-muted-foreground">or {formatLocalPrice(pack.priceCents, currency)} · v{pack.version}</p>
           </div>
           {owned ? (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-energy/40 bg-energy/10 px-3 py-2 text-xs font-bold text-energy">
@@ -151,6 +164,26 @@ const EventPacks = () => {
   const [basket, setBasket] = useState<EventPack[]>([]);
   const [showBasket, setShowBasket] = useState(false);
   const [detail, setDetail] = useState<EventPack | null>(null);
+  // The cash price is a reference next to the credit price, so it has to be in
+  // the athlete's currency: the Market showed the same credits at £3.15 while
+  // every pack card said "or $24.99".
+  const [currency, setCurrency] = useState("USD");
+  const userId = user?.id;
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const cfg = await loadEconomyConfig();
+      let value = cfg.region.currency;
+      if (userId) {
+        const { data: settings } = await supabase
+          .from("user_settings").select("currency").eq("user_id", userId).maybeSingle();
+        if (settings?.currency) value = settings.currency;
+      }
+      if (active) setCurrency(value);
+    })();
+    return () => { active = false; };
+  }, [userId]);
 
   useEffect(() => {
     let active = true;
@@ -215,12 +248,25 @@ const EventPacks = () => {
   }, [packs, profile]);
 
   const sections = useMemo(() => {
-    return SECTION_LABELS.map((s) => ({
-      ...s,
-      items: s.key === "recommended"
-        ? recommended
-        : packs.filter((p) => !p.retired && p.sections.includes(s.key)).sort((a, b) => b.popularity - a.popularity).slice(0, 6),
-    })).filter((s) => s.items.length > 0);
+    // One card per pack across the whole page. Every section used to draw from
+    // the same pool, so "Open Water 1K — Beginner" appeared three times: as a
+    // recommendation, again under Most Popular, and again under Beginner
+    // Friendly. `recommended` is already ranked, so it is not re-sorted.
+    const seen = new Set<string>();
+    return SECTION_LABELS.map((s) => {
+      const pool =
+        s.key === "recommended"
+          ? recommended
+          : packs.filter((p) => !p.retired && p.sections.includes(s.key)).sort((a, b) => b.popularity - a.popularity);
+      const items = pool
+        .filter((p) => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        })
+        .slice(0, 6);
+      return { ...s, items };
+    }).filter((s) => s.items.length > 0);
   }, [packs, recommended]);
 
   const addToBasket = (pack: EventPack) => {
@@ -347,7 +393,7 @@ const EventPacks = () => {
                 <p className="text-xs font-display font-bold text-primary">
                   {detail.creditPrice.toLocaleString()} credits
                 </p>
-                <p className="text-[9px] text-muted-foreground">or {detail.price}</p>
+                <p className="text-[9px] text-muted-foreground">or {formatLocalPrice(detail.priceCents, currency)}</p>
               </div>
             </div>
 
@@ -579,6 +625,7 @@ const EventPacks = () => {
             {visible.slice(0, 60).map((p) => (
               <PackCard
                 key={p.id} pack={p} owned={owned.includes(p.id)} inBasket={basket.some((b) => b.id === p.id)}
+                currency={currency}
                 onOpen={() => setDetail(p)} onAdd={() => addToBasket(p)}
               />
             ))}
@@ -602,7 +649,7 @@ const EventPacks = () => {
               <div className="flex gap-3 overflow-x-auto no-scrollbar px-5 pb-1">
                 {packs.filter((p) => owned.includes(p.id)).map((p) => (
                   <div key={p.id} className="w-[240px] shrink-0">
-                    <PackCard pack={p} owned inBasket={false} onOpen={() => setDetail(p)} onAdd={() => {}} />
+                    <PackCard pack={p} owned inBasket={false} currency={currency} onOpen={() => setDetail(p)} onAdd={() => {}} />
                   </div>
                 ))}
               </div>
@@ -620,6 +667,7 @@ const EventPacks = () => {
                   <div key={p.id} className="w-[240px] shrink-0">
                     <PackCard
                       pack={p} owned={owned.includes(p.id)} inBasket={basket.some((b) => b.id === p.id)}
+                      currency={currency} sectionKey={s.key}
                       onOpen={() => setDetail(p)} onAdd={() => addToBasket(p)}
                     />
                   </div>
@@ -637,6 +685,7 @@ const EventPacks = () => {
               {visible.slice(0, 30).map((p) => (
                 <PackCard
                   key={p.id} pack={p} owned={owned.includes(p.id)} inBasket={basket.some((b) => b.id === p.id)}
+                  currency={currency}
                   onOpen={() => setDetail(p)} onAdd={() => addToBasket(p)}
                 />
               ))}

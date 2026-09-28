@@ -33,7 +33,7 @@ export const TYPE_META: Record<CosmeticType, { label: string; blurb: string }> =
   title: { label: "Titles", blurb: "The word under your name." },
   border: { label: "Borders", blurb: "The ring around your avatar." },
   background: { label: "Backdrops", blurb: "Behind your profile card." },
-  name_color: { label: "Name colours", blurb: "How your name reads." },
+  name_color: { label: "Name colors", blurb: "How your name reads." },
   effect: { label: "Effects", blurb: "Ambient flair on your profile." },
   badge: { label: "Badges", blurb: "Earned from chests and challenges." },
 };

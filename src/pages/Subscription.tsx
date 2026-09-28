@@ -104,7 +104,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
       )}
       {plan.entitlements.monthly_credit_allowance > 0 && (
         <p className="mt-3 text-[11px] text-muted-foreground">
-          Rollover limit: {plan.credit_rollover_limit} credits (configurable).
+          Unused credits roll over, up to {plan.credit_rollover_limit}.
         </p>
       )}
     </motion.section>

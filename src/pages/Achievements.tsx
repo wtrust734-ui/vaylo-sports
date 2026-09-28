@@ -81,9 +81,14 @@ const builtInAchievements = [
   { id: "10_friends", title: "Popular", desc: "Have 10 friends", icon: "crown", check: (d: AchievementStats) => d.friends >= 10 },
   { id: "mental_owner", title: "Mental Gym Owner", desc: "Purchase Mental Gym", icon: "brain", check: (d: AchievementStats) => d.purchases.includes("mental_gym") },
   { id: "form_owner", title: "Form Analyst", desc: "Purchase Form Analysis", icon: "target", check: (d: AchievementStats) => d.purchases.includes("form_analysis") },
-  { id: "coach_owner", title: "Coach Pro", desc: "Purchase Coach Pro", icon: "star", check: (d: AchievementStats) => d.purchases.includes("coach_pro") },
-  { id: "pro_sub", title: "Pro Athlete", desc: "Subscribe to Pro", icon: "crown", check: (d: AchievementStats) => d.purchases.includes("pro") },
-  { id: "min_sub", title: "Minimum Athlete", desc: "Subscribe to Minimum", icon: "shield", check: (d: AchievementStats) => d.purchases.includes("minimum") },
+  // The four achievements below used to name products the app no longer sells
+  // — "Coach Pro", "Pro" and "Minimum" tiers — so they could never fire. They
+  // now check product ids that actually exist, which is what user_purchases
+  // is written with. Coach is per-prompt, not a product, and already has its
+  // own message-count achievements, so that one is gone rather than repointed.
+  { id: "injury_owner", title: "Injury Manager", desc: "Unlock Injury Management", icon: "shield", check: (d: AchievementStats) => d.purchases.includes("injury_management") },
+  { id: "credit_sub", title: "Recurring Athlete", desc: "Subscribe to the credit plan", icon: "crown", check: (d: AchievementStats) => d.purchases.includes("credit_monthly") },
+  { id: "unlimited_sub", title: "All In", desc: "Subscribe to Unlimited", icon: "crown", check: (d: AchievementStats) => d.purchases.includes("unlimited_monthly") },
   { id: "first_meal", title: "Fuel Up", desc: "Log your first meal", icon: "flame", check: (d: AchievementStats) => d.meals >= 1 },
   { id: "25_meals", title: "Nutrition Tracker", desc: "Log 25 meals", icon: "flame", check: (d: AchievementStats) => d.meals >= 25 },
   { id: "100_meals", title: "Diet Master", desc: "Log 100 meals", icon: "crown", check: (d: AchievementStats) => d.meals >= 100 },
@@ -133,7 +138,7 @@ const builtInAchievements = [
   { id: "10_streak", title: "10 Day Fire", desc: "10-day streak", icon: "flame", check: (d: AchievementStats) => d.streak >= 10 },
   { id: "first_purchase", title: "First Purchase", desc: "Buy something from the Market", icon: "shopping", check: (d: AchievementStats) => d.purchases.length >= 1 },
   { id: "3_purchases", title: "Collector", desc: "Make 3 purchases", icon: "shopping", check: (d: AchievementStats) => d.purchases.length >= 3 },
-  { id: "all_features", title: "Feature Complete", desc: "Own all individual features", icon: "crown", check: (d: AchievementStats) => ["form_analysis", "coach_pro", "mental_gym"].every((f) => d.purchases.includes(f)) },
+  { id: "all_features", title: "Feature Complete", desc: "Own all individual features", icon: "crown", check: (d: AchievementStats) => ["form_analysis", "mental_gym", "injury_management", "nutrition_pack"].every((f) => d.purchases.includes(f)) },
   { id: "first_review", title: "Self Reflector", desc: "Complete a post-event review", icon: "award", check: (d: AchievementStats) => d.reviews >= 1 },
   { id: "10_reviews", title: "Review Expert", desc: "10 post-event reviews", icon: "award", check: (d: AchievementStats) => d.reviews >= 10 },
   { id: "hrv_tracker", title: "HRV Tracker", desc: "Log HRV 5 times", icon: "heart", check: (d: AchievementStats) => d.hrvLogs >= 5 },

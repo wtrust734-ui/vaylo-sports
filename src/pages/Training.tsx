@@ -1136,7 +1136,7 @@ const Training = () => {
         <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           className="mx-5 mb-5 bg-gradient-card border border-primary/30 rounded-2xl p-5 shadow-card text-center">
           <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}><Dumbbell size={32} className="mx-auto text-primary mb-3" /></motion.div>
-          <h3 className="font-display font-bold text-lg">No Training Plan Yet</h3>
+          <h3 className="font-display font-bold text-lg">No training plan yet</h3>
           <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first personalised plan to get started.</p>
           <motion.button onClick={() => setShowCreate(true)} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
             className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
@@ -1158,7 +1158,7 @@ const Training = () => {
           <div className="flex gap-2 mt-4">
             <motion.button onClick={() => navigate("/workouts")} whileTap={{ scale: 0.98 }}
               className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
-              <Play size={18} /> Start Workout
+              <Play size={18} /> Start workout
             </motion.button>
             <motion.button onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }} whileTap={{ scale: 0.98 }}
               className="flex items-center justify-center gap-1 bg-card border border-border px-3 py-3 rounded-xl hover:border-primary/20 transition-colors">

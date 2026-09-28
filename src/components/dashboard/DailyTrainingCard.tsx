@@ -178,7 +178,7 @@ const DailyTrainingCard = () => {
                 <Dumbbell size={20} className="text-primary-foreground" />
               </span>
             </motion.div>
-            <h3 className="font-display font-bold text-lg mt-3">No Training Plan Yet</h3>
+            <h3 className="font-display font-bold text-lg mt-3">No training plan yet</h3>
             <p className="text-xs text-muted-foreground mt-1 mb-4">Create a plan to see your daily schedule</p>
             <motion.button onClick={() => navigate("/training")} whileTap={{ scale: 0.98 }}
               className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow border border-white/10 text-sm">

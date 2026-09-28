@@ -224,7 +224,7 @@ const Workouts = () => {
           {!showNew ? (
             <motion.button onClick={() => setShowNew(true)} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
               className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
-              <Plus size={18} /> Start Workout
+              <Plus size={18} /> Start workout
             </motion.button>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
