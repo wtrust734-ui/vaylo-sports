@@ -401,3 +401,207 @@ column that doesn't exist.
   client; it is in the registry and is counted by the verification pass.
 - The guard test was itself tested: removing an entry, or renaming a column to one
   that doesn't exist, makes it fail with the exact table named.
+
+## Audit round, 2026-09-27 — what was broken and what changed
+
+Migrations `20260927150000` … `20260927190000`, all applied. Every claim below
+was checked against the live project; the checks are quoted so they can be
+re-run.
+
+### 1. No subscription could ever be bought, and the free trial never worked
+
+The headline defect, and it was invisible from the app — the button just failed.
+`subscriptions.plan_type` still carried its legacy CHECK:
+
+```
+CHECK (plan_type = ANY (ARRAY['free','minimum','pro','elite']))
+```
+
+but both writers had moved on. `activate_subscription()` sets
+`plan_type = subscription_plans.plan_key`, whose live values are `credit` and
+`unlimited`; `grant_unlimited_trial()` wrote `trial`. Every insert raised
+`23514 ... violates check constraint "subscriptions_plan_type_check"`. That is
+why all three rows in the table read `free`/`free`/`provider='none'` — nothing had
+ever completed a write.
+
+Found by simulating a purchase inside a rolled-back transaction rather than by
+reading the code. The constraint now matches the client's `PlanKey` union
+(`free | credit | unlimited`, legacy values kept so old rows still validate), and
+the trial writes `plan_type = 'unlimited'` to mirror `plan_key` exactly as
+`activate_subscription` does.
+
+Live proof, one transaction, rolled back:
+
+```
+activate_subscription   {"ok":true,"plan_key":"unlimited","expires_at":"…+1 month"}
+entitlements            plan=unlimited status=active unlimited=true
+cancel                  {"ok":true,"access_until":"…","cancel_at_period_end":true}
+status after cancel     active          ← the paid period survives cancellation
+unlimited after period  false status=expired
+```
+
+`subscriptions_user_id_key` (the `UNIQUE (user_id)` that `ON CONFLICT` needs) does
+exist, so the constraint was the only obstacle.
+
+### 2. Cancelling revoked time the user had already paid for
+
+`cancel_my_subscription()` set `status = 'cancelled'` immediately and *then*
+returned `access_until = expires_at`. Since `has_unlimited_credits()` requires a
+live status, access died at once while the response claimed otherwise. It now
+keeps the live status and sets `cancel_at_period_end`, revoking immediately only
+when there is no future `expires_at` to honour.
+
+### 3. The 7-day Unlimited trial never expired, and repeated
+
+`grant_unlimited_trial` was the **only** object in the entire schema that
+mentioned `trial_ends_at`; nothing read it. It also never set `expires_at`, so the
+generic expiry path (which only inspects `active` rows) could not catch it, and
+the client treats `status = 'trial'` as live. One tap bought unlimited credits
+permanently. The `trial_already_used` branch was unreachable too — the preceding
+`status <> 'free'` check returned first — so the one-trial-per-account guarantee
+its comment advertised was not enforced.
+
+Trials now set both `trial_ends_at` and `expires_at`, are refused once
+`trial_ends_at` is non-null, and `has_unlimited_credits()` /
+`get_my_entitlements()` both expire them:
+
+```
+trial #1   {"ok":true,"days":7}
+trial #2   {"ok":false,"error":"trial_already_used"}
+trial ended: unlimited=false  status=expired
+```
+
+`has_unlimited_credits()` also had a second, quieter problem: it accepted
+`trialing`/`renewing` (which nothing writes) and not `trial` (which the trial
+writes), so a trial user was shown Unlimited by `get_my_entitlements()` while the
+server charged credits. Both lists are now aligned.
+
+### 4. Event Packs were free, and the server had no price to check
+
+`EventPacks.tsx` `checkout()` looped `claimEventPack(p)` over the basket with no
+payment step, and `claim_event_pack` — `SECURITY DEFINER`, executable by `anon` —
+stored `p_price_cents` straight from the caller and granted ownership
+unconditionally. `select count(*) from event_packs` returned **0**, so there was
+nothing server-side to validate against; the packs in
+`src/config/eventPacks.ts` are genuinely priced ($12.99–$59.99).
+
+The catalog is now seeded (648 rows) by `scripts/gen-event-packs-sql.cjs`
+(`npm run gen:packs`, generated from the client list so it cannot drift), and the
+function reads identity *and* price from it, ignoring the wire arguments while
+keeping the signature so deployed clients do not break. A priced pack requires a
+verified `user_purchases` row — the only writer of which is `process-purchase`:
+
+```
+claim_event_pack('ep_1')  →  Purchase required for this event pack
+```
+
+**Product consequence, deliberate:** Event Packs are now unbuyable until Play
+Billing is wired to that screen. The screen says so plainly ("Pack purchases
+aren't live yet — nothing has been charged") rather than reporting a declined
+card. Selling them needs the Play service-account secrets, which are still unset.
+
+### 5. 24 SECURITY DEFINER functions were reachable without signing in
+
+Every one carried the default PUBLIC grant (`=X/postgres`) that `create function`
+applies and nothing had revoked. Most are guarded by `auth.uid()`, but
+`is_group_member` / `is_community_member` / `is_team_member` take an arbitrary
+user id and answer about *other* people, and `has_role(_user_id, _role)` is a
+straight admin-membership oracle for any uuid. Two admin policies were scoped to
+`public` — that is what forced `has_role` open — so they were narrowed to
+`authenticated` (their public read policies are untouched) and the grant removed.
+
+Anon-executable definer functions: **21 → 1**. The survivor is `top_referrers`,
+which the public `/referral-leaderboard` route genuinely needs. The seven trigger
+helpers lost their grants entirely, which changes nothing: trigger invocation does
+not consult EXECUTE.
+
+Two self-service RPCs were closed at the same time. `award_points(p_points, …)`
+let the caller name its own score (500 per call, 2500 per 24h) into
+`points_events`, which is exactly what the leaderboard ranks on;
+`award_activity_points()` is the same shape. Neither has a live caller —
+`award_activity_points` appears nowhere at all, and the `awardPoints` wrapper in
+`src/lib/scoring.ts` is exported but never invoked — so both now require the
+service role. Granting them back is one line, and it should be done as part of
+moving scoring server-side, because the amount has to be decided there for the
+number to mean anything.
+
+### 6. Performance and integrity cleanups
+
+- **147 RLS policies** were re-evaluating `auth.uid()` per row;
+  `20260927190000` rewrote them to `(select auth.uid())`, which Postgres hoists
+  into an InitPlan. Written as a catalogue walk, and idempotent by construction
+  (it unwraps before it re-wraps, so re-running cannot nest selects). Enforcement
+  was re-proved afterwards: as user B, `own=1 other=0 total_visible=1` on
+  `profiles`. Advisors: `auth_rls_initplan` **147 → 0**.
+- **22 foreign keys had no covering index.** All added; the
+  `unindexed_foreign_keys` advisor is now clear. (This raises the
+  `unused_index` count, because brand-new indexes on a table nobody has written
+to have obviously never been used. That lint is noise at this traffic level and
+  should not be "fixed" by dropping them.)
+- **`tg_health_connections_touch`** was the only function without a pinned
+  `search_path`; it now sets `public`.
+- **`hasEntitlement()` in `_shared/guard.ts`** treated `unlimited_credits = true`
+  as proof of payment and ignored `expires_at`. Since `cancel_my_subscription()`
+  leaves that flag set and nothing rewrites an `active` row when it lapses, a
+  cancelled or expired plan kept unlocking paid features. It now checks status
+  **and** `expires_at`, matching `has_unlimited_credits()`.
+- **Android backup was shipping the session off-device.** The WebView persists
+  the Supabase refresh token in app-private storage, and the manifest default
+  (`allowBackup="true"`, no extraction rules) uploads that to Google Drive. Now
+  `allowBackup="false"` plus `data_extraction_rules.xml` (Android 12+, which is
+  what covers device-to-device transfer) and `full_backup_content.xml` (API ≤30).
+  Verified in the built APK with `aapt2 dump xmltree`.
+
+### 7. Configuration and documentation that had drifted
+
+- `verify_jwt = false` for `og-image` and `link-preview` existed **only in a code
+  comment**, so a plain `supabase functions deploy` would have 401'd every shared
+  link. Both are now declared in `config.toml`.
+- `capacitor.config.ts` still claimed the app was "a pure web app", that nothing
+  imported Capacitor and that `@capacitor/cli` was not a dependency. All three
+  were false; the header now describes the shell that actually ships.
+- `index.html` carried two stale `TODO`s (one asking to set a title that was
+  already set) and shipped "An app for winners" as its description in every
+  og/twitter tag. Replaced with a factual description.
+- `nativeOAuth.ts` pointed at a "capacitor.config deepLink section" that does not
+  exist; the comment now names where the scheme must actually be declared.
+
+### Still open after this round (needs you, not code)
+- **`OPENAI_API_KEY`** — every AI function returns
+  `AI service is not configured` (500). Unchanged by this round.
+- **Play Billing secrets** (`GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`,
+  `GOOGLE_ANDROID_PACKAGE_NAME`, `PAYMENT_MODE=store`) — without them
+  `verifyPlayPurchase` cannot confirm anything, so Event Packs stay unbuyable.
+- **Release keystore** — the `.aab` is debug-signed and not Play-uploadable,
+  and `release` still builds with `minifyEnabled false`.
+- **No `@capacitor/*` plugin package is installed.** `node_modules/@capacitor`
+  holds only `android`, `cli` and `core`, and `android/app/capacitor.build.gradle`
+  has an empty `dependencies {}` block — so no official plugin's native code is in
+  the APK. `loadPlugin()` swallows the failure and falls back to web behaviour,
+  which means: the hardware back button never reaches `NativeBackButton`;
+  **`awaitOAuthDeepLink` waits out its full 5-minute timeout and rejects** because
+  neither `@capacitor/app` nor `@capacitor/browser` exists, so native social
+  sign-in cannot complete; and the `SplashScreen` / `StatusBar` / `Keyboard`
+  blocks in `capacitor.config.ts` configure plugins that are not there. Also note
+  `loadPlugin("in-app-purchases")` builds the specifier
+  `@capacitor/in-app-purchases`, which is not a published package. Fixing this
+  means adding the plugin dependencies, `npx cap sync android`, and rebuilding the
+  APK — a dependency decision, so it is called out rather than made silently.
+- **Auth URLs still point at localhost.** `site_url = "http://localhost:8080"` and
+  the redirect allow-list is dev-only, so password-reset mail links to a machine
+  no user has. `vaylosports.com` does not resolve yet, so the real domain could
+  not be filled in; the native origins (`com.vaylosports.app://auth-callback`,
+  `https://localhost`, `capacitor://localhost`) have been added so at least the
+  app's own OAuth callback is permitted.
+- **Email confirmation is off** (`[auth.email] enable_confirmations = false`,
+  documented in `config.toml`) — anyone can register an address they do not own.
+  Turning it on needs SMTP first, or sign-up breaks on the built-in mail rate
+  limit.
+- **Leaked-password protection is disabled** in Auth settings.
+- **`brands`, `brand_placements`, `brand_metrics`** have RLS enabled and zero
+  policies. That is deny-all by design — sponsored content is served through the
+  `sponsored_placements()` definer RPC — not a leak.
+- **34 → 24 `multiple_permissive_policies`** remain (the reward tables' duplicates
+  were resolved by the policy-role narrowing). Merging the rest changes
+  authorisation semantics for no measurable gain at this traffic level, so they
+  are left alone deliberately.

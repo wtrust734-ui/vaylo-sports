@@ -24,6 +24,20 @@ additional_redirect_urls = [
   "http://localhost:5173",
   "http://127.0.0.1:8080",
   "http://127.0.0.1:5173",
+  # --- Native shell -------------------------------------------------------
+  # src/lib/nativeOAuth.ts sends the provider back to
+  # com.vaylosports.app://auth-callback. GoTrue rejects any redirect that is not
+  # on this list, and the scheme is also matched by the VIEW/BROWSABLE
+  # intent-filter in android/app/src/main/AndroidManifest.xml. Without these
+  # three entries native sign-in can never complete, however correct the app is.
+  "com.vaylosports.app://auth-callback",
+  # Android serves the Capacitor bundle from https://localhost; iOS uses
+  # capacitor://localhost. Both are the app's own origin, not a public site.
+  "https://localhost",
+  "capacitor://localhost",
+  # TODO before launch: add the deployed web origin (and its www alias) here and
+  # set site_url to it. Until then every password-reset link points at
+  # localhost, a machine no user has.
 ]
 
 # Email confirmation is OFF while no SMTP provider is configured.
