@@ -24,6 +24,7 @@
     "typecheck:functions": "tsc --noEmit -p tsconfig.functions.json",
     "ui:audit": "npm run build && node scripts/ui-audit.mjs",
     "ui:check": "npm run build && node scripts/ui-audit.mjs --check",
+    "security:check": "node scripts/security-check.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

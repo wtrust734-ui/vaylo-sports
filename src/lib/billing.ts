@@ -54,6 +54,22 @@ export interface PurchaseResult {
   };
 }
 
+/**
+ * True when the server refused because no payment provider is wired yet, rather
+ * than because anything went wrong.
+ *
+ * Until Play Billing (or a web provider) is live, process-purchase refuses
+ * every product priced in cents with `code: "payments_not_available"`. That is
+ * a fact about the app, not a failure, and the difference matters at the three
+ * call sites that would otherwise shout "Purchase failed" with a red toast the
+ * first time an athlete tries to spend money.
+ */
+export const isPaymentsUnavailable = (result: PurchaseResult): boolean =>
+  !result.ok && (result.data as { code?: string } | undefined)?.code === "payments_not_available";
+
+export const PAYMENTS_UNAVAILABLE_MESSAGE =
+  "Purchases aren't available yet. Credits you earn in the app still unlock Mental Gym, Form Analysis, Injury Management and Event Packs.";
+
 export interface BillingProvider {
   id: "web" | "store";
   label: string;

@@ -5,7 +5,7 @@ import BottomSheet from "@/components/ui/bottom-sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { purchaseItems } from "@/lib/billing";
+import { purchaseItems, isPaymentsUnavailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { COINS_PER_CREDIT } from "@/config/coins";
 import { planTopUp, type BundleOffer } from "@/lib/topUp";
@@ -61,6 +61,11 @@ export default function CoinTopUpSheet({
     setBusy(null);
     if (!result.ok) {
       if (!result.cancelled) hapticWarning();
+      if (isPaymentsUnavailable(result)) {
+        toast({ title: "Top-ups aren't available yet", description: PAYMENTS_UNAVAILABLE_MESSAGE });
+        onClose();
+        return;
+      }
       toast({
         title: result.cancelled ? "Purchase cancelled" : "Purchase failed",
         description: result.cancelled ? undefined : result.error,

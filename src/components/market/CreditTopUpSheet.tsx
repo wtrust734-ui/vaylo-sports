@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Zap, Sparkles, X, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { purchaseItems } from "@/lib/billing";
+import { purchaseItems, isPaymentsUnavailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { formatLocalPrice } from "@/lib/creditEconomy";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +55,14 @@ const CreditTopUpSheet = () => {
     setBusyId(null);
     if (!result.ok) {
       if (!result.cancelled) hapticWarning();
+      // No payment provider yet is not a failure of this sheet, and saying
+      // "Purchase failed" over the top of a gap the athlete was trying to close
+      // is the worst version of this screen.
+      if (isPaymentsUnavailable(result)) {
+        toast({ title: "Top-ups aren't available yet", description: PAYMENTS_UNAVAILABLE_MESSAGE });
+        completeTopUp(null);
+        return;
+      }
       toast({
         title: result.cancelled ? "Purchase cancelled" : "Purchase failed",
         description: result.cancelled ? undefined : result.error,

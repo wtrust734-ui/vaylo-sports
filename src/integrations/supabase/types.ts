@@ -3839,6 +3839,10 @@ export type Database = {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: number
       }
+      // Service-role only. Exists because profiles.infinite_credits is money and
+      // is covered by guard_profile_credits, which the service role does not
+      // bypass — only a function that sets the flag can write it.
+      grant_infinite_credits: { Args: { p_user: string; p_until: string | null }; Returns: undefined }
       grant_unlimited_trial: { Args: { p_days?: number }; Returns: Json }
       has_role: {
         Args: {

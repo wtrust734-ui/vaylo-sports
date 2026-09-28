@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
  */
 type LooseClient = Omit<SupabaseClient, "rpc"> & {
   rpc: (
-    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment",
+    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment" | "grant_infinite_credits",
     args?: Record<string, unknown>,
   ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 };
@@ -268,6 +268,31 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: `Unknown product: ${productId}` }), { status: 400, headers: corsHeaders });
       }
 
+      // -------------------------------------------------------------------------
+      // A product that costs MONEY may only be granted with proof of payment.
+      //
+      // PAYMENT_MODE=test means there is no payment step, so anything priced in
+      // cents is granted for the asking — one HTTP call bought 650 credits,
+      // twice in a row, from an account holding 50. Feature unlocks and event
+      // packs are different: they are paid for with credits the athlete earned,
+      // and the credit balance is the authority, so they still work here.
+      //
+      // The honest state of affairs is that no money can be collected yet, so
+      // refusing is not a revenue decision — it is the difference between a
+      // catalogue and an open wallet. Set PAYMENT_MODE=store once Play Billing
+      // is live and this branch stops applying.
+      // -------------------------------------------------------------------------
+      if (priceCents > 0 && PAYMENT_MODE !== "store") {
+        return new Response(
+          JSON.stringify({
+            error: "Paid purchases are not available yet. Credits earned in the app can still be spent on unlocks and Event Packs.",
+            code: "payments_not_available",
+            product_id: productId,
+          }),
+          { status: 503, headers: corsHeaders }
+        );
+      }
+
       // Offers and the first-purchase bundle are one redemption per account.
       const oneTime = ONE_TIME_PRODUCTS.includes(productId) || productId.startsWith("offer_");
       if (oneTime) {
@@ -478,10 +503,21 @@ Deno.serve(async (req) => {
         : infiniteGrant.period === "year"
         ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      await supabase.from("profiles").update({
-        infinite_credits: true,
-        infinite_credits_until: until,
-      }).eq("user_id", user.id);
+      // Through the RPC, not a direct update: `profiles.infinite_credits` is
+      // read back as the spendable balance for every credit-priced product, so
+      // the guard trigger covers it and the service role does not bypass
+      // triggers. A direct update here fails the purchase at the last step,
+      // after the credits were already granted.
+      const { error: infiniteErr } = await supabase.rpc("grant_infinite_credits", {
+        p_user: user.id,
+        p_until: until,
+      });
+      if (infiniteErr) {
+        return new Response(
+          JSON.stringify({ error: `Unlimited grant failed: ${infiniteErr.message}` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
     }
 
     await supabase.from("basket_items").delete().eq("user_id", user.id);

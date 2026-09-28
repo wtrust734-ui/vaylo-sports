@@ -4,7 +4,7 @@ import { ShoppingCart, Zap, Coins, X, Infinity as InfinityIcon, Gift, Flame, Clo
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { purchaseItems } from "@/lib/billing";
+import { purchaseItems, isPaymentsUnavailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import {
   loadEconomyConfig,
@@ -162,6 +162,13 @@ const Market = () => {
     );
     if (!result.ok) {
       if (!result.cancelled) hapticWarning();
+      // Until a payment provider is live, every basket is refused by design.
+      // Saying so plainly beats a red "Purchase failed" over a button the
+      // athlete pressed deliberately.
+      if (isPaymentsUnavailable(result)) {
+        toast({ title: "Purchases aren't available yet", description: PAYMENTS_UNAVAILABLE_MESSAGE });
+        return;
+      }
       toast({
         title: result.cancelled ? "Purchase cancelled" : "Purchase failed",
         description: result.cancelled ? undefined : result.error,
