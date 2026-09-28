@@ -443,7 +443,7 @@ const Auth = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">Vaylo Sports</span>{' '}<span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">Sports</span>
+            <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">Vaylo</span>{' '}<span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">Sports</span>
           </motion.h1>
           <motion.p
             className="text-sm text-muted-foreground mt-2"
