@@ -26,7 +26,7 @@ Repository: this folder. CLI: `supabase` 2.117.0, already linked to that project
 | Edge functions | 14 exist in the repo and are deployed: `ai-analyze`, `ai-service`, `coach-chat`, `delete-account`, `generate-plan`, `learning-recommend`, `link-preview`, `manage-subscription`, `og-image`, `open-chest`, `process-purchase`, `video-form-analysis`, `wearable-oauth`, `weekly-review`. `og-image` and `link-preview` are the two public ones (`verify_jwt = false`, now declared in `config.toml` rather than only in a code comment) |
 | `config.toml` | `project_id = "vvwhausdjzdmsyxekrcl"` — matches `.env`, so CLI commands cannot hit the wrong project. It now also declares the auth URLs (§4), pushed with `supabase config push` |
 | Auth URL config | **Applied.** `site_url` moved off the dead `localhost:3000` to `localhost:8080`, redirect allow-list set for the dev ports. 11 unrelated hosted settings left untouched (verified with `supabase config diff`) |
-| Edge secrets | `PAYMENT_MODE=test` set. **No AI keys yet:** `OPENAI_API_KEY` and `GOOGLE_API` are unset, so the AI features error (and refund their credits) until you add one |
+| Edge secrets | `PAYMENT_MODE=disabled` set. **No AI keys yet:** `OPENAI_API_KEY` and `GOOGLE_API` are unset, so the AI features answer "not switched on yet" (and refund their credits) until you add one |
 | Live end-to-end check | **Done, then cleaned up.** Sign-up bootstrapped a profile with 20 starter credits, cross-user reads and writes were refused, and the 18+ sponsorship gate was proven blocked for a non-adult and served for an adult. All test rows deleted — every user table re-counted at 0 |
 | Frontend hosting | **Not done.** Supabase does not host the frontend; `dist/` has not been published anywhere, so the app is not yet reachable by anyone but you |
 
@@ -240,7 +240,7 @@ confusing failures.
 
 ## 5. Secrets and function deploys — ✅ applied, except the AI keys
 
-> **Status: done.** `PAYMENT_MODE=test` is set on the project (verified with
+> **Status: done.** `PAYMENT_MODE=disabled` is set on the project (verified with
 > `supabase secrets list`), and the four functions whose code changed were
 > redeployed with `supabase functions deploy … --use-api` — `--use-api` bundles
 > server-side, which is why this worked without Docker. All 11 functions are
@@ -251,7 +251,7 @@ Functions get `SUPABASE_URL`, `SUPABASE_ANON_KEY` and
 `SUPABASE_SERVICE_ROLE_KEY` automatically. The rest you must set:
 
 ```bash
-supabase secrets set PAYMENT_MODE=test
+supabase secrets set PAYMENT_MODE=disabled     # only `store` accepts money; see §5
 supabase secrets set OPENAI_API_KEY=sk-...     # when you have one
 supabase secrets set GOOGLE_API=...            # when you have one
 ```
@@ -262,7 +262,7 @@ Which function needs what, verified by reading each entry point:
 |---|---|---|
 | `ai-service`, `ai-analyze`, `coach-chat`, `generate-plan`, `weekly-review`, `learning-recommend` | `OPENAI_API_KEY` | The AI features return an error. Coach chat, weekly review, plan generation, form analysis and mental/nutrition/tactics advice all stop |
 | `video-form-analysis` | `GOOGLE_API` | Video analysis returns "not configured" |
-| `process-purchase` | `PAYMENT_MODE` (defaults to `test`) | N/A |
+| `process-purchase` | `PAYMENT_MODE` (defaults to `disabled`) | Any product priced in money is refused with `code: payments_not_available`; credit-paid unlocks and Event Packs are unaffected |
 | `delete-account`, `open-chest`, `manage-subscription` | service role only | N/A |
 
 All AI calls go through one module, `supabase/functions/_shared/openai.ts`,
@@ -410,8 +410,10 @@ These are known gaps, not oversights — each is tracked in the docs named:
   `_shared/openai.ts`) is in place.
 - **Payments: Google Play Billing is the chosen provider.** The server-side
   verifier is implemented (`_shared/playBilling.ts` + `verifyStorePurchase()`),
-  but `PAYMENT_MODE=test` still keeps checkout granting without verification
-  until Play Console products + the service-account secrets are in place and
+  and `PAYMENT_MODE=disabled` now refuses every product priced in money rather
+  than trusting the caller — a forged Play receipt buys nothing
+  (`security:check` asserts it). Checkout takes money once Play Console
+  products + the service-account secrets are in place and
   `supabase secrets set PAYMENT_MODE=store` is run. Full runbook:
   `CAPACITOR.md` §3. Don't sell anything real until that cutover is done.
 - **Sponsored surfaces are empty** by design — no brand rows exist. See

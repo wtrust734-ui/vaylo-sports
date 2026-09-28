@@ -176,6 +176,31 @@ for (const [name, body] of [
   check("An achievement cannot claim its own date or share count", ok, detail);
 }
 
+{
+  // A caller who invents a Play receipt must not buy credits with it. This is the
+  // path that was open while PAYMENT_MODE=test: the function returned
+  // `verified: true` without looking at anything, so one HTTP call with a
+  // made-up token granted 650 credits. The forged token below is well-formed
+  // and names a real product, so only a real verification can reject it.
+  const before = (await (await fetch(`${URL_BASE}/rest/v1/profiles?select=credits&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.credits;
+  const r = await fetch(`${URL_BASE}/functions/v1/process-purchase`, {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({
+      items: [{ product_id: "pack_500", product_type: "credits" }],
+      platform: "android",
+      verification: {
+        reference: `security-check-${Date.now()}`,
+        receipt: JSON.stringify({ packageName: "app.vaylo.sports", productId: "pack_500", token: "forged" }),
+      },
+    }),
+  });
+  const t = (await r.text()).trim();
+  const after = (await (await fetch(`${URL_BASE}/rest/v1/profiles?select=credits&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.credits;
+  check("A forged Play receipt does not buy a credit pack", r.status === 503 && before === after,
+    `HTTP ${r.status} · balance ${before} -> ${after} · ${t.slice(0, 80)}`);
+}
+
 // ---------------------------------------------------------------------------
 // Official challenges (creator_id NULL) are content the whole app points at, so
 // no athlete may rewrite them. An update matching zero RLS rows resolves without

@@ -38,10 +38,17 @@ const corsHeaders = {
 // NOTE ON PAYMENT VERIFICATION: Google Play Billing is the store provider. In
 // PAYMENT_MODE=store the purchase token from the client is verified in
 // `verifyStorePurchase()` below against the Google Play Developer API
-// (see _shared/playBilling.ts); PAYMENT_MODE=test keeps web checkout trusted.
+// (see _shared/playBilling.ts); PAYMENT_MODE=test keeps web checkout trusted;
+// anything else — including the default — takes no money at all.
 // See CAPACITOR.md §3 for the Play Console + secrets runbook.
 
-const PAYMENT_MODE = Deno.env.get("PAYMENT_MODE") ?? "test";
+// Modes: `store` verifies a Google Play token, `test` trusts the client (local
+// work only, and it grants nothing that is priced in money), anything else is
+// inert. The default used to be `test`, which meant losing the secret silently
+// restored a mode that trusts the client — a footgun aimed at production, since
+// a missing secret is exactly what a deploy goes wrong on. Failing shut is the
+// better default: nobody is charged, and the reason is in the log.
+const PAYMENT_MODE = Deno.env.get("PAYMENT_MODE") ?? "disabled";
 
 type Verification =
   | { verified: true; reference: string }
@@ -74,8 +81,10 @@ interface SpecialOfferRow {
 /**
  * Verifies a purchase before anything is granted.
  *
- * `test` mode (the current default) keeps the web app fully working: the client
- * is trusted and the reference is optional.
+ * `test` mode keeps the web app working during local development: the client is
+ * trusted and the reference is optional. It is not the default, and it is never
+ * used for a product priced in money — the caller only reaches this function for
+ * those, and the price loop refuses them again on the way out.
  *
  * `PAYMENT_MODE=store` is the native Google Play Billing path. The client buys
  * through Play Billing and sends the purchase token + a JSON receipt
@@ -93,6 +102,18 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
 
   if (PAYMENT_MODE === "test") {
     return { verified: true, reference: reference || `test:${Date.now()}` };
+  }
+
+  if (PAYMENT_MODE !== "store") {
+    // Fail shut on anything priced in money. Reached only for a basket that
+    // contains a money-priced product (see the call site), so this can never
+    // block a credit-paid unlock.
+    console.error(`PAYMENT_MODE is "${PAYMENT_MODE}"; no payment path is enabled`);
+    return {
+      verified: false,
+      error: "Paid purchases are not available yet. Credits earned in the app can still be spent on unlocks and Event Packs.",
+      status: 503,
+    };
   }
 
   if (!reference || !body.verification?.receipt) {
@@ -175,15 +196,31 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as RequestBody;
     const items = Array.isArray(body?.items) ? body.items : [];
 
-    const verification = await verifyStorePurchase(items, body);
-    // Explicit comparison rather than `!verification.verified`: the negation form
-    // does not narrow this union under the compiler options used here, so
-    // `verification.error` would not type-check on the branch that guarantees it.
-    if (verification.verified === false) {
-      return new Response(
-        JSON.stringify({ error: verification.error }),
-        { status: verification.status ?? 402, headers: corsHeaders }
-      );
+    // Payment verification is only meaningful for a basket that contains a
+    // product priced in money. A feature unlock or an Event Pack is paid for in
+    // credits the athlete earned, and the credit balance is the authority — it
+    // is checked per item below. Requiring a store receipt for those would make
+    // an in-app unlock unbuyable, which is the opposite of the intent.
+    //
+    // This predicate is deliberately coarse — it only decides whether to ask for
+    // proof. The authoritative price for every item is resolved in the loop
+    // below, and that loop is what refuses an unaffordable or unpriced basket.
+    const basketHasMoney = items.some((i) => {
+      const id = String((i as { product_id?: unknown } | null)?.product_id || "");
+      return PRODUCT_PRICES[id] != null || id.startsWith("offer_");
+    });
+
+    if (basketHasMoney) {
+      const verification = await verifyStorePurchase(items, body);
+      // Explicit comparison rather than `!verification.verified`: the negation
+      // form does not narrow this union under the compiler options used here, so
+      // `verification.error` would not type-check on the branch that guarantees it.
+      if (verification.verified === false) {
+        return new Response(
+          JSON.stringify({ error: verification.error, code: "payments_not_available" }),
+          { status: verification.status ?? 402, headers: corsHeaders }
+        );
+      }
     }
 
     // Store servers retry, and a client can retry a timeout it never saw fail.
