@@ -41,7 +41,17 @@ const MetricsHub = () => {
   };
 
   const analysis = analyzeLoads(loads);
-  const recoveryAvg = recovery.length ? Math.round(recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length) : 50;
+  // With no logs there is no readiness, no ratio and no injury risk — only the
+  // absence of data. Defaulting to 50 coloured the tile red and made a new
+  // athlete look like they were in trouble on day one, and a ratio of 0 counts
+  // as "undertrained", so the risk tile said MODERATE out of nothing at all.
+  const hasRecovery = recovery.length > 0;
+  const hasLoads = loads.length > 0;
+  const NO_DATA = "—";
+  const MUTED = "text-muted-foreground";
+  const recoveryAvg = hasRecovery
+    ? Math.round(recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length)
+    : 0;
   const calsToday = meals.reduce((a, b) => a + (b.calories || 0), 0);
   const proteinToday = meals.reduce((a, b) => a + (b.protein_g || 0), 0);
   const carbsToday = meals.reduce((a, b) => a + (b.carbs_g || 0), 0);
@@ -76,12 +86,12 @@ const MetricsHub = () => {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   const cards = [
-    { label: "Readiness (7d avg)", value: `${recoveryAvg}/100`, color: recoveryAvg > 70 ? "text-primary" : recoveryAvg > 50 ? "text-energy" : "text-destructive" },
-    { label: "A:C Ratio", value: analysis.ratio.toFixed(2), color: analysis.ratio > 1.3 || analysis.ratio < 0.7 ? "text-energy" : "text-primary" },
-    { label: "Acute load", value: Math.round(analysis.acute), color: "text-foreground" },
+    { label: "Readiness (7d avg)", value: hasRecovery ? `${recoveryAvg}/100` : NO_DATA, color: !hasRecovery ? MUTED : recoveryAvg > 70 ? "text-primary" : recoveryAvg > 50 ? "text-energy" : "text-destructive" },
+    { label: "A:C Ratio", value: hasLoads ? analysis.ratio.toFixed(2) : NO_DATA, color: !hasLoads ? MUTED : analysis.ratio > 1.3 || analysis.ratio < 0.7 ? "text-energy" : "text-primary" },
+    { label: "Acute load", value: hasLoads ? Math.round(analysis.acute) : NO_DATA, color: hasLoads ? "text-foreground" : MUTED },
     { label: "Calories today", value: calsToday, color: "text-foreground" },
     { label: "Protein today", value: `${Math.round(proteinToday)}g`, color: "text-foreground" },
-    { label: "Injury risk", value: analysis.injuryRisk.toUpperCase(), color: analysis.injuryRisk === "high" ? "text-destructive" : analysis.injuryRisk === "moderate" ? "text-energy" : "text-primary" },
+    { label: "Injury risk", value: hasLoads ? analysis.injuryRisk.toUpperCase() : NO_DATA, color: !hasLoads ? MUTED : analysis.injuryRisk === "high" ? "text-destructive" : analysis.injuryRisk === "moderate" ? "text-energy" : "text-primary" },
   ];
 
   return (

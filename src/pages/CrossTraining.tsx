@@ -142,7 +142,11 @@ const CrossTraining = () => {
     const injuries = (dossier.injuries as { status?: string; body_part?: string }[] | undefined) || [];
     const activeInjuries = injuries.filter((i) => i.status !== "resolved");
     const recovery = (dossier.recovery as { readiness_score?: number | null }[] | undefined) || [];
-    const readinessAvg = recovery.length ? recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
+    // 65 is a ranking default, not a measurement: with no recovery logs we
+    // assume "fine" so nothing gets pushed into the recovery bucket. It is
+    // deliberately not shown to the athlete — see `hasRecovery` below.
+    const hasRecovery = recovery.length > 0;
+    const readinessAvg = hasRecovery ? recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
     const outcomeGoals = (dossier.outcomeGoals as { title: string; category?: string }[] | undefined) || [];
     const vpr = dossier.vpr as Record<string, number | undefined> | null | undefined;
 
@@ -195,6 +199,7 @@ const CrossTraining = () => {
       weakestBuckets,
       weakFocuses: Array.from(weakFocuses),
       readinessAvg: Math.round(readinessAvg),
+      hasRecovery,
       activeInjuries,
       outcomeGoals: outcomeGoals.slice(0, 2),
       picks: deduped,
@@ -216,7 +221,7 @@ const CrossTraining = () => {
           <Sparkles size={16} className="text-primary" />
           <span className="text-xs font-bold uppercase tracking-widest text-primary">For you</span>
           {dossierLoading && <span className="text-[10px] text-muted-foreground ml-auto">Loading your dossier…</span>}
-          {!dossierLoading && forYou && <span className="text-[10px] text-muted-foreground ml-auto">Readiness {forYou.readinessAvg}/100{forYou.activeInjuries.length ? ` · ${forYou.activeInjuries.length} active injury` : ""}</span>}
+          {!dossierLoading && forYou && <span className="text-[10px] text-muted-foreground ml-auto">{forYou.hasRecovery ? `Readiness ${forYou.readinessAvg}/100` : "No readiness logged"}{forYou.activeInjuries.length ? ` · ${forYou.activeInjuries.length} active injury` : ""}</span>}
         </div>
         {!dossierLoading && forYou ? (
           <>
@@ -250,7 +255,7 @@ const CrossTraining = () => {
                 );
               })}
             </div>
-            {forYou.readinessAvg < 50 && (
+            {forYou.hasRecovery && forYou.readinessAvg < 50 && (
               <p className="text-xs text-energy mt-3 flex items-center gap-1.5"><AlertTriangle size={12} /> Readiness is low — favour mobility & aerobic picks above; push hard sessions to next week.</p>
             )}
             {forYou.activeInjuries.length > 0 && (

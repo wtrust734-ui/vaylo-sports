@@ -109,8 +109,8 @@ const VPRPage = () => {
           <p className="text-muted-foreground mt-1">{archetype.name} — {archetype.description}</p>
         ) : (
           <p className="text-muted-foreground mt-1">
-            Archetype: <span className="font-semibold text-foreground">Undefined</span> — log at least {ARCHETYPE_MIN_METRICS} metrics across {ARCHETYPE_MIN_BUCKETS}+ areas.
-            <span className="ml-2 text-xs">({readiness.total}/{ARCHETYPE_MIN_METRICS} · {readiness.filledBuckets}/{ARCHETYPE_MIN_BUCKETS} areas)</span>
+            Archetype: <span className="font-semibold text-foreground">not set yet</span> — log at least {ARCHETYPE_MIN_METRICS} metrics across {ARCHETYPE_MIN_BUCKETS}+ areas.{' '}
+            <span className="text-xs">({readiness.total}/{ARCHETYPE_MIN_METRICS} logged · {readiness.filledBuckets}/{ARCHETYPE_MIN_BUCKETS} areas filled)</span>
           </p>
         )}
       </motion.div>

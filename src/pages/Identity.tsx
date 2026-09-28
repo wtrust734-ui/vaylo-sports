@@ -53,7 +53,9 @@ const Identity = () => {
             </>
           ) : (
             <>
-              <div className="text-5xl font-display font-bold mt-2 text-muted-foreground">Undefined</div>
+              {/* "Undefined" was the internal sentinel shown as the athlete's
+                  identity in 5xl type. Say what is actually true instead. */}
+              <div className="text-5xl font-display font-bold mt-2 text-muted-foreground">Not set yet</div>
               <p className="text-muted-foreground mt-3 max-w-xl">
                 Your archetype stays undefined until we have enough reliable stats to define it. Keep logging metrics across different tests — you need at least {ARCHETYPE_MIN_METRICS} metrics spanning {ARCHETYPE_MIN_BUCKETS}+ performance areas.
               </p>
