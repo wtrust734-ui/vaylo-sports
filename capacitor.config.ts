@@ -1,16 +1,23 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
- * Capacitor configuration — ready, not enabled.
+ * Capacitor configuration — the shell this app actually ships in.
  *
- * The app is still a pure web app: nothing imports Capacitor, `@capacitor/cli`
- * is not a dependency, and this file is inert until you follow CAPACITOR.md.
- * Keeping it here means the shell settings (identity, web dir, dark status bar,
- * keyboard behaviour) are decided and reviewed *before* the conversion, which is
- * the part that is easy to get wrong under time pressure.
+ * The Android project is real and generated: `android/` is tracked, the debug
+ * APK is built from it in CI, and `@capacitor/android` / `@capacitor/core` /
+ * `@capacitor/cli` are all dependencies. The non-negotiable part is `webDir`
+ * plus the appId/appName pair — changing appId invalidates every vendor OAuth
+ * redirect and breaks the deep-link scheme in nativeOAuth.ts.
  *
- * `webDir` points at Vite's default output. If you build with VITE_BASE=./ for
- * the native bundle, keep this as-is.
+ * The `plugins` block below only takes effect for plugins that are actually
+ * installed — they are added to the native build by `npx cap sync android`,
+ * which the seven `@capacitor/*` packages in package.json all are. Note that
+ * configuration alone does not make a plugin reachable from JS: `loadPlugin` in
+ * src/lib/platform.ts holds the static import registry that does.
+ *
+ * The native bundle is built with `npm run build:native` (Vite `--mode native`,
+ * which sets base './' so the WebView can load assets relatively). See
+ * CAPACITOR.md.
  */
 const config: CapacitorConfig = {
   appId: "com.vaylosports.app",

@@ -1,11 +1,12 @@
 // ============================================================================
 // PLATFORM
 // ----------------------------------------------------------------------------
-// The app runs on the web today and will later be wrapped in Capacitor. Nothing
-// here requires Capacitor to be installed: every native capability is detected
-// at runtime and degrades to the web behaviour, so this file is safe to ship now
-// and starts working the moment the native shell exists.
+// The same bundle runs on the web and inside the Capacitor shell. Every native
+// capability is detected at runtime and degrades to the web behaviour, so a
+// missing plugin is a soft failure rather than a crash.
 // ============================================================================
+
+import { registerPlugin } from "@capacitor/core";
 
 export type AppPlatform = "web" | "ios" | "android";
 
@@ -53,35 +54,102 @@ export const isNativeShell = (): boolean => {
 export const isIOS = (): boolean => getPlatform() === "ios";
 export const isAndroid = (): boolean => getPlatform() === "android";
 
+/** `status-bar` -> `StatusBar`, matching every Capacitor package's named export. */
+const pascalCase = (name: string): string =>
+  name
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+
 /**
- * Loads a Capacitor plugin without a static import, so the web build never
- * depends on (or fails to resolve) packages that are not installed yet.
+ * Official plugins, keyed by the short name callers pass to `loadPlugin`.
+ *
+ * These imports must be static. The previous implementation built the
+ * `@capacitor/<name>` specifier at runtime behind Vite's `@vite-ignore` escape
+ * hatch, which no bundler can resolve — so in the WebView the dynamic import
+ * rejected for a bare specifier and `loadPlugin` answered `null` for *every*
+ * plugin. Native back handling, in-app browser, share sheet and haptics were
+ * all silently running their web fallbacks inside the app shell.
+ */
+const officialPlugins: Record<string, () => Promise<Record<string, unknown>>> = {
+  app: () => import("@capacitor/app"),
+  browser: () => import("@capacitor/browser"),
+  haptics: () => import("@capacitor/haptics"),
+  keyboard: () => import("@capacitor/keyboard"),
+  "splash-screen": () => import("@capacitor/splash-screen"),
+  share: () => import("@capacitor/share"),
+  "status-bar": () => import("@capacitor/status-bar"),
+};
+
+/**
+ * Custom native plugins, which have no npm package to import.
+ *
+ * `MainActivity.registerPlugin` only makes the bridge aware of the Kotlin
+ * class; the JS-side proxy still has to exist, and in a normal Capacitor plugin
+ * the npm package is nothing more than a wrapper around `registerPlugin`. So
+ * this map *is* the wrapper for `HealthConnectPlugin`. `@capacitor/core` is
+ * safe to bundle for the web: the proxy only throws when a method is actually
+ * called, and every caller checks `isNative()`/`isAndroid()` first.
+ */
+let healthConnectProxy: unknown;
+const customPlugins: Record<string, () => unknown> = {
+  // Registered once and shared: the proxy is stateless, and `registerPlugin`
+  // warns if the same name is registered twice.
+  VayloHealthConnect: () =>
+    (healthConnectProxy ??= registerPlugin<Record<string, unknown>>("VayloHealthConnect")),
+};
+
+/**
+ * Removes thenability from a plugin proxy before it leaves an async function.
+ *
+ * A Capacitor plugin is a `Proxy` whose `get` trap manufactures a method for
+ * *any* property name — including `then`. Because `loadPlugin` is async, its
+ * return value is treated as a thenable and JS calls `proxy.then(resolve,
+ * reject)`. That manufactures a `then` method no plugin implements, whose
+ * rejection lands on a promise nobody awaits: `resolve` is never called, so
+ * `await loadPlugin(...)` **never settles at all**. The plugin is fine, only the
+ * async return value is, so it is handed over with `then` masked to `undefined`.
+ */
+const settle = <T>(plugin: T): T =>
+  new Proxy(plugin as object, {
+    get: (target, property, receiver) =>
+      property === "then" ? undefined : Reflect.get(target, property, receiver),
+  }) as T;
+
+/**
+ * Loads a Capacitor plugin by its short name (`"app"`, `"haptics"`, …).
+ *
+ * Returns `null` when the plugin is unknown or genuinely unavailable, so
+ * callers fall back to web behaviour instead of throwing.
  */
 export async function loadPlugin<T = Record<string, unknown>>(name: string): Promise<T | null> {
   if (!isNative()) return null;
-  const bridge = capacitor();
-  // Custom plugins registered natively (MainActivity.registerPlugin) live on
-  // the injected Plugins proxy with no npm package behind them — prefer that
-  // before attempting a module import that cannot resolve for them.
-  const direct = bridge?.Plugins?.[name];
-  if (direct) return direct as T;
+
+  const custom = customPlugins[name];
+  if (custom) {
+    try {
+      return settle(custom() as T);
+    } catch {
+      return null;
+    }
+  }
+
+  const load = officialPlugins[name];
+  if (!load) return null;
+
   try {
-    const specifier = `@capacitor/${name}`;
-    const mod = (await import(/* @vite-ignore */ specifier)) as Record<string, unknown>;
-    const pluginName = name
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join("");
-    return (mod[pluginName] as T) ?? (mod.default as T) ?? null;
+    const mod = await load();
+    const plugin = (mod[pascalCase(name)] as T) ?? (mod.default as T) ?? null;
+    return plugin ? settle(plugin) : null;
   } catch {
-    // Plugin not installed yet — the caller falls back to web behaviour.
+    // Plugin not bundled into this build — the caller falls back to web.
     return null;
   }
 }
 
 /**
- * Opens a link outside the app. On web (and until @capacitor/browser is added)
- * this is a normal new tab; in a native shell it will use the in-app browser.
+ * Opens a link outside the app: the in-app browser inside the native shell, a
+ * normal new tab on the web.
  */
 export async function openExternal(url: string): Promise<void> {
   if (isNative()) {

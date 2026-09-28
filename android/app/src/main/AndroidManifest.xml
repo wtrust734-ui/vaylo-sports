@@ -43,6 +43,22 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
 
+            <!-- Deep links on the app's own scheme.
+
+                 src/lib/nativeOAuth.ts completes native sign-in from an
+                 appUrlOpen event carrying com.vaylosports.app://auth-callback#code=…
+                 and strings.xml has always declared custom_url_scheme — but no
+                 intent-filter referenced it, so Android had no route to hand the
+                 app that URL and the callback could never arrive. Registering the
+                 scheme (rather than a specific host) also covers other links that
+                 come back on it, such as password recovery. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/custom_url_scheme" />
+            </intent-filter>
+
         </activity>
 
         <!-- Android 14+ permission-usage entry point (opens the privacy policy). -->

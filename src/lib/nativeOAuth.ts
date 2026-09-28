@@ -27,7 +27,14 @@ import type { Provider } from "@supabase/supabase-js";
 /** Deep-link scheme derived from the Capacitor appId (com.vaylosports.app). */
 const SCHEME = "com.vaylosports.app";
 
-/** Path registered in capacitor.config deepLink section and both OAuth apps. */
+/**
+ * Path in the callback URL, and the value the provider's OAuth app must
+ * redirect to. On Android it is matched by the VIEW/BROWSABLE intent-filter in
+ * android/app/src/main/AndroidManifest.xml (which registers the scheme from
+ * `custom_url_scheme`); on iOS the scheme has to be declared under
+ * CFBundleURLTypes in Info.plist. Both must also appear in the project's
+ * additional_redirect_urls allow-list, or GoTrue rejects the redirect.
+ */
 const CALLBACK_PATH = "auth-callback";
 
 /** Web-only: where the browser flow should land (unchanged behaviour). */

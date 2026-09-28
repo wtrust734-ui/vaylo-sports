@@ -1,11 +1,11 @@
 // ============================================================================
 // VAYLO HEALTH — Capacitor bridge
 // ----------------------------------------------------------------------------
-// The single seam between the web app and the native Android layer. Loads the
-// custom `VayloHealthConnect` plugin through the dependency-free loadPlugin
-// pattern (no Capacitor import reaches the web bundle). On web every function
-// resolves to a "web" sentinel result instead of throwing, so callers can
-// branch on platform without try/catch noise.
+// The single seam between the web app and the native Android layer. Resolves
+// the custom `VayloHealthConnect` plugin through `loadPlugin`, which owns the
+// one `registerPlugin` call that gives the Kotlin class a JS proxy. On web every
+// function resolves to a "web" sentinel result instead of throwing, so callers
+// can branch on platform without try/catch noise.
 //
 // Raw health data is NEVER logged here.
 // ============================================================================
