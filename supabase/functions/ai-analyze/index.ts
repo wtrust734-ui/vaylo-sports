@@ -9,6 +9,7 @@ import {
   json,
   readJsonBody,
   spendForUser,
+  aiCallAllowed,
   throttled,
   userOwnsProduct,
   validImagePayload,
@@ -30,6 +31,9 @@ Deno.serve(async (req) => {
     const userId = await authenticate(req);
     if (!userId) return json({ error: "Unauthorized" }, 401);
     if (throttled(userId)) return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
+    if (!(await aiCallAllowed(req, userId, "ai-analyze", { max: 20, windowSeconds: 60 }))) {
+      return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
+    }
 
     const body = await readJsonBody(req);
     if (!body) return json({ error: "Invalid JSON body" }, 400);

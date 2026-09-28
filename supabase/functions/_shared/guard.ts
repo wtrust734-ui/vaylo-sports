@@ -3,7 +3,8 @@
  *
  * Every AI function gets, in one import:
  *  • authenticate()  — verifies the caller's JWT (never trust the anon key alone)
- *  • throttled()     — best-effort per-user sliding-window throttle (per isolate)
+ *  • aiCallAllowed() — durable per-user rate limit, counted in Postgres
+ *  • throttled()     — cheap in-memory pre-filter (per isolate; see aiCallAllowed)
  *  • readJsonBody()  — strict JSON parse with a hard request-size cap
  *  • edgeError()     — client-side helper: surface a function error's message
  *  • spendForUser()  — authoritative server-side credit charge via credits_spend()
@@ -46,13 +47,57 @@ export async function authenticate(req: Request): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Throttle — per-user sliding window, per isolate (abuse guard, not billing)
+// Rate limit
 // ---------------------------------------------------------------------------
+// Two layers, and the second one is the one that counts.
+//
+// The in-memory window below is per isolate: Supabase runs each function on
+// several instances and recycles them, so it resets on a cold start and is not
+// shared between instances. Useful for turning away a flood without a database
+// round trip; useless as a bound on what a script can spend.
+//
+// aiCallAllowed() counts in Postgres, where every instance sees the same rows.
+// It fails OPEN — if the database is unreachable the call proceeds, because an
+// outage in the limiter should not take the coach offline. Credits remain the
+// real bound; this is the thing that stops the spend rate, not the total.
+
+export async function aiCallAllowed(
+  req: Request,
+  userId: string,
+  feature: string,
+  opts: { max?: number; windowSeconds?: number } = {}
+): Promise<boolean> {
+  const max = opts.max ?? 20;
+  const windowSeconds = opts.windowSeconds ?? 60;
+  // The caller's own JWT, so auth.uid() inside ai_call_allowed() resolves to
+  // the athlete making the call rather than to nobody.
+  const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
+  if (!token) return false;
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data, error } = await supabase.rpc("ai_call_allowed", {
+      p_feature: feature,
+      p_max: max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) {
+      console.warn(`ai_call_allowed failed for ${userId}, failing open:`, error.message);
+      return true;
+    }
+    return data === true;
+  } catch (e) {
+    console.warn("ai_call_allowed threw, failing open:", e);
+    return true;
+  }
+}
 
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 20;
 const hits = new Map<string, number[]>();
 
+/** Per-isolate pre-filter. See aiCallAllowed() for the limit that actually binds. */
 export function throttled(userId: string): boolean {
   const now = Date.now();
   const recent = (hits.get(userId) ?? []).filter((t) => now - t < WINDOW_MS);

@@ -132,6 +132,50 @@ for (const [name, body] of [
   );
 }
 
+{
+  // A streak is counted by touch_streak(), which clamps the athlete's local day
+  // and applies the grace-day and freeze rules. The client only ever needs to
+  // read it. Asserted by effect, not by status: with no UPDATE policy a PATCH
+  // that matches no permitted row returns 200 with an empty array rather than
+  // an error, so a status-code assertion here would pass on a write that
+  // silently did nothing — and would also have passed before the fix.
+  const before = (await (await fetch(`${URL_BASE}/rest/v1/streaks?select=current_streak&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.current_streak ?? 0;
+  await fetch(`${URL_BASE}/rest/v1/streaks?user_id=eq.${me}`, { method: "PATCH", headers: authHeaders, body: JSON.stringify({ current_streak: 5000 }) });
+  const after = (await (await fetch(`${URL_BASE}/rest/v1/streaks?select=current_streak&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.current_streak ?? 0;
+  check("Cannot set own streak", before === after, `current_streak ${before} -> ${after} after asking for 5000`);
+
+  await fetch(`${URL_BASE}/rest/v1/streaks`, { method: "POST", headers: authHeaders, body: JSON.stringify({ user_id: me, current_streak: 9999, longest_streak: 9999 }) });
+  const after2 = (await (await fetch(`${URL_BASE}/rest/v1/streaks?select=current_streak&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.current_streak ?? 0;
+  check("Cannot insert a streak", after2 === after, `current_streak still ${after2} after inserting 9999`);
+}
+
+{
+  // checkAndAwardMilestones inserts a medal client-side, so the INSERT stays.
+  // What the client may not do is assert when it was earned or how many people
+  // shared it. Inserted with both claims set to something absurd, then deleted:
+  // the delete policy is the owner's, so this leaves nothing behind.
+  const r = await post("achievements", {
+    user_id: me,
+    type: "points",
+    title: "security-check probe",
+    description: "deleted immediately",
+    icon: "star",
+    earned_at: "2000-01-01T00:00:00Z",
+    share_count: 100000,
+  });
+  const t = (await r.text()).trim();
+  let ok = false;
+  let detail = `HTTP ${r.status} · ${t.slice(0, 100)}`;
+  if (t.startsWith("[{")) {
+    const row = JSON.parse(t)[0];
+    const year = new Date(row.earned_at).getUTCFullYear();
+    ok = year > 2020 && row.share_count === 0;
+    detail = `HTTP ${r.status} · earned_at ${year} (asked for 2000) · share_count ${row.share_count} (asked for 100000)`;
+    await fetch(`${URL_BASE}/rest/v1/achievements?title=eq.security-check probe`, { method: "DELETE", headers: authHeaders });
+  }
+  check("An achievement cannot claim its own date or share count", ok, detail);
+}
+
 // ---------------------------------------------------------------------------
 const failed = results.filter((r) => !r.passed);
 console.log(`security-check: ${failed.length ? `FAIL (${failed.length})` : `PASS (${results.length} checks)`}`);

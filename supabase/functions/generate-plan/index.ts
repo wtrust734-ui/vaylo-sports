@@ -3,7 +3,7 @@ import { fetchAthleteDossier, formatDossierForPrompt, getAgeCaps } from "../_sha
 import { MODELS } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
-import { authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
+import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
 // Prompt-stuffing caps — this function spends real AI budget.
@@ -33,6 +33,9 @@ Deno.serve(async (req) => {
     const userId = await authenticate(req);
     if (!userId) return json({ error: "Unauthorized" }, 401);
     if (throttled(userId)) return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
+    if (!(await aiCallAllowed(req, userId, "generate-plan", { max: 15, windowSeconds: 60 }))) {
+      return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
+    }
 
     const body = await readJsonBody(req);
     if (!body) return json({ error: "Invalid JSON body" }, 400);

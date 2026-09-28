@@ -1,5 +1,5 @@
 import { MODELS } from "../_shared/aiModels.ts";
-import { authenticate, readJsonBody, throttled } from "../_shared/guard.ts";
+import { aiCallAllowed, authenticate, readJsonBody, throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +23,11 @@ Deno.serve(async (req) => {
       });
     }
     if (throttled(userId)) {
+      return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!(await aiCallAllowed(req, userId, "learning-recommend", { max: 20, windowSeconds: 60 }))) {
       return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

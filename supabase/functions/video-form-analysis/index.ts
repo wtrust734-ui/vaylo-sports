@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { languageDirective } from "../_shared/openai.ts";
-import { throttled } from "../_shared/guard.ts";
+import { aiCallAllowed, throttled } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,6 +69,9 @@ Deno.serve(async (req) => {
     } = await admin.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
     if (throttled(user.id)) return json({ error: "Too many requests. Wait a moment and try again." }, 429);
+    if (!(await aiCallAllowed(req, user.id, "video-form-analysis", { max: 5, windowSeconds: 60 }))) {
+      return json({ error: "Too many requests. Wait a moment and try again." }, 429);
+    }
 
     const body = await req.json().catch(() => null);
     if (!body) return json({ error: "Invalid request body" }, 400);

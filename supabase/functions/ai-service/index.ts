@@ -15,6 +15,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { featureCatalog } from "../_shared/aiModels.ts";
 import { AIServiceError, generateAIResponse } from "../_shared/openai.ts";
 import { fetchAthleteDossier, type EdgePB } from "../_shared/athleteDossier.ts";
+import { aiCallAllowed } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,23 +29,7 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-/** Best-effort per-user sliding-window throttle (per isolate) — abuse guard. */
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 20;
-const hits = new Map<string, number[]>();
 
-function throttled(userId: string): boolean {
-  const now = Date.now();
-  const recent = (hits.get(userId) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_PER_WINDOW) {
-    hits.set(userId, recent);
-    return true;
-  }
-  recent.push(now);
-  hits.set(userId, recent);
-  if (hits.size > 5000) hits.clear();
-  return false;
-}
 
 /** Verifies the caller's JWT. Returns the user id + token. */
 async function authenticate(req: Request): Promise<{ userId: string; token: string } | null> {
@@ -67,12 +52,16 @@ Deno.serve(async (req) => {
     if (req.method === "GET") return json({ features: featureCatalog() });
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-    if (throttled(auth.userId)) {
-      return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
-    }
-
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") return json({ error: "Invalid JSON body" }, 400);
+
+    // Per feature rather than one global bucket, so a heavy feature cannot
+    // spend another feature's budget, and counted in Postgres rather than in
+    // this isolate, so a cold start or a second instance does not reset it.
+    const feature = typeof body.feature === "string" ? body.feature.slice(0, 60) : "ai-service";
+    if (!(await aiCallAllowed(req, auth.userId, feature, { max: 20, windowSeconds: 60 }))) {
+      return json({ error: "Too many AI requests. Wait a moment and try again." }, 429);
+    }
 
     // ---- Auto-enrich userData with authoritative dossier (if caller didn't send rich data) ----
     let userData: Record<string, unknown> | null = body.userData ?? null;

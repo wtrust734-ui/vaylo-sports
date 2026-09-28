@@ -27,7 +27,8 @@
     "security:check": "node scripts/security-check.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "auth:posture": "node scripts/auth-posture.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

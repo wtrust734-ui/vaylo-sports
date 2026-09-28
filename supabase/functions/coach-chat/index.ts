@@ -4,7 +4,7 @@ import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteD
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import { languageDirective } from "../_shared/openai.ts";
-import { throttled } from "../_shared/guard.ts";
+import { aiCallAllowed, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective, familyForCoach } from "../_shared/coachVoice.ts";
 
 const corsHeaders = {
@@ -44,6 +44,11 @@ serve(async (req) => {
       });
     }
     if (throttled(user.id)) {
+      return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!(await aiCallAllowed(req, user.id, "coach-chat", { max: 20, windowSeconds: 60 }))) {
       return new Response(JSON.stringify({ error: "Too many AI requests. Wait a moment and try again." }), {
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

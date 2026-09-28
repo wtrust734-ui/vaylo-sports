@@ -75,59 +75,135 @@ referral data yet, so nothing leaks today, but it will as soon as there is.
 **Fixed**: `has_role` answers about the caller, or for an admin — otherwise it
 returns false. `top_referrers` is no longer executable by `anon`.
 
+### 6. The AI rate limit was per-instance — MEDIUM
+
+`_shared/guard.ts` throttled with an in-memory `Map`: 20 calls a minute, per
+function instance. Supabase runs each function on several instances and recycles
+them, so the counter an attacker is up against is whichever instance answered,
+and it resets when that instance is replaced. Every one of those calls is billed
+to `OPENAI_API_KEY`, so a per-isolate `Map` should not be the thing standing
+between a script and your invoice.
+
+**Fixed**: `ai_call_allowed(feature, max, window)` counts in Postgres, where
+every instance sees the same rows, and all seven AI endpoints call it —
+`ai-analyze`, `generate-plan`, `learning-recommend`, `coach-chat`,
+`video-form-analysis`, `ai-service`, `weekly-review`. It fails **open**: an
+outage in the limiter should not take the coach offline, and credits remain the
+real bound. Verified against the deployed function: 30 requests in a row, 20
+answered, 10 refused with 429.
+
+`ai-service` kept its own private copy of the throttle, which is exactly why a
+change to the shared one would have missed it. That duplicate is deleted; the
+endpoint now counts per feature, so a heavy feature cannot spend a light one's
+budget.
+
+Note the limiter counts *attempts*, not successes: a call that fails afterwards
+— a 500 from a missing API key, say — has still been counted, which is the right
+behaviour for an abuse guard.
+
+### 7. The client could assert its own streak and achievement history — MEDIUM
+
+`streaks` had an `ALL` policy for the owner. Reproduced before the fix:
+`current_streak: 9999` accepted with HTTP 201.
+
+Nothing needed that write. The app already goes through `touch_streak(p_date)`,
+a `SECURITY DEFINER` routine that clamps the athlete's local day to ±1 day of the
+server's own and handles the grace-day and freeze rules. The client only ever
+needs to read its row, so the write policies are gone and the only remaining
+access is `SELECT`.
+
+A trigger that recomputed the streak was written first and removed: it would have
+fought `touch_streak`'s own grace-day handling — the branch that decides whether
+a missed day is forgiven, and which deliberately does *not* increment the counter.
+Deriving a value in a second place, from less information, is how that rule
+quietly breaks.
+
+`achievements` genuinely is client-written — `checkAndAwardMilestones` inserts a
+medal at a points threshold — so the INSERT stays. What changed is what a row may
+claim: `earned_at` is stamped by the server's clock and `share_count` starts at
+zero. Verified by inserting a medal claiming the year 2000 and 100,000 shares:
+it came back as 2026 and 0, and the delete policy removed the test row.
+
+### 8. The app shipped a key that can never be rotated — LOW
+
+`VITE_SUPABASE_PUBLISHABLE_KEY` held the legacy `anon` JWT. Both key types are
+designed to be public and both end up in the APK, so neither is a secret — but
+the legacy JWT has an `iat` fixed when the project was created and can never be
+rotated, so every build ever shipped carries the same key forever. The project
+also has a modern `sb_publishable_…` key that can be replaced from the Dashboard
+in seconds.
+
+**Fixed**: the client uses the publishable key now, verified end to end (public
+read, sign-in and a session against the API all behave identically), and the
+bundle no longer contains a `eyJ…` JWT at all.
+
+The legacy key is still injected into the edge runtime as `SUPABASE_ANON_KEY`, so
+do not disable it in the Dashboard until nothing depends on it.
+
+### 9. The native OAuth callback was the implicit flow — LOW
+
+`src/lib/nativeOAuth.ts` parses `code` and `flow_state_id` and calls
+`exchangeCodeForSession` — PKCE-shaped code — but the client never asked for PKCE.
+The authorize URL was generated without a `code_challenge` at all, so what came
+back in the redirect was not a code the exchange could safely use, on a custom
+scheme (`com.vaylosports.app://`) that Android does not verify: any other app on
+the device can register the same scheme.
+
+**Fixed**: the client sets `flowType: "pkce"`. Verified by inspecting the
+authorize URL — `code_challenge` present, method `s256` — and by confirming that
+password sign-in and a session against the API are unaffected. The exchange side
+needed no change; only the request side was asking for the wrong thing.
+
 ---
 
 ## Open
 
 ### Auth accepts any password and issues a session immediately — HIGH
 
+The only finding left that matters, and the only one no migration can touch.
+
 Signing up with the password `123456` succeeded and returned a session, and
 twelve consecutive wrong passwords produced no `429`. Every throwaway account
-can then claim the 30-day unlimited trial (`grant_unlimited_trial` is clamped
-to 30 days server-side, one per account) and spend it on AI calls, which are
-paid for with `OPENAI_API_KEY`. Mass sign-up is a direct route to your OpenAI
-bill.
+can then claim the 30-day unlimited trial (`grant_unlimited_trial` is clamped to
+30 days server-side, one per account) and spend it on AI calls, which are billed
+to `OPENAI_API_KEY`. Mass sign-up is a direct route to your OpenAI bill.
 
-These are Dashboard settings, not schema, so they are not in the migration.
-**Authentication → Sign In / Providers → Email:**
+These are Dashboard settings, not schema, so they cannot be applied from the
+repository. **Authentication → Sign In / Providers → Email:**
 
 - [ ] Enable email confirmation (`Confirm email`) — this is the one that stops mass trial abuse
 - [ ] Minimum password length 8 or more
 - [ ] Enable leaked-password protection (Have I Been Pwned)
 - [ ] Set the rate limits: `token_refresh` and `password` to something an hour of typing cannot reach
 
-Enabling confirmation changes the Play reviewer flow: the reviewer account
-needs a real inbox to click the link once. That is the account in
+Then run `npm run auth:posture` to find out whether it took effect. It probes the
+live endpoint the way an attacker would and reports each property. It exits 0
+whatever it finds, because it is a report rather than a gate: `security:check` is
+the gate, and it deliberately asserts nothing about auth, since a check nobody
+can fix from the repository is one people learn to ignore. The two probes that
+create an account print the addresses they used so you can delete them.
+
+Enabling confirmation changes the Play reviewer flow: the reviewer account needs
+a real inbox to click the link once. That is the account in
 `.freebuff/ui-audit.local.json` in your working checkout.
 
-### Streaks and achievements are written by the client — MEDIUM (integrity, not breach)
+### A custom URL scheme is still unverified — LOW
 
-`streaks` has an `ALL` policy for the owner and `achievements` an INSERT policy,
-both by design — the app writes them client-side. An athlete can therefore set a
-9,999-day streak or award themselves an achievement with an invented
-`share_count`. Nothing is gained but credibility, and a leaderboard built on
-either is not a leaderboard. Reproduced: `streaks` accepted `current_streak:
-9999`. If the leaderboard matters, move those writes behind an RPC that derives
-the value.
+PKCE means an intercepted callback buys the interceptor nothing, which is the
+part that mattered. What is left is that Android cannot tell your app from
+another one claiming `com.vaylosports.app://`. Moving to HTTPS App Links needs
+`assetlinks.json` served from a domain you control at a stable host, so it is a
+deployment question rather than a code one.
 
-### AI rate limiting is per-instance — MEDIUM
+### Streaks and achievements are written by the client — CLOSED, see 7 above
 
-`_shared/guard.ts` throttles with an in-memory `Map`, which resets on a cold
-start and is not shared between the instances Supabase runs. It is a speed bump,
-not a limit. Credits are still the real bound.
+### `minifyEnabled false` for release — LOW, and left deliberately
 
-### The native OAuth callback has no PKCE — LOW
-
-`src/lib/nativeOAuth.ts` completes sign-in from `com.vaylosports.app://auth-callback#code=…`.
-The flow is bound by Supabase's `flow_state_id`, and custom schemes cannot be
-claimed by verification, so another app on the device could register the same
-scheme. Move to HTTPS App Links and PKCE before the Play listing is public.
-
-### `minifyEnabled false` for release — LOW
-
-No R8 obfuscation. For a Capacitor app the JavaScript *is* the application and is
-readable in the APK regardless, so this buys little; it is worth enabling for
-the Java-only shell code.
+No R8 obfuscation on the release build. For a Capacitor app the JavaScript *is*
+the application and is readable in the APK either way, so obfuscation buys
+almost nothing here — and R8 strips or renames exactly the reflection a
+Capacitor plugin relies on, which fails at runtime in ways a build cannot
+predict. Not worth the risk to a Play reviewer build for a cosmetic gain.
 
 ---
 
@@ -164,7 +240,8 @@ treated as a regression:
 ## Re-running the checks
 
 ```bash
-npm run security:check   # 10 assertions, all of them negative
+npm run security:check   # 13 assertions, all of them negative
+npm run auth:posture     # reports the four Dashboard settings that no migration can set
 ```
 
 It signs in as the review account and asserts that each closed path is still
