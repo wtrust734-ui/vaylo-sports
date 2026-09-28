@@ -240,7 +240,7 @@ treated as a regression:
 ## Re-running the checks
 
 ```bash
-npm run security:check   # 13 assertions, all of them negative
+npm run security:check   # 14 assertions, all of them negative
 npm run auth:posture     # reports the four Dashboard settings that no migration can set
 ```
 
@@ -249,3 +249,22 @@ closed, including that a money-priced product is refused and the balance is
 unchanged afterwards. A migration is a one-time event; this is the standing
 assertion, because the failure mode is silent — nothing throws, the app just
 quietly gives things away.
+
+### On asserting with supabase-js
+
+An `update()` that matches zero rows under RLS **resolves without an error**. An
+assertion written as "did this call fail?" therefore passes for the wrong reason
+and tells you nothing. Write `.select()` on the write and count the returned
+rows — that is the evidence. The official-challenge check in `security-check.mjs`
+is written that way for exactly this reason, after a first version of it passed
+while proving nothing.
+
+### Official challenges are immutable
+
+`public.challenges.creator_id` was `NOT NULL`, which is why the table had never
+been seeded: there is no system user to own a row. Rather than fabricate a
+profile that would appear in member lists and own content no human wrote,
+`creator_id` is now nullable and NULL means "published by Vaylo". The existing
+policies are all `auth.uid() = creator_id`, and NULL never matches, so an
+official challenge is immutable and undeletable by every athlete — the right
+default for content the whole app points at. `security:check` asserts it.

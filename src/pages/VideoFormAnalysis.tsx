@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 
 interface AnalysisResult {
   overall_score: number;
@@ -137,10 +138,10 @@ const VideoFormAnalysis = () => {
         let msg = error.message;
         const err = error as { context?: { text?: () => Promise<string> } };
         try { const ctx = err.context; if (ctx?.text) { const parsed = JSON.parse(await ctx.text()); msg = parsed.error || msg; } } catch { /* ignore */ }
-        throw new Error(msg);
+        throw new Error(isNotReadyMessage(msg) ? AI_NOT_READY_MESSAGE : msg);
       }
       const payload = (data ?? {}) as { error?: string; result?: AnalysisResult; model?: string; saved_id?: string | null };
-      if (payload.error) throw new Error(payload.error);
+      if (payload.error) throw new Error(isNotReadyMessage(payload.error) ? AI_NOT_READY_MESSAGE : payload.error);
 
       setProgress(100);
       setResult(payload.result as AnalysisResult);

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getAiLocale } from "@/i18n";
+import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 
 /**
  * Client wrapper for the central AI service (`ai-service` edge function).
@@ -90,10 +91,14 @@ export async function runAIDetailed(options: RunAIOptions): Promise<AIResult> {
 
   if (error) {
     const message = (data as { error?: string } | null)?.error || error.message;
+    // The provider key is an operator fact; an athlete gets the plain one.
+    if (message && isNotReadyMessage(message)) throw new Error(AI_NOT_READY_MESSAGE);
     throw new Error(message || "AI request failed.");
   }
   const result = data as AIResult | { error?: string };
-  if ("error" in result && result.error) throw new Error(result.error);
+  if ("error" in result && result.error) {
+    throw new Error(isNotReadyMessage(result.error) ? AI_NOT_READY_MESSAGE : result.error);
+  }
   if (!(result as AIResult).text) throw new Error("The AI returned an empty response.");
   return result as AIResult;
 }

@@ -177,6 +177,24 @@ for (const [name, body] of [
 }
 
 // ---------------------------------------------------------------------------
+// Official challenges (creator_id NULL) are content the whole app points at, so
+// no athlete may rewrite them. An update matching zero RLS rows resolves without
+// an error, so the count of returned rows is the evidence, not the absence of one.
+{
+  const id = "11111111-1111-4111-8111-111111111101";
+  const r = await fetch(`${URL_BASE}/rest/v1/challenges?id=eq.${id}`, {
+    method: "PATCH",
+    headers: { ...authHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({ title: "security-check probe" }),
+  });
+  const body = await r.text();
+  let changed = 0;
+  try { changed = JSON.parse(body || "[]").length; } catch { /* non-JSON counts as 0 */ }
+  check("An official challenge cannot be rewritten by an athlete", changed === 0,
+    `HTTP ${r.status} · ${changed} rows changed`);
+}
+
+// ---------------------------------------------------------------------------
 const failed = results.filter((r) => !r.passed);
 console.log(`security-check: ${failed.length ? `FAIL (${failed.length})` : `PASS (${results.length} checks)`}`);
 for (const f of failed) console.log(`  - ${f.name}: ${f.detail}`);

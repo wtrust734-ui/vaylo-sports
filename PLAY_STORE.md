@@ -56,9 +56,13 @@ Ordered by how early they block you.
    re-doing this section for the next reviewer.
 3. **`OPENAI_API_KEY`** as a Supabase secret. Every AI feature returns HTTP 500 in
    production right now (`supabase/functions/_shared/openai.ts` throws
-   `AI service is not configured`). A reviewer who tries the coach will see a
-   failure. Set it with
+   `AI service is not configured`). Set it with
    `supabase secrets set OPENAI_API_KEY=sk-...` — no redeploy needed.
+   Until then the coach, form analysis, tactical plans, learning recommendations,
+   weekly review and video analysis answer with "This feature isn't switched on
+   yet" rather than the name of the missing environment variable: an internal
+   detail read to a reviewer looks like a broken build. Seven features are
+   gated on that one secret, so it is the highest-value thing you can set.
 
 Already handled, for reference: the legal pages are published (§1), and the public
 app URL is set to `https://vaylosports.lovable.app` in `.env.local` (git-ignored)
@@ -394,7 +398,10 @@ if a tester goes looking.
    button on Android, as the copy now says "distance only") or add
    `ACCESS_FINE_LOCATION` plus a WebView geolocation grant — the second also means
    declaring location in the Data safety form.
-2. **AI features return HTTP 500 in production** until `OPENAI_API_KEY` is set.
+2. **AI features are switched off in production** until `OPENAI_API_KEY` is set.
+   The message is now athlete-facing and uniform, but the features themselves
+   are still inert — a reviewer who taps the coach gets a clear "not switched
+   on yet" rather than an error.
 3. **Wearable sync is unconfigured.** `wearable-oauth` answers `not_configured` for
    every provider because no vendor OAuth secrets are set. The screen is honest
    about it, but it is a headline feature that does not work.

@@ -21,6 +21,7 @@ import {
 } from "@/lib/goals";
 import ReactMarkdown from "react-markdown";
 import NaturalLanguageGoalInput from "@/components/goals/NaturalLanguageGoalInput";
+import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 
 
 
@@ -95,9 +96,14 @@ const Goals = () => {
       const { data, error } = await supabase.functions.invoke("weekly-review", { body: { stats, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) } });
       if (error) throw error;
       const payload = (data ?? {}) as { error?: string; feedback?: string; balance?: number | null; cost?: number };
-      if (payload.error && payload.error.includes("Not enough credits")) {
-        toast.error(payload.error);
-        return;
+      if (payload.error) {
+        // A 200 can still carry an error string, and a provider key that has
+        // not been set yet must not read as a fault in the review.
+        if (isNotReadyMessage(payload.error)) { toast.error(AI_NOT_READY_MESSAGE); return; }
+        if (payload.error.includes("Not enough credits")) {
+          toast.error(payload.error);
+          return;
+        }
       }
       setAiFeedback(payload.feedback);
       if (payload.balance != null) toast.success(`Review complete${payload.cost ? ` — ${payload.cost} credits used` : ""}.`);
@@ -106,7 +112,7 @@ const Goals = () => {
       if (msg.includes("Not enough credits") || msg.includes("Insufficient") || e?.status === 402) {
         toast.error(msg.includes("credits") ? msg : "Not enough credits for Weekly Coach Review — need 3 credits.");
       } else {
-        toast.error(msg);
+        toast.error(isNotReadyMessage(msg) ? AI_NOT_READY_MESSAGE : msg);
       }
     } finally {
       setAiLoading(false);

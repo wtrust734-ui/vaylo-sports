@@ -511,7 +511,7 @@ export type Database = {
       challenges: {
         Row: {
           created_at: string
-          creator_id: string
+          creator_id: string | null
           description: string | null
           end_date: string | null
           icon: string | null
@@ -533,7 +533,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          creator_id: string
+          creator_id?: string | null
           description?: string | null
           end_date?: string | null
           icon?: string | null
@@ -555,7 +555,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          creator_id?: string
+          creator_id?: string | null
           description?: string | null
           end_date?: string | null
           icon?: string | null
