@@ -12,6 +12,7 @@ import {
   type EventPack,
 } from "@/lib/eventPacks";
 import { EVENT_PACK_SPORTS, EVENT_PACK_DIFFICULTIES, type EventPackDifficulty } from "@/config/eventPacks";
+import { requestCreditTopUp } from "@/lib/topUpStore";
 
 type SortKey = "popular" | "price_low" | "price_high" | "duration_short" | "duration_long";
 
@@ -103,8 +104,10 @@ function PackCard({
 
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="font-display text-base font-bold text-primary">{pack.price}</p>
-            <p className="text-[9px] text-muted-foreground">one-time · v{pack.version}</p>
+            <p className="font-display text-base font-bold text-primary">
+              {pack.creditPrice.toLocaleString()}<span className="text-[10px] font-semibold"> credits</span>
+            </p>
+            <p className="text-[9px] text-muted-foreground">or {pack.price} · v{pack.version}</p>
           </div>
           {owned ? (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-energy/40 bg-energy/10 px-3 py-2 text-xs font-bold text-energy">
@@ -130,7 +133,7 @@ function PackCard({
 }
 
 const EventPacks = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
 
   const [packs, setPacks] = useState<EventPack[]>([]);
@@ -228,26 +231,68 @@ const EventPacks = () => {
   };
 
   const basketTotal = basket.reduce((s, b) => s + b.priceCents, 0);
+  const basketCredits = basket.reduce((s, b) => s + b.creditPrice, 0);
 
+  /**
+   * Claims the basket one pack at a time. The server prices each pack; this
+   * loop never sends or computes a cost.
+   *
+   * A shortfall is not a dead end: `claim_event_pack` answers with the exact gap
+   * (rather than raising), so the top-up sheet can be offered for that number
+   * and the pack the athlete actually wanted is retried once they've bought the
+   * credits. Dismissing the sheet leaves the basket untouched.
+   */
   const checkout = async () => {
     if (!user) { toast({ title: "Sign in to buy Event Packs", variant: "destructive" }); return; }
+    if (basket.length === 0) return;
+
+    const pending = [...basket];
+    let spent = 0;
+
     try {
-      for (const p of basket) await claimEventPack(p);
-      setOwned((o) => [...new Set([...o, ...basket.map((b) => b.id)])]);
-      setBasket([]);
+      for (const pack of pending) {
+        let result = await claimEventPack(pack);
+
+        if (!result.ok) {
+          const outcome = await requestCreditTopUp({
+            shortfall: result.shortfall,
+            balance: result.balance,
+            reasonLabel: pack.name,
+          });
+          if (!outcome.purchased) return; // dismissed: nothing was charged
+          result = await claimEventPack(pack);
+          if (!result.ok) {
+            toast({
+              title: "Still short of credits",
+              description: `${pack.name} needs ${result.required.toLocaleString()} credits.`,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+
+        spent += result.creditsPaid;
+        setOwned((o) => [...new Set([...o, pack.id])]);
+        setBasket((b) => b.filter((x) => x.id !== pack.id));
+      }
+
       setShowBasket(false);
-      toast({ title: "Event Packs unlocked 🎉", description: "Lifetime access — they'll restore on any device you sign in to." });
+      void refreshProfile();
+      toast({
+        title: pending.length === 1 ? "Event Pack unlocked 🎉" : `${pending.length} Event Packs unlocked 🎉`,
+        description: spent > 0
+          ? `${spent.toLocaleString()} credits spent · lifetime access, restored on any device you sign in to.`
+          : "Lifetime access — they'll restore on any device you sign in to.",
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e ?? "");
-      // claim_event_pack now resolves the price from public.event_packs and
-      // refuses to hand out a paid pack without a verified purchase, so a
-      // basket of priced packs cannot be claimed. Until Play Billing is wired
-      // to this screen, say that plainly rather than reporting a failure that
-      // reads like the user's card was declined.
+      // The purchase branch is still reachable: a pack is cash-only until its
+      // credit price is set. Say that plainly rather than reporting a failure
+      // that reads like the athlete's card was declined.
       if (/purchase required/i.test(msg)) {
         toast({
-          title: "Pack purchases aren't live yet",
-          description: "Event Packs will be buyable in a coming update — nothing has been charged.",
+          title: "This pack is cash-only for now",
+          description: "Nothing has been charged — contact support to complete this one.",
         });
         return;
       }
@@ -299,7 +344,10 @@ const EventPacks = () => {
               <div className="rounded-xl border border-primary/30 bg-card/60 p-3 text-center">
                 <Trophy size={14} className="mx-auto mb-1 text-primary" />
                 <p className="text-[10px] text-muted-foreground">Price</p>
-                <p className="text-xs font-display font-bold text-primary">{detail.price}</p>
+                <p className="text-xs font-display font-bold text-primary">
+                  {detail.creditPrice.toLocaleString()} credits
+                </p>
+                <p className="text-[9px] text-muted-foreground">or {detail.price}</p>
               </div>
             </div>
 
@@ -361,7 +409,9 @@ const EventPacks = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold">{r.name}</span>
-                    <span className="block text-[10px] text-muted-foreground">{r.sport} · {r.weeks}w · {r.price}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {r.sport} · {r.weeks}w · {r.creditPrice.toLocaleString()} credits
+                    </span>
                   </span>
                   <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
                 </button>
@@ -384,7 +434,7 @@ const EventPacks = () => {
                 inBasket ? "border border-border bg-muted/40 text-muted-foreground" : "bg-gradient-primary text-primary-foreground shadow-glow"
               }`}
             >
-              {inBasket ? "In basket" : `Add to basket · ${detail.price}`}
+              {inBasket ? "In basket" : `Add to basket · ${detail.creditPrice.toLocaleString()} credits`}
             </motion.button>
           )}
         </div>
@@ -400,8 +450,13 @@ const EventPacks = () => {
           <div>
             <h1 className="font-display text-2xl font-bold">Event Packs</h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              Complete event preparation programmes. One payment, lifetime access.
+              Complete event preparation programmes. Pay once with credits, keep them for life.
             </p>
+            {profile && typeof profile.credits === "number" && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary">
+                <Sparkles size={11} /> {profile.credits.toLocaleString()} credits available
+              </p>
+            )}
           </div>
           <motion.button
             whileTap={{ scale: 0.92 }}
@@ -624,17 +679,22 @@ const EventPacks = () => {
                           <p className="truncate text-xs font-bold">{b.name}</p>
                           <p className="text-[10px] text-muted-foreground">{b.sport} · {b.weeks}w · lifetime access</p>
                         </div>
-                        <p className="text-xs font-bold text-primary">{b.price}</p>
+                        <p className="text-xs font-bold text-primary">{b.creditPrice.toLocaleString()} cr</p>
                         <button onClick={() => setBasket(basket.filter((x) => x.id !== b.id))}>
                           <X size={14} className="text-muted-foreground" />
                         </button>
                       </div>
                     ))}
                   </div>
-                  <div className="mb-3 flex items-center justify-between text-sm">
+                  <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Total (one-time)</span>
-                    <span className="font-display text-lg font-bold text-primary">${(basketTotal / 100).toFixed(2)}</span>
+                    <span className="font-display text-lg font-bold text-primary">
+                      {basketCredits.toLocaleString()} credits
+                    </span>
                   </div>
+                  <p className="mb-3 text-end text-[10px] text-muted-foreground">
+                    or ${(basketTotal / 100).toFixed(2)} once store billing is live
+                  </p>
                   <motion.button
                     whileTap={{ scale: 0.97 }} onClick={checkout}
                     className="w-full rounded-2xl bg-gradient-primary py-3.5 text-sm font-bold text-primary-foreground shadow-glow"
@@ -642,7 +702,7 @@ const EventPacks = () => {
                     Unlock {basket.length} pack{basket.length === 1 ? "" : "s"} — lifetime access
                   </motion.button>
                   <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                    Payments are not live yet — packs unlock immediately for your account.
+                    Lifetime access, deducted from your credit balance. Nothing recurs.
                   </p>
                 </>
               )}

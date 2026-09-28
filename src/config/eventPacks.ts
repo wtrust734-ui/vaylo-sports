@@ -25,6 +25,8 @@ export interface EventPack {
   weeks: number;
   price: string;
   priceCents: number;
+  /** Price in credits — what `claim_event_pack` actually charges. */
+  creditPrice: number;
   difficulty: EventPackDifficulty;
   /** Who the plan is designed for. */
   designedFor: string;
@@ -37,6 +39,32 @@ export interface EventPack {
   sections: EventPackSection[];
   featured: boolean;
   retired: boolean;
+}
+
+// ============================================================================
+// CREDITS PRICING
+// ----------------------------------------------------------------------------
+// Event Packs are bought with credits. One rate, in one place, so the catalogue,
+// the generated server table and the UI can never disagree — and so changing
+// what a pack costs in credits is a one-line edit plus `npm run gen:packs`.
+//
+// 20 credits per dollar puts a credit at five cents and sits between the two
+// rates the app already sells credits at: the "Popular" pack ($9.99 for 145) is
+// 14.5/$, the "Elite" pack ($24.99 for 650) is 26/$. Pricing here is therefore
+// a modest discount against the best bulk pack and a premium against the small
+// ones — deliberately neither a giveaway nor an arbitrage. Raising it makes
+// packs dearer in credits; it does not touch the cash price.
+// ============================================================================
+export const EVENT_PACK_CREDITS_PER_DOLLAR = 20;
+
+/** Credits charged for a pack with the given cash price. Rounded, never below 1. */
+export function creditsForPackPrice(priceCents: number): number {
+  return Math.max(1, Math.round((priceCents * EVENT_PACK_CREDITS_PER_DOLLAR) / 100));
+}
+
+/** "300 credits" — for UI next to the cash price. */
+export function formatPackCredits(credits: number): string {
+  return `${credits.toLocaleString()} credits`;
 }
 
 export const EVENT_PACK_SPORTS = [
@@ -320,6 +348,7 @@ function build(): EventPack[] {
           weeks: evt.weeks,
           price: `$${(evt.price / 100).toFixed(2)}`,
           priceCents: evt.price,
+          creditPrice: creditsForPackPrice(evt.price),
           difficulty: diff,
           designedFor: DESIGNED_FOR[diff],
           includes: [...BASE_INCLUDES, ...EXTRA_INCLUDES[diff]],

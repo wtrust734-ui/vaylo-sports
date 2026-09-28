@@ -8,7 +8,16 @@
 //
 // Run after editing src/config/eventPacks.ts, then apply the emitted migration:
 //
-//   node scripts/gen-event-packs-sql.cjs
+//   node scripts/gen-event-packs-sql.cjs [output.sql]
+//
+// The output defaults to the migration below, which is REWRITTEN wholesale on
+// every run. Once a generated file has been applied to production it must not be
+// edited again, so the next catalog change needs a new timestamped filename:
+//
+//   node scripts/gen-event-packs-sql.cjs supabase/migrations/<new>.sql
+//
+// and a matching bump to DEFAULT_TARGET. Migrations are append-only history; the
+// catalog and the claim function are both re-stated in full by each one.
 //
 // The bundled catalog is evaluated in-process rather than parsed with regexes,
 // because the packs are generated from TEMPLATES + per-sport overrides and a
@@ -21,11 +30,12 @@ const esbuild = require("esbuild");
 
 const root = path.resolve(__dirname, "..");
 const entry = path.join(root, "src", "config", "eventPacks.ts");
+const DEFAULT_TARGET = "20260927200000_event_pack_credits.sql";
 const target = path.join(
   root,
   "supabase",
   "migrations",
-  "20260927150000_event_pack_server_catalog.sql"
+  process.argv[2] ? path.basename(process.argv[2]) : DEFAULT_TARGET
 );
 
 const bundled = esbuild.buildSync({
@@ -65,6 +75,7 @@ const rows = [...packs]
         lit(p.description),
         num(p.weeks),
         num(p.priceCents),
+        num(p.creditPrice),
         lit(p.difficulty),
         lit(p.designedFor ?? null),
         arr(p.includes),
@@ -90,9 +101,23 @@ const sql = `-- Event Pack catalog — server-side prices.
 -- the database the authoritative price the claim function now enforces, and the
 -- ON CONFLICT branch means re-running the generator is how admin price edits
 -- from src/config/eventPacks.ts reach the server.
+--
+-- Event Packs are sold for CREDITS as well as cash. credit_price is derived
+-- from price_cents at the single rate in src/config/eventPacks.ts
+-- (EVENT_PACK_CREDITS_PER_DOLLAR), so the two cannot drift apart here, and
+-- claim_event_pack charges the catalogue's number rather than the caller's.
+
+alter table public.event_packs
+  add column if not exists credit_price integer not null default 0;
+
+-- What the athlete actually paid in credits, alongside the cash price they did
+-- or did not pay. 0 means a free pack or a Play purchase.
+alter table public.event_pack_ownership
+  add column if not exists credits_paid integer not null default 0;
 
 insert into public.event_packs (
   pack_id, name, sport, category, target_event, description, weeks, price_cents,
+  credit_price,
   difficulty, designed_for, includes, version, future_updates_included,
   featured, sections, popularity, retired
 ) values
@@ -105,6 +130,7 @@ on conflict (pack_id) do update set
   description = excluded.description,
   weeks = excluded.weeks,
   price_cents = excluded.price_cents,
+  credit_price = excluded.credit_price,
   difficulty = excluded.difficulty,
   designed_for = excluded.designed_for,
   includes = excluded.includes,
@@ -116,9 +142,10 @@ on conflict (pack_id) do update set
   retired = excluded.retired,
   updated_at = now();
 
--- The caller may no longer name the pack's contents or its price: both are
--- read from the catalog row. A paid pack additionally requires a verified
--- purchase, which only process-purchase (service role) can write.
+-- The caller may no longer name the pack's contents or its prices: both are
+-- read from the catalog row. A priced pack is either already paid for — a
+-- verified purchase, which only process-purchase (service role) can write — or
+-- bought with the credits in the athlete's own balance.
 create or replace function public.claim_event_pack(
   p_pack_id text,
   p_pack_name text default null,
@@ -136,6 +163,9 @@ declare
   v_existing uuid;
   v_pack public.event_packs%rowtype;
   v_paid boolean := false;
+  v_cost integer := 0;
+  v_balance integer;
+  v_source text;
 begin
   if v_user is null then raise exception 'Not authenticated'; end if;
   if p_pack_id is null or length(p_pack_id) = 0 then raise exception 'Missing pack'; end if;
@@ -146,7 +176,7 @@ begin
     return jsonb_build_object('ok', true, 'duplicate', true, 'pack_id', p_pack_id);
   end if;
 
-  -- The catalog, not the caller, decides the pack's identity and price.
+  -- The catalog, not the caller, decides the pack's identity and prices.
   -- p_pack_name / p_sport / p_price_cents / p_version are accepted for wire
   -- compatibility with deployed clients and deliberately ignored.
   select * into v_pack from public.event_packs
@@ -155,30 +185,75 @@ begin
     raise exception 'Unknown or retired event pack: %', p_pack_id;
   end if;
 
-  if coalesce(v_pack.price_cents, 0) > 0 then
-    -- A paid pack needs a verified purchase. process-purchase writes
-    -- user_purchases from Play Billing; nothing else may.
+  if coalesce(v_pack.price_cents, 0) <= 0 then
+    v_source := 'free';
+  else
     select true into v_paid from public.user_purchases
       where user_id = v_user and product_id = 'event_pack:' || p_pack_id
       limit 1;
-    if not coalesce(v_paid, false) then
+
+    if coalesce(v_paid, false) then
+      -- Bought from the store: the credit price is not charged.
+      v_source := 'purchase';
+    elsif coalesce(v_pack.credit_price, 0) > 0 then
+      v_cost := v_pack.credit_price;
+
+      -- Deducted here rather than through credits_spend() deliberately: that
+      -- routine consumes an Unlimited subscription's features for nothing,
+      -- which is right for metered AI calls and wrong for a catalogue product,
+      -- or a E2.99 unlimited month would include all 648 packs. The avatar
+      -- catalogue works the same way (coins, no bypass). guard_profile_credits
+      -- applies to this update just as it does there, hence the config flag.
+      select credits into v_balance from public.profiles
+        where user_id = v_user for update;
+      if v_balance is null then raise exception 'Profile not found'; end if;
+
+      if v_balance < v_cost then
+        -- Returned, not raised: the screen needs the exact gap so it can offer
+        -- the top-up sheet instead of parsing a message.
+        return jsonb_build_object(
+          'ok', false,
+          'pack_id', v_pack.pack_id,
+          'error', 'insufficient_credits',
+          'required', v_cost,
+          'balance', v_balance,
+          'shortfall', v_cost - v_balance
+        );
+      end if;
+
+      v_balance := v_balance - v_cost;
+      perform set_config('app.allow_credit_change', 'on', true);
+      update public.profiles set credits = v_balance where user_id = v_user;
+      perform set_config('app.allow_credit_change', 'off', true);
+
+      insert into public.credit_transactions
+        (user_id, amount, reason, feature, source, balance_after, metadata)
+      values (
+        v_user, -v_cost, 'Event Pack: ' || v_pack.name, 'event_pack',
+        'event_pack', v_balance,
+        jsonb_build_object('pack_id', v_pack.pack_id, 'price_cents', v_pack.price_cents)
+      );
+
+      v_source := 'credits';
+    else
       raise exception 'Purchase required for this event pack';
     end if;
   end if;
 
   insert into public.event_pack_ownership
-    (user_id, pack_id, pack_name, sport, price_cents, version_at_purchase, source)
+    (user_id, pack_id, pack_name, sport, price_cents, version_at_purchase, source, credits_paid)
   values (
     v_user, v_pack.pack_id, v_pack.name, v_pack.sport,
-    coalesce(v_pack.price_cents, 0), v_pack.version,
-    case when coalesce(v_pack.price_cents, 0) > 0 then 'purchase' else 'free' end
+    coalesce(v_pack.price_cents, 0), v_pack.version, v_source, v_cost
   );
 
   return jsonb_build_object(
     'ok', true,
     'duplicate', false,
     'pack_id', v_pack.pack_id,
-    'price_cents', coalesce(v_pack.price_cents, 0)
+    'price_cents', coalesce(v_pack.price_cents, 0),
+    'credits_paid', v_cost,
+    'balance', v_balance
   );
 end;
 $function$;

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   BUILT_IN_EVENT_PACKS,
   DESIGNED_FOR,
+  creditsForPackPrice,
   formatPackPrice,
   type EventPack,
   type EventPackDifficulty,
@@ -22,6 +23,7 @@ type AdminRow = {
   description: string | null;
   weeks: number | null;
   price_cents: number | null;
+  credit_price: number | null;
   difficulty: string | null;
   designed_for: string | null;
   includes: string[] | null;
@@ -37,6 +39,9 @@ type AdminRow = {
 function mergeRow(base: EventPack | null, row: AdminRow): EventPack {
   const difficulty = (row.difficulty as EventPackDifficulty) || base?.difficulty || "Intermediate";
   const priceCents = row.price_cents ?? base?.priceCents ?? 1999;
+  // The row wins: an admin edit in the database is what the server will charge,
+  // so the UI must not quote a different number from the bundled catalog.
+  const creditPrice = row.credit_price ?? base?.creditPrice ?? creditsForPackPrice(priceCents);
   const sections = (row.sections?.length ? row.sections : base?.sections ?? []) as EventPackSection[];
   const featured = row.featured ?? base?.featured ?? false;
   return {
@@ -50,6 +55,7 @@ function mergeRow(base: EventPack | null, row: AdminRow): EventPack {
     weeks: row.weeks ?? base?.weeks ?? 8,
     price: formatPackPrice(priceCents),
     priceCents,
+    creditPrice,
     difficulty,
     designedFor: row.designed_for || base?.designedFor || DESIGNED_FOR[difficulty],
     includes: row.includes?.length ? row.includes : base?.includes ?? [],
@@ -94,8 +100,32 @@ export async function loadOwnedPackIds(): Promise<string[]> {
   return (data || []).map((r) => r.pack_id);
 }
 
-/** Records permanent ownership. Duplicates are ignored. */
-export async function claimEventPack(pack: EventPack): Promise<{ duplicate: boolean }> {
+/**
+ * Claims a pack. The server prices it — none of the arguments below are
+ * trusted, they only keep older deployed clients on the same wire shape.
+ *
+ * A priced pack is paid for either by a verified Play purchase or by credits
+ * from the athlete's balance; the result says which happened, or how many
+ * credits were missing so the screen can offer a top-up.
+ *
+ * Deliberately a flat shape rather than a discriminated union: this project
+ * compiles with `strict: false`, under which boolean discriminants do not
+ * narrow, and it matches SpendResult in src/lib/credits.ts.
+ */
+export type ClaimResult = {
+  ok: boolean;
+  duplicate: boolean;
+  /** Credits actually charged: 0 for a free pack or a store purchase. */
+  creditsPaid: number;
+  balance: number;
+  /** Credits the pack costs — only meaningful when `ok` is false. */
+  required: number;
+  /** How many more credits are needed — only when `ok` is false. */
+  shortfall: number;
+  error?: "insufficient_credits";
+};
+
+export async function claimEventPack(pack: EventPack): Promise<ClaimResult> {
   const { data, error } = await supabase.rpc("claim_event_pack", {
     p_pack_id: pack.id,
     p_pack_name: pack.name,
@@ -104,7 +134,37 @@ export async function claimEventPack(pack: EventPack): Promise<{ duplicate: bool
     p_version: pack.version,
   });
   if (error) throw error;
-  return { duplicate: !!(data as { duplicate?: boolean } | null)?.duplicate };
+
+  const r = (data ?? {}) as {
+    ok?: boolean;
+    duplicate?: boolean;
+    credits_paid?: number;
+    balance?: number | null;
+    error?: string;
+    required?: number;
+    shortfall?: number;
+  };
+
+  if (r.ok === false && r.error === "insufficient_credits") {
+    return {
+      ok: false,
+      duplicate: false,
+      creditsPaid: 0,
+      error: "insufficient_credits",
+      required: Number(r.required ?? 0),
+      balance: Number(r.balance ?? 0),
+      shortfall: Number(r.shortfall ?? 0),
+    };
+  }
+
+  return {
+    ok: true,
+    duplicate: !!r.duplicate,
+    creditsPaid: Number(r.credits_paid ?? 0),
+    balance: Number(r.balance ?? 0),
+    required: 0,
+    shortfall: 0,
+  };
 }
 
 /** Similar packs: same target event first, then same sport/category. */

@@ -175,11 +175,20 @@ remains is Play Console setup, a Capacitor billing plugin, and secrets.
    credits end-to-end is proof the production path works. Billing must be
    configured in Play Console (merchant account) before test purchases work.
 
-**Event Packs are gated on a paid purchase.** `claim_event_pack` reads identity
-and price from the `event_packs` table (seeded from `src/config/eventPacks.ts`
-via `npm run gen:packs`) and requires a verified `user_purchases` row for any
-priced pack. Until Play Billing is wired to that screen, packs are deliberately
-**unbuyable** and `EventPacks.tsx` says so rather than reporting a declined card.
+**Event Packs are bought with credits.** `claim_event_pack` reads identity and
+both prices from the `event_packs` table (seeded from `src/config/eventPacks.ts`
+via `npm run gen:packs`); nothing the client sends is trusted. A priced pack is
+settled either by a verified `user_purchases` row — which only `process-purchase`
+can write — or by deducting its `credit_price` from the athlete's balance. A
+shortfall comes back as data, not an exception, so the screen opens the top-up
+sheet for the exact gap and retries the pack the athlete wanted.
+
+The cash price is retained for the Play Billing launch; a pack is cash-only only
+while its `credit_price` is 0. Two deliberate properties worth not undoing:
+unlimited subscriptions do **not** cover packs (that entitlement is for metered
+AI features, so the charge bypasses `credits_spend()`), and the credits rate is a
+single constant in `src/config/eventPacks.ts`. Both are pinned by
+`src/lib/eventPackCredits.test.ts`.
 
 ---
 
