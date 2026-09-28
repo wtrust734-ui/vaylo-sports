@@ -28,7 +28,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "auth:posture": "node scripts/auth-posture.mjs"
+    "auth:posture": "node scripts/auth-posture.mjs",
+    "ai:health": "node scripts/ai-health.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
