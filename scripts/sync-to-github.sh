@@ -25,6 +25,12 @@
 # android/app/src/main/assets, which `npx cap sync` owns. Mirroring those between
 # trees is how a fresh sync got silently replaced by an older one.
 #
+# `android/capacitor-cordova-android-plugins/build/` is in that list for the same
+# reason and was found by dry-running the command below: Gradle writes ~50
+# intermediates there on every Android build, and every one of them was being
+# copied on each sync. Only the `build/` subdirectory is excluded — the generated
+# gradle files beside it are what a Gradle build in the repository reads.
+#
 # ARTIFACTS are excluded too. These two live in the Freebuff checkout and belong
 # to it, not to the project, and neither is git-ignored — so without this a full
 # sync would commit them on the first run:
@@ -62,6 +68,7 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude='.git/' --exclude='node_modules/' --exclude='dist/' \
     --exclude='android/app/build/' --exclude='android/build/' \
     --exclude='android/app/src/main/assets/' --exclude='.freebuff/' \
+    --exclude='android/capacitor-cordova-android-plugins/build/' \
     --exclude='bun.lockb' --exclude='project-id' \
     --exclude='*.tsbuildinfo' \
     "$M"/ "$P"/
@@ -74,9 +81,11 @@ elif command -v robocopy >/dev/null 2>&1; then
   EX_BUILD="$(cygpath -w "$M/android/app/build" 2>/dev/null || echo "$M/android/app/build")"
   EX_ROOTBUILD="$(cygpath -w "$M/android/build" 2>/dev/null || echo "$M/android/build")"
   EX_ASSETS="$(cygpath -w "$M/android/app/src/main/assets" 2>/dev/null || echo "$M/android/app/src/main/assets")"
+  EX_CORDOVA_BUILD="$(cygpath -w "$M/android/capacitor-cordova-android-plugins/build" 2>/dev/null || echo "$M/android/capacitor-cordova-android-plugins/build")"
   # No /MIR: deleting in the repository is git's job, not a copy tool's.
   MSYS_NO_PATHCONV=1 robocopy "$M_WIN" "$P_WIN" /E \
-    /XD .git node_modules dist .freebuff "$EX_BUILD" "$EX_ROOTBUILD" "$EX_ASSETS" \
+    /XD .git node_modules dist .freebuff \
+    "$EX_BUILD" "$EX_ROOTBUILD" "$EX_ASSETS" "$EX_CORDOVA_BUILD" \
     /XF "*.tsbuildinfo" $ARTIFACTS /NFL /NDL /NJH /NJS /NC /NS >/dev/null 2>&1 || true
   echo "[sync] copied with robocopy"
 else
