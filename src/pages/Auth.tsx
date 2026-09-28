@@ -143,8 +143,30 @@ const Auth = () => {
     return () => { cancelled = true; };
   }, [session, pendingRef, toast]);
 
+  /**
+   * Consent gate for everything that can *create* an account.
+   *
+   * Email-and-password is not the only door: OAuth, the magic link and the phone
+   * code all create the account on first use, so guarding only `handleSubmit`
+   * would have left the age and terms acknowledgement trivially bypassable by
+   * tapping "Continue with Google" instead.
+   *
+   * Sign-in is deliberately never gated — an existing athlete has already agreed,
+   * and asking again on a login screen only creates a way to lock yourself out.
+   */
+  const consentGiven = (): boolean => {
+    if (isLogin || acceptedTerms) return true;
+    toast({
+      title: "Please accept the Terms",
+      description: "You need to accept the Terms of Service and Privacy Policy to create an account.",
+      variant: "destructive",
+    });
+    return false;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!consentGiven()) return;
     setLoading(true);
 
     try {
@@ -152,14 +174,6 @@ const Auth = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        if (!acceptedTerms) {
-          toast({
-            title: "Please accept the Terms",
-            description: "You need to accept the Terms of Service and Privacy Policy to create an account.",
-            variant: "destructive",
-          });
-          return;
-        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -228,6 +242,7 @@ const Auth = () => {
   // step 2 exchanges the code for a session. Creates the account on first use,
   // exactly like magic-link sign-up.
   const handlePhoneSend = async () => {
+    if (!consentGiven()) return;
     const phone = normalisePhone(phoneRaw);
     if (!phone) {
       toast({
@@ -273,6 +288,7 @@ const Auth = () => {
   // Magic link: passwordless sign-in/sign-up over email. Rides the same email
   // provider as passwords, so it is offered whenever email auth is enabled.
   const handleMagicLink = async () => {
+    if (!consentGiven()) return;
     if (!email.trim()) {
       toast({
         title: "Enter your email first",
@@ -316,6 +332,7 @@ const Auth = () => {
   };
 
   const handleMicrosoftSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("azure", { scopes: "email profile openid offline_access" });
       if (url && usesNativeOAuth()) {
@@ -329,6 +346,7 @@ const Auth = () => {
   };
 
   const handleDiscordSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("discord");
       if (url && usesNativeOAuth()) {
@@ -341,6 +359,7 @@ const Auth = () => {
   };
 
   const handleFacebookSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("facebook");
       if (url && usesNativeOAuth()) {
@@ -353,6 +372,7 @@ const Auth = () => {
   };
 
   const handleLinkedInSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("linkedin_oidc");
       if (url && usesNativeOAuth()) {
@@ -365,6 +385,7 @@ const Auth = () => {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("google");
       if (url && usesNativeOAuth()) {
@@ -377,6 +398,7 @@ const Auth = () => {
   };
 
   const handleAppleSignIn = async () => {
+    if (!consentGiven()) return;
     try {
       const url = await startOAuth("apple");
       if (url && usesNativeOAuth()) {
