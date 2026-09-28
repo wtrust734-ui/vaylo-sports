@@ -1,7 +1,7 @@
 // ============================================================================
 // PROFILE COSMETICS
 // ----------------------------------------------------------------------------
-// The identity layer: titles, borders, backgrounds, name colours and effects.
+// The identity layer: titles, borders, backgrounds, name colors and effects.
 // Definitions live in `reward_definitions`, ownership in `user_rewards`, and
 // what is currently equipped in `user_profile_cosmetics` (one row per user).
 //
@@ -78,7 +78,7 @@ export const cosmeticLabel = (def?: CosmeticDef | null): string => {
   return label ?? def.name;
 };
 
-/** Colour a cosmetic paints with (name colours and borders). */
+/** Color a cosmetic paints with (name colors and borders). */
 export const cosmeticColor = (def?: CosmeticDef | null): string | null =>
   (def?.payload as { color?: string } | null)?.color ?? null;
 

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Wind, AlertTriangle, Zap, Crosshair, TrendingUp, ShoppingBag, Target, BarChart3, ArrowLeft } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { creditCost } from "@/lib/credits";
+import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import MentalCheckIn from "@/components/mental/MentalCheckIn";
 import BreathingTool from "@/components/mental/BreathingTool";
 import PressureScenarios from "@/components/mental/PressureScenarios";
@@ -17,25 +18,41 @@ type Tab = "checkin" | "train" | "race" | "review" | "progress";
 type TrainTool = "breathing" | "pressure" | "reset" | "cue" | null;
 
 const Mental = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [hasAccess, setHasAccess] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const { hasFeature, loading: entitlementsLoading, refresh } = useSubscription();
+  const [unlocking, setUnlocking] = useState(false);
   const [tab, setTab] = useState<Tab>("checkin");
   const [trainTool, setTrainTool] = useState<TrainTool>(null);
   const [cueWords, setCueWords] = useState<string[]>([]);
   const [readiness, setReadiness] = useState<number | null>(null);
   const [raceMode, setRaceMode] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("user_purchases").select("product_id").eq("user_id", user.id)
-      .in("product_id", ["mental_gym", "pro_subscription", "pro"])
-      .then(({ data }) => {
-        setHasAccess((data || []).length > 0);
-        setLoading(false);
-      });
-  }, [user]);
+  // Access comes from the subscription context, not a query of this page's own.
+  // The old check asked user_purchases for "pro" and "pro_subscription" — ids
+  // the app no longer writes — so it missed every current subscriber, and it
+  // could only ever see a one-time purchase. hasFeature covers the active
+  // plans as well, which is what "also included with the Premium plan" on the
+  // card below actually promises.
+  const hasAccess = hasFeature("mental_gym");
+  const loading = entitlementsLoading;
+  const unlock = useUnlockFeature();
+
+  const handleUnlock = async () => {
+    setUnlocking(true);
+    try {
+      const res = await unlock("mental_gym");
+      if (res.status === "failed") {
+        toast(res.error || "Could not unlock Mental Gym");
+        return;
+      }
+      toast("Mental Gym unlocked");
+      await refresh();
+    } catch (e) {
+      toast((e as Error)?.message || "Failed to unlock");
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   if (loading) return <div className="min-h-screen bg-background" />;
 
@@ -48,9 +65,9 @@ const Mental = () => {
           </motion.div>
           <h1 className="text-2xl font-display font-bold mb-2">Mental Gym</h1>
           <p className="text-sm text-muted-foreground mb-6">Elite mental training for athletes. Used before, during, and after competition.</p>
-          <motion.button whileTap={{ scale: 0.98 }} onClick={() => navigate("/market")}
-            className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-3 rounded-xl mb-3">
-            <ShoppingBag size={18} /> Unlock for 39 credits
+          <motion.button whileTap={{ scale: 0.98 }} onClick={handleUnlock} disabled={unlocking}
+            className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-3 rounded-xl mb-3 disabled:opacity-60">
+            <ShoppingBag size={18} /> {unlocking ? "Unlocking…" : `Unlock for ${creditCost("mental_gym_unlock")} credits`}
           </motion.button>
           <p className="text-xs text-muted-foreground">One-time unlock. Also included with the Premium plan.</p>
         </motion.div>

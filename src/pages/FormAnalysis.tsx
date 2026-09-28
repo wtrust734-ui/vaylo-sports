@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
+import { creditCost } from "@/lib/credits";
+import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 
 const drillCategories = [
   {
@@ -53,7 +55,7 @@ const drillCategories = [
 
 const FormAnalysis = () => {
   const { user } = useAuth();
-  const { hasFeature } = useSubscription();
+  const { hasFeature, refresh } = useSubscription();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [expandedDrill, setExpandedDrill] = useState<string | null>(null);
@@ -68,6 +70,33 @@ const FormAnalysis = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasAccess = hasFeature("form_analysis");
+
+  // The card quoted a price and then sent the athlete to the Market, which
+  // sells packs and plans and not this unlock — so topping up bought nothing
+  // they could spend it on. The purchase now happens here, and a shortfall
+  // becomes a top-up for the exact gap with the unlock retried after it.
+  // The price is read from the credit config rather than written into the
+  // button, so the two cannot drift the way the old "54 credits" copy did.
+  const [unlocking, setUnlocking] = useState(false);
+  const unlock = useUnlockFeature();
+  const formCost = creditCost("form_analysis_unlock");
+
+  const handleUnlock = async () => {
+    setUnlocking(true);
+    try {
+      const res = await unlock("form_analysis");
+      if (res.status === "failed") {
+        toast(res.error || "Could not unlock AI Analysis");
+        return;
+      }
+      toast("AI Analysis unlocked");
+      await refresh();
+    } catch (e) {
+      toast((e as Error)?.message || "Failed to unlock");
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -185,9 +214,10 @@ const FormAnalysis = () => {
             <h3 className="font-display font-bold text-lg mb-1">Unlock AI Analysis</h3>
             <p className="text-sm text-muted-foreground mb-3">Get AI-powered photo feedback on your form. Unlocked with the Premium plan or a one-time 54-credit purchase.</p>
             <motion.button whileTap={{ scale: 0.98 }}
-              onClick={() => navigate("/market")}
-              className="w-full flex items-center justify-center gap-2 bg-muted text-muted-foreground font-semibold py-3 rounded-xl">
-              <Lock size={18} /> 54 credits — Unlock in Market
+              onClick={handleUnlock}
+              disabled={unlocking}
+              className="w-full flex items-center justify-center gap-2 bg-muted text-muted-foreground font-semibold py-3 rounded-xl disabled:opacity-60">
+              <Lock size={18} /> {unlocking ? "Unlocking…" : `Unlock for ${formCost} credits`}
             </motion.button>
           </>
         )}

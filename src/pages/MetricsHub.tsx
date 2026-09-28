@@ -42,7 +42,7 @@ const MetricsHub = () => {
 
   const analysis = analyzeLoads(loads);
   // With no logs there is no readiness, no ratio and no injury risk — only the
-  // absence of data. Defaulting to 50 coloured the tile red and made a new
+  // absence of data. Defaulting to 50 colored the tile red and made a new
   // athlete look like they were in trouble on day one, and a ratio of 0 counts
   // as "undertrained", so the risk tile said MODERATE out of nothing at all.
   const hasRecovery = recovery.length > 0;

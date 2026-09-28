@@ -42,6 +42,18 @@ Ordered by how early they block you.
 2. **A demo account for the reviewer** (email + password), for the App access
    declaration in §4. The app is behind a login, so without this a reviewer sees
    the sign-in screen and nothing else.
+
+   One already exists and is the same account the UI audit signs in with:
+   `ui.review.20260928@example.com`. It has starting grant credits, no purchases,
+   no personal data, and no connection to a real athlete. Its password is in
+   `.freebuff/ui-audit.local.json` in the working checkout — outside the
+   repository on purpose, since the same password gets pasted into the Play
+   listing anyway and one copy is easier to rotate than two.
+
+   Two things to do with it. Put the credentials in the App access declaration
+   before you submit, and re-check before you go public: a reviewer account that
+   is still reachable after launch is an open door, and deleting it then means
+   re-doing this section for the next reviewer.
 3. **`OPENAI_API_KEY`** as a Supabase secret. Every AI feature returns HTTP 500 in
    production right now (`supabase/functions/_shared/openai.ts` throws
    `AI service is not configured`). A reviewer who tries the coach will see a

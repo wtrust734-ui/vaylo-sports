@@ -16,10 +16,17 @@
 // text report to .freebuff/ui-audit/ (outside the repo, so a sync won't pick
 // them up).
 //
-// Signing in is done through the real auth REST endpoint with a throwaway
-// account, then the session is written to localStorage in the shape
+// Signing in is done through the real auth REST endpoint with a dedicated
+// review account, then the session is written to localStorage in the shape
 // supabase-js v2 reads. That is the only way to see the app: every screen but
 // /auth is behind a session.
+//
+// The credentials are not in this file. The review account is the same one
+// Play's reviewers use, so its password ends up pasted into a Play Console
+// listing regardless; keeping a copy in the repository too would just mean two
+// places to rotate. They are read from UI_EMAIL/UI_PASSWORD, or from
+// .freebuff/ui-audit.local.json, which is outside the repo and therefore never
+// committed by a sync.
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -47,8 +54,18 @@ const OUT = ".freebuff/ui-audit";
 // --user-data-dir is relative. Cost a whole debugging detour once.
 const PROFILE = resolve(".freebuff/ui-audit-profile");
 
-const EMAIL = process.env.UI_EMAIL || "ui.review.20260928@example.com";
-const PASSWORD = process.env.UI_PASSWORD || "UiReview!20260928";
+const LOCAL_CREDS = ".freebuff/ui-audit.local.json";
+const localCreds = existsSync(LOCAL_CREDS) ? JSON.parse(readFileSync(LOCAL_CREDS, "utf8")) : {};
+const EMAIL = process.env.UI_EMAIL || localCreds.email;
+const PASSWORD = process.env.UI_PASSWORD || localCreds.password;
+if (!EMAIL || !PASSWORD) {
+  console.error(
+    `ui-audit: no review-account credentials.\n` +
+      `  Set UI_EMAIL and UI_PASSWORD, or write ${LOCAL_CREDS}:\n` +
+      `    { "email": "...", "password": "..." }`,
+  );
+  process.exit(1);
+}
 
 // Routes worth looking at: the tab-level screens an athlete actually lands on,
 // plus the ones built most recently.
@@ -400,6 +417,7 @@ async function main() {
   }
 
   const report = [];
+  const flowResults = [];
   for (const [name, route] of routes) {
     cdp.drain();
     if (route && name === "auth") {
@@ -430,6 +448,22 @@ async function main() {
         }
         return false;
       };
+      // An element that sticks out of a *clipping* ancestor is a different
+      // thing, and reporting it as viewport overflow is how this check learned
+      // to cry wolf: three blurred decorative glows sit deliberately past the
+      // edge of their card, which has overflow-hidden, and were reported as
+      // layout defects on every run. A glow being cut off is the design. Text
+      // being cut off is not, so that is reported separately as CLIPPED, where
+      // it can be acted on.
+      const clippingAncestor = (el) => {
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+          const ox = getComputedStyle(p).overflowX;
+          if (ox === "hidden" || ox === "clip") return p;
+        }
+        return null;
+      };
+      const clipped = [];
+      const clippedSeen = new Set();
       for (const el of document.querySelectorAll("body *")) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) continue;
@@ -437,6 +471,20 @@ async function main() {
         if (right > vw + 1 && !inScroller(el)) {
           const cs = getComputedStyle(el);
           if (cs.position === "fixed" || cs.display === "none" || cs.visibility === "hidden") continue;
+          const clip = clippingAncestor(el);
+          if (clip) {
+            // Cut off by its own card. Only worth reporting if something the
+            // athlete needs to read is on the far side of the cut.
+            const text = (el.textContent || "").trim();
+            if (text.length > 0) {
+              const tag = el.tagName.toLowerCase() + "." + String(el.className || "").trim().split(/\\s+/).slice(0, 2).join(".");
+              if (!clippedSeen.has(tag + "|" + text.slice(0, 20))) {
+                clippedSeen.add(tag + "|" + text.slice(0, 20));
+                clipped.push({ tag: tag.slice(0, 70), text: text.slice(0, 60) });
+              }
+            }
+            continue;
+          }
           const tag = el.tagName.toLowerCase() + (el.className && typeof el.className === "string"
             ? "." + el.className.trim().split(/\\s+/).slice(0, 3).join(".")
             : "");
@@ -482,6 +530,8 @@ async function main() {
         text: text.slice(0, 4000),
         offenders: offenders.slice(0, 6),
         offenderCount: offenders.length,
+        clipped: clipped.slice(0, 6),
+        clippedCount: clipped.length,
         badStrings: [],
         bodyBg: getComputedStyle(document.body).backgroundColor,
       };
@@ -522,6 +572,7 @@ async function main() {
     report.push({ name, requested: route, ...probe });
     const flags = [];
     if (probe.offenderCount) flags.push(`OVERFLOW x${probe.offenderCount}`);
+    if (probe.clippedCount) flags.push(`CLIPPED-TEXT x${probe.clippedCount}`);
     if (probe.docWidth > probe.viewport) flags.push(`H-SCROLL ${probe.docWidth}>${probe.viewport}`);
     if (probe.url !== route) flags.push(`redirected to ${probe.url}`);
     if (probe.smallTargetCount) flags.push(`${probe.smallTargetCount} small targets`);
@@ -531,13 +582,31 @@ async function main() {
     for (const o of probe.offenders) {
       console.log(`               +${o.over}px  ${o.tag}  "${o.text}"`);
     }
+    for (const c of probe.clipped || []) {
+      console.log(`               cut off  ${c.tag}  "${c.text}"`);
+    }
     for (const t of probe.smallTargets || []) {
       console.log(`                target ${t.w}x${t.h}  "${t.label}"`);
     }
     if (probe.badStrings.length) console.log(`               bad text: ${probe.badStrings.join(", ")}`);
   }
 
-  writeFileSync(`${OUT}/report.json`, JSON.stringify({ report, consoleIssues }, null, 2));
+  // The one journey with money in it that a screenshot cannot check: a locked
+  // feature quoting a credit price, the purchase coming up short, and the gap
+  // turning into a top-up sheet. Screenshots of Form Analysis only prove the
+  // card renders. This drives the button and reads what the athlete gets.
+  //
+  // Form Analysis is used rather than Mental Gym because it costs more than the
+  // review account holds, so the run exercises the shortfall path and cannot
+  // quietly spend the balance. If that account is ever topped up, this picks
+  // whichever locked card is still short rather than buying something.
+  if (process.argv.includes("--flow=unlock")) {
+    const verdict = await unlockFlow(cdp);
+    flowResults.push(verdict);
+    console.log(`[flow:unlock] ${verdict.ok ? "PASS" : "FAIL"} — ${verdict.detail}`);
+  }
+
+  writeFileSync(`${OUT}/report.json`, JSON.stringify({ report, consoleIssues, flows: flowResults }, null, 2));
   writeGallery();
   console.log(`\n--- console/network errors (${consoleIssues.length}) ---`);
   const grouped = new Map();
@@ -554,11 +623,15 @@ async function main() {
     for (const r of report) {
       if (r.smallTargetCount) failures.push(`${r.name}: ${r.smallTargetCount} controls under 44px`);
       if (r.docWidth > r.viewport) failures.push(`${r.name}: page scrolls sideways (${r.docWidth} > ${r.viewport})`);
+      if (r.clippedCount) failures.push(`${r.name}: ${r.clippedCount} elements cut off by their own container`);
       if (r.badStrings?.length) failures.push(`${r.name}: placeholder text on screen (${r.badStrings.join(", ")})`);
     }
     for (const c of consoleIssues) {
       if (c.kind === "exception") failures.push(`${c.route}: ${c.text}`);
       if (c.kind === "request-failed") failures.push(`${c.route}: ${c.text}`);
+    }
+    for (const f of flowResults) {
+      if (!f.ok) failures.push(`flow ${f.flow}: ${f.detail}`);
     }
     await finish(chrome, server);
     if (failures.length) {
@@ -566,7 +639,7 @@ async function main() {
       for (const f of failures) console.error("  - " + f);
       process.exit(1);
     }
-    console.log("\nui-audit: PASS — every control is at least 44px, nothing scrolls sideways");
+    console.log("\nui-audit: PASS — every control is at least 44px, nothing scrolls sideways, nothing is cut off");
     process.exit(0);
   }
 
@@ -579,6 +652,52 @@ async function main() {
 
 // A single page with every screenshot inlined, so the whole app can be reviewed
 // by scrolling one tab instead of opening 19 files.
+// Drive the shortest path with money on it: a locked feature quoting a price,
+// the purchase coming up short, and the gap becoming a top-up sheet. Nothing
+// here buys anything — the review account's balance is below the Form Analysis
+// price by design, so the run lands on the shortfall branch. If that ever
+// changes, the flow says so rather than quietly spending credits.
+async function unlockFlow(cdp) {
+  await cdp.send("Page.navigate", { url: `${APP}/form` });
+  await sleep(4500);
+
+  const clicked = await cdp.evaluate(`(() => {
+    const el = [...document.querySelectorAll("button, a, [role=button]")]
+      .find((e) => /unlock/i.test(e.textContent || "") && e.getBoundingClientRect().height > 0);
+    if (!el) return { ok: false, why: "no unlock control on the page" };
+    el.click();
+    return { ok: true, label: el.textContent.trim().slice(0, 60) };
+  })()`);
+  if (!clicked.ok) {
+    return { ok: false, flow: "unlock", detail: clicked.why, step: "find-unlock" };
+  }
+
+  // The purchase round-trip and the sheet animation.
+  await sleep(6000);
+
+  const state = await cdp.evaluate(`(() => {
+    const text = document.body.innerText || "";
+    const gap = text.match(/([\\d,]+)\\s+more credits needed/i);
+    return {
+      gap: gap ? gap[1] : null,
+      asksToTopUp: /more credits needed|top up to finish/i.test(text),
+      // The sheet has to say what it is selling, or the athlete is looking at a
+      // credit pack with no idea it is the last step of a purchase they started.
+      namesTheUnlock: /top up to finish:\\s*form analysis/i.test(text),
+      tail: text.slice(-400).replace(/\\s+/g, " ").slice(0, 300),
+    };
+  })()`);
+
+  const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+  writeFileSync(`${OUT}/flow-unlock.png`, Buffer.from(shot.data, "base64"));
+
+  const ok = state.asksToTopUp && Boolean(state.gap) && state.namesTheUnlock;
+  const detail = ok
+    ? `clicked "${clicked.label}", sheet asks for ${state.gap} more credits and names the unlock`
+    : `clicked "${clicked.label}" but the top-up sheet was wrong (gap=${state.gap}, names the unlock=${state.namesTheUnlock}); page ends: ${state.tail}`;
+  return { ok, flow: "unlock", detail, gap: state.gap, label: clicked.label };
+}
+
 function writeGallery() {
   const shots = readdirSync(OUT).filter((f) => f.endsWith(".png")).sort();
   const cells = shots

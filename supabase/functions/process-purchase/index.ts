@@ -303,8 +303,18 @@ Deno.serve(async (req) => {
         }
         const cost = Number(costRow);
         if (cost > availableCredits) {
+          // 402 with a machine-readable shortfall as well as the sentence: the
+          // client's top-up sheet needs the gap, not a number it has to parse
+          // out of prose. Without this an unlock was a dead end — the athlete
+          // saw "need 39" and nothing else they could do about it.
           return new Response(
-            JSON.stringify({ error: `Not enough credits for ${productId} (need ${cost}).` }),
+            JSON.stringify({
+              error: `Not enough credits for ${productId} (need ${cost}).`,
+              code: "insufficient_credits",
+              required: cost,
+              balance: availableCredits,
+              shortfall: cost - availableCredits,
+            }),
             { status: 402, headers: corsHeaders }
           );
         }

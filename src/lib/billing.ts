@@ -64,6 +64,33 @@ export interface BillingProvider {
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error ?? "Purchase failed");
 
+/**
+ * Pull a message and the rest of the body out of a failed function call.
+ *
+ * supabase-js rejects with a FunctionsHttpError whose `context` is the Response,
+ * so the body has to be read off it — it is a stream, not a string, and
+ * JSON.parse of one throws. Exported and unit-tested (billing.test.ts) because
+ * the failure mode is invisible: nothing throws, the athlete just reads
+ * "[object ReadableStream]".
+ */
+export async function readPurchaseError(
+  error: unknown,
+  fallback: string
+): Promise<{ message: string; detail: Record<string, unknown> }> {
+  const message = error instanceof Error ? error.message : fallback;
+  const context = (error as { context?: unknown } | null)?.context;
+  if (!(context instanceof Response)) return { message, detail: {} };
+  // clone(): the stream is one-shot and the caller may still want the original.
+  const text = await context.clone().text().catch(() => "");
+  if (!text) return { message, detail: {} };
+  try {
+    const parsed = JSON.parse(text) as { error?: string; [key: string]: unknown };
+    return { message: parsed.error ?? message, detail: parsed };
+  } catch {
+    return { message: text, detail: {} };
+  }
+}
+
 /** Shared edge-function call — the same endpoint and body the app already used. */
 async function invokePurchase(
   items: PurchaseItem[],
@@ -78,17 +105,8 @@ async function invokePurchase(
   });
 
   if (error) {
-    // supabase-js wraps non-2xx responses; surface the server's message.
-    const context = (error as { context?: { body?: string } }).context;
-    let message = error.message;
-    if (context?.body) {
-      try {
-        message = JSON.parse(context.body)?.error ?? message;
-      } catch {
-        message = context.body || message;
-      }
-    }
-    return { ok: false, error: message };
+    const { message, detail } = await readPurchaseError(error, "Purchase failed");
+    return { ok: false, error: message, data: detail };
   }
 
   const payload = (data ?? {}) as { error?: string };

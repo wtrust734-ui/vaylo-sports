@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeLoads, type LoadRow } from "@/lib/performance";
 import { creditCost } from "@/lib/credits";
-import { purchaseItems } from "@/lib/billing";
+import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,6 +101,7 @@ const Injury = () => {
   const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
   const [unlocked, setUnlocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const unlock = useUnlockFeature();
 
   useEffect(() => { if (user) load(); }, [user]);
   const load = async () => {
@@ -129,8 +130,14 @@ const Injury = () => {
       // `user_purchases` also accepted client inserts for any product id, the
       // entitlement itself was forgeable without paying. process-purchase reads
       // the price from the database, spends the credits and records the unlock.
-      const res = await purchaseItems([{ product_id: "injury_management", product_type: "feature_unlock" }]);
-      if (!res.ok) { toast.error(res.error || "Could not unlock Injury Management"); return; }
+      //
+      // The hook rather than a bare purchaseItems call: this was the only
+      // feature that could actually be bought, and it was also the only one
+      // that dead-ended at "not enough credits". useUnlockFeature turns the
+      // shortfall into a top-up for the exact gap and retries, which is what
+      // the other two locked features now do too.
+      const res = await unlock("injury_management");
+      if (res.status === "failed") { toast.error(res.error || "Could not unlock Injury Management"); return; }
       await refreshProfile();
       setUnlocked(true);
       toast.success("Injury Management unlocked!");

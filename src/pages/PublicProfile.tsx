@@ -38,7 +38,7 @@ interface ProfileState {
   name: string;
   /** Equipped public title cosmetic, if any. */
   titleLabel: string;
-  /** Equipped name-colour cosmetic, if any. */
+  /** Equipped name-color cosmetic, if any. */
   nameColor: string | null;
   loadout: AvatarLoadout | null;
   /** False when the athlete has asked not to be shown publicly. */
@@ -78,7 +78,7 @@ const PublicProfile = () => {
 
       // Equipped cosmetics are public (`user_profile_cosmetics` and
       // `reward_definitions` are both readable), so they render here too. Titles
-      // carry their display text in payload; name colours carry a hex value.
+      // carry their display text in payload; name colors carry a hex value.
       let titleLabel = "";
       let nameColor: string | null = null;
       const cosmeticIds = [cosRes?.data?.title_id, cosRes?.data?.name_color_id].filter((id): id is string => !!id);
@@ -86,9 +86,9 @@ const PublicProfile = () => {
         const { data: defs } = await supabase.from("reward_definitions").select("id,name,payload").in("id", cosmeticIds);
         const byId = new Map<string, CosmeticDefRow>((defs ?? []).map(d => [d.id, d as CosmeticDefRow]));
         const title = cosRes?.data?.title_id ? byId.get(cosRes.data.title_id) : undefined;
-        const colour = cosRes?.data?.name_color_id ? byId.get(cosRes.data.name_color_id) : undefined;
+        const color = cosRes?.data?.name_color_id ? byId.get(cosRes.data.name_color_id) : undefined;
         titleLabel = (title?.payload as { label?: string } | null)?.label ?? title?.name ?? "";
-        nameColor = (colour?.payload as { color?: string } | null)?.color ?? null;
+        nameColor = (color?.payload as { color?: string } | null)?.color ?? null;
       }
 
       // Points come from `points_events` (publicly readable). Rank is only
