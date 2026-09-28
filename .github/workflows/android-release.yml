@@ -1,0 +1,146 @@
+name: android-release
+
+# Produces the signed App Bundle that goes to a Play testing track.
+#
+# Not wired to `push`: an upload is a deliberate act, and every bundle consumed
+# by Play must carry a versionCode it has never seen before, so this runs when
+# someone asks for it — by hand, or by pushing a v* tag.
+#
+# Needs four repository secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64    base64 of android/upload-keystore.jks
+#   ANDROID_KEYSTORE_PASSWORD  storePassword from android/keystore.properties
+#   ANDROID_KEY_ALIAS          keyAlias  (currently "upload")
+#   ANDROID_KEY_PASSWORD       keyPassword
+# PLAY_STORE.md § "Build the bundle in CI" has the exact commands to produce the
+# base64 value from the local keystore.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "versionCode — must be higher than every previous upload"
+        required: true
+        type: string
+      version_name:
+        description: "versionName shown to testers (e.g. 1.2.0)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check signing secrets are present
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ]   || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]         || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ]      || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "See PLAY_STORE.md for the values and how to generate ANDROID_KEYSTORE_BASE64."
+            exit 1
+          fi
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          # Must satisfy `@capacitor/cli`'s `engines.node` (>=22.0.0).
+          node-version: "22"
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # A release bundle must not come from an unverified tree. These are the
+      # same gates the debug workflow runs on every push.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build web assets for the native shell
+        run: npm run build:native
+
+      - name: Sync Capacitor Android assets
+        run: npx cap sync android
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Write the upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          # `storeFile` is resolved against the root project dir (android/).
+          cat > android/keystore.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          # Nothing here should ever be printed, so only ever confirm sizes.
+          echo "keystore bytes: $(wc -c < android/upload-keystore.jks)"
+
+      - name: Build release App Bundle
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          set -euo pipefail
+          extra=""
+          if [ -n "${VERSION_CODE:-}" ]; then extra="$extra -PversionCode=$VERSION_CODE"; fi
+          if [ -n "${VERSION_NAME:-}" ]; then extra="$extra -PversionName=$VERSION_NAME"; fi
+          ./gradlew bundleRelease --no-daemon $extra
+
+      - name: Verify the bundle is signed
+        working-directory: android
+        run: |
+          set -euo pipefail
+          bundle=app/build/outputs/bundle/release/app-release.aab
+          test -f "$bundle"
+          jarsigner -verify "$bundle"
+          # jarsigner exits 0 for a self-signed Android key, so also assert the
+          # signer is the upload key and not the debug key that Play refuses.
+          signer=$(keytool -printcert -jarfile "$bundle" | grep -m1 "Owner:")
+          echo "$signer"
+          echo "$signer" | grep -q "Vaylo Sports" || {
+            echo "::error::Bundle is not signed with the Vaylo Sports upload key"
+            exit 1
+          }
+
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-release
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30

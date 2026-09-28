@@ -1,6 +1,30 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// ============================================================================
+// RELEASE SIGNING
+// ----------------------------------------------------------------------------
+// Play refuses a debug-signed or unsigned bundle, so a release build has to find
+// a real key. Credentials are read from android/keystore.properties locally
+// (git-ignored, alongside the .jks) or from the environment in CI, where the
+// keystore is written out from a repository secret.
+//
+// This is an UPLOAD key. New Play apps enrol in Play App Signing, so Google
+// holds the key that actually signs what users install and this one only
+// authorises uploads — if it is ever lost, Play Console can reset it.
+// ============================================================================
+def releaseSigningProps = new Properties()
+def releaseSigningFile = rootProject.file("keystore.properties")
+if (releaseSigningFile.exists()) {
+    releaseSigningFile.withInputStream { releaseSigningProps.load(it) }
+}
+
+def releaseStorePath = releaseSigningProps.getProperty("storeFile") ?: System.getenv("ANDROID_KEYSTORE_FILE")
+def releaseStorePassword = releaseSigningProps.getProperty("storePassword") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = releaseSigningProps.getProperty("keyAlias") ?: System.getenv("ANDROID_KEY_ALIAS")
+def releaseKeyPassword = releaseSigningProps.getProperty("keyPassword") ?: System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it }
+
 android {
     namespace = "com.vaylosports.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +32,12 @@ android {
         applicationId "com.vaylosports.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1.0"
+        // Overridable from CI (`./gradlew bundleRelease -PversionCode=4`), so a
+        // tester-only fix does not need a commit just to bump a number. Play
+        // rejects any upload whose versionCode it has already seen, so every
+        // closed-testing upload needs a new one.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 2
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,10 +45,45 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                // v1 is required for Android 6 and below, v2+ for everything
+                // newer. The bundle is re-signed by Play, but a locally built
+                // release APK has to verify on its own.
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+// Fail with an explanation instead of producing an artifact Play will reject.
+// Gradle's own message for a missing signing config is a bare "not signed".
+tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
+    doFirst {
+        if (!hasReleaseSigning) {
+            throw new GradleException(
+                "Release signing is not configured.\n" +
+                "  Local: create android/keystore.properties with storeFile, storePassword,\n" +
+                "         keyAlias and keyPassword (see PLAY_STORE.md).\n" +
+                "  CI:    set the ANDROID_KEYSTORE_FILE, ANDROID_KEYSTORE_PASSWORD,\n" +
+                "         ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets."
+            )
         }
     }
 }
