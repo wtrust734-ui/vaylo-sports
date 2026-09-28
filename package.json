@@ -22,6 +22,8 @@
     "typecheck": "npm run typecheck:app && npm run typecheck:functions",
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "typecheck:functions": "tsc --noEmit -p tsconfig.functions.json",
+    "ui:audit": "npm run build && node scripts/ui-audit.mjs",
+    "ui:check": "npm run build && node scripts/ui-audit.mjs --check",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

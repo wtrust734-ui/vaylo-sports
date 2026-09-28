@@ -262,3 +262,23 @@
   body { text-rendering: optimizeSpeed; }
   h1, h2, h3 { letter-spacing: -0.015em; }
 }
+
+/* ── Touch targets ─────────────────────────────────────────────────────────
+   Android's own floor is 48dp; 44px is the smallest thing a thumb hits
+   reliably, and it is what `npm run ui:audit` measures. ":where()" keeps
+   specificity at zero, so any min-h-* utility on a component still wins,
+   and `min-h-0` opts a control out where a compact row genuinely needs it.
+   Only real controls are listed: a bare <a> in a sentence stays a sentence. */
+:where(
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="radio"],
+  [role="menuitem"],
+  [role="switch"],
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"])
+) {
+  min-height: 44px;
+}
