@@ -61,8 +61,18 @@ Ordered by how early they block you.
    Until then the coach, form analysis, tactical plans, learning recommendations,
    weekly review and video analysis answer with "This feature isn't switched on
    yet" rather than the name of the missing environment variable: an internal
-   detail read to a reviewer looks like a broken build. Seven features are
-   gated on that one secret, so it is the highest-value thing you can set.
+   detail read to a reviewer looks like a broken build. Six features are gated on
+   that one secret, so it is the highest-value thing you can set.
+
+   **Video analysis is separate.** It calls Gemini, not OpenAI, and wants a
+   plain API key from Google AI Studio — no service account, no YouTube upload:
+
+   ```bash
+   npx supabase secrets set GOOGLE_API=...
+   ```
+
+   Check what is actually live at any time with `npm run ai:health`, which calls
+   all seven endpoints with a real session and reports which answer.
 
 Already handled, for reference: the legal pages are published (§1), and the public
 app URL is set to `https://vaylosports.lovable.app` in `.env.local` (git-ignored)
