@@ -18,6 +18,9 @@ import CountrySelect from "@/components/geo/CountrySelect";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
+import { FileText, ShieldCheck } from "lucide-react";
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from "@/lib/legalUrls";
+import { openExternal } from "@/lib/platform";
 
 
 const currencies = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD"];
@@ -341,6 +344,23 @@ const Profile = () => {
                   className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none" />
                 <motion.button whileTap={{ scale: 0.95 }} onClick={saveWaterGoal} className="bg-primary text-primary-foreground px-4 rounded-xl text-sm font-semibold">Save</motion.button>
               </div>
+            </div>
+            {/* Legal. Google Play requires the privacy policy to be reachable
+                from inside the app, not only from the store listing, and the
+                account-deletion page is the one Play points at for its data
+                deletion requirement. Both open in the in-app browser so the
+                athlete never loses their place in the app. */}
+            <div className="pt-3 border-t border-border space-y-1">
+              <button type="button" onClick={() => void openExternal(PRIVACY_POLICY_URL)}
+                className="w-full flex items-center justify-between gap-2 text-foreground hover:text-primary transition-colors">
+                <span className="flex items-center gap-2 text-sm font-medium"><ShieldCheck size={16} /> Privacy Policy</span>
+                <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+              </button>
+              <button type="button" onClick={() => void openExternal(TERMS_OF_SERVICE_URL)}
+                className="w-full flex items-center justify-between gap-2 text-foreground hover:text-primary transition-colors">
+                <span className="flex items-center gap-2 text-sm font-medium"><FileText size={16} /> Terms of Service</span>
+                <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+              </button>
             </div>
             <div className="pt-3 border-t border-border">
               <motion.button whileTap={{ scale: 0.98 }} onClick={handleDeleteAccount}

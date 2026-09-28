@@ -9,6 +9,9 @@ import { useAuthMethods, passkeySupported, normalisePhone } from "@/hooks/use-au
 import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { Check } from "lucide-react";
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from "@/lib/legalUrls";
+import { openExternal } from "@/lib/platform";
 import logo from "@/assets/logo.jpg";
 
 type Mode = "auth" | "forgot" | "updatePassword";
@@ -47,6 +50,11 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pendingRef, setPendingRef] = useState<string | null>(null);
+  // Sign-up consent. Google Play requires the privacy policy to be reachable
+  // from inside the app, and the terms set the minimum age and the health
+  // disclaimer — so neither can be accepted implicitly by tapping a button.
+  // Login is deliberately unaffected: an existing athlete already agreed.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Phone sign-in state: number → code → session.
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -144,6 +152,14 @@ const Auth = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
+        if (!acceptedTerms) {
+          toast({
+            title: "Please accept the Terms",
+            description: "You need to accept the Terms of Service and Privacy Policy to create an account.",
+            variant: "destructive",
+          });
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -789,6 +805,41 @@ const Auth = () => {
                   >
                     Forgot password?
                   </button>
+                </div>
+              )}
+
+              {!isLogin && (
+                <div className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={acceptedTerms}
+                    aria-label="I am 13 or older and accept the Terms of Service and Privacy Policy"
+                    onClick={() => setAcceptedTerms((v) => !v)}
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${acceptedTerms ? "border-primary bg-primary text-primary-foreground" : "border-white/20 bg-white/[0.04]"}`}
+                  >
+                    {acceptedTerms && <Check size={13} strokeWidth={3} />}
+                  </button>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    I am 13 or older and I accept the{" "}
+                    <button
+                      type="button"
+                      onClick={() => void openExternal(TERMS_OF_SERVICE_URL)}
+                      className="font-semibold text-primary underline underline-offset-2"
+                    >
+                      Terms of Service
+                    </button>{" "}
+                    and the{" "}
+                    <button
+                      type="button"
+                      onClick={() => void openExternal(PRIVACY_POLICY_URL)}
+                      className="font-semibold text-primary underline underline-offset-2"
+                    >
+                      Privacy Policy
+                    </button>
+                    , including how my health and fitness data is handled. Under 18? Vaylo
+                    Sports stays ad-free and training loads are adjusted for your age.
+                  </p>
                 </div>
               )}
 
