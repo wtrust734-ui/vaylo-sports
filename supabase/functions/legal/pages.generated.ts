@@ -15,10 +15,10 @@ export interface LegalPage {
  * index.ts refuses to serve anything in that state, so a policy naming the
  * wrong company or a dead inbox cannot be published or reviewed.
  */
-export const OPERATOR_DETAILS_UNSET = true;
+export const OPERATOR_DETAILS_UNSET = false;
 
-export const OPERATOR_NAME = "REPLACE_ME";
-export const CONTACT_EMAIL = "REPLACE_ME";
+export const OPERATOR_NAME = "Vaylo Sports";
+export const CONTACT_EMAIL = "vaylosportssupport@gmail.com";
 
 export const LEGAL_PAGES: Record<string, LegalPage> = {
   "privacy": {
@@ -33,7 +33,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   ============================================================================
   OPERATOR DETAILS ARE TOKENS
   ----------------------------------------------------------------------------
-  "REPLACE_ME" and "REPLACE_ME" are replaced at publish time from
+  "Vaylo Sports" and "vaylosportssupport@gmail.com" are replaced at publish time from
   LEGAL_OPERATOR_NAME / LEGAL_CONTACT_EMAIL (see supabase/functions/legal/).
   They are deliberately left unresolved here so compiled output containing a
   guessed company name or a dead inbox cannot reach a public URL — a privacy
@@ -79,7 +79,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h1>Privacy Policy</h1>
   <p class="meta">Version 1.0 &middot; Effective 28 September 2026</p>
-  <p class="meta">Data controller: REPLACE_ME &middot; Contact: <a href="mailto:REPLACE_ME">REPLACE_ME</a></p>
+  <p class="meta">Data controller: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
     Vaylo Sports is a training app for athletes. This policy explains what personal
@@ -276,7 +276,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     If you are under 18, sponsored content is suppressed across the app, training
     loads are adjusted for youth athletes, and no data of yours is included in the
     aggregate reporting described above. If you believe a child under 13 has created
-    an account, contact <a href="mailto:REPLACE_ME">REPLACE_ME</a>
+    an account, contact <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>
     and we will delete it.
   </p>
 
@@ -301,7 +301,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     <li><strong>Object or restrict</strong> — contact us and we will assess it. You can also complain to your local data protection authority; if you are in the EU or UK, you may complain to the authority in the country where you live.</li>
   </ul>
   <p>
-    Write to <a href="mailto:REPLACE_ME">REPLACE_ME</a> for anything in
+    Write to <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a> for anything in
     this section. We respond within 30 days.
   </p>
 
@@ -349,7 +349,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <div class="nav">
     Questions about this policy or your data:
-    <a href="mailto:REPLACE_ME">REPLACE_ME</a>.
+    <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>.
     <br />
     <a href="terms.html">Terms of Service</a> &middot;
     <a href="account-deletion.html">Delete your account</a> &middot;
@@ -403,10 +403,10 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h1>Terms of Service</h1>
   <p class="meta">Version 1.0 &middot; Effective 28 September 2026</p>
-  <p class="meta">Operator: REPLACE_ME &middot; Contact: <a href="mailto:REPLACE_ME">REPLACE_ME</a></p>
+  <p class="meta">Operator: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
-    These terms are the agreement between you and REPLACE_ME for the Vaylo
+    These terms are the agreement between you and Vaylo Sports for the Vaylo
     Sports app. By creating an account you accept them. If you do not accept them,
     do not use the app.
   </p>
@@ -496,7 +496,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     refundable once spent, except where the law gives you a right to a refund or
     where we failed to deliver what you paid for. Nothing in these terms removes a
     statutory right you have as a consumer. If a purchase goes wrong, contact
-    <a href="mailto:REPLACE_ME">REPLACE_ME</a> and we will sort it out.
+    <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a> and we will sort it out.
   </p>
   <p>
     We verify every purchase with Google's servers before granting anything. If a
@@ -582,7 +582,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2>15. Governing law</h2>
   <p>
-    These terms are governed by the laws of the country in which REPLACE_ME is
+    These terms are governed by the laws of the country in which Vaylo Sports is
     established, and disputes may be brought before its courts. If you are a consumer
     resident elsewhere, you also keep the protection of the mandatory consumer law of
     your own country of residence and may bring proceedings there.
@@ -597,7 +597,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2>17. Contact</h2>
   <p>
-    <a href="mailto:REPLACE_ME">REPLACE_ME</a>
+    <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>
   </p>
 
   <div class="nav">
@@ -659,7 +659,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h1>Delete your account</h1>
   <p class="meta">Last updated 28 September 2026</p>
-  <p class="meta">Vaylo Sports is operated by REPLACE_ME. Contact: <a href="mailto:REPLACE_ME">REPLACE_ME</a></p>
+  <p class="meta">Vaylo Sports is operated by Vaylo Sports. Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
     You can delete your Vaylo Sports account and all of its data yourself, at any
@@ -688,7 +688,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
       address, and ask for deletion. We will action it and confirm within 30 days,
       usually much sooner.
     </p>
-    <a class="cta" href="mailto:REPLACE_ME?subject=Delete%20my%20Vaylo%20Sports%20account">Email REPLACE_ME</a>
+    <a class="cta" href="mailto:vaylosportssupport@gmail.com?subject=Delete%20my%20Vaylo%20Sports%20account">Email vaylosportssupport@gmail.com</a>
   </div>
 
   <h2>What gets deleted</h2>

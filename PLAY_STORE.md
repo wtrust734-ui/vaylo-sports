@@ -22,7 +22,9 @@ provide" is the list of things that will stop you.
 | Upload key SHA-256 | `3B:E6:CD:40:CC:7F:21:5C:00:5D:94:32:58:7A:D8:51:89:17:1C:47:E8:53:F9:FA:EE:6B:BD:04:42:76:23:FD` |
 | Upload key valid until | 2054-02-13 (Play requires validity past 2033) |
 | Signed bundle in CI | `.github/workflows/android-release.yml` (manual or `v*` tag) |
-| Privacy policy / terms / deletion pages | Written; published by the `legal` edge function |
+| Privacy policy / terms / deletion pages | Written and **live** (see §1) |
+| Support email | `vaylosportssupport@gmail.com` |
+| Public app URL | `https://vaylosports.lovable.app` |
 | Store icon + feature graphic | Generated into `store/` |
 | Screenshots | **Not yet captured** — see §6 |
 
@@ -32,29 +34,24 @@ provide" is the list of things that will stop you.
 
 Ordered by how early they block you.
 
-1. **Legal entity name and a working support email.** `legal/operator.json` still
-   holds `REPLACE_ME`. The `legal` function answers **503** until both are filled
-   in, deliberately: a privacy policy that names the wrong company offers reviewers
-   no way to make a data request, and publishing one is worse than being late. Fill
-   it in, run `node scripts/gen-legal-pages.cjs`, redeploy.
-   Also needed for the store listing itself, which requires a support email.
-2. **A decision on target audience** — §0.
-3. **A Play Console developer account.** Note the account *type*: personal,
+1. **A Play Console developer account.** Note the account *type*: personal,
    non-organisation accounts created after 13 November 2023 must run a closed test
    with **at least 12 testers for 14 continuous days** before they can even apply
    for production access. An organisation account has no such gate. If you have a
    registered business, the organisation route is materially faster.
-4. **A demo account for the reviewer** (email + password), for the App access
+2. **A demo account for the reviewer** (email + password), for the App access
    declaration in §4. The app is behind a login, so without this a reviewer sees
    the sign-in screen and nothing else.
-5. **`OPENAI_API_KEY`** as a Supabase secret. Every AI feature returns HTTP 500 in
+3. **`OPENAI_API_KEY`** as a Supabase secret. Every AI feature returns HTTP 500 in
    production right now (`supabase/functions/_shared/openai.ts` throws
    `AI service is not configured`). A reviewer who tries the coach will see a
    failure. Set it with
    `supabase secrets set OPENAI_API_KEY=sk-...` — no redeploy needed.
-6. **A real public URL for `VITE_PUBLIC_APP_URL`.** Unset, so share links, referral
-   links and password-reset redirects point at `localhost`. Not a Play blocker, but
-   it makes the app look broken in ways that are hard to explain in a review.
+
+Already handled, for reference: the legal pages are published (§1), and the public
+app URL is set to `https://vaylosports.lovable.app` in `.env.local` (git-ignored)
+and as the `PUBLIC_APP_URL` Supabase secret, so shared links and auth emails now
+point at your site instead of `localhost`. Both were pointing at nothing before.
 
 ---
 
@@ -84,38 +81,41 @@ declaration costs nothing, and getting it wrong is a policy strike.
 
 ---
 
-## 1. Publish the legal pages
+## 1. The legal pages (already published)
 
-The pages are written, but living in `legal/` they are not yet reachable from a
-URL, and Play will not let you finish the listing without one.
+Live and verified on 28 September 2026 — all three return HTTP 200 with real
+content and no unresolved placeholders:
+
+| Play Console field | URL | Response |
+|---|---|---|
+| Privacy policy (App content) | `…/functions/v1/legal/privacy` | 200, 17 KB |
+| — | `…/functions/v1/legal/terms` | 200, 11 KB |
+| Data deletion → URL | `…/functions/v1/legal/account-deletion` | 200, 6 KB |
+
+where `…` is `https://vvwhausdjzdmsyxekrcl.supabase.co`. Paste those two into
+Play Console exactly as written — the full URL, not the shortened form.
+
+To change the operator name or contact address, edit `legal/operator.json`, then:
 
 ```bash
-# 1. Fill in legal/operator.json (operatorName, contactEmail), then:
-node scripts/gen-legal-pages.cjs
-
-# 2. Publish them
+node scripts/gen-legal-pages.cjs          # embeds the pages into the function
 supabase functions deploy legal --no-verify-jwt
-
-# 3. Verify — expect HTTP 200 and real content, not the 503 notice
 curl -sS -o /dev/null -w '%{http_code}\n' \
   "https://vvwhausdjzdmsyxekrcl.supabase.co/functions/v1/legal/privacy"
-
-# 4. Set the same value where the app reads it, before building the APK/AAB
-#    (optional once a real domain exists)
-# VITE_LEGAL_BASE_URL=https://<host>/functions/v1/legal
 ```
 
-These are the URLs to paste into Play Console:
+The function refuses to serve anything while `legal/operator.json` still holds its
+`REPLACE_ME` placeholders, on purpose: a policy naming the wrong company, or
+offering an inbox nobody reads, is worse than one that is temporarily unavailable,
+and this URL is handed to Play.
 
-| Play Console field | URL |
-|---|---|
-| Privacy policy (App content) | `…/functions/v1/legal/privacy` |
-| Data deletion → URL | `…/functions/v1/legal/account-deletion` |
-
-Why an edge function rather than a web host: this project has no public domain
-yet — `vaylosports.com`, which the code defaults to elsewhere, does not resolve —
-and Play will not publish a listing without a reachable policy URL. The same files
-can be dropped onto any static host later; nothing in them refers to this host.
+**Why not your own domain.** `https://vaylosports.lovable.app/privacy` looks as
+though it serves a policy — it answers 200 — but it is a single-page app with a
+catch-all rewrite: `/privacy`, `/account-deletion` and a deliberately invented path
+all return the same 11,428-byte shell. A reviewer who opens it sees the app, not a
+policy, which is a rejection. Serving the documents from an edge function gives a
+URL that actually returns a document today; moving them to a real domain later is a
+copy of `legal/*.html` and a one-line change to `VITE_LEGAL_BASE_URL`.
 
 **`legal/` is not bundled into the app.** The in-app Privacy and Terms links in
 Profile → Settings open these URLs in the in-app browser, so there is one copy of
@@ -187,6 +187,7 @@ the release can roll out; the ones marked ⚠ change what you can ship.
 | Declaration | Answer |
 |---|---|
 | Privacy policy | The §1 URL |
+| Store listing → Website | `https://vaylosports.lovable.app` (optional field) |
 | App access | **All functionality is not available without special access.** Provide the demo account from §"What only you can provide" as email + password. |
 | Ads | Per §0b — recommended **Yes** |
 | ⚠ Content rating | Fill in the IARC questionnaire honestly. There is **user-generated content** (posts, comments, community messages, DMs) and **social features** (friends, leaderboards, challenges) — both are mandatory disclosures. There are in-app purchases and **simulated rewards** (credits, coins). No violence, no sexual content, no gambling, no controlled substances. Expect a Teen-ish rating. |
@@ -385,6 +386,17 @@ if a tester goes looking.
 3. **Wearable sync is unconfigured.** `wearable-oauth` answers `not_configured` for
    every provider because no vendor OAuth secrets are set. The screen is honest
    about it, but it is a headline feature that does not work.
-4. **Share and reset links point at `localhost`** until `VITE_PUBLIC_APP_URL` is set.
-5. **Password-reset email delivery** depends on Supabase's SMTP configuration; the
+4. **Password-reset email delivery** depends on Supabase's SMTP configuration; the
    built-in sender is rate-limited and unsuitable for real users.
+5. **The web app and the Android app are different builds.**
+   `vaylosports.lovable.app` is served by Lovable, not from this repository, and its
+   page title is "Vaylo sports" — lower-case S. The store listing title must be
+   "Vaylo Sports", and if the two builds diverge users will notice. Decide which is
+   canonical before inviting testers.
+6. **No registered legal entity yet.** The policy names "Vaylo Sports" as the data
+   controller, which is what a trading name is for, and it works with a working
+   contact address. When there is a limited company, put its registered name in
+   `legal/operator.json` and redeploy. If you are in the UK, processing personal
+   data also means registering with the ICO and paying the data protection fee
+   unless an exemption applies — that is a legal step, not a technical one, and
+   nothing in this repository does it for you.
