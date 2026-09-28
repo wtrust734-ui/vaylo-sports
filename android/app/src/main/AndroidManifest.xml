@@ -10,6 +10,18 @@
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
 
+    <!-- Health Connect is a separate app on Android 13 (API 33) and below, and from
+         API 30 Android hides packages an app has not declared. Without this,
+         HealthConnectClient.getSdkStatus() cannot see Health Connect at all, so
+         isAvailable() answers false on every Android 11-13 device — precisely the
+         range where users still have to install it themselves. Google documents
+         this declaration for any app integrating with Health Connect.
+
+         Must stay a direct child of <manifest>, not of <application>. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
     <!-- Backup is off: the WebView persists the Supabase session (refresh token)
          in app-private storage, and platform-default backup would upload it to
          Google Drive and carry it across device-to-device transfers. See

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Health Connect permissions — Vaylo Sports</title>
+<!--
+  The permission rationale Android shows when the athlete taps the privacy-policy
+  link on Health Connect's permissions screen. Health Connect requires the app to
+  explain how the requested data is used and handled, and the manifest routes both
+  rationales here (see MainActivity.onNewIntent).
+
+  Deliberately self-contained: no fonts, scripts or images from anywhere. It has
+  to render with no network — and a page that explains your data handling should
+  not quietly hand a request to a third party to do it.
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 64px; background: #05070f; color: #e8ecf6;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .mark { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, hsl(217 100% 60%), hsl(265 90% 62%)); }
+  .brand span { font-weight: 700; letter-spacing: -0.01em; }
+  h1 { font-size: 1.55rem; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h2 { font-size: 1.02rem; margin: 30px 0 8px; color: #fff; }
+  p, li { color: #c9d2e4; }
+  a { color: hsl(217 100% 72%); }
+  .lede { color: #8b97ae; margin: 0 0 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 4px; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1b2438; vertical-align: top; }
+  th { color: #8b97ae; font-weight: 600; }
+  .card { background: #0c1120; border: 1px solid #1b2438; border-radius: 14px; padding: 16px 18px; margin: 18px 0; }
+  .cta {
+    display: inline-block; margin-top: 26px; padding: 13px 18px; border-radius: 12px;
+    background: hsl(217 100% 60%); color: #05070f; font-weight: 700; text-decoration: none;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
+
+  <h1>Health Connect permissions</h1>
+  <p class="lede">What Vaylo Sports reads, why, and how you stay in control.</p>
+
+  <h2>What we read</h2>
+  <p>
+    Vaylo Sports asks Health Connect for <strong>read-only</strong> access, and only to the
+    six types of record below. We never write to Health Connect, and we do not request
+    access to anything else.
+  </p>
+  <table>
+    <tr><th>Record type</th><th>Why</th></tr>
+    <tr><td>Exercise sessions</td><td>To show your completed sessions and the training you have actually done</td></tr>
+    <tr><td>Distance</td><td>To measure running, cycling and swimming volume</td></tr>
+    <tr><td>Total calories burned</td><td>To estimate training load and energy use</td></tr>
+    <tr><td>Heart rate</td><td>To show intensity and help keep hard days hard and easy days easy</td></tr>
+    <tr><td>Steps</td><td>To include everyday movement alongside structured training</td></tr>
+    <tr><td>Sleep</td><td>To factor recovery into your training load</td></tr>
+  </table>
+
+  <h2>What happens to it</h2>
+  <ul>
+    <li>It is stored in your Vaylo Sports account so your training, load and recovery views reflect what you have actually done.</li>
+    <li>It is <strong>never used for advertising</strong>, and it is <strong>never sold</strong>.</li>
+    <li>
+      Sponsorship partners receive only aggregate counts of how many times a campaign was
+      shown or tapped, per campaign per day. No personal data, and nothing derived from
+      your health records, is shared with them.
+    </li>
+    <li>You can delete the data, and your whole account, at any time — see the links below.</li>
+  </ul>
+
+  <h2>How to change your mind</h2>
+  <p>
+    Open the <strong>Health Connect</strong> app (or Settings → Security and privacy →
+    Privacy controls → Health Connect), choose <strong>Apps</strong>, then
+    <strong>Vaylo Sports</strong>, and remove any or all of the permissions. Revoking
+    access stops any further syncing immediately; data already synced stays until you
+    delete it.
+  </p>
+
+  <h2>Kept on your device</h2>
+  <p>
+    Health data is used to build your training views and calculate load and recovery.
+    It is never used for advertising and never sold. You can delete the synced data,
+    or your whole account, from Profile &rarr; Settings in the app.
+  </p>
+
+  <div class="card">
+    <strong>Our full privacy policy</strong>
+    <p style="margin:6px 0 0">
+      The Vaylo Sports privacy policy covers the categories of data we handle, every
+      processor that works on our behalf, how long we keep data, and your rights. It
+      is linked from the app and from our Google Play listing.
+    </p>
+  </div>
+
+  <a class="cta" href="/">Back to Vaylo Sports</a>
+</main>
+</body>
+</html>
