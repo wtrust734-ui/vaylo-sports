@@ -96,6 +96,38 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* ── Safe areas, applied exactly once ───────────────────────────────────
+     `viewport-fit=cover` in index.html plus `StatusBar.overlaysWebView: true`
+     means the WebView genuinely extends under the status bar, the camera
+     cutout and the gesture bar. That has to be paid for somewhere.
+
+     It is paid here, on the root, and nowhere else. Previously the top inset
+     was applied by `pt-safe-t` on AppLayout's <main>, which meant the two
+     screens outside that layout — /auth and /onboarding, the ones an athlete
+     sees first — had no inset at all, and every screen that had one risked
+     doubling it. One root rule fixes both ends of that.
+
+     The bottom inset is deliberately *not* applied to the body. The tab bar is
+     position:fixed and anchors itself to `env(safe-area-inset-bottom)`; giving
+     the body bottom padding as well would lift page content twice. Content
+     clears the tab bar with pb-28 in AppLayout, which is what that padding is
+     for. */
+  html {
+    /* `clip` rather than `hidden`: it stops the document scrolling sideways
+       to reveal an off-screen element without creating a scroll container, so
+       `position: fixed` keeps working against the viewport. This is a guard,
+       not a treatment — the fixed widths that used to trigger it are fixed at
+       their source, and `overflowLayout.test.ts` fails if they come back. */
+    overflow-x: clip;
+  }
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    /* Guarantees a usable minimum on a device that reports a 0px inset rather
+       than none at all. Zero here means the WebView is not edge-to-edge and no
+       padding is wanted; this only ever applies in the degenerate case. */
+    min-height: 100dvh;
+  }
+
   /* Selection + focus */
   ::selection { background: hsla(217 100% 60% / 0.28); }
   :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
@@ -207,6 +239,17 @@
   }
   .icon-tap {
     @apply transition-transform duration-150 ease-out active:scale-90;
+  }
+
+  /* ── Long-content containment ───────────────────────────────────────────
+     `break-words` is `overflow-wrap: break-word`, which only breaks a word once
+     it has already overflowed its line box — so a long unbroken token still
+     establishes a min-content width, and in a flex or grid parent that is
+     enough to widen the whole screen. `anywhere` also affects intrinsic
+     sizing, so the container can actually shrink to fit. This is the
+     difference between wrapping a UUID and drawing it off the right edge. */
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
   }
 }
 

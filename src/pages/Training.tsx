@@ -1221,7 +1221,10 @@ const Training = () => {
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Best time of day to train</label>
-                <div className="grid grid-cols-4 gap-1.5">
+                {/* "Afternoon" in an 11px font needs ~70px, which is exactly the
+                    cell width four-across gives at 320px — so the label clipped
+                    on the narrowest phones. Two-up below `sm`. */}
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                   {["Morning","Afternoon","Evening","Night"].map(t => (
                     <button key={t} onClick={() => setPlanTimeOfDay(t)} className={`text-[11px] ${chipClass(planTimeOfDay === t)}`}>{t}</button>
                   ))}

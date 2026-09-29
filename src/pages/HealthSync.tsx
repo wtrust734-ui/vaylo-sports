@@ -395,7 +395,7 @@ const HealthSync = () => {
         <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
           <Smartphone size={12} /> On your phone
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
           <ProviderCard id="health_connect" />
           <ProviderCard id="healthkit" />
         </div>
@@ -421,7 +421,7 @@ const HealthSync = () => {
             {cloudLoading ? "Checking…" : `${Object.values(cloudMap).filter((c) => c?.connected).length} connected`}
           </span>
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
           {CLOUD_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
         </div>
       </div>
@@ -431,7 +431,7 @@ const HealthSync = () => {
         <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
           <Moon size={12} /> Recovery & sleep
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
           {RECOVERY_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
         </div>
       </div>
@@ -441,7 +441,7 @@ const HealthSync = () => {
         <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
           <Sparkles size={12} /> Network & extras
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
           {SOCIAL_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">

@@ -104,7 +104,13 @@ export default function BottomSheet({
             {...panelMotion(reduced)}
             onClick={(event) => event.stopPropagation()}
             className={cn(
-              "flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-background shadow-elev-3 outline-none sm:rounded-3xl",
+              // `dvh` rather than `vh`: on Android the dynamic viewport height
+              // tracks the keyboard and the system bars, so a sheet containing a
+              // form shrinks with the space available instead of overflowing
+              // past the top of the screen. `vh` on Android WebView resolves
+              // against the *largest* viewport, which is the full screen height
+              // and therefore too tall exactly when a keyboard is open.
+              "flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-background shadow-elev-3 outline-none sm:rounded-3xl",
               SIZES[size],
               className
             )}
@@ -115,8 +121,8 @@ export default function BottomSheet({
               <div className="flex items-start gap-3 border-b border-border px-5 py-4">
                 {leading}
                 <div className="min-w-0 flex-1">
-                  {title && <h3 className="font-display text-base font-bold text-foreground">{title}</h3>}
-                  {subtitle && <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>}
+                  {title && <h3 className="break-words font-display text-base font-bold text-foreground">{title}</h3>}
+                  {subtitle && <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{subtitle}</p>}
                 </div>
                 {headerRight}
                 <button

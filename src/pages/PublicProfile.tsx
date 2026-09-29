@@ -204,7 +204,7 @@ const PublicProfile = () => {
         </div>
       </div>
 
-      <div className="px-5 mt-4 grid grid-cols-4 gap-2">
+      <div className="px-5 mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat icon={Activity} label="Points" value={state.points.toLocaleString()} />
         <Stat icon={Trophy} label="Challenges" value={state.joinedChallenges} />
         <Stat icon={Users} label="Communities" value={state.communities} />

@@ -73,7 +73,10 @@ export default function DailyRewardsCard() {
         <span className="text-xs text-muted-foreground">Day {Math.min(dayInCycle || 1, 7)} of 7</span>
       </div>
 
-      <div className="mb-4 grid grid-cols-7 gap-1.5">
+      {/* Seven columns stay seven — this is a week, and wrapping it to two rows
+          would stop reading as a cycle. The gap tightens on phones instead so
+          each day keeps a usable target at 320px. */}
+      <div className="mb-4 grid grid-cols-7 gap-1 sm:gap-1.5">
         {Array.from({ length: 7 }).map((_, i) => {
           const day = i + 1;
           const isDone = day <= dayInCycle;

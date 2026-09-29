@@ -205,8 +205,14 @@ const Avatar = () => {
 
   return (
     <div className="min-h-screen pb-32 relative overflow-hidden">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none absolute inset-0">
+      {/* Ambient background glow.
+
+          `overflow-hidden` is on this wrapper rather than relied on from the
+          root four elements up: a 520px circle positioned with `-top-24` is
+          wider than a 320px screen, and containment that depends on a distant
+          ancestor is containment that one refactor away from silently
+          disappearing. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-primary/15 blur-3xl" />
         <div className="absolute top-40 right-0 w-[300px] h-[300px] rounded-full bg-electric-purple/20 blur-3xl" />
       </div>

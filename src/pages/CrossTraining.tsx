@@ -244,7 +244,7 @@ const CrossTraining = () => {
                 <span key={g.title} className="text-[10px] px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">{g.title}</span>
               ))}
             </div>
-            <div className="grid md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {forYou.picks.map(({ e, reasons }, idx) => {
                 const meta = FOCUS_META[e.focus] ?? FOCUS_META.Prehab;
                 const Icon = meta.icon;
@@ -325,7 +325,7 @@ const CrossTraining = () => {
       <AnimatePresence mode="popLayout">
         <motion.div key={`${sport}-${phase}-${focus}`}
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-          className="grid md:grid-cols-2 gap-3">
+          className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {library.map((e, idx) => {
             const meta = FOCUS_META[e.focus] ?? FOCUS_META.Prehab;
             const Icon = meta.icon;

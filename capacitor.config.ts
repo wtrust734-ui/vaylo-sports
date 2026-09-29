@@ -41,14 +41,34 @@ const config: CapacitorConfig = {
       launchAutoHide: true,
     },
     StatusBar: {
-      style: "DARK",
+      // LIGHT means light *content* — i.e. white clock, battery and signal
+      // icons. The previous value was DARK, which asks Android for dark icons
+      // on a #05070f background: the clock and battery were effectively
+      // invisible. This is the single most-cited visual bug in the app and it
+      // was one word in this file.
+      style: "LIGHT",
       backgroundColor: "#05070f",
-      overlaysWebView: false,
+      // Edge-to-edge, deliberately, to match `viewport-fit=cover` in index.html
+      // and the `env(safe-area-inset-*)` padding the CSS now applies once at
+      // the root. The previous `false` claimed the WebView would start below
+      // the status bar; on Android 15+ (targetSdk 35+) the system enforces
+      // edge-to-edge regardless, so the setting was not describing the
+      // behaviour — it was describing the one case where the CSS was wrong.
+      // Being explicit keeps the shell and the CSS telling the same story.
+      overlaysWebView: true,
     },
     Keyboard: {
-      // Resize the web view so form inputs are never hidden behind the keyboard.
-      resize: "body",
-      style: "DARK",
+      // "native" resizes the WebView itself, so the visual viewport shrinks and
+      // fixed elements (the bottom tab bar) move with it. "body" resizes the
+      // body element instead, which leaves fixed elements where they were and
+      // opens a gap between them and the keyboard — the "layout jumps and
+      // leaves a blank strip" report. Forms now stay reachable because the
+      // viewport itself is smaller, and `scrollFocusedInputIntoView` in
+      // src/lib/keyboard.ts handles the focus case where a field is still
+      // under the keyboard.
+      resize: "native",
+      // Same reasoning as StatusBar: light content on a dark keyboard.
+      style: "LIGHT",
     },
   },
 };

@@ -291,17 +291,21 @@ const Coach = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 pb-40">
         {messages.map((m, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+            {/* `min-w-0` is load-bearing: a flex item defaults to min-width:auto,
+                so a long unbroken string inside an AI reply — a URL, a UUID, a
+                pasted training block — sets the item's floor and drags the whole
+                row wider than the phone. `break-words` then wraps it instead. */}
+            <div className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-3 text-sm break-words ${
               m.role === "user"
                 ? "bg-primary text-primary-foreground rounded-br-md"
                 : "bg-card border border-border rounded-bl-md"
             }`}>
               {m.role === "assistant" ? (
-                <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <div className="prose prose-sm prose-invert max-w-none break-words overflow-wrap-anywhere [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                   <ReactMarkdown>{cleanContent(m.content)}</ReactMarkdown>
                 </div>
               ) : m.content}
@@ -318,9 +322,15 @@ const Coach = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Lifted clear of the mobile tab bar (the `tab` token matches BottomNav);
-          back to the screen edge once the tab bar is hidden at lg. */}
-      <div className="fixed bottom-tab lg:bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t border-border px-4 py-3 pb-3 lg:pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+      {/* Lifted clear of the mobile tab bar.
+
+          `bottom-tab` was not a real class — it is not in the `spacing` scale in
+          tailwind.config, so `bottom: bottom-tab` was invalid CSS and this
+          composer had no bottom offset at all. It rendered on top of the tab
+          bar, which is what made the send button hard to hit. The value below
+          matches the tab bar's own geometry (64px of nav plus its 8px offset)
+          and matches QuickActionSheet, so the three agree. */}
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.25rem)] lg:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border px-3 sm:px-4 py-3 lg:pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
         <div className="flex gap-2 items-end">
           <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}

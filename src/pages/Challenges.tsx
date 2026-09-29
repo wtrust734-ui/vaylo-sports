@@ -122,11 +122,16 @@ const Challenges = () => {
           <p className="text-[11px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5 mb-2">
             <Sparkles size={11} /> Suggested for you
           </p>
-          <div className="grid gap-2">
+          {/* `grid-cols-1` is `minmax(0, 1fr)`, not a bare `grid`. A bare
+              `grid` gives an `auto` track, and `auto` is sized to the items'
+              *max-content* — the card's `truncate` makes the title
+              `white-space: nowrap`, so the track grows to the full unwrapped
+              string and pushes the card past the screen edge. */}
+          <div className="grid grid-cols-1 gap-2">
             {suggestions.map((s, i) => (
               <motion.button key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                 onClick={() => { setPrefill(s); setCreating(true); }}
-                className="text-start bg-gradient-to-r from-card to-primary/5 border border-primary/20 rounded-xl p-3 hover:border-primary/60 hover:shadow-glow transition-all">
+                className="min-w-0 text-start bg-gradient-to-r from-card to-primary/5 border border-primary/20 rounded-xl p-3 hover:border-primary/60 hover:shadow-glow transition-all">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center text-lg shrink-0">{s.icon}</div>
@@ -146,28 +151,40 @@ const Challenges = () => {
       )}
 
 
-      <div className="px-5 flex gap-1.5 mb-3 overflow-x-auto no-scrollbar">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
-              tab === t ? "bg-gradient-to-r from-primary to-electric-purple text-primary-foreground border-transparent shadow-glow" : "bg-card border-border text-muted-foreground hover:border-primary/40"
-            }`}>
-            {t}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-1 text-xs shrink-0">
-          <Filter size={12} className="text-muted-foreground" />
-          <select value={scope} onChange={e => setScope(e.target.value as (typeof SCOPES)[number])} className="bg-card border border-border rounded-lg px-2 py-1">
-            {SCOPES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+      {/* The filter used to sit inside the horizontally-scrolling tab strip
+          with `ml-auto`. In a scrolling flex container `ml-auto` resolves
+          against the *scrollable content* width, not the visible width, so it
+          parked the scope dropdown ~100px past the right edge — reachable only
+          by scrolling the tabs, and it made the strip 400px wide. The strip
+          now scrolls on its own and the filter moved down to the count row,
+          so the tabs get the full width instead of being clipped mid-word
+          against a pinned dropdown. */}
+      <div className="px-5 mb-3">
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
+                tab === t ? "bg-gradient-to-r from-primary to-electric-purple text-primary-foreground border-transparent shadow-glow" : "bg-card border-border text-muted-foreground hover:border-primary/40"
+              }`}>
+              {t}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="px-5 flex items-center justify-between mb-3">
-        <p className="text-xs text-muted-foreground">{filtered.length} challenges</p>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-electric-purple transition-colors">
-          <Plus size={14} /> Create
-        </button>
+      <div className="px-5 flex items-center justify-between gap-2 mb-3">
+        <p className="text-xs text-muted-foreground shrink-0">{filtered.length} challenges</p>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1 text-xs shrink-0">
+            <Filter size={12} className="text-muted-foreground shrink-0" />
+            <select value={scope} onChange={e => setScope(e.target.value as (typeof SCOPES)[number])} aria-label="Filter challenges by scope" className="min-w-0 max-w-[7rem] bg-card border border-border rounded-lg px-2 py-1">
+              {SCOPES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <button onClick={() => setCreating(true)} className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-electric-purple transition-colors shrink-0">
+            <Plus size={14} /> Create
+          </button>
+        </div>
       </div>
 
       {loading ? <p className="px-5 text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (

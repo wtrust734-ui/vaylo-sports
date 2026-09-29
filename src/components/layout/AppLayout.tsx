@@ -30,9 +30,19 @@ const AppLayout = () => {
       {/* Subtle top hairline + mesh stays fixed via body, but this adds a soft vignette on large screens */}
       <div aria-hidden className="pointer-events-none fixed inset-0 hidden lg:block" style={{ background: "radial-gradient(900px 500px at 50% -10%, hsla(217 100% 60% / 0.06), transparent 70%)" }} />
       <AppSidebar />
-      {/* pb-28 clears the floating tab bar; pt-safe-t keeps headers clear of the notch */}
-      <main className="relative pt-safe-t pb-28 lg:pl-60">
-        <div className="mx-auto w-full max-w-[1100px]">
+      {/* pb-28 clears the floating tab bar.
+
+          The top inset is NOT applied here. It lives on `body` in index.css,
+          which is the only place it belongs: /auth and /onboarding render
+          outside this layout, so a `pt-safe-t` here left the first two screens
+          an athlete ever sees sitting under the status bar, while every screen
+          that did have it risked double padding once the root rule existed. */}
+      <main className="relative pb-28 lg:pl-60">
+        {/* `min-w-0` on the flex/grid child is what actually stops a wide
+            descendant (a long username, an AI response, a stat grid) from
+            pushing the page wider than the viewport. Without it the child is
+            sized by its content and `max-w` alone does not constrain it. */}
+        <div className="mx-auto w-full min-w-0 max-w-[1100px]">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}

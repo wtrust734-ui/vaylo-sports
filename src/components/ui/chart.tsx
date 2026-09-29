@@ -159,7 +159,7 @@ const ChartTooltipContent = React.forwardRef<
         )}
       >
         {!nestLabel ? tooltipLabel : null}
-        <div className="grid gap-1.5">
+        <div className="grid grid-cols-1 gap-1.5">
           {payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
@@ -203,7 +203,7 @@ const ChartTooltipContent = React.forwardRef<
                         nestLabel ? "items-end" : "items-center",
                       )}
                     >
-                      <div className="grid gap-1.5">
+                      <div className="grid grid-cols-1 gap-1.5">
                         {nestLabel ? tooltipLabel : null}
                         <span className="text-muted-foreground">{itemConfig?.label || item.name}</span>
                       </div>

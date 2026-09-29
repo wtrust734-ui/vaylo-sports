@@ -258,7 +258,7 @@ const Nutrition = () => {
                 ))}
               </div>
               <div className="flex gap-2">
-                <input type="number" step="10" value={addAmount} onChange={e => setAddAmount(e.target.value)} className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground" />
+                <input type="number" step="10" value={addAmount} onChange={e => setAddAmount(e.target.value)} className="min-w-0 flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground" />
                 <motion.button whileTap={{ scale: 0.95 }} onClick={addWater} className="bg-electric-purple/10 text-electric-purple text-sm font-semibold px-4 py-2 rounded-xl"><Plus size={14} className="inline mr-1" /> Add</motion.button>
               </div>
             </>
@@ -267,7 +267,7 @@ const Nutrition = () => {
 
         {/* Today's Macros */}
         {meals.length > 0 && (
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-4">
             {[{ label: "Cal", value: totalCalories, unit: "kcal" }, { label: "Protein", value: totalProtein, unit: "g" }, { label: "Carbs", value: totalCarbs, unit: "g" }, { label: "Fat", value: totalFat, unit: "g" }].map((m, i) => (
               <motion.div key={m.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
                 className="bg-card border border-border rounded-xl p-2.5 text-center">
@@ -328,7 +328,7 @@ const Nutrition = () => {
                 className="bg-gradient-card border border-electric-purple/20 rounded-xl p-4">
                 <h4 className="font-semibold text-sm mb-1">{scanResult.name}</h4>
                 {scanResult.description && <p className="text-xs text-muted-foreground mb-2">{scanResult.description}</p>}
-                <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="grid grid-cols-2 gap-2 mb-3 sm:grid-cols-4">
                   <div className="text-center"><p className="text-xs text-muted-foreground">Cal</p><p className="text-sm font-bold">{scanResult.calories}</p></div>
                   <div className="text-center"><p className="text-xs text-muted-foreground">P</p><p className="text-sm font-bold">{scanResult.protein}g</p></div>
                   <div className="text-center"><p className="text-xs text-muted-foreground">C</p><p className="text-sm font-bold">{scanResult.carbs}g</p></div>

@@ -79,7 +79,7 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
             No human coaches are taking bookings yet. Verified coaches are being onboarded — check back soon, or keep training with Vaylo Sports Coach in the meantime.
           </div>
          ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {coaches.map((c, i) => (
               <motion.div key={c.user_id}
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}

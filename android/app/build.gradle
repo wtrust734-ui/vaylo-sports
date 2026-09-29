@@ -36,7 +36,11 @@ android {
         // tester-only fix does not need a commit just to bump a number. Play
         // rejects any upload whose versionCode it has already seen, so every
         // closed-testing upload needs a new one.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 2
+        //
+        // 3 is the mobile-layout rebuild: same app, same upload key, same
+        // applicationId, corrected phone rendering. It has to be higher than 2
+        // or Play refuses the upload and a phone treats it as the same build.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 3
         versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

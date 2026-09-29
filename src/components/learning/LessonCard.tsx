@@ -33,7 +33,13 @@ export function FeaturedCard({ lesson, saved, onOpen, onToggleSave, index = 0 }:
       transition={{ delay: index * 0.06, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       whileTap={{ scale: 0.98 }}
       onClick={() => onOpen(lesson)}
-      className="press relative min-w-[290px] max-w-[380px] flex-1 cursor-pointer overflow-hidden rounded-3xl border border-electric-purple/25 bg-gradient-to-br from-navy via-card to-electric-purple/15 p-5 shadow-card sm:min-w-[330px]"
+      /* `min-w-[290px]` used to be unconditional. A flex item's min-width wins
+         over its container, so a 290px floor inside anything narrower pushed
+         the whole page wide — and this card is also used outside the featured
+         scroller. Below `sm` the width is now a fraction of the viewport, which
+         is both safe at 320px and better as a carousel: the next card peeks in,
+         so the section reads as scrollable instead of as a single card. */
+      className="press relative w-[76vw] max-w-[380px] min-w-0 flex-1 cursor-pointer overflow-hidden rounded-3xl border border-electric-purple/25 bg-gradient-to-br from-navy via-card to-electric-purple/15 p-5 shadow-card sm:w-auto sm:min-w-[330px]"
     >
       <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-electric-purple/25 blur-2xl" />
       <div className="relative flex items-start justify-between gap-2">
@@ -59,7 +65,7 @@ export function CompactCard({ lesson, saved, onOpen, onToggleSave }: BaseProps) 
   return (
     <article
       onClick={() => onOpen(lesson)}
-      className="press-card w-[210px] shrink-0 cursor-pointer rounded-2xl border border-border bg-card p-4 hover:border-electric-purple/40"
+      className="press-card w-[190px] shrink-0 cursor-pointer rounded-2xl border border-border bg-card p-4 hover:border-electric-purple/40 sm:w-[210px]"
     >
       <div className="flex justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-wide text-electric-purple">{typeFor(lesson)}</span>

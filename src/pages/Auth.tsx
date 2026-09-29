@@ -411,7 +411,16 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen app-mesh bg-background flex flex-col items-center justify-center px-5 py-8 relative overflow-hidden">
+    /* `justify-center` was replaced with `my-auto` on the card below.
+       Centring a flex column with justify-center distributes overflow evenly
+       above and below, so when the form is taller than the viewport — which is
+       exactly what happens once the keyboard opens, or on a 320px phone — the
+       top of the form is pushed *outside* the box. `overflow-hidden` on this
+       container then clips it, and there is nothing to scroll back up to. The
+       athlete sees a sign-in form with its logo and title cut off and no way to
+       reach them. Auto margins centre when there is room and simply stack when
+       there is not. */
+    <div className="min-h-[100dvh] app-mesh bg-background flex flex-col items-center px-4 sm:px-5 py-8 relative overflow-hidden">
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(900px 600px at 18% -8%, hsla(272 84% 62% / 0.14), transparent 62%), radial-gradient(760px 520px at 88% 0%, hsla(217 100% 60% / 0.12), transparent 62%)" }} />
       <div aria-hidden className="pointer-events-none absolute -top-28 -right-28 h-[520px] w-[520px] rounded-full blur-3xl opacity-[0.12]" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.9), transparent 68%)" }} />
 
@@ -419,7 +428,7 @@ const Auth = () => {
         initial={{ opacity: 0, y: 28, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm relative z-10 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card overflow-hidden p-6 sm:p-7"
+        className="w-full max-w-sm my-auto relative z-10 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card overflow-hidden p-5 sm:p-7"
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.06] via-transparent to-transparent" />
         <div className="relative">

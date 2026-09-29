@@ -273,7 +273,7 @@ export default function Learning() {
             <p className="text-sm font-bold">
               Start here — {goalLessonCount} piece{goalLessonCount === 1 ? "" : "s"} matched
             </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 grid-cols-1 sm:grid-cols-3">
               {goalLessons.map((lesson) => (
                 <ContinueCard key={lesson.id} lesson={lesson} onOpen={openLesson} />
               ))}
@@ -285,7 +285,7 @@ export default function Learning() {
       {/* 7 — Personalised */}
       {profileSport && recommendations.length > 0 && (
         <PageSection title="Recommended for you" subtitle="Based on your sport, goals and what you've been reading.">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
             {recommendations.map(({ lesson, reason }) => (
               <article
                 key={lesson.id}
@@ -329,7 +329,7 @@ export default function Learning() {
         title={isFiltering ? "Search results" : "Keep exploring"}
         subtitle={`${visibleLessons.length} piece${visibleLessons.length === 1 ? "" : "s"} of learning content`}
       >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {visibleLessons.map((lesson) => (
             <LessonRow
               key={lesson.id}

@@ -37,7 +37,7 @@ const SkillAnalytics = () => {
         <h1 className="text-4xl font-display font-bold mt-2">Skill <span className="text-gradient-electric">Engine</span></h1>
       </motion.div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className="bg-card/60 backdrop-blur border border-border rounded-2xl p-5">
           <h2 className="font-semibold flex items-center gap-2 mb-3"><TrendingUp className="text-primary" size={16} /> Strengths</h2>

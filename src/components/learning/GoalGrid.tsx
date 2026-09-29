@@ -5,7 +5,7 @@ import { LEARNING_GOALS } from "@/lib/learningContent";
 /** Learn-by-goal selector cards; selecting one reveals matched content below. */
 export function GoalGrid({ selected, onSelect }: { selected: string | null; onSelect: (goalId: string | null) => void }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       {LEARNING_GOALS.map((goal, index) => {
         const active = goal.id === selected;
         return (

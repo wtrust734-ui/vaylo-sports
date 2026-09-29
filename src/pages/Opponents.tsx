@@ -51,7 +51,7 @@ const Opponents = () => {
         </button>
       </div>
 
-      <div className="px-5 grid sm:grid-cols-2 gap-3">
+      <div className="px-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {list.length === 0 && <p className="text-sm text-muted-foreground text-center py-8 col-span-2">No opponent dossiers yet.</p>}
         {list.map(o => (
           <motion.button key={o.id} onClick={() => setEditing(o)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}

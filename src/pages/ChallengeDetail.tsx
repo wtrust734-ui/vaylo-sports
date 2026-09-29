@@ -116,8 +116,8 @@ const ChallengeDetail = () => {
             mine.status === "completed" ? (
               <p className="mt-3 text-xs text-primary font-semibold flex items-center gap-1"><Flag size={12}/> Completed!</p>
             ) : (
-              <div className="flex gap-2 mt-3">
-                <input value={delta} onChange={e => setDelta(e.target.value)} type="number" className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm" placeholder={`+ ${ch.target_unit}`} />
+              <div className="flex flex-wrap gap-2 mt-3">
+                <input value={delta} onChange={e => setDelta(e.target.value)} type="number" className="min-w-0 flex-1 basis-28 bg-muted rounded-lg px-3 py-2 text-sm" placeholder={`+ ${ch.target_unit}`} />
                 <button onClick={handleLog} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center gap-1"><Plus size={14}/> Log</button>
                 <button onClick={async () => { await leaveChallenge(ch.id); toast.success("Left"); load(); }} className="px-3 py-2 rounded-lg border border-border text-xs">Leave</button>
               </div>

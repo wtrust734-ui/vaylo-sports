@@ -5,6 +5,7 @@ import { BrowserRouter, HashRouter, Navigate, Route, Routes } from "react-router
 import { isNativeShell, loadPlugin } from "@/lib/platform";
 import { isFlagOn } from "@/config/featureFlags";
 import { consumeBackPress } from "@/lib/backButton";
+import { dismissKeyboard, installKeyboardFocusScroller } from "@/lib/keyboard";
 // Single toast renderer: sonner. The shadcn <Toaster/> and the reducer behind it
 // were removed — src/hooks/use-toast.ts now forwards to sonner.
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -106,6 +107,14 @@ const Router = isNativeShell() ? HashRouter : BrowserRouter;
  */
 const NativeBackButton = () => {
   useEffect(() => {
+    // Keeps the focused field above the keyboard on every screen, including
+    // the ones that render outside AppLayout (/auth, /onboarding) — which is
+    // where a new athlete meets their first form and the first chance to notice
+    // that the caret is under the keyboard.
+    return installKeyboardFocusScroller();
+  }, []);
+
+  useEffect(() => {
     if (!isNativeShell()) return;
     let cancelled = false;
     let remove: (() => void) | undefined;
@@ -122,6 +131,14 @@ const NativeBackButton = () => {
       if (!App?.addListener || cancelled) return;
 
       const subscription = await App.addListener("backButton", ({ canGoBack }) => {
+        // Keyboard first, then overlays, then navigation.
+        //
+        // Android users expect back to close the keyboard before it does
+        // anything else. Without this, dismissing the keyboard by pressing back
+        // on a form inside a bottom sheet closed the *sheet* instead — losing
+        // half-typed input, which is the worst possible outcome of a gesture
+        // that should have been harmless.
+        if (dismissKeyboard()) return;
         if (consumeBackPress()) return;
         if (canGoBack) {
           window.history.back();

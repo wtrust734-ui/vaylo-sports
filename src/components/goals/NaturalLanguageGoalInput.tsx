@@ -93,7 +93,7 @@ const NaturalLanguageGoalInput = ({ onCreated }: { onCreated?: () => void }) => 
         <input value={text} onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleParse()}
           placeholder='e.g. "I want to run a 5k in under 25 minutes by July"'
-          className="flex-1 bg-muted border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+          className="min-w-0 flex-1 bg-muted border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
         <button onClick={handleParse} className="px-4 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground font-semibold text-sm">Parse</button>
       </div>
       {parsed && (

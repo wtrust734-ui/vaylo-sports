@@ -67,7 +67,7 @@ const WeeklySummary = () => {
         <Sparkles size={12} /> Weekly Report · Week of {new Date(monday).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
       </div>
       <h3 className="font-display font-bold text-xl mt-1">Your performance recap</h3>
-      <div className="grid grid-cols-4 gap-2 mt-4">
+      <div className="grid grid-cols-2 gap-2 mt-4 sm:grid-cols-4">
         <Stat label="Load" value={data.load} />
         <Stat label="Sessions" value={`${data.completed}/${data.planned || data.completed}`} />
         <Stat label="Avg RPE" value={data.avgRPE} />

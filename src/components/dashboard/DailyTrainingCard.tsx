@@ -347,7 +347,10 @@ const DailyTrainingCard = () => {
           </>
         )}
 
-        <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-4 gap-2">
+        {/* 2-up on phones: four columns inside a 320px viewport leaves ~65px per
+            cell, which squeezes the icon, the value and the label into each
+            other. Two columns keeps the same information readable. */}
+        <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
             <Droplets size={13} className="mx-auto text-primary mb-1" />
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Water</p>

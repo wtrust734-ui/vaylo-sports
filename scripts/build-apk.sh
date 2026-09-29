@@ -45,6 +45,10 @@ echo "[apk] build-tools: $(basename "$BT")"
 cd "$M/android"
 TASK=":app:assembleRelease"
 [ "$DEBUG" = "1" ] && TASK=":app:assembleDebug $TASK"
+# The AAB is what Play actually consumes, so it is built here rather than left
+# to CI. Same signing config, same source — the two artefacts cannot disagree
+# because they come out of the same invocation.
+TASK="$TASK :app:bundleRelease"
 echo "[apk] gradle $TASK"
 ./gradlew $TASK --console=plain -q || {
   echo "[apk] BUILD FAILED" >&2
@@ -120,6 +124,56 @@ cp "$REL" "$OUT"
 [ "$DEBUG" = "1" ] && cp \
   "$M/android/app/build/outputs/apk/debug/app-debug.apk" \
   "$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-debug.apk"
+
+# --- 6. Publish the AAB, verified the same way ------------------------------
+AAB_SRC="$M/android/app/build/outputs/bundle/release/app-release.aab"
+if [ -f "$AAB_SRC" ]; then
+  AAB_OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-release.aab"
+  cp "$AAB_SRC" "$AAB_OUT"
+  echo
+  echo "[apk] --- AAB checks ---"
+  # The upload key is what Play matches the app to, so an AAB signed with
+  # anything else is rejected at upload with a message that does not mention
+  # signing. jarsigner ships with the JDK, which is not on PATH in every
+  # shell — it sits next to the same JAVA_HOME Gradle just used, so look
+  # there first and the check actually runs instead of reporting
+  # "unavailable" and passing for the wrong reason.
+  JARSIGNER="$(command -v jarsigner || true)"
+  if [ -z "$JARSIGNER" ] && [ -x "$JAVA_HOME/bin/jarsigner" ]; then
+    JARSIGNER="$JAVA_HOME/bin/jarsigner"
+  fi
+  if [ -n "$JARSIGNER" ]; then
+    # Two flag traps here, both of which made this check report FAIL on a
+    # correctly signed AAB:
+    #   * `-printcert` is not an option in JDK 21+ — it exits "Illegal option".
+    #   * `-verify` alone prints only "jar verified."; the signer DN is only
+    #     emitted with `-verbose`. `-certs` does not carry it either.
+    # Both streams are captured, because a broken signature writes to stderr.
+    VOUT="$("$JARSIGNER" -verify -verbose:summary "$AAB_SRC" 2>&1 || true)"
+    OWNER="$(printf '%s' "$VOUT" | grep -m1 'Signed by' || true)"
+    case "$OWNER" in
+      *"CN=Vaylo Sports"*)
+        echo "[apk] ok   AAB signed with the Vaylo Sports upload key"
+        printf '%s' "$OWNER" | sed 's/.*"CN=/[apk]     CN=/;s/".*//' ;;
+      *) echo "[apk] FAIL AAB signer is ${OWNER:-<not a signed jar>}" >&2; exit 1 ;;
+    esac
+    # A self-signed upload key is normal and expected — Play re-signs with
+    # Play App Signing — so the chain warnings above are not a finding. A
+    # *verification* failure would be, so check the summary line explicitly.
+    case "$VOUT" in
+      *"jar verified."*) : ;;
+      *) echo "[apk] FAIL AAB signature did not verify" >&2; exit 1 ;;
+    esac
+    echo "[apk] ok   AAB signature verifies"
+  else
+    echo "[apk] FAIL jarsigner not found; cannot verify the AAB signer" >&2
+    exit 1
+  fi
+  echo "[apk] $AAB_OUT"
+  ls -la "$AAB_OUT"
+else
+  echo "[apk] --   no AAB produced at $AAB_SRC" >&2
+fi
 
 echo
 echo "[apk] $OUT"

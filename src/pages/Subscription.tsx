@@ -57,7 +57,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
         ))}
       </ul>
 
-      <div className="mt-5 grid gap-2">
+      <div className="mt-5 grid grid-cols-1 gap-2">
         {plan.options.map((o) => (
           <button
             key={o.product_id}
@@ -134,7 +134,7 @@ export default function Subscription() {
         <AccountSubscriptionCard />
       </div>
 
-      <div className="px-5 mt-5 grid gap-4 md:grid-cols-2 md:max-w-4xl md:mx-auto">
+      <div className="px-5 mt-5 grid gap-4 grid-cols-1 md:grid-cols-2 md:max-w-4xl md:mx-auto">
         {SUBSCRIPTION_PLANS.map((plan, i) => (
           <PlanCard key={plan.plan_key} plan={plan} index={i} />
         ))}

@@ -119,7 +119,7 @@ const VPRPage = () => {
         className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-6 overflow-hidden relative">
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
         <div className="relative">
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="h-72">
             <ResponsiveContainer>
               <RadarChart data={radarData}>

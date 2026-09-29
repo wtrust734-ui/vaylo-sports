@@ -235,7 +235,7 @@ const Injury = () => {
         <div className="text-sm">{riskTier.action}</div>
       </motion.div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
           className="p-5 rounded-2xl bg-card/40 border border-border">
           <h3 className="font-semibold mb-3">Risk Drivers</h3>
