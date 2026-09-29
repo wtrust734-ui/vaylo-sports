@@ -35,6 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Secret scan
+        # Same gate as the debug workflow. A release bundle is the one artefact
+        # that leaves the machine, so a tree with a committed credential in it
+        # must not reach the point of being signed.
+        run: npm run secret:scan
+
       - name: Check signing secrets are present
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

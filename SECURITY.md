@@ -287,10 +287,82 @@ deliberately do not show another athlete's achievements — so the worst outcome
 a badge on your own profile. Closing it properly means a catalog table and a
 check constraint, which is a product change.
 
+### 14. The Play reviewer account's password is in git history — CRITICAL, open
+
+Found by grepping the remote's own history for the review account's password,
+after the rest of this pass had come up clean.
+
+`scripts/ui-audit.mjs` was committed with the credentials inline:
+
+```js
+const EMAIL = process.env.UI_EMAIL || "ui.review.20260928@example.com";
+const PASSWORD = process.env.UI_PASSWORD || "…";
+```
+
+They were moved to a git-ignored local file afterwards, which fixed the working
+tree and left history untouched. The password is recoverable from **five commits
+on `origin/main`**, so it is exposed to anyone who can clone, permanently,
+whatever the current file says.
+
+This is worse than an ordinary leaked key. It is the account Google's testers
+type a username and password into during review, so it is the credential most
+likely to be *used* rather than merely found, and it is written down in a place
+a Play reviewer or an automated scanner will read.
+
+**Rotate it. Rotation is the only complete fix** — a force-push removes the
+commits from the tip of the branch but not from any clone that already exists,
+and not from GitHub's cached views of dangling objects. In order:
+
+1. Change the password in Supabase → Authentication → Users for
+   `ui.review.20260928@example.com`, and delete any other review-account
+   credentials that were ever pasted into a Play Console form.
+2. Update Play Console → App access → Testing instructions with the new
+   password, if the account is still needed for closed testing.
+3. Only then consider `git filter-repo --invert-paths` or BFG. That is a
+   destructive rewrite of shared history and needs a decision, not a reflex.
+
+**What has been done here** is to stop it recurring, which is the part that is
+actually fixable without destroying the history:
+
+- `scripts/secret-scan.mjs`, run by `npm run secret:scan` and as the first step
+  of both CI workflows, fails the build when a tracked file contains a
+  credential. It scans what git is *tracking*, not the working tree, because the
+  working tree legitimately holds real secrets in `.env`.
+- `.freebuff/` is now in `.gitignore`. Before this, the review credentials were
+  kept out of the repository only by the sync script excluding the directory
+  when copying — a property of the copy tool, not of git. A plain `git add` in
+  the editing checkout would have committed a working Play reviewer login.
+- `src/lib/secretScan.test.ts` pins the calibration. See below for why that
+  turned out to be the important part.
+
+### On writing a secret scanner and believing it
+
+The first version of `secret-scan.mjs` ran against this repository and reported
+PASS, on a repository that still contained the password in five commits.
+
+Its rules matched `password: "…"`. The leak was written
+`process.env.UI_PASSWORD || "…"` — the credential is the *fallback*, not the
+assignment — so no rule fired. A third bug in the same file: the private-key
+rule needed the key material on the line after the header, but the scanner ran
+every rule one line at a time, so it could never match a PEM block.
+
+None of these would have been found by reading the code. They were found by
+extracting the offending file from the offending commit and running the scanner
+against it, which is the only test that means anything here: **a scanner is
+only proven by the thing it was built to catch.** So the fixtures in
+`secretScan.test.ts` are pinned to the real shape of this leak, and the scanner
+scans itself — an earlier version allowlisted its own file, which is how a real
+password came to sit in a comment inside it.
+
+The test fixtures use a fake password of the same shape. Quoting the real one
+in a test would have moved a credential that is currently only in history into
+the tip of `main`, which is strictly worse than the problem being fixed.
+
 ## Re-running the checks
 
 ```bash
 npm run security:check   # 18 assertions, all of them negative
+npm run secret:scan      # credential shapes in tracked files; needs no credentials
 npm run auth:posture     # reports the four Dashboard settings that no migration can set
 npm run ai:health        # which of the 7 AI features answer, and whether they took credits
 ```

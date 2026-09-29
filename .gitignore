@@ -20,6 +20,15 @@ dist-ssr
 .env.*
 !.env.example
 
+# Agent scratch space. `ui-audit.local.json` in here holds the Play reviewer
+# account's email and password: that account is what Google's testers log in
+# with, so committing it would publish a working login. The sync script already
+# excludes this directory when copying between the two checkouts, but that is a
+# property of the copy tool, not of git — a plain `git add` in this checkout
+# would have swept it in. Ignored here so the safety does not depend on
+# remembering which script is being run.
+.freebuff/
+
 # Database dumps / backups. These contain user emails and password hashes.
 *.backup
 *.dump

@@ -15,6 +15,8 @@ on:
       - "tsconfig*.json"
       - "eslint.config.js"
       - ".github/workflows/android-debug.yml"
+      - "scripts/secret-scan.mjs"
+      - ".gitignore"
   pull_request:
     branches: [main]
     paths:
@@ -29,6 +31,8 @@ on:
       - "tsconfig*.json"
       - "eslint.config.js"
       - ".github/workflows/android-debug.yml"
+      - "scripts/secret-scan.mjs"
+      - ".gitignore"
   workflow_dispatch:
 
 jobs:
@@ -36,6 +40,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Secret scan
+        # Before anything is built, and before the slow Gradle steps, so a
+        # committed credential fails in seconds rather than after ten minutes.
+        # The Play reviewer password was committed five times before this
+        # existed; the working tree had been fixed, so nothing would have
+        # flagged it.
+        run: npm run secret:scan
 
       - name: Set up Java 21
         uses: actions/setup-java@v4

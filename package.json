@@ -29,7 +29,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "auth:posture": "node scripts/auth-posture.mjs",
-    "ai:health": "node scripts/ai-health.mjs"
+    "ai:health": "node scripts/ai-health.mjs",
+    "secret:scan": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
