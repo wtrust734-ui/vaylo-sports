@@ -295,9 +295,14 @@ after the rest of this pass had come up clean.
 `scripts/ui-audit.mjs` was committed with the credentials inline:
 
 ```js
-const EMAIL = process.env.UI_EMAIL || "ui.review.20260928@example.com";
-const PASSWORD = process.env.UI_PASSWORD || "…";
+const EMAIL = process.env.UI_EMAIL || "<the review account's address>";
+const PASSWORD = process.env.UI_PASSWORD || "<a literal password>";
 ```
+
+Both values are redacted here on purpose. Quoting the real address here would
+add another copy of it to the tip of `main`, and the account name is in the
+history already — adding to it helps nobody. The *shape* is the finding, and the
+shape is preserved.
 
 They were moved to a git-ignored local file afterwards, which fixed the working
 tree and left history untouched. The password is recoverable from **five commits
