@@ -65,3 +65,10 @@ android/build/
 android/app/build/
 *.keystore
 *.jks
+
+# Sideloadable builds, produced by scripts/build-apk.sh and copied out of
+# android/app/build/outputs/. Signed artefacts and 5–7 MB binaries; the real
+# output is generated, not tracked. `apksigner` on these is how the upload key
+# is checked, and a tracked copy would be one more thing to re-sign whenever the
+# key rotates.
+apk/
