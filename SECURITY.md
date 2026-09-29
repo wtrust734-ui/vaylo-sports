@@ -237,12 +237,91 @@ treated as a regression:
 
 ---
 
+### 10. The challenge clamp was decorative — HIGH, closed
+
+A clamp inside an RPC protects only the RPC. `challenge_participants` also carried
+an `"update self"` RLS policy, so an athlete could `PATCH` their own row to any
+progress and walk straight past `update_challenge_progress()`. Verified:
+`progress 0 -> 99999` against a target of 5, HTTP 200.
+
+The policy had no legitimate caller — joining is INSERT, leaving is DELETE, and
+every progress change goes through the RPC — so it is dropped rather than
+narrowed. `security:check` asserts the direct write returns zero rows.
+
+### 11. A challenge creator could price their own reward, and forge "official" — HIGH, closed
+
+An athlete could INSERT a challenge with `is_official = true`, an arbitrary
+`sponsor_name`, and `reward_points` of their choosing. Two problems at once: a
+fake "Vaylo official" challenge, or one wearing a brand that never agreed to
+appear, is phishing inside the app's own UI; and completion writes
+`points_events` using the challenge's own `reward_points`, so the creator priced
+their own payout. Chained with finding 10, that was a points-minting loop.
+
+A BEFORE INSERT OR UPDATE trigger now normalises the privileged columns for any
+client write — `is_official` false, `sponsor_*` null, `participant_count` 0, and
+rewards capped at 20 credits / 250 points. `auth.uid()` is null for service-role
+callers, so the official challenges and the seeder are untouched. Normalising
+rather than raising is deliberate: none of these columns are part of any client
+contract, and an error would break a future client that harmlessly sends one.
+
+### 12. An empty basket returned `{"success": true}` — MEDIUM, closed
+
+No money moved, but the client shows a success toast for a request that bought
+nothing, which trains athletes to ignore the one signal that tells them a
+purchase failed. `process-purchase` now answers 400 for an empty or id-less
+basket.
+
+### 13. An achievement could be granted but never removed — LOW, closed
+
+`achievements` had INSERT and SELECT policies and no DELETE, so a row was
+permanent. This surfaced as a bug in my own tooling: `security:check` filtered
+on `title=eq.security-check probe`, and with an unencoded space PostgREST read
+that as `title = 'security-check'` and matched nothing, so every run left a probe
+row behind. Ten had accumulated on the review account. The encoding is fixed in
+the script and the policy is added; a run now leaves zero.
+
+*Known limitation, not fixed:* an athlete can insert an achievement with a title
+of their choosing, because there is no achievement catalog to validate against.
+That is self-gaming rather than reputation forgery — public profiles
+deliberately do not show another athlete's achievements — so the worst outcome is
+a badge on your own profile. Closing it properly means a catalog table and a
+check constraint, which is a product change.
+
 ## Re-running the checks
 
 ```bash
-npm run security:check   # 14 assertions, all of them negative
+npm run security:check   # 18 assertions, all of them negative
 npm run auth:posture     # reports the four Dashboard settings that no migration can set
+npm run ai:health        # which of the 7 AI features answer, and whether they took credits
 ```
+
+### On testing a whole schema
+
+`.freebuff/rls-sweep.mjs` attempts a write to all 97 tables as both `anon` and a
+signed-in athlete. Two earlier versions of it were worthless, and both failed the
+same way — by looking clean for the wrong reason:
+
+1. A fixed probe body of `{ user_id, title, name, email }` was rejected with
+   `PGRST204` on every table, because most tables have no `email` column. The
+   request never reached the database. "No table accepted a write" was true and
+   meaningless.
+2. Rewriting every string to a sentinel fixed that but produced `22007`/`22P02` on
+   28 tables — a uuid into `reward_config.id`, which is an integer. Those
+   included `credit_transactions`, `profiles` and `subscriptions`.
+
+The working version clones a **real** row, changes only the primary key and the
+owner columns, and leaves every other value byte-identical. A value read from a
+real row is already legal for its own column, so the only variable left is the
+policy. It then reads the SQLSTATE, because a rejected insert means one of two
+opposite things:
+
+- `42501` — RLS refused. The answer we want.
+- `23503` / `23514` / `23505` — RLS **allowed** the write and only a foreign key,
+  a CHECK, or a unique index stopped it. Reported as a LEAD, because the policy
+  would have let it through and an integrity rule is the only thing in the way.
+
+Anything the script cannot classify is printed as UNKNOWN rather than counted as
+safe. A sweep that cannot explain its own failures is not evidence.
 
 It signs in as the review account and asserts that each closed path is still
 closed, including that a money-priced product is refused and the balance is

@@ -196,6 +196,24 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as RequestBody;
     const items = Array.isArray(body?.items) ? body.items : [];
 
+    // An empty or id-less basket is a malformed request, not a purchase. It
+    // used to fall through the loop untouched and answer `{"success": true}`
+    // with nothing granted, which taught the client to show a success toast for
+    // a request that bought nothing — the one signal an athlete relies on when a
+    // purchase genuinely fails.
+    if (items.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Your basket is empty." }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    if (items.some((i) => !String((i as { product_id?: unknown } | null)?.product_id || "").trim())) {
+      return new Response(
+        JSON.stringify({ error: "One of the items has no product id." }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
     // Payment verification is only meaningful for a basket that contains a
     // product priced in money. A feature unlock or an Event Pack is paid for in
     // credits the athlete earned, and the credit balance is the authority — it

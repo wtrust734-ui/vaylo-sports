@@ -171,7 +171,11 @@ for (const [name, body] of [
     const year = new Date(row.earned_at).getUTCFullYear();
     ok = year > 2020 && row.share_count === 0;
     detail = `HTTP ${r.status} · earned_at ${year} (asked for 2000) · share_count ${row.share_count} (asked for 100000)`;
-    await fetch(`${URL_BASE}/rest/v1/achievements?title=eq.security-check probe`, { method: "DELETE", headers: authHeaders });
+    // The title contains a space, so it must be URL-encoded. Without this the
+    // filter parsed as `title = 'security-check'` and matched nothing, so every
+    // run of this script quietly left its probe row behind — ten had
+    // accumulated on the review account before it was noticed.
+    await fetch(`${URL_BASE}/rest/v1/achievements?title=eq.${encodeURIComponent("security-check probe")}`, { method: "DELETE", headers: authHeaders });
   }
   check("An achievement cannot claim its own date or share count", ok, detail);
 }
@@ -217,6 +221,86 @@ for (const [name, body] of [
   try { changed = JSON.parse(body || "[]").length; } catch { /* non-JSON counts as 0 */ }
   check("An official challenge cannot be rewritten by an athlete", changed === 0,
     `HTTP ${r.status} · ${changed} rows changed`);
+}
+
+// ---------------------------------------------------------------------------
+// Challenge progress is server-owned. A clamp inside an RPC is decoration if the
+// column is writable beside it, and it was: an "update self" policy let an
+// athlete PATCH their own row to any progress. That policy had no client caller
+// — join is INSERT, leave is DELETE, progress is the RPC — so it is gone rather
+// than narrowed.
+{
+  const CH = "11111111-1111-4111-8111-111111111102";
+  await fetch(`${URL_BASE}/rest/v1/challenge_participants`, {
+    method: "POST", headers: authHeaders,
+    body: JSON.stringify({ challenge_id: CH, user_id: me }),
+  }).then(async (r) => { if (!r.ok) return; }); // join; ignored either way
+  const r = await fetch(
+    `${URL_BASE}/rest/v1/challenge_participants?challenge_id=eq.${CH}&user_id=eq.${me}`,
+    {
+      method: "PATCH",
+      headers: { ...authHeaders, Prefer: "return=representation" },
+      body: JSON.stringify({ progress: 99999, status: "completed" }),
+    }
+  );
+  const body = r.ok ? await r.json() : [];
+  const row = await (
+    await fetch(`${URL_BASE}/rest/v1/challenge_participants?challenge_id=eq.${CH}&user_id=eq.${me}&select=progress`, { headers: authHeaders })
+  ).json();
+  check("Challenge progress cannot be written beside the RPC", (body?.length ?? 0) === 0 && Number(row?.[0]?.progress ?? 0) <= 5,
+    `PATCH returned ${body?.length ?? 0} rows · progress ${row?.[0]?.progress ?? "none"} (target 5)`);
+  await fetch(`${URL_BASE}/rest/v1/challenge_participants?challenge_id=eq.${CH}&user_id=eq.${me}`, { method: "DELETE", headers: authHeaders });
+}
+
+// ---------------------------------------------------------------------------
+// A challenge creator cannot price their own reward, and cannot mint one that
+// looks official or sponsored. Completion writes points_events from the
+// challenge's own reward_points, so a client-chosen value is a client-chosen
+// payout — and a fake "Vaylo official" challenge is phishing inside our own UI.
+{
+  const r = await fetch(`${URL_BASE}/rest/v1/challenges`, {
+    method: "POST",
+    headers: { ...authHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({
+      creator_id: me,
+      title: "security-check official-impersonation probe",
+      type: "count",
+      target_value: 1,
+      target_unit: "workouts",
+      is_official: true,
+      sponsor_name: "security-check Brand",
+      reward_credits: 9999,
+      reward_points: 99999,
+      scope: "weekly",
+    }),
+  });
+  const rows = r.ok ? await r.json() : [];
+  const row = rows?.[0];
+  const spoofed = !!row && (row.is_official === true || !!row.sponsor_name || row.reward_points > 250 || row.reward_credits > 20);
+  check("A challenge creator cannot mint an official, sponsored or over-priced one", !spoofed,
+    row ? `created · is_official=${row.is_official} sponsor=${JSON.stringify(row.sponsor_name)} reward=${row.reward_credits}c/${row.reward_points}pt`
+        : `refused · HTTP ${r.status}`);
+  if (row) {
+    await fetch(`${URL_BASE}/rest/v1/challenges?id=eq.${row.id}`, { method: "DELETE", headers: authHeaders });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// An empty or id-less basket must be a 400, not a success. Granting nothing is
+// safe; answering `{"success": true}` is not, because the client shows a success
+// toast and the athlete learns to ignore the signal that a purchase failed.
+{
+  const bal0 = (await (await fetch(`${URL_BASE}/rest/v1/profiles?select=credits&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.credits;
+  const seen = [];
+  for (const body of [{}, { items: [] }, { items: [{ product_type: "credits" }] }]) {
+    const r = await fetch(`${URL_BASE}/functions/v1/process-purchase`, {
+      method: "POST", headers: authHeaders, body: JSON.stringify(body),
+    });
+    if (r.status === 200) seen.push(`HTTP 200 for ${JSON.stringify(body)}`);
+  }
+  const bal1 = (await (await fetch(`${URL_BASE}/rest/v1/profiles?select=credits&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.credits;
+  check("An empty basket is a 400, not a success", seen.length === 0 && bal0 === bal1,
+    seen.length ? seen.join(" | ") : `3 malformed baskets all refused · balance ${bal0} -> ${bal1}`);
 }
 
 // ---------------------------------------------------------------------------
