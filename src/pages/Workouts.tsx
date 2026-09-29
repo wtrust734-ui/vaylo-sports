@@ -10,6 +10,7 @@ import RPEModal from "@/components/RPEModal";
 import { triggerMilestone } from "@/components/MilestoneCelebration";
 import ShareActivityButton from "@/components/feed/ShareActivityButton";
 import { fetchMyShareKeys, shareKey, workoutShareInput } from "@/lib/activitySharing";
+import { isFlagOn } from "@/config/featureFlags";
 
 type Workout = Tables<"workouts">;
 
@@ -205,6 +206,7 @@ const Workouts = () => {
             </div>
           )}
           {!gpsTracking && (
+
             <div className="mt-4">
               <label className="text-xs text-muted-foreground mb-1 block">Distance (km)</label>
               <input type="number" step="0.01" placeholder="0.00" value={distance} onChange={(e) => setDistance(e.target.value)}
@@ -239,10 +241,18 @@ const Workouts = () => {
                   </motion.button>
                 ))}
               </div>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                <input type="checkbox" checked={gpsTracking} onChange={e => setGpsTracking(e.target.checked)} className="accent-primary" />
-                <Navigation size={14} /> Track with GPS
-              </label>
+              {/* GPS is launch-gated (featureFlags.ts). The Android manifest
+                  declares no location permission, so the watch never resolves
+                  and the checkbox silently does nothing — a control that looks
+                  live and isn't. Hidden rather than disabled, so the athlete is
+                  not offered a feature this build cannot deliver. The manual
+                  distance field above is unaffected and still records distance. */}
+              {isFlagOn("gpsTracking") && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input type="checkbox" checked={gpsTracking} onChange={e => setGpsTracking(e.target.checked)} className="accent-primary" />
+                  <Navigation size={14} /> Track with GPS
+                </label>
+              )}
               <div className="flex gap-2">
                 <button onClick={() => setShowNew(false)} className="px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
                 <motion.button onClick={startWorkout} whileTap={{ scale: 0.98 }}

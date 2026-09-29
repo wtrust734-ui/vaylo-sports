@@ -27,6 +27,8 @@ provide" is the list of things that will stop you.
 | Public app URL | `https://vaylosports.lovable.app` |
 | Store icon + feature graphic | Generated into `store/` |
 | Screenshots | **Not yet captured** — see §6 |
+| Wearable sync / GPS / coach marketplace | Launch-gated **off** via `src/config/featureFlags.ts` |
+| AI features | **Off** — needs `OPENAI_API_KEY`; not flaggable by design |
 
 ---
 
@@ -397,24 +399,109 @@ If it is your first release, expect **1–7 days** for review of a closed test.
 
 ---
 
+## Pre-launch checklist
+
+Updated 2026-09-29. Ordered by what actually blocks a rollout, not by
+convenience. Everything in **Tier 0** is a real exposure or a lost conversion;
+everything in **Tier 4** can wait until after closed testing.
+
+### Tier 0 — today, about 15 minutes, all yours
+
+| | Task | Why |
+|---|---|---|
+| ☐ | **Rotate the Play reviewer password** | It is recoverable from 5 commits on `origin/main` — see SECURITY.md finding 14. This is the only open item on this page that is an active exposure. |
+| ☐ | Auth Dashboard → rate-limit wrong passwords | `npm run auth:posture` reports 3 of 3 at risk. |
+| ☐ | Auth Dashboard → min password length 6 → 8 | As above. |
+| ☐ | **Leave "require email confirmation" OFF** | It looks like a fix for the third posture finding and it would break the closed test. Testers sign up with an address they cannot verify and every one of them is locked out at the first screen. Turn it on *after* closed testing, once onboarding is yours. |
+
+### Tier 1 — the build, done in this repository
+
+The closed-test bundle should not contain a feature that visibly does nothing.
+As of this commit it does not:
+
+| Feature | How it is handled |
+|---|---|
+| **Wearable sync** | `wearableSync` flag, default off. `/health-sync` redirects to `/recover`, and all three entry points (sidebar, Recover hub, the route) are gated from `src/config/featureFlags.ts`. |
+| **GPS tracking** | `gpsTracking` flag, default off. The "Track with GPS" control is hidden in Workouts and Routines; manual distance entry still works. |
+| **Coach marketplace** | `coachMarketplace` flag, already off before this change. |
+| **AI** | **Not flagged, on purpose.** AI is inside the core pages — Training generates the plan, FormAnalysis / Nutrition / Tactics analyse, Goals writes the weekly review, Coach chats. A flag would not hide a feature, it would gut the product. The athlete already sees "not switched on yet"; the real fix is `supabase secrets set OPENAI_API_KEY=…`. **If you are choosing between adding that key and adding a flag, add the key.** |
+
+To build a bundle that *shows* one of these, set the override — see
+`.env.example`:
+
+```bash
+VITE_ENABLE_wearableSync=true   # or gpsTracking, coachMarketplace
+```
+
+Overrides are build-time and per-machine. Note that `vaylosports.lovable.app` is
+served by Lovable from its own copy of the code, so **none of this affects the
+live web app** — only builds made from this repository, which is to say the
+Android app.
+
+### Tier 2 — Play Console forms, about 2 hours, all yours
+
+Nothing in this repository does these, and you need them before the *first*
+rollout to a closed track, not before production.
+
+- ☐ **Health apps declaration** — the one that will generate questions. Reading
+  Health Connect data makes this a health app, which brings extra scrutiny and
+  requires the privacy policy to cover health data specifically. Start it first.
+- ☐ **Data safety** — declare Health Connect, account credentials, and whatever
+  the AI features would send. The location question resolves itself given the
+  GPS flag above.
+- ☐ **Content rating** questionnaire.
+- ☐ **Target audience and content**.
+- ☐ **Store listing** — screenshots are still not captured (§6). Title must be
+  "VAYLO Sports" with a capital S.
+
+### Tier 3 — the artefact, about 30 minutes
+
+- ☐ Signed bundle via the `android-release` workflow. Signing is configured, the
+  upload key is valid to 2054, and the release build compiles clean. This is
+  paperwork, not engineering.
+
+### Tier 4 — after closed testing
+
+Email confirmation · AI keys · wearable vendor agreements · the web/Android
+build divergence (gap 5 below) · legal entity and ICO registration · Supabase
+SMTP for password reset.
+
+One item is mis-tiered and worth knowing: **password-reset email** depends on
+Supabase's built-in sender, which is rate-limited. A reviewer using the account
+you hand them will not hit it; a tester who mistypes their email on signup will.
+
+### The 14-day clock
+
+Closed testing itself has **no tester minimum**. The 12-testers-for-14-continuous-
+days requirement applies to *production access* on new personal developer
+accounts. It is the long pole, it cannot be shortened, and it only starts once
+the track is live — so open the track the moment the bundle is uploaded rather
+than waiting for the closed test to look finished.
+
 ## Known gaps
 
 These are not Play blockers, but they are real and they will surface in a review
-if a tester goes looking.
+if a tester goes looking. Items 1 and 2 are now handled by launch flags rather
+than left for a tester to find — see the pre-launch checklist above.
 
 1. **GPS tracking does nothing on Android.** `Workouts.tsx` and `Routines.tsx` call
    `navigator.geolocation`, but the manifest declares no location permission, so the
-   call fails and the button is inert. Either accept it (and consider hiding the
-   button on Android, as the copy now says "distance only") or add
-   `ACCESS_FINE_LOCATION` plus a WebView geolocation grant — the second also means
-   declaring location in the Data safety form.
+   call fails and the button is inert. The `gpsTracking` flag now hides both
+   controls, which also keeps location out of the Data safety form. To turn it
+   on properly: add `ACCESS_FINE_LOCATION` plus a WebView geolocation grant, and
+   declare location in Data safety.
 2. **AI features are switched off in production** until `OPENAI_API_KEY` is set.
    The message is now athlete-facing and uniform, but the features themselves
    are still inert — a reviewer who taps the coach gets a clear "not switched
-   on yet" rather than an error.
+   on yet" rather than an error. This is the one gap worth fixing before
+   rollout, because it is a single environment variable rather than missing
+   engineering.
 3. **Wearable sync is unconfigured.** `wearable-oauth` answers `not_configured` for
-   every provider because no vendor OAuth secrets are set. The screen is honest
-   about it, but it is a headline feature that does not work.
+   every provider because no vendor OAuth secrets exist — Garmin, Strava and the
+   rest each need a developer agreement signed by a human. The `wearableSync`
+   flag now hides the whole surface, including the route, so a reviewer never
+   lands on a screen of dead providers. Set `VITE_ENABLE_wearableSync=true` once
+   the secrets do exist.
 4. **Password-reset email delivery** depends on Supabase's SMTP configuration; the
    built-in sender is rate-limited and unsuitable for real users.
 5. **The web app and the Android app are different builds.**

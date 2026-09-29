@@ -53,6 +53,7 @@ import { formatSports } from "@/lib/profile";
 import { discordInviteUrl } from "@/config/community";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import { NAV_CATALOG } from "@/lib/personalization/nav";
+import { isRouteVisible } from "@/config/featureFlags";
 import logo from "@/assets/logo.jpg";
 
 function CommunityLink() {
@@ -209,7 +210,12 @@ const AppSidebar = () => {
           labelKey,
           path,
           icon: iconFor.get(path) ?? base.icon,
-        }));
+        }))
+        // Launch flags, applied after personalisation so a feature that is off
+        // for the build cannot reappear because the athlete's sport happens to
+        // match it. Without this the sidebar would link to /health-sync, which
+        // now redirects to /recover — a menu entry that bounces.
+        .filter((it) => isRouteVisible(it.path));
       if (items.length === 0) return null; // whole group irrelevant
       return {
         titleKey: spec.titleKey,

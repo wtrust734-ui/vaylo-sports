@@ -214,7 +214,16 @@ const App = () => (
                 <Route path="/avatar" element={<Avatar />} />
                 <Route path="/communities" element={<Communities />} />
                 <Route path="/goals" element={<Goals />} />
-                <Route path="/health-sync" element={<HealthSync />} />
+                {/* Wearable sync is launch-gated (featureFlags.ts). The vendor
+                    OAuth apps do not exist yet, so the screen lists providers
+                    that cannot be connected. Redirect rather than 404 so an old
+                    link or a stale shortcut lands somewhere real. */}
+                <Route
+                  path="/health-sync"
+                  element={
+                    isFlagOn("wearableSync") ? <HealthSync /> : <Navigate to="/recover" replace />
+                  }
+                />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/pbs" element={<PBs />} />

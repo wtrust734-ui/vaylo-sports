@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, SkipForward, Plus, Trash2, Check, Clock, MapPin, X, Edit3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lsGet, lsSet } from "@/lib/localStore";
+import { isFlagOn } from "@/config/featureFlags";
 
 interface Step { name: string; seconds: number; cue?: string }
 interface RoutineHistoryEntry { id: string; name: string; completed: string; distance_m?: number }
@@ -260,12 +261,19 @@ const Routines = () => {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm bg-background/60 border border-border rounded-lg p-3 cursor-pointer">
-                  <input type="checkbox" checked={!!editing.gps_enabled}
-                    onChange={(e) => setEditing({ ...editing, gps_enabled: e.target.checked })} />
-                  <MapPin size={14} className="text-primary" />
-                  <span>Enable GPS tracking (distance only)</span>
-                </label>
+                {/* GPS is launch-gated (featureFlags.ts) — see the note in
+                    Workouts.tsx. The copy here said "distance only", which was
+                    an attempt to be honest about a control that on Android does
+                    nothing at all. Hiding it is honest in a way the wording was
+                    not. */}
+                {isFlagOn("gpsTracking") && (
+                  <label className="flex items-center gap-2 text-sm bg-background/60 border border-border rounded-lg p-3 cursor-pointer">
+                    <input type="checkbox" checked={!!editing.gps_enabled}
+                      onChange={(e) => setEditing({ ...editing, gps_enabled: e.target.checked })} />
+                    <MapPin size={14} className="text-primary" />
+                    <span>Enable GPS tracking (distance only)</span>
+                  </label>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
