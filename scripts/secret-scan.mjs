@@ -118,10 +118,16 @@ export const RULES = [
     // main, which is strictly worse than the problem being fixed.
     // The name has to look credential-ish. Matching every `|| "string"` in a
     // codebase is every string fallback, which is all of them.
-    re: /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;,]*?\|\|\s*["']([^"']{6,})["']/,
+    re: /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;,]*?\|\|\s*(?:"([^"\n]{6,}?)"|'([^'\n]{6,}?)')/,
     why: "A credential-shaped variable falling back to a literal instead of failing when the env var is unset.",
     nameRe: /^(?:.*_)?(?:password|passwd|secret|api_?key|apikey|token|email|credential|auth|private_?key)$/i,
-    capture: 2,
+    // Two alternatives rather than `["']…["']`, because a negated character
+    // class cannot exclude one quote while permitting the other. With
+    // `[^"']` the value truncates at the first apostrophe, which turned
+    // `<the account's address>` into `<the account` — a fragment short enough
+    // to clear the reject list, so the rule fired on the redaction that exists
+    // to stop it firing. Real passwords contain apostrophes too.
+    capture: firstOf(2, 3),
     reject: [
       /^\.{2,}$/,
       /^\*+$/,
@@ -144,8 +150,9 @@ export const RULES = [
     // placeholders this repo actually uses ("...", "changeme", "***", the
     // env-var expression), is what keeps this from being noise. It found the
     // reviewer password, which is the only proof it is calibrated.
-    re: /\b(?:password|passwd|secret|api_?key|token)\b\s*[:=]\s*["']([^"']{8,})["']/i,
+    re: /\b(?:password|passwd|secret|api_?key|token)\b\s*[:=]\s*(?:"([^"\n]{8,}?)"|'([^'\n]{8,}?)')/i,
     why: "A credential assigned as a literal string.",
+    capture: firstOf(1, 2),
     reject: [
       /^\.{2,}$/,                       // "..." — the placeholder in ui-audit.mjs
       /^\*+$/,                          // "***"
@@ -158,6 +165,20 @@ export const RULES = [
     ],
   },
 ]
+
+/**
+ * Build a `capture` resolver that returns the first group that actually
+ * matched. Used by rules that spell out their two quoting styles as separate
+ * alternatives, so exactly one of the groups is ever populated.
+ */
+function firstOf(...indexes) {
+  return (m) => {
+    for (const i of indexes) {
+      if (m[i] !== undefined) return m[i]
+    }
+    return m[0]
+  }
+}
 
 /**
  * Run the rules over one line of text.
@@ -179,7 +200,11 @@ export function scanText(text) {
       const m = haystack.match(rule.re)
       if (!m) continue
       if (rule.nameRe && !rule.nameRe.test(m[1] ?? "")) continue
-      const value = rule.capture ? m[rule.capture] : (m[1] ?? m[0])
+      const value = typeof rule.capture === "function"
+        ? rule.capture(m)
+        : rule.capture
+          ? m[rule.capture]
+          : (m[1] ?? m[0])
       if (rule.reject?.some((r) => r.test(value))) continue
       out.push({ id: rule.id, why: rule.why, sample: m[0].trim().slice(0, 80) })
     }

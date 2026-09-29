@@ -124,4 +124,39 @@ describe("secret-scan does not cry wolf on this repository's real code", () => {
   it("ignores an empty-string and whitespace fallback", () => {
     expect(ids('const SECRET = process.env.SECRET || ""')).not.toContain("env-fallback-literal")
   })
+
+  // A redacted placeholder with an apostrophe in it. This failed once: the value
+  // pattern was `[^"']`, which truncated at the apostrophe, leaving a short
+  // fragment that cleared the reject list — so the scanner fired on the
+  // placeholder that exists precisely to stop it firing.
+  it("ignores a redacted placeholder that contains an apostrophe", () => {
+    const doc = `const EMAIL = process.env.UI_EMAIL || "<the review account's address>";`
+    expect(ids(doc)).not.toContain("env-fallback-literal")
+  })
+})
+
+describe("secret-scan handles quotes inside the value", () => {
+  // A password with an apostrophe is ordinary. A scanner that truncates at the
+  // first one is blind to a whole class of real credentials, and — worse — the
+  // truncated fragment is short enough to pass the placeholder reject list,
+  // which turns the bug into a false positive on the very redactions that are
+  // supposed to prevent one.
+  it("flags a single-quoted password containing an apostrophe", () => {
+    expect(ids(`const password = "dont'guess-me-1234";`)).toContain("hardcoded-password")
+  })
+
+  it("flags a double-quoted password containing an apostrophe", () => {
+    expect(ids(`const password = "don't guess me 12345";`)).toContain("hardcoded-password")
+  })
+
+  it("flags a fallback value containing an apostrophe", () => {
+    const line = `const PASSWORD = process.env.PW || "it's-not-the-real-one-9";`
+    expect(ids(line)).toContain("env-fallback-literal")
+  })
+
+  it("flags a single-quoted fallback and does not run past the closing quote", () => {
+    // The value ends at its own quote, not at the next one of the other kind.
+    const line = `const PASSWORD = process.env.PW || 'x' + suffix;`
+    expect(ids(line)).not.toContain("env-fallback-literal")
+  })
 })
