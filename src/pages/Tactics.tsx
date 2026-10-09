@@ -126,7 +126,7 @@ const Tactics = () => {
   const sportLabel = (profile?.sport || "").split(",")[0].trim() || "Multi-Sport";
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Swords size={14} /> Tactical Intelligence</div>
         <h1 className="text-4xl font-display font-bold mt-2">Tactical <span className="text-gradient-electric">Prep</span></h1>
@@ -142,7 +142,7 @@ const Tactics = () => {
           onChange={(e) => setBriefing(e.target.value)}
           rows={7}
         />
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between text-[12px] text-muted-foreground">
           <span>{briefing.length} chars</span>
           <span>Balance: {profile?.credits ?? 0} credits</span>
         </div>

@@ -33,14 +33,25 @@ describe("familiesForProfile", () => {
 });
 
 describe("isFeatureRelevant", () => {
-  it("hides technique-first features from pure endurance athletes", () => {
-    expect(isFeatureRelevant("training.form", ["endurance"])).toBe(false);
+  it("never hides a purchased surface, and still tailors optional depth", () => {
+    // training.form and recover.nutrition are PAID surfaces (Form Analysis,
+    // Nutrition Pack). This test used to pin the opposite — /form hidden from a
+    // pure endurance athlete — and that is exactly how a priced feature became
+    // unfindable: the Market quoted its price and the athlete's own nav removed
+    // the way to it. Personalisation may order a purchasable surface, never
+    // remove it. /skills is optional depth, not a product, and stays tailored.
+    expect(isFeatureRelevant("training.form", ["endurance"])).toBe(true);
     expect(isFeatureRelevant("training.form", ["skill"])).toBe(true);
+    expect(isFeatureRelevant("recover.nutrition", ["skill"])).toBe(true);
+    expect(isFeatureRelevant("perform.skills", ["endurance"])).toBe(false);
   });
 
-  it("shows opponents only to adversarial sports", () => {
-    expect(isFeatureRelevant("compete.opponents", ["team"])).toBe(true);
-    expect(isFeatureRelevant("compete.opponents", ["endurance"])).toBe(false);
+  it("shows a sport-specific surface only to the sports it is priced for", () => {
+    // Pinned `compete.opponents` until that surface was removed on 2026-10-08.
+    // Same shape, on a feature that still ships: visible to the families it is
+    // priced for, hidden from a pure endurance athlete.
+    expect(isFeatureRelevant("perform.skills", ["team"])).toBe(true);
+    expect(isFeatureRelevant("perform.skills", ["endurance"])).toBe(false);
   });
 
   it("never hides universal features", () => {
@@ -61,14 +72,18 @@ describe("visibleFeatures over the nav catalog", () => {
     expect(tailored).toBeGreaterThan(full / 2); // tailored, not gutted
   });
 
-  it("removes AR overlay and opponents for a runner, keeps them for a footballer", () => {
+  it("keeps the shop reachable in every athlete's nav, and still tailors depth", () => {
     const runPaths = visibleFeatures(flatten(NAV_CATALOG), runner).map((i) => i.path);
-    expect(runPaths).not.toContain("/ar-overlay");
-    expect(runPaths).not.toContain("/opponents");
+    // Paid surfaces — see the note in features.ts. A runner could not reach
+    // /form or /nutrition before, while both were priced in the Market.
+    expect(runPaths).toContain("/form");
+    expect(runPaths).toContain("/nutrition");
+    // Optional depth is still tailored: skill analytics is not a product.
+    expect(runPaths).not.toContain("/skills");
 
     const footPaths = visibleFeatures(flatten(NAV_CATALOG), baller).map((i) => i.path);
-    expect(footPaths).toContain("/ar-overlay");
-    expect(footPaths).toContain("/opponents");
+    expect(footPaths).toContain("/form");
+    expect(footPaths).toContain("/skills");
   });
 
   it("keeps everything for unknown sports (fail open)", () => {
@@ -119,12 +134,16 @@ describe("ordering", () => {
 
   it("orderByRelevance is stable and only reorders, never removes", () => {
     const items = [
-      { feature: "training.form" as const, id: "form" },
+      // A family-scoped surface, so the runner's ordering has something to move:
+      // optional depth sinks, universal surfaces stay put. (This used
+      // training.form, which is universal now — a universal feature has nothing
+      // to sink relative to.)
+      { feature: "perform.skills" as const, id: "skills" },
       { feature: "training.plans" as const, id: "plans" },
     ];
     const ordered = orderByRelevance(items, runner);
     expect(ordered).toHaveLength(2);
-    // form is irrelevant to endurance so it should sink below plans
-    expect(ordered[ordered.length - 1].id).toBe("form");
+    // skills is irrelevant to endurance so it should sink below plans
+    expect(ordered[ordered.length - 1].id).toBe("skills");
   });
 });

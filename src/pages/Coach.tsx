@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, Plus, Trash2, Edit3, Send, Loader2, Brain, X, ChevronLeft, Database } from "lucide-react";
+import { DISCLAIMERS } from "@/config/disclaimers";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -98,24 +99,19 @@ const Coach = () => {
     setMemories(prev => prev.filter(m => m.id !== id));
   };
 
-  const parseMemorySaves = useCallback(async (text: string) => {
+  // Memories are persisted by the coach-chat edge function now (it sees the
+  // full streamed reply, so a closed tab or a dropped frame can no longer drop
+  // a memory, and a doctored client can no longer fabricate one). The client
+  // only refreshes its memory list after each reply; nothing writes here.
+  const parseMemorySaves = useCallback(async (_text: string) => {
     if (!user) return;
-    const regex = /\[MEMORY_SAVE:\s*category=([^,]+),\s*key=([^,]+),\s*value=([^\]]+)\]/g;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      const [, category, key, value] = match;
-      const { error } = await supabase.from("coach_memories").upsert({
-        user_id: user.id,
-        category: category.trim(),
-        key: key.trim(),
-        value: value.trim(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id,key" }).select();
-      if (error) {
-        console.error("coach memory save failed:", error.message);
-        toast({ title: "Couldn't save a coach memory", description: error.message, variant: "destructive" });
-      }
-    }
+    // Re-read the user's memories so the sidebar reflects what the server saved.
+    const { data } = await supabase
+      .from("coach_memories")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    setMemories(data ?? []);
   }, [user]);
 
   const send = async (text: string) => {
@@ -224,7 +220,7 @@ const Coach = () => {
   if (!activeConv && messages.length === 0) {
     return (
       <div className="min-h-screen bg-background pb-24">
-        <div className="px-5 pb-3 pt-14 flex items-center justify-between">
+        <div className="px-5 pb-3 pt-[var(--vaylo-screen-top)] flex items-center justify-between">
           <div>
             <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-display font-bold">Vaylo Sports Coach</motion.h1>
             <p className="text-xs text-muted-foreground">3 credits per prompt · {profile?.credits ?? 0} credits</p>
@@ -245,7 +241,12 @@ const Coach = () => {
             <Brain size={36} className="text-primary" />
           </motion.div>
           <h2 className="text-lg font-display font-bold mb-1">Elite AI Coach</h2>
-          <p className="text-xs text-muted-foreground text-center max-w-xs mb-8">Direct. Analytical. No fluff. Creates training plans, nutrition plans, and remembers your data.</p>
+          <p className="text-xs text-muted-foreground text-center max-w-xs mb-3">Direct. Analytical. No fluff. Creates training plans, nutrition plans, and remembers your data.</p>
+          {/* The coach is a language model. Saying so once, where the athlete
+              starts, is more honest than a legal page they never open. */}
+          <p className="text-[11px] leading-relaxed text-muted-foreground text-center max-w-xs mb-6">
+            {DISCLAIMERS.aiEstimate.full}
+          </p>
 
           {/* Input bar directly on welcome */}
           <div className="w-full mb-4">
@@ -279,11 +280,11 @@ const Coach = () => {
   // Chat view
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="px-4 pt-14 pb-3 flex items-center gap-3 border-b border-border">
+      <div className="px-4 pt-[var(--vaylo-screen-top)] pb-3 flex items-center gap-3 border-b border-border">
         <button onClick={() => { setActiveConv(null); setMessages([]); }} className="p-1.5 text-muted-foreground"><ChevronLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{convs.find(c => c.id === activeConv)?.title || "New Chat"}</p>
-          <p className="text-[10px] text-muted-foreground">{profile?.credits ?? 0} credits remaining</p>
+          <p className="text-[12px] text-muted-foreground">{profile?.credits ?? 0} credits remaining</p>
         </div>
         <div className="flex gap-1.5">
           <button onClick={() => { setMemoryOpen(true); loadMemories(); }} className="p-1.5 text-muted-foreground"><Database size={16} /></button>
@@ -330,7 +331,7 @@ const Coach = () => {
           bar, which is what made the send button hard to hit. The value below
           matches the tab bar's own geometry (64px of nav plus its 8px offset)
           and matches QuickActionSheet, so the three agree. */}
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.25rem)] lg:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border px-3 sm:px-4 py-3 lg:pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+      <div className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] lg:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border px-3 sm:px-4 py-3 lg:pb-[calc(var(--vaylo-inset-bottom)+12px)]">
         <div className="flex gap-2 items-end">
           <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
@@ -362,11 +363,11 @@ const ConvSidebar = ({ open, onClose, convs, onSelect, onDelete, onNew, editingT
     {open && (
       <>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50" onClick={onClose} />
+          className="fixed inset-0 bg-background/70 backdrop-blur-sm z-[59]" onClick={onClose} />
         <motion.div initial={{ x: drawerSlide() }} animate={{ x: 0 }} exit={{ x: drawerSlide() }}
           transition={{ type: "spring", stiffness: 400, damping: 35 }}
-          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-50 flex flex-col">
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-[59] flex flex-col">
+          <div className="p-4 border-b border-border flex items-center justify-between pt-[max(1rem,var(--vaylo-inset-top))]">
             <span className="font-display font-bold text-sm">Conversations</span>
             <button onClick={onClose}><X size={18} className="text-muted-foreground" /></button>
           </div>
@@ -375,7 +376,7 @@ const ConvSidebar = ({ open, onClose, convs, onSelect, onDelete, onNew, editingT
               <Plus size={16} /> New Chat
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 space-y-1">
+          <div className="flex-1 overflow-y-auto px-3 pb-[max(0.75rem,var(--vaylo-inset-bottom))] space-y-1">
             {convs.map(c => (
               <div key={c.id} className="flex items-center gap-1 group">
                 {editingTitle === c.id ? (
@@ -407,24 +408,24 @@ const MemoryPanel = ({ open, onClose, memories, onDelete }: {
     {open && (
       <>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50" onClick={onClose} />
+          className="fixed inset-0 bg-background/70 backdrop-blur-sm z-[59]" onClick={onClose} />
         <motion.div initial={{ x: drawerSlide() }} animate={{ x: 0 }} exit={{ x: drawerSlide() }}
           transition={{ type: "spring", stiffness: 400, damping: 35 }}
-          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-50 flex flex-col">
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          className="fixed end-0 top-0 bottom-0 w-72 bg-card/95 backdrop-blur-xl border-s border-border z-[59] flex flex-col">
+          <div className="p-4 border-b border-border flex items-center justify-between pt-[max(1rem,var(--vaylo-inset-top))]">
             <span className="font-display font-bold text-sm">Memory Bank</span>
             <button onClick={onClose}><X size={18} className="text-muted-foreground" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+          <div className="flex-1 overflow-y-auto px-3 py-3 pb-[max(0.75rem,var(--vaylo-inset-bottom))] space-y-2">
             {memories.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">No memories stored yet. Chat with your coach and share data to build your profile.</p>}
             {memories.map(m => (
               <div key={m.id} className="bg-muted/30 rounded-xl p-3 group">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-primary font-semibold uppercase">{m.category}</span>
+                  <span className="text-[12px] text-primary font-semibold uppercase">{m.category}</span>
                   <button onClick={() => onDelete(m.id)} className="opacity-0 group-hover:opacity-100 text-destructive"><Trash2 size={10} /></button>
                 </div>
                 <p className="text-xs font-semibold">{m.key}</p>
-                <p className="text-[11px] text-muted-foreground">{m.value}</p>
+                <p className="text-[12px] text-muted-foreground">{m.value}</p>
               </div>
             ))}
           </div>

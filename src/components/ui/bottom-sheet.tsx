@@ -51,7 +51,11 @@ export default function BottomSheet({
   toolbar,
   footer,
   size = "md",
-  z = "z-50",
+  // z-[59], not z-50: the floating tab bar is a later sibling of <main> and
+  // wins at equal z-index, so on z-50 every sheet opened with the tab bar
+  // painted over it — and over its own footer buttons. See the ladder in
+  // BottomNav. Callers that need to sit above this can still pass `z`.
+  z = "z-[59]",
   className,
   bodyClassName,
   children,
@@ -122,7 +126,7 @@ export default function BottomSheet({
                 {leading}
                 <div className="min-w-0 flex-1">
                   {title && <h3 className="break-words font-display text-base font-bold text-foreground">{title}</h3>}
-                  {subtitle && <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{subtitle}</p>}
+                  {subtitle && <p className="mt-0.5 break-words text-[12px] text-muted-foreground">{subtitle}</p>}
                 </div>
                 {headerRight}
                 <button
@@ -141,7 +145,7 @@ export default function BottomSheet({
             <div
               className={cn(
                 "min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4",
-                !footer && "pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+                !footer && "pb-[max(1.25rem,var(--vaylo-inset-bottom))]",
                 bodyClassName
               )}
             >
@@ -149,7 +153,7 @@ export default function BottomSheet({
             </div>
 
             {footer && (
-              <div className="shrink-0 border-t border-border px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <div className="shrink-0 border-t border-border px-5 pb-[max(1rem,var(--vaylo-inset-bottom))] pt-3">
                 {footer}
               </div>
             )}

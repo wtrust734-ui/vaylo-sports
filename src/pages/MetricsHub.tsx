@@ -41,10 +41,10 @@ const MetricsHub = () => {
   };
 
   const analysis = analyzeLoads(loads);
-  // With no logs there is no readiness, no ratio and no injury risk — only the
-  // absence of data. Defaulting to 50 colored the tile red and made a new
+  // With no logs there is no readiness, no ratio and no workload status — only
+  // the absence of data. Defaulting to 50 colored the tile red and made a new
   // athlete look like they were in trouble on day one, and a ratio of 0 counts
-  // as "undertrained", so the risk tile said MODERATE out of nothing at all.
+  // as "undertrained", so the tile said MODERATE out of nothing at all.
   const hasRecovery = recovery.length > 0;
   const hasLoads = loads.length > 0;
   const NO_DATA = "—";
@@ -64,6 +64,34 @@ const MetricsHub = () => {
   const proteinPct = macroSum ? Math.round((proteinToday * 4 / macroSum) * 100) : 0;
   const carbsPct = macroSum ? Math.round((carbsToday * 4 / macroSum) * 100) : 0;
   const fatPct = macroSum ? Math.round((fatToday * 9 / macroSum) * 100) : 0;
+  /**
+   * What the acute:chronic ratio actually says, in words an athlete can act on.
+   *
+   * This tile used to read "Injury risk: HIGH", which is the one kind of claim
+   * this product does not make: nothing here has been validated against an
+   * injury outcome, so a risk score is a number invented from a ratio and
+   * dressed as a medical finding. The ratio is real and useful — it compares the
+   * last 7 days with the 28 before them — so it is reported as a workload
+   * status with the action attached, not as a verdict on the athlete's body.
+   */
+  const workloadStatus = !hasLoads
+    ? NO_DATA
+    : analysis.ratio > 1.5
+      ? "SPIKING"
+      : analysis.ratio > 1.3
+        ? "RISING"
+        : analysis.ratio < 0.7 && analysis.chronic > 0
+          ? "DROPPING"
+          : "STEADY";
+  // `analyzeLoads` already writes the actionable sentence for this case; it was
+  // being computed and then thrown away. Reusing it keeps the words and the
+  // number in one place.
+  const workloadAdvice = hasLoads
+    ? analysis.alerts.find(
+        (a) => a.type === "overtraining" || a.type === "spike" || a.type === "undertraining",
+      )?.message ?? null
+    : null;
+
   const addEquipment = async () => {
     if (!user || !form.name) return;
     const { error } = await supabase.from("equipment").insert({ user_id: user.id, ...form });
@@ -91,15 +119,23 @@ const MetricsHub = () => {
     { label: "Acute load", value: hasLoads ? Math.round(analysis.acute) : NO_DATA, color: hasLoads ? "text-foreground" : MUTED },
     { label: "Calories today", value: calsToday, color: "text-foreground" },
     { label: "Protein today", value: `${Math.round(proteinToday)}g`, color: "text-foreground" },
-    { label: "Injury risk", value: hasLoads ? analysis.injuryRisk.toUpperCase() : NO_DATA, color: !hasLoads ? MUTED : analysis.injuryRisk === "high" ? "text-destructive" : analysis.injuryRisk === "moderate" ? "text-energy" : "text-primary" },
+    { label: "Workload", value: workloadStatus, color: !hasLoads ? MUTED : workloadStatus === "SPIKING" ? "text-destructive" : workloadStatus === "RISING" || workloadStatus === "DROPPING" ? "text-energy" : "text-primary" },
   ];
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Activity size={14} /> Holistic Metrics</div>
         <h1 className="text-4xl font-display font-bold mt-2">Performance <span className="text-gradient-electric">Dashboard</span></h1>
       </motion.div>
+
+      {workloadAdvice && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Workload: </span>
+          {workloadAdvice} The ratio compares the load of your last 7 days with the 28 before
+          them — it is a training measure, not a medical assessment.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {cards.map((c, i) => (
@@ -148,9 +184,9 @@ const MetricsHub = () => {
                   </div>
                   <div className="flex gap-1">
                     {e.active && <>
-                      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => logUsage(e.id, e.usage_km, 5)}>+5km</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => logUsage(e.id, e.usage_km, 10)}>+10km</Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => retire(e.id)}>Retire</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => logUsage(e.id, e.usage_km, 5)}>+5km</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => logUsage(e.id, e.usage_km, 10)}>+10km</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-[12px]" onClick={() => retire(e.id)}>Retire</Button>
                     </>}
                   </div>
                 </div>
@@ -160,7 +196,12 @@ const MetricsHub = () => {
                       <motion.div initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }}
                         className={`h-full ${tier === "destructive" ? "bg-destructive" : tier === "energy" ? "bg-energy" : "bg-primary"}`} />
                     </div>
-                    {pct > 90 && <div className="text-xs text-destructive mt-1">⚠ Replace soon — performance and injury risk climb past 90%.</div>}
+                    {/* Phase 6 reworded this from "performance and injury risk climb
+                        past 90%". Worn-out cushioning is a fact about the shoe and
+                        worth acting on; a claim that it raises injury risk is a
+                        medical statement this product has nothing to back. The
+                        nudge survives; the diagnosis does not. */}
+                    {pct > 90 && <div className="text-xs text-destructive mt-1">⚠ Replace soon — this pair is past its rated distance, and worn cushioning changes how a run feels.</div>}
                     {pct > 70 && pct <= 90 && <div className="text-xs text-energy mt-1">Plan a replacement in the next few weeks.</div>}
                   </>
                 )}

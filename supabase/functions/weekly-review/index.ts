@@ -113,8 +113,8 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
     });
 
     if (!r.ok) {
-      const t = await r.text();
-      console.error("ai error", r.status, t);
+      // Status + marker only — never the raw provider body.
+      console.error("ai error", r.status, "upstream_error");
       // Charged but no review delivered — refund.
       if (chargedUserId) {
         await refundCredits({
@@ -147,7 +147,9 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
       });
       chargedUserId = null;
     }
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "err" }), {
+    // Internal details stay in logs; the client gets a stable message.
+    console.error("weekly-review error:", e);
+    return new Response(JSON.stringify({ error: "The weekly review could not be generated. Please try again." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

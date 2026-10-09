@@ -140,8 +140,15 @@ async function fetchHypeState(activityIds: string[], userId: string | null) {
  * page around it still renders.
  */
 export async function fetchSharedFeed(opts: { limit?: number; userId: string | null }): Promise<SharedActivity[]> {
+  // Reads the `feed_visible_activities` view, not the table. That view drops
+  // anyone the viewer blocks or is blocked by — SERVER-SIDE. Filtering this in
+  // the client would still ship the blocked athlete's rows to the device, which
+  // is the opposite of what blocking is for.
+  //
+  // The view uses security_invoker, so the SELECT policy on `shared_activities`
+  // (authenticated only) still applies through it.
   const { data, error } = await supabase
-    .from("shared_activities")
+    .from("feed_visible_activities")
     .select("*")
     .order("shared_at", { ascending: false })
     .limit(opts.limit ?? 50);
@@ -190,6 +197,49 @@ export async function unhypeActivity(activityId: string, userId: string): Promis
     return { ok: false };
   }
   return { ok: true };
+}
+
+/**
+ * This athlete's own published shares, newest first.
+ *
+ * Used where something is handed to a specific person rather than broadcast: a
+ * message may only attach a share of the SENDER's (the database refuses anyone
+ * else's), so the picker must offer exactly these rows.
+ */
+export async function fetchMySharedActivities(
+  userId: string,
+  limit = 50,
+): Promise<SharedActivityRow[]> {
+  const { data, error } = await supabase
+    .from("shared_activities")
+    .select("*")
+    .eq("user_id", userId)
+    .order("shared_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error("fetchMySharedActivities failed:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
+ * Looks up published shares by id, for rendering an attachment.
+ *
+ * One query for the whole thread rather than one per message, and it never
+ * throws: a withdrawn share (or a block that hides it) leaves the card out and
+ * the sentence around it intact.
+ */
+export async function fetchActivitiesByIds(ids: string[]): Promise<Map<string, SharedActivityRow>> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return new Map();
+
+  const { data, error } = await supabase.from("shared_activities").select("*").in("id", unique);
+  if (error) {
+    console.error("fetchActivitiesByIds failed:", error.message);
+    return new Map();
+  }
+  return new Map((data ?? []).map((row) => [row.id, row]));
 }
 
 /** Builds the share payload for a completed workout. */

@@ -86,8 +86,8 @@ export function SearchBar({ query, onQueryChange, suggestions, lessonsById, onOp
             {!query.trim() && recents.length > 0 && (
               <div className="p-2">
                 <div className="flex items-center justify-between px-2 pb-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recent searches</p>
-                  <button onClick={() => { clearRecentSearches(); setRecents([]); }} className="text-[10px] font-semibold text-electric-purple">Clear</button>
+                  <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Recent searches</p>
+                  <button onClick={() => { clearRecentSearches(); setRecents([]); }} className="text-[12px] font-semibold text-electric-purple">Clear</button>
                 </div>
                 {recents.map((recent) => (
                   <button key={recent} onClick={() => choose(recent)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-start text-sm hover:bg-muted/70">

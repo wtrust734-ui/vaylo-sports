@@ -167,10 +167,38 @@ export type Database = {
             foreignKeyName: "activity_hypes_activity_id_fkey"
             columns: ["activity_id"]
             isOneToOne: false
+            referencedRelation: "feed_visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_hypes_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
             referencedRelation: "shared_activities"
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_call_events: {
+        Row: {
+          created_at: string
+          feature: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feature: string
+          id?: never
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feature?: string
+          id?: never
+          user_id?: string
+        }
+        Relationships: []
       }
       athlete_position: {
         Row: {
@@ -629,6 +657,57 @@ export type Database = {
           },
         ]
       }
+      coach_applications: {
+        Row: {
+          created_at: string
+          currency: string
+          display_name: string | null
+          email: string | null
+          fee_cents: number
+          id: string
+          note: string | null
+          paid_at: string | null
+          refunded_at: string | null
+          status: string
+          stripe_payment_intent: string | null
+          stripe_session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          display_name?: string | null
+          email?: string | null
+          fee_cents?: number
+          id?: string
+          note?: string | null
+          paid_at?: string | null
+          refunded_at?: string | null
+          status?: string
+          stripe_payment_intent?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          display_name?: string | null
+          email?: string | null
+          fee_cents?: number
+          id?: string
+          note?: string | null
+          paid_at?: string | null
+          refunded_at?: string | null
+          status?: string
+          stripe_payment_intent?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       coach_bookings: {
         Row: {
           client_id: string
@@ -695,6 +774,177 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_credit_entries: {
+        Row: {
+          created_at: string
+          delta_cents: number
+          id: string
+          order_id: string | null
+          provider_reference: string | null
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta_cents: number
+          id?: string
+          order_id?: string | null
+          provider_reference?: string | null
+          reason: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta_cents?: number
+          id?: string
+          order_id?: string | null
+          provider_reference?: string | null
+          reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_credit_entries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "coach_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_credit_packs: {
+        Row: {
+          active: boolean
+          created_at: string
+          credit_cents: number
+          currency: string
+          id: string
+          price_cents: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          credit_cents: number
+          currency?: string
+          id: string
+          price_cents: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          credit_cents?: number
+          currency?: string
+          id?: string
+          price_cents?: number
+        }
+        Relationships: []
+      }
+      coach_credit_wallet: {
+        Row: {
+          balance_cents: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_cents?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_cents?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coach_deliveries: {
+        Row: {
+          body: string
+          buyer_id: string
+          coach_id: string
+          created_at: string
+          id: string
+          opened_at: string | null
+          order_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          buyer_id: string
+          coach_id: string
+          created_at?: string
+          id?: string
+          opened_at?: string | null
+          order_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          buyer_id?: string
+          coach_id?: string
+          created_at?: string
+          id?: string
+          opened_at?: string | null
+          order_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "coach_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_earnings: {
+        Row: {
+          amount_cents: number
+          coach_id: string
+          created_at: string
+          currency: string
+          id: string
+          order_id: string
+          paid_at: string | null
+          payout_reference: string | null
+          status: string
+        }
+        Insert: {
+          amount_cents: number
+          coach_id: string
+          created_at?: string
+          currency?: string
+          id?: string
+          order_id: string
+          paid_at?: string | null
+          payout_reference?: string | null
+          status?: string
+        }
+        Update: {
+          amount_cents?: number
+          coach_id?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          order_id?: string
+          paid_at?: string | null
+          payout_reference?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_earnings_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "coach_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coach_memories: {
         Row: {
           category: string
@@ -756,6 +1006,62 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "coach_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_orders: {
+        Row: {
+          buyer_id: string
+          coach_id: string
+          created_at: string
+          currency: string
+          fee_cents: number
+          gross_cents: number
+          id: string
+          listing_id: string | null
+          net_cents: number
+          paid_at: string | null
+          provider_reference: string | null
+          rail: string
+          status: string
+        }
+        Insert: {
+          buyer_id: string
+          coach_id: string
+          created_at?: string
+          currency?: string
+          fee_cents: number
+          gross_cents: number
+          id?: string
+          listing_id?: string | null
+          net_cents: number
+          paid_at?: string | null
+          provider_reference?: string | null
+          rail: string
+          status?: string
+        }
+        Update: {
+          buyer_id?: string
+          coach_id?: string
+          created_at?: string
+          currency?: string
+          fee_cents?: number
+          gross_cents?: number
+          id?: string
+          listing_id?: string | null
+          net_cents?: number
+          paid_at?: string | null
+          provider_reference?: string | null
+          rail?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_orders_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_listings"
             referencedColumns: ["id"]
           },
         ]
@@ -994,6 +1300,48 @@ export type Database = {
         }
         Relationships: []
       }
+      content_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          resolution_note: string | null
+          reviewed_at: string | null
+          status: string
+          target_id: string
+          target_label: string | null
+          target_type: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          resolution_note?: string | null
+          reviewed_at?: string | null
+          status?: string
+          target_id: string
+          target_label?: string | null
+          target_type: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          resolution_note?: string | null
+          reviewed_at?: string | null
+          status?: string
+          target_id?: string
+          target_label?: string | null
+          target_type?: string
+        }
+        Relationships: []
+      }
       country_pricing_map: {
         Row: {
           country_code: string
@@ -1029,8 +1377,10 @@ export type Database = {
       creator_profiles: {
         Row: {
           bio: string | null
+          coach_since: string | null
           created_at: string
           display_name: string
+          is_coach: boolean
           payout_email: string | null
           specialties: string[] | null
           user_id: string
@@ -1038,8 +1388,10 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          coach_since?: string | null
           created_at?: string
           display_name: string
+          is_coach?: boolean
           payout_email?: string | null
           specialties?: string[] | null
           user_id: string
@@ -1047,8 +1399,10 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          coach_since?: string | null
           created_at?: string
           display_name?: string
+          is_coach?: boolean
           payout_email?: string | null
           specialties?: string[] | null
           user_id?: string
@@ -1186,6 +1540,36 @@ export type Database = {
           },
         ]
       }
+      direct_messages: {
+        Row: {
+          activity_id: string | null
+          body: string
+          created_at: string
+          id: string
+          read_at: string | null
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
       economy_config: {
         Row: {
           ab_variant: string | null
@@ -1270,6 +1654,7 @@ export type Database = {
       event_pack_ownership: {
         Row: {
           created_at: string
+          credits_paid: number
           id: string
           pack_id: string
           pack_name: string | null
@@ -1282,6 +1667,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          credits_paid?: number
           id?: string
           pack_id: string
           pack_name?: string | null
@@ -1294,6 +1680,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          credits_paid?: number
           id?: string
           pack_id?: string
           pack_name?: string | null
@@ -1310,6 +1697,7 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          credit_price: number
           description: string | null
           designed_for: string | null
           difficulty: string
@@ -1332,6 +1720,7 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
+          credit_price?: number
           description?: string | null
           designed_for?: string | null
           difficulty?: string
@@ -1354,6 +1743,7 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          credit_price?: number
           description?: string | null
           designed_for?: string | null
           difficulty?: string
@@ -1547,6 +1937,111 @@ export type Database = {
           created_at?: string
           friend_id?: string
           id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      guardian_invites: {
+        Row: {
+          athlete_user_id: string
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+        }
+        Insert: {
+          athlete_user_id: string
+          code: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Update: {
+          athlete_user_id?: string
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Relationships: []
+      }
+      guardian_links: {
+        Row: {
+          approved_at: string | null
+          athlete_user_id: string
+          created_at: string
+          defaults_band: string | null
+          guardian_user_id: string
+          id: string
+          permissions: Json
+          relationship: string
+          revoked_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          athlete_user_id: string
+          created_at?: string
+          defaults_band?: string | null
+          guardian_user_id: string
+          id?: string
+          permissions?: Json
+          relationship?: string
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          athlete_user_id?: string
+          created_at?: string
+          defaults_band?: string | null
+          guardian_user_id?: string
+          id?: string
+          permissions?: Json
+          relationship?: string
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      health_connection_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string | null
+          provider: string
+          refresh_token: string | null
+          scope: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at?: string | null
+          provider: string
+          refresh_token?: string | null
+          scope?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string | null
+          provider?: string
+          refresh_token?: string | null
+          scope?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -1868,6 +2363,75 @@ export type Database = {
         }
         Relationships: []
       }
+      life_events: {
+        Row: {
+          activity_level: string
+          allow_training: string
+          created_at: string
+          end_date: string
+          event_type: string
+          id: string
+          note: string | null
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_level?: string
+          allow_training?: string
+          created_at?: string
+          end_date: string
+          event_type: string
+          id?: string
+          note?: string | null
+          start_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_level?: string
+          allow_training?: string
+          created_at?: string
+          end_date?: string
+          event_type?: string
+          id?: string
+          note?: string | null
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketplace_config: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          key: string
+          region: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          key: string
+          region?: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          key?: string
+          region?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: []
+      }
       marketplace_listings: {
         Row: {
           active: boolean
@@ -1875,13 +2439,16 @@ export type Database = {
           cover_url: string | null
           created_at: string
           creator_id: string
+          currency: string
           description: string | null
           duration_minutes: number | null
           id: string
+          is_coach_plan: boolean
           price_cents: number
           rating: number | null
           sales_count: number
           title: string
+          weeks: number | null
         }
         Insert: {
           active?: boolean
@@ -1889,13 +2456,16 @@ export type Database = {
           cover_url?: string | null
           created_at?: string
           creator_id: string
+          currency?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          is_coach_plan?: boolean
           price_cents?: number
           rating?: number | null
           sales_count?: number
           title: string
+          weeks?: number | null
         }
         Update: {
           active?: boolean
@@ -1903,13 +2473,16 @@ export type Database = {
           cover_url?: string | null
           created_at?: string
           creator_id?: string
+          currency?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          is_coach_plan?: boolean
           price_cents?: number
           rating?: number | null
           sales_count?: number
           title?: string
+          weeks?: number | null
         }
         Relationships: []
       }
@@ -2136,11 +2709,17 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          current_level: string | null
           current_value: number | null
           deadline: string | null
           description: string | null
+          development_areas: Json
           id: string
           metric_unit: string | null
+          milestones: Json
+          phase: string | null
+          progress_status: string | null
+          roadmap_updated_at: string | null
           start_value: number | null
           status: string
           target_value: number | null
@@ -2151,11 +2730,17 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
+          current_level?: string | null
           current_value?: number | null
           deadline?: string | null
           description?: string | null
+          development_areas?: Json
           id?: string
           metric_unit?: string | null
+          milestones?: Json
+          phase?: string | null
+          progress_status?: string | null
+          roadmap_updated_at?: string | null
           start_value?: number | null
           status?: string
           target_value?: number | null
@@ -2166,11 +2751,17 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          current_level?: string | null
           current_value?: number | null
           deadline?: string | null
           description?: string | null
+          development_areas?: Json
           id?: string
           metric_unit?: string | null
+          milestones?: Json
+          phase?: string | null
+          progress_status?: string | null
+          roadmap_updated_at?: string | null
           start_value?: number | null
           status?: string
           target_value?: number | null
@@ -2193,6 +2784,7 @@ export type Database = {
           notes: string | null
           pace_per_km: string | null
           perceived_exertion: number | null
+          session_load: number | null
           sport: string | null
           time_seconds: number | null
           title: string | null
@@ -2210,6 +2802,7 @@ export type Database = {
           notes?: string | null
           pace_per_km?: string | null
           perceived_exertion?: number | null
+          session_load?: number | null
           sport?: string | null
           time_seconds?: number | null
           title?: string | null
@@ -2227,6 +2820,7 @@ export type Database = {
           notes?: string | null
           pace_per_km?: string | null
           perceived_exertion?: number | null
+          session_load?: number | null
           sport?: string | null
           time_seconds?: number | null
           title?: string | null
@@ -2275,12 +2869,16 @@ export type Database = {
       }
       plan_events: {
         Row: {
+          adjusted_reason: string | null
           completed_at: string | null
           created_at: string
           description: string | null
           duration_minutes: number | null
           id: string
+          important: boolean
           intensity: string | null
+          life_event_id: string | null
+          original_scheduled_date: string | null
           scheduled_date: string
           status: string
           title: string
@@ -2290,12 +2888,16 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          adjusted_reason?: string | null
           completed_at?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          important?: boolean
           intensity?: string | null
+          life_event_id?: string | null
+          original_scheduled_date?: string | null
           scheduled_date: string
           status?: string
           title: string
@@ -2305,12 +2907,16 @@ export type Database = {
           user_id: string
         }
         Update: {
+          adjusted_reason?: string | null
           completed_at?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          important?: boolean
           intensity?: string | null
+          life_event_id?: string | null
+          original_scheduled_date?: string | null
           scheduled_date?: string
           status?: string
           title?: string
@@ -2319,7 +2925,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plan_events_life_event_id_fkey"
+            columns: ["life_event_id"]
+            isOneToOne: false
+            referencedRelation: "life_events"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       points_events: {
         Row: {
@@ -2475,14 +3089,18 @@ export type Database = {
           extended_profile: Json | null
           full_name: string | null
           goals: string[] | null
+          health_consent_at: string | null
           height_cm: number | null
           id: string
           infinite_credits: boolean | null
           infinite_credits_until: string | null
+          is_guest: boolean
           onboarding_complete: boolean
           preferred_units: string
           sex: string | null
           sport: string | null
+          terms_accepted_at: string | null
+          terms_version: string | null
           updated_at: string
           user_id: string
           weight_kg: number | null
@@ -2497,14 +3115,18 @@ export type Database = {
           extended_profile?: Json | null
           full_name?: string | null
           goals?: string[] | null
+          health_consent_at?: string | null
           height_cm?: number | null
           id?: string
           infinite_credits?: boolean | null
           infinite_credits_until?: string | null
+          is_guest?: boolean
           onboarding_complete?: boolean
           preferred_units?: string
           sex?: string | null
           sport?: string | null
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           user_id: string
           weight_kg?: number | null
@@ -2519,14 +3141,18 @@ export type Database = {
           extended_profile?: Json | null
           full_name?: string | null
           goals?: string[] | null
+          health_consent_at?: string | null
           height_cm?: number | null
           id?: string
           infinite_credits?: boolean | null
           infinite_credits_until?: string | null
+          is_guest?: boolean
           onboarding_complete?: boolean
           preferred_units?: string
           sex?: string | null
           sport?: string | null
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           user_id?: string
           weight_kg?: number | null
@@ -2574,6 +3200,36 @@ export type Database = {
           offer_slug?: string | null
           pack_id?: string | null
           region?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_tokens: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          id: string
+          last_seen_at: string
+          platform: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          token?: string
           user_id?: string
         }
         Relationships: []
@@ -2848,6 +3504,72 @@ export type Database = {
         }
         Relationships: []
       }
+      sponsor_enquiries: {
+        Row: {
+          brand_name: string
+          contact_email: string
+          contact_name: string | null
+          created_at: string
+          email_message_sent: boolean
+          email_sent_at: string | null
+          goals: string | null
+          id: string
+          interests: Json
+          ip_hash: string | null
+          reference: string
+          regions: string[]
+          sports: string[]
+          status: string
+          terms_accepted_at: string
+          terms_version: string
+          updated_at: string
+          user_agent: string | null
+          website: string | null
+        }
+        Insert: {
+          brand_name: string
+          contact_email: string
+          contact_name?: string | null
+          created_at?: string
+          email_message_sent?: boolean
+          email_sent_at?: string | null
+          goals?: string | null
+          id?: string
+          interests?: Json
+          ip_hash?: string | null
+          reference: string
+          regions?: string[]
+          sports?: string[]
+          status?: string
+          terms_accepted_at?: string
+          terms_version: string
+          updated_at?: string
+          user_agent?: string | null
+          website?: string | null
+        }
+        Update: {
+          brand_name?: string
+          contact_email?: string
+          contact_name?: string | null
+          created_at?: string
+          email_message_sent?: boolean
+          email_sent_at?: string | null
+          goals?: string | null
+          id?: string
+          interests?: Json
+          ip_hash?: string | null
+          reference?: string
+          regions?: string[]
+          sports?: string[]
+          status?: string
+          terms_accepted_at?: string
+          terms_version?: string
+          updated_at?: string
+          user_agent?: string | null
+          website?: string | null
+        }
+        Relationships: []
+      }
       streaks: {
         Row: {
           current_streak: number
@@ -3022,6 +3744,57 @@ export type Database = {
           unlimited_credits?: boolean
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      support_requests: {
+        Row: {
+          account_ref: string | null
+          body: string
+          category: string
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          ip_hash: string | null
+          is_child_safety: boolean
+          reference: string
+          status: string
+          subject: string | null
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          account_ref?: string | null
+          body: string
+          category: string
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          ip_hash?: string | null
+          is_child_safety?: boolean
+          reference: string
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          account_ref?: string | null
+          body?: string
+          category?: string
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          ip_hash?: string | null
+          is_child_safety?: boolean
+          reference?: string
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_agent?: string | null
         }
         Relationships: []
       }
@@ -3217,6 +3990,7 @@ export type Database = {
           goal: string | null
           id: string
           level: string
+          plan_adjustments: Json
           plan_data: Json | null
           sport: string
           title: string
@@ -3232,6 +4006,7 @@ export type Database = {
           goal?: string | null
           id?: string
           level?: string
+          plan_adjustments?: Json
           plan_data?: Json | null
           sport: string
           title: string
@@ -3247,12 +4022,34 @@ export type Database = {
           goal?: string | null
           id?: string
           level?: string
+          plan_adjustments?: Json
           plan_data?: Json | null
           sport?: string
           title?: string
           updated_at?: string
           user_id?: string
           week_current?: number
+        }
+        Relationships: []
+      }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
         }
         Relationships: []
       }
@@ -3559,12 +4356,68 @@ export type Database = {
         }
         Relationships: []
       }
+      video_analysis_quota_reservations: {
+        Row: {
+          expires_at: string
+          id: number
+          idempotency_key: string
+          reserved_at: string
+          status: string
+          tier: string
+          user_id: string
+        }
+        Insert: {
+          expires_at: string
+          id?: never
+          idempotency_key: string
+          reserved_at?: string
+          status?: string
+          tier: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string
+          id?: never
+          idempotency_key?: string
+          reserved_at?: string
+          status?: string
+          tier?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      video_analysis_request_claims: {
+        Row: {
+          created_at: string
+          lease_expires_at: string
+          request_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          lease_expires_at?: string
+          request_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          lease_expires_at?: string
+          request_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       video_form_analyses: {
         Row: {
           created_at: string
+          deleted_at: string | null
           id: string
           model_used: string | null
           overall_score: number | null
+          request_id: string | null
           result: Json
           saved: boolean
           sport_type: string
@@ -3573,9 +4426,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           model_used?: string | null
           overall_score?: number | null
+          request_id?: string | null
           result: Json
           saved?: boolean
           sport_type?: string
@@ -3584,9 +4439,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           model_used?: string | null
           overall_score?: number | null
+          request_id?: string | null
           result?: Json
           saved?: boolean
           sport_type?: string
@@ -3643,6 +4500,110 @@ export type Database = {
         }
         Relationships: []
       }
+      waitlist_campaign_sends: {
+        Row: {
+          campaign_key: string
+          claimed_at: string
+          email: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_key: string
+          claimed_at?: string
+          email: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_key?: string
+          claimed_at?: string
+          email?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_campaign_sends_campaign_key_fkey"
+            columns: ["campaign_key"]
+            isOneToOne: false
+            referencedRelation: "waitlist_campaigns"
+            referencedColumns: ["campaign_key"]
+          },
+        ]
+      }
+      waitlist_campaigns: {
+        Row: {
+          campaign_key: string
+          completed_at: string | null
+          last_run_at: string | null
+          send_at: string
+          sent_count: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_key: string
+          completed_at?: string | null
+          last_run_at?: string | null
+          send_at: string
+          sent_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_key?: string
+          completed_at?: string | null
+          last_run_at?: string | null
+          send_at?: string
+          sent_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      waitlist_signups: {
+        Row: {
+          confirmation_sent_at: string | null
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          ip_hash: string | null
+          last_emailed_at: string | null
+          source: string
+          unsubscribe_token: string
+          unsubscribed_at: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          confirmation_sent_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          ip_hash?: string | null
+          last_emailed_at?: string | null
+          source?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          confirmation_sent_at?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          ip_hash?: string | null
+          last_emailed_at?: string | null
+          source?: string
+          unsubscribe_token?: string
+          unsubscribed_at?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       water_logs: {
         Row: {
           amount_ml: number
@@ -3663,6 +4624,30 @@ export type Database = {
           id?: string
           log_date?: string
           logged_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wearable_auth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          provider: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          provider: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          provider?: string
+          state?: string
           user_id?: string
         }
         Relationships: []
@@ -3697,6 +4682,57 @@ export type Database = {
         }
         Relationships: []
       }
+      workout_imports: {
+        Row: {
+          analysis: Json | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          imported_count: number
+          note: string | null
+          skipped_count: number
+          source: string
+          status: string
+          updated_at: string
+          updated_count: number
+          user_id: string
+          window_end: string
+          window_start: string | null
+        }
+        Insert: {
+          analysis?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          imported_count?: number
+          note?: string | null
+          skipped_count?: number
+          source: string
+          status?: string
+          updated_at?: string
+          updated_count?: number
+          user_id: string
+          window_end?: string
+          window_start?: string | null
+        }
+        Update: {
+          analysis?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          imported_count?: number
+          note?: string | null
+          skipped_count?: number
+          source?: string
+          status?: string
+          updated_at?: string
+          updated_count?: number
+          user_id?: string
+          window_end?: string
+          window_start?: string | null
+        }
+        Relationships: []
+      }
       workouts: {
         Row: {
           calories_burned: number | null
@@ -3705,9 +4741,14 @@ export type Database = {
           created_at: string
           distance_km: number | null
           duration_minutes: number | null
+          external_id: string | null
           heart_rate_avg: number | null
           id: string
+          imported_at: string | null
           notes: string | null
+          session_load: number | null
+          source: string | null
+          sport: string | null
           started_at: string | null
           title: string
           training_plan_id: string | null
@@ -3721,9 +4762,14 @@ export type Database = {
           created_at?: string
           distance_km?: number | null
           duration_minutes?: number | null
+          external_id?: string | null
           heart_rate_avg?: number | null
           id?: string
+          imported_at?: string | null
           notes?: string | null
+          session_load?: number | null
+          source?: string | null
+          sport?: string | null
           started_at?: string | null
           title: string
           training_plan_id?: string | null
@@ -3737,9 +4783,14 @@ export type Database = {
           created_at?: string
           distance_km?: number | null
           duration_minutes?: number | null
+          external_id?: string | null
           heart_rate_avg?: number | null
           id?: string
+          imported_at?: string | null
           notes?: string | null
+          session_load?: number | null
+          source?: string | null
+          sport?: string | null
           started_at?: string | null
           title?: string
           training_plan_id?: string | null
@@ -3758,6 +4809,55 @@ export type Database = {
       }
     }
     Views: {
+      coach_roster: {
+        Row: {
+          bio: string | null
+          coach_since: string | null
+          display_name: string | null
+          listing_count: number | null
+          lowest_net_cents: number | null
+          specialties: string[] | null
+          user_id: string | null
+          verified: boolean | null
+        }
+        Relationships: []
+      }
+      feed_visible_activities: {
+        Row: {
+          detail: string | null
+          id: string | null
+          shared_at: string | null
+          source_id: string | null
+          source_kind: string | null
+          sport: string | null
+          title: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          detail?: string | null
+          id?: string | null
+          shared_at?: string | null
+          source_id?: string | null
+          source_kind?: string | null
+          sport?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          detail?: string | null
+          id?: string | null
+          shared_at?: string | null
+          source_id?: string | null
+          source_kind?: string | null
+          sport?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       leaderboard_totals: {
         Row: {
           last_event: string | null
@@ -3769,6 +4869,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_friend_request: { Args: { p_request_id: string }; Returns: string }
       activate_subscription: {
         Args: {
           p_product_id: string
@@ -3786,10 +4887,39 @@ export type Database = {
         Args: { p_amount: number; p_reason: string }
         Returns: number
       }
+      ai_call_allowed: {
+        Args: { p_feature: string; p_max?: number; p_window_seconds?: number }
+        Returns: boolean
+      }
+      apply_coach_signup_payment: {
+        Args: {
+          p_email?: string
+          p_payment_intent: string
+          p_session_id: string
+        }
+        Returns: {
+          already_applied: boolean
+          display_name: string
+          email: string
+          user_id: string
+        }[]
+      }
       apply_credit_refill: { Args: { p_user?: string }; Returns: Json }
       award_points: {
         Args: { p_points: number; p_source: string; p_sport?: string }
         Returns: number
+      }
+      blocked_with: { Args: { p_other: string }; Returns: boolean }
+      buy_coach_plan: {
+        Args: { p_buyer: string; p_listing_id: string; p_reference: string }
+        Returns: {
+          balance_cents: number
+          fee_cents: number
+          gross_cents: number
+          net_cents: number
+          order_id: string
+          reused: boolean
+        }[]
       }
       cancel_my_subscription: { Args: never; Returns: Json }
       claim_event_pack: {
@@ -3802,8 +4932,25 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_push_token: {
+        Args: { p_app_version?: string; p_platform?: string; p_token: string }
+        Returns: string
+      }
+      claim_video_analysis_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: Json
+      }
       coins_per_credit: { Args: never; Returns: number }
+      commit_video_analysis_slot: {
+        Args: { p_reservation_id: number }
+        Returns: boolean
+      }
+      complete_video_analysis_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: boolean
+      }
       convert_credits_to_coins: { Args: { p_credits: number }; Returns: Json }
+      create_guardian_invite: { Args: never; Returns: Json }
       credit_cost: { Args: { p_feature: string }; Returns: number }
       credits_claim_reward: {
         Args: { p_idempotency_key?: string; p_kind: string; p_reason?: string }
@@ -3831,19 +4978,45 @@ export type Database = {
         }
         Returns: Json
       }
+      credits_spend_metered: {
+        Args: {
+          p_feature: string
+          p_idempotency_key: string
+          p_metadata?: Json
+          p_reason: string
+          p_source: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      delete_expired_ai_data: { Args: never; Returns: number }
       economy_value: { Args: { p_key: string }; Returns: Json }
       equip_cosmetic: { Args: { p_reward_id: string }; Returns: Json }
       find_user_by_friend_code: { Args: { p_code: string }; Returns: string }
       get_my_entitlements: { Args: never; Returns: Json }
+      grant_coach_credits: {
+        Args: { p_pack_id: string; p_reference: string; p_user: string }
+        Returns: {
+          balance_cents: number
+          credited_cents: number
+          reused: boolean
+        }[]
+      }
       grant_coins: {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: number
       }
-      // Service-role only. Exists because profiles.infinite_credits is money and
-      // is covered by guard_profile_credits, which the service role does not
-      // bypass — only a function that sets the flag can write it.
-      grant_infinite_credits: { Args: { p_user: string; p_until: string | null }; Returns: undefined }
+      grant_infinite_credits: {
+        Args: { p_until: string; p_user: string }
+        Returns: undefined
+      }
       grant_unlimited_trial: { Args: { p_days?: number }; Returns: Json }
+      guardian_athlete_overview: { Args: { p_athlete: string }; Returns: Json }
+      guardian_default_permissions: { Args: { p_band: string }; Returns: Json }
+      guardian_sanitize_permissions: {
+        Args: { p_band: string; p_requested: Json }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -3867,7 +5040,43 @@ export type Database = {
       }
       join_challenge: { Args: { p_challenge: string }; Returns: string }
       join_challenge_by_id: { Args: { p_challenge: string }; Returns: Json }
+      leaderboard_points: {
+        Args: { p_from?: string; p_sport?: string; p_to?: string }
+        Returns: {
+          points: number
+          sport: string
+          user_id: string
+        }[]
+      }
       leave_challenge: { Args: { p_challenge: string }; Returns: boolean }
+      mark_messages_read: { Args: { p_friend_id: string }; Returns: number }
+      marketplace_config_int: {
+        Args: { p_fallback: number; p_key: string }
+        Returns: number
+      }
+      marketplace_quote: {
+        Args: { p_net_cents: number }
+        Returns: {
+          commission_bps: number
+          fee_cents: number
+          gross_cents: number
+          net_cents: number
+        }[]
+      }
+      peer_privacy: {
+        Args: { p_user: string }
+        Returns: {
+          allow_friend_requests: boolean
+          show_avatar_publicly: boolean
+        }[]
+      }
+      peer_regions: {
+        Args: { p_users: string[] }
+        Returns: {
+          country: string
+          user_id: string
+        }[]
+      }
       purchase_avatar_item: {
         Args: {
           p_category: string
@@ -3912,7 +5121,62 @@ export type Database = {
         Args: { p_feature: string; p_units?: number }
         Returns: Json
       }
+      redeem_guardian_invite: { Args: { p_code: string }; Returns: Json }
       redeem_referral: { Args: { p_code: string }; Returns: Json }
+      release_video_analysis_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      release_video_analysis_slot: {
+        Args: { p_reservation_id: number }
+        Returns: boolean
+      }
+      report_content: {
+        Args: {
+          p_details?: string
+          p_reason: string
+          p_target_id: string
+          p_target_label?: string
+          p_target_type: string
+        }
+        Returns: {
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          resolution_note: string | null
+          reviewed_at: string | null
+          status: string
+          target_id: string
+          target_label: string | null
+          target_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "content_reports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reserve_video_analysis_slot: {
+        Args: {
+          p_idempotency_key: string
+          p_limit: number
+          p_tier: string
+          p_user_id: string
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
+      set_guardian_link_status: {
+        Args: { p_link: string; p_status: string }
+        Returns: Json
+      }
+      set_guardian_permissions: {
+        Args: { p_athlete: string; p_permissions: Json }
+        Returns: Json
+      }
       spend_coins: {
         Args: { p_amount: number; p_reason: string }
         Returns: number
@@ -3950,11 +5214,37 @@ export type Database = {
         | { Args: never; Returns: Json }
         | { Args: { p_date: string }; Returns: Json }
       unequip_cosmetic: { Args: { p_slot: string }; Returns: Json }
+      unfriend: { Args: { p_friend_id: string }; Returns: boolean }
       update_challenge_progress: {
         Args: { p_challenge: string; p_delta: number }
         Returns: Json
       }
       viewer_is_adult: { Args: never; Returns: boolean }
+      waitlist_campaign_recipients: {
+        Args: { p_campaign_key: string; p_limit: number }
+        Returns: {
+          display_name: string
+          email: string
+          unsubscribe_token: string
+        }[]
+      }
+      waitlist_campaign_remaining: {
+        Args: { p_campaign_key: string }
+        Returns: number
+      }
+      waitlist_claim_campaign_send: {
+        Args: { p_campaign_key: string; p_email: string }
+        Returns: boolean
+      }
+      waitlist_mark_campaign_sent: {
+        Args: { p_campaign_key: string; p_email: string }
+        Returns: undefined
+      }
+      waitlist_release_campaign_send: {
+        Args: { p_campaign_key: string; p_email: string }
+        Returns: undefined
+      }
+      waitlist_trigger_campaigns: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

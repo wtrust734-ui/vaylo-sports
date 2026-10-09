@@ -114,11 +114,12 @@ Achievements system
 
 Trophy room (display best performances, milestones)
 
-Leaderboards (global + friends)
-
-Friends system (add, compare, compete)
-
-Communities (sport-specific groups)
+Removed 2026-10-08: the activity feed, leaderboards, the friends system and
+communities. With no seeded users these rendered as empty states — a screen that
+reads as broken rather than as new — and the AR overlay went for a harder
+reason: it draws a camera overlay and this build declares no camera permission,
+so on Android it could never have worked. Their old paths still resolve, as
+redirects.
 
 🎮 ENGAGEMENT FEATURES
 
@@ -739,7 +740,7 @@ Training plans are 1 credit per week. Calorie scanning is 2 credits per scan. Nu
 Vaylo Sports runs entirely on [Supabase](https://supabase.com):
 
 - **Postgres** database with Row Level Security — every table is user-scoped
-- **Auth** — email/password plus Google & Apple OAuth via Supabase Auth
+- **Auth** — email/password plus Google OAuth via Supabase Auth
 - **Edge Functions** — all AI features (coach chat, training plans, form/calorie/video analysis, weekly reviews, learning recommendations) call OpenAI / Gemini with API keys stored only as Supabase secrets (`OPENAI_API_KEY`, `GOOGLE_API`)
 - **Credit economy** — balances and transactions are enforced server-side by the `credits_spend()` / `credits_grant()` Postgres functions; the client can never set a balance
 

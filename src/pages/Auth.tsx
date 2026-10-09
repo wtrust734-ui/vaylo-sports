@@ -6,12 +6,13 @@ import { useToast } from "@/hooks/use-toast";
 import { authRedirectUrl } from "@/lib/share";
 import { consumePendingJoin } from "@/hooks/usePendingJoin";
 import { useAuthMethods, passkeySupported, normalisePhone } from "@/hooks/use-auth-providers";
+import { isFlagOn } from "@/config/featureFlags";
 import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
-import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from "@/lib/legalUrls";
-import { openExternal } from "@/lib/platform";
+import { legalPath } from "@/lib/legalUrls";
+import { recordTermsAcceptance } from "@/lib/consent";
 import logo from "@/assets/logo.jpg";
 
 type Mode = "auth" | "forgot" | "updatePassword";
@@ -46,6 +47,18 @@ const Auth = () => {
   const [mode, setMode] = useState<Mode>("auth");
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
+  /* Minimum length for a NEW password, enforced here as well as by the auth
+     server.
+
+     The server's own minimum is still 6 — it is a Dashboard setting, and
+     `npm run auth:posture` reports it as AT RISK on every run. A client cannot
+     change that, but it can refuse to hand over a weak new credential in the
+     first place, which is what this does.
+
+     Login is deliberately NOT checked against it: an account created under the
+     old policy must still be able to sign in, and whether a password is right
+     is the server's decision, not this file's. */
+  const NEW_PASSWORD_MIN = 8;
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -174,11 +187,23 @@ const Auth = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
+        if (password.length < NEW_PASSWORD_MIN) {
+          toast({
+            title: "Choose a longer password",
+            description: `A new password needs at least ${NEW_PASSWORD_MIN} characters.`,
+            variant: "destructive",
+          });
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
+        // Stamp the consent the checkbox just captured. The box is the consent
+        // moment; without this we could not later show an athlete which terms
+        // they accepted, or when.
+        void recordTermsAcceptance();
         toast({
           title: "Account created!",
           description: "You're in. Let’s finish onboarding.",
@@ -217,8 +242,12 @@ const Auth = () => {
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast({ title: "Too short", description: "Password must be at least 6 characters.", variant: "destructive" });
+    if (newPassword.length < NEW_PASSWORD_MIN) {
+      toast({
+        title: "Too short",
+        description: `Password must be at least ${NEW_PASSWORD_MIN} characters.`,
+        variant: "destructive",
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -421,16 +450,13 @@ const Auth = () => {
        reach them. Auto margins centre when there is room and simply stack when
        there is not. */
     <div className="min-h-[100dvh] app-mesh bg-background flex flex-col items-center px-4 sm:px-5 py-8 relative overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(900px 600px at 18% -8%, hsla(272 84% 62% / 0.14), transparent 62%), radial-gradient(760px 520px at 88% 0%, hsla(217 100% 60% / 0.12), transparent 62%)" }} />
-      <div aria-hidden className="pointer-events-none absolute -top-28 -right-28 h-[520px] w-[520px] rounded-full blur-3xl opacity-[0.12]" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.9), transparent 68%)" }} />
 
       <motion.div
         initial={{ opacity: 0, y: 28, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm my-auto relative z-10 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card overflow-hidden p-5 sm:p-7"
+        className="w-full max-w-sm my-auto relative z-10 rounded-[22px] border border-white/[0.07] bg-card shadow-card overflow-hidden p-5 sm:p-7"
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.06] via-transparent to-transparent" />
         <div className="relative">
         <motion.div
           className="text-center mb-8"
@@ -439,7 +465,7 @@ const Auth = () => {
           transition={{ delay: 0.2, duration: 0.5 }}
         >
           <motion.div
-            className="mx-auto inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-primary shadow-glow border border-white/10 overflow-hidden mb-4"
+            className="mx-auto inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-white/[0.06] border border-white/10 overflow-hidden mb-4"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 20 }}
@@ -452,7 +478,7 @@ const Auth = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">Vaylo</span>{' '}<span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">Sports</span>
+            <span className="text-foreground">Vaylo</span>{' '}<span className="text-primary">Sports</span>
           </motion.h1>
           <motion.p
             className="text-sm text-muted-foreground mt-2"
@@ -484,10 +510,12 @@ const Auth = () => {
               <input
                 type={showNewPassword ? "text" : "password"}
                 placeholder="New password"
+                aria-label="New password"
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={NEW_PASSWORD_MIN}
                 className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur pl-10 pr-10 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all duration-300"
               />
               <button
@@ -503,17 +531,19 @@ const Auth = () => {
               <input
                 type={showNewPassword ? "text" : "password"}
                 placeholder="Confirm new password"
+                aria-label="Confirm new password"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={NEW_PASSWORD_MIN}
                 className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur pl-10 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all duration-300"
               />
             </div>
             <motion.button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 shadow-glow transition-all duration-300 hover:shadow-electric"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 transition-colors duration-200 press"
               whileTap={{ scale: 0.98 }}
               whileHover={{ scale: 1.01 }}
             >
@@ -556,6 +586,8 @@ const Auth = () => {
                 <input
                   type="email"
                   placeholder="Email"
+                  aria-label="Email address"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -566,7 +598,7 @@ const Auth = () => {
               <motion.button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 shadow-glow transition-all duration-300 hover:shadow-electric"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 transition-colors duration-200 press"
                 whileTap={{ scale: 0.98 }}
                 whileHover={{ scale: 1.01 }}
               >
@@ -612,7 +644,7 @@ const Auth = () => {
                   type="button"
                   onClick={handlePhoneSend}
                   disabled={loading}
-                  className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 shadow-glow transition-all duration-300 hover:shadow-electric"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 transition-colors duration-200 press"
                   whileTap={{ scale: 0.98 }}
                   whileHover={{ scale: 1.01 }}
                 >
@@ -639,7 +671,7 @@ const Auth = () => {
                   type="button"
                   onClick={handlePhoneVerify}
                   disabled={loading}
-                  className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 shadow-glow transition-all duration-300 hover:shadow-electric"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 transition-colors duration-200 press"
                   whileTap={{ scale: 0.98 }}
                   whileHover={{ scale: 1.01 }}
                 >
@@ -684,7 +716,7 @@ const Auth = () => {
                 Continue with Google
               </button>
               )}
-              {methods!.providers.includes("apple") && (
+              {isFlagOn("iphone") && methods!.providers.includes("apple") && (
               <button
                 onClick={handleAppleSignIn}
                 className="w-full flex items-center justify-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur py-3 text-sm font-semibold text-foreground hover:bg-white/[0.07] hover:border-white/15 transition-colors active:scale-[0.98]"
@@ -799,6 +831,8 @@ const Auth = () => {
                 <input
                   type="email"
                   placeholder="Email"
+                  aria-label="Email address"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -812,18 +846,21 @@ const Auth = () => {
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="Password"
+                  aria-label="Password"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={NEW_PASSWORD_MIN}
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur pl-10 pr-10 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all duration-300"
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
                 </button>
               </div>
 
@@ -851,11 +888,11 @@ const Auth = () => {
                   >
                     {acceptedTerms && <Check size={13} strokeWidth={3} />}
                   </button>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="text-[12px] leading-relaxed text-muted-foreground">
                     I am 13 or older and I accept the{" "}
                     <button
                       type="button"
-                      onClick={() => void openExternal(TERMS_OF_SERVICE_URL)}
+                      onClick={() => navigate(legalPath("terms"))}
                       className="font-semibold text-primary underline underline-offset-2"
                     >
                       Terms of Service
@@ -863,13 +900,14 @@ const Auth = () => {
                     and the{" "}
                     <button
                       type="button"
-                      onClick={() => void openExternal(PRIVACY_POLICY_URL)}
+                      onClick={() => navigate(legalPath("privacy"))}
                       className="font-semibold text-primary underline underline-offset-2"
                     >
                       Privacy Policy
                     </button>
-                    , including how my health and fitness data is handled. Under 18? Vaylo
-                    Sports stays ad-free and training loads are adjusted for your age.
+                    , including how my health and fitness data is handled. Vaylo Sports is for
+                    18–30-year-old athletes; we don't verify age, and if you're under 18 the
+                    training-load limits and ad-free protections stay switched on.
                   </p>
                 </div>
               )}
@@ -877,7 +915,7 @@ const Auth = () => {
               <motion.button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 shadow-glow transition-all duration-300 hover:shadow-electric"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl disabled:opacity-50 transition-colors duration-200 press"
                 whileTap={{ scale: 0.98 }}
                 whileHover={{ scale: 1.01 }}
               >

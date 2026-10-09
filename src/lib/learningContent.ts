@@ -159,7 +159,7 @@ export const LESSONS: Lesson[] = [
   // ---- Recovery ----
   { id: "rec-001", category: "Recovery", title: "Sleep Is the #1 Recovery Tool", duration: "5 min", summary: "Why 8 hours beats every supplement.",
     tags: ["sleep", "recovery", "injury risk"], views: 16400, saves: 2050, trending: true,
-    body: "Growth hormone, glycogen replenishment, and CNS recovery happen in deep sleep. Athletes sleeping <7h have 1.7× the injury rate of those at 8h+. Prioritize sleep before any other intervention.",
+    body: "Growth hormone, glycogen replenishment, and CNS recovery happen in deep sleep. Athletes sleeping under 7h show around 1.7× the injury rate of those at 8h+ in observational studies — a population trend, not a verdict on any one night. Prioritize sleep before any other intervention.",
     quiz: [
       { q: "Athletes sleeping <7h have:", options: ["Lower injury rate", "Higher injury rate", "No change"], correct: 1 },
       { q: "Growth hormone peaks in:", options: ["REM", "Deep sleep", "Naps"], correct: 1 },
@@ -249,9 +249,9 @@ export const LESSONS: Lesson[] = [
       { q: "Best interval intensity:", options: ["50% HR", "90-95% HR", "120% HR"], correct: 1 },
       { q: "Improvable by:", options: ["0%", "15-20%", "100%"], correct: 1 },
     ]},
-  { id: "sci-002", category: "Sport Science", title: "The Acute:Chronic Ratio", duration: "5 min", summary: "Why ratios above 1.5 spike injury risk.",
+  { id: "sci-002", category: "Sport Science", title: "The Acute:Chronic Ratio", duration: "5 min", summary: "Why ratios above 1.5 are linked to higher injury rates.",
     tags: ["load management", "acwr", "injury risk", "overtraining"], views: 7200, saves: 640,
-    body: "Compare last 7 days of load to last 28 days. Ratios between 0.8-1.3 are the 'sweet spot.' Above 1.5 doubles injury risk in most sports research.",
+    body: "Compare last 7 days of load to last 28 days. Ratios between 0.8-1.3 are the 'sweet spot.' Above about 1.5, the acute:chronic workload research has found roughly double the injury risk — an association across groups of athletes, not a prediction for any one of them.",
     quiz: [
       { q: "Sweet-spot ratio:", options: ["0.2-0.5", "0.8-1.3", "2-3"], correct: 1 },
       { q: "Compare days:", options: ["1 vs 7", "7 vs 28", "30 vs 365"], correct: 1 },
@@ -699,7 +699,7 @@ export const LESSONS: Lesson[] = [
     goals: ["Training"], difficulty: "Beginner", contentType: "Article",
     takeaways: ["Bones grow faster than tendons adapt — that gap is where growth-phase pain lives.", "Sudden load spikes, not training itself, drive most youth overuse injuries.", "Growing-plate pain (knees, heels, hips) means adjust now, not push through."],
     views: 5300, saves: 520,
-    body: "For athletes between roughly 12 and 17, injury risk has a shape: it spikes during growth spurts, when bones lengthen faster than tendons and coordination keep up. The knee (Osgood-Schlatter), heel (Sever's) and hip are the classic sites — growing-plate pain, not weakness.\n\nThe driver is almost never 'too much training' in general — it's the spike: a new team mid-season, three sessions replacing two, a camp week, a leap in strength training. Load changes of more than ~10–20% week-to-week during a growth phase are where overuse injuries concentrate.\n\nThe practical playbook:\n\n• Keep weekly load progression gentle during spurts, and let sport skill variety do the developing — multi-sport exposure builds broader, more robust athletes than early specialisation.\n• Respect the signals: knee or heel pain that warms up but returns after, night-time aches after sessions, limping into the next day. Adjust volume for a week, not the season.\n• Maintain strength and mobility through spurts — the skeleton changed, the movement patterns need re-grooving.\n\nNone of this means train soft. It means the developing athlete's superpower is consistency across months — growth phases reward patience disproportionately.",
+    body: "For athletes between roughly 12 and 17, injury risk has a shape: it spikes during growth spurts, when bones lengthen faster than tendons and coordination keep up. The knee (Osgood-Schlatter), heel (Sever's) and hip are the classic sites — growing-plate pain, not weakness.\n\nThe driver is almost never 'too much training' in general — it's the spike: a new team mid-season, three sessions replacing two, a camp week, a leap in strength training. Load changes of more than ~10–20% week-to-week during a growth phase are where overuse injuries tend to concentrate.\n\nThe practical playbook:\n\n• Keep weekly load progression gentle during spurts, and let sport skill variety do the developing — multi-sport exposure builds broader, more robust athletes than early specialisation.\n• Respect the signals: knee or heel pain that warms up but returns after, night-time aches after sessions, limping into the next day. Adjust volume for a week, not the season.\n• Maintain strength and mobility through spurts — the skeleton changed, the movement patterns need re-grooving.\n\nNone of this means train soft. It means the developing athlete's superpower is consistency across months — growth phases reward patience disproportionately.",
     quiz: [
       { q: "Growth-phase injury risk spikes because:", options: ["Bones grow faster than tendons adapt", "Young athletes are weak", "Sport is dangerous"], correct: 0 },
       { q: "The strongest driver of youth overuse injury:", options: ["Training at all", "Sudden load spikes week-to-week", "Strength training"], correct: 1 },
@@ -730,7 +730,7 @@ export const LESSONS: Lesson[] = [
     summary: "The 90-second case for sleep being your best legal performance enhancer.",
     tags: ["sleep", "recovery", "quick", "performance"], goals: ["Recovery"],
     difficulty: "Beginner", contentType: "Explainer", views: 8100, saves: 870,
-    body: "During deep sleep your body does its maintenance: growth hormone release for tissue repair, glycogen restocking, and nervous-system recovery. Skimp on it and every other input — training quality, reaction time, mood, injury resilience — runs at a discount.\n\nThe numbers worth knowing: athletes sleeping under 7 hours show around 1.7× the injury risk of those sleeping 8+; reaction time measurably degrades on short sleep; and one bad night doesn't ruin you — chronic short sleep does.\n\nThe fix is boring and free: a consistent bedtime, 8–9 hours as the target, screens down before sleep. Nothing else in your recovery stack comes close.",
+    body: "During deep sleep your body does its maintenance: growth hormone release for tissue repair, glycogen restocking, and nervous-system recovery. Skimp on it and every other input — training quality, reaction time, mood, injury resilience — runs at a discount.\n\nThe numbers worth knowing: sleep studies in athletes link under 7 hours with around 1.7× the injury risk of 8+ hours — an association across groups, not a sentence on any one short night. Reaction time measurably degrades on short sleep, and one bad night doesn't ruin you — chronic short sleep does.\n\nThe fix is boring and free: a consistent bedtime, 8–9 hours as the target, screens down before sleep. Nothing else in your recovery stack comes close.",
     quiz: [
       { q: "Deep sleep is when:", options: ["Nothing happens", "Growth hormone and tissue repair peak", "You burn no energy"], correct: 1 },
       { q: "Chronic short sleep is linked to:", options: ["Higher injury risk and slower reactions", "Better performance", "Nothing measurable"], correct: 0 },

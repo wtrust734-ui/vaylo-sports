@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 const items = [
   { icon: Home, label: "Home", path: "/" },
   { icon: BarChart3, label: "Stats", path: "/vpr" },
-  { icon: Play, label: "Train", path: "/workouts", primary: true },
+  { icon: Play, label: "Train", path: "/train", primary: true },
   { icon: MessageSquare, label: "Coach", path: "/coach" },
   { icon: User, label: "You", path: "/profile" },
 ];
@@ -56,7 +56,7 @@ const QuickCommandBar = () => {
                 />
               )}
               <item.icon size={18} className={`relative z-10 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-              <span className={`relative z-10 text-[9px] font-bold tracking-widest ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+              <span className={`relative z-10 text-[12px] font-bold tracking-widest ${isActive ? "text-primary" : "text-muted-foreground"}`}>
                 {item.label}
               </span>
             </button>

@@ -31,7 +31,6 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     feature: null,
     items: [
       { feature: "perform.goals", labelKey: "sidebar.dashboard", path: "/" },
-      { feature: "compete.communities", labelKey: "sidebar.activityFeed", path: "/feed" },
     ],
   },
   {
@@ -40,12 +39,11 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     feature: null,
     items: [
       { feature: "training.plans", labelKey: "sidebar.trainingPlans", path: "/training", newFirst: true },
-      { feature: "training.workouts", labelKey: "sidebar.workouts", path: "/workouts", newFirst: true },
+      { feature: "training.availability", labelKey: "sidebar.availability", path: "/availability" },
       { feature: "training.routines", labelKey: "sidebar.routines", path: "/routines" },
       { feature: "training.crossTraining", labelKey: "sidebar.crossTraining", path: "/cross-training", establishedFirst: true },
       { feature: "training.pbs", labelKey: "sidebar.pbs", path: "/pbs", establishedFirst: true },
       { feature: "training.form", labelKey: "sidebar.formAnalysis", path: "/form" },
-      { feature: "training.arOverlay", labelKey: "sidebar.arOverlay", path: "/ar-overlay" },
     ],
   },
   {
@@ -81,10 +79,9 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     items: [
       { feature: "compete.events", labelKey: "sidebar.events", path: "/events" },
       { feature: "compete.challenges", labelKey: "sidebar.challenges", path: "/challenges", newFirst: true },
-      { feature: "compete.leaderboard", labelKey: "sidebar.leaderboard", path: "/leaderboard" },
-      { feature: "compete.friends", labelKey: "sidebar.friends", path: "/friends" },
-      { feature: "compete.communities", labelKey: "sidebar.communities", path: "/communities" },
-      { feature: "compete.opponents", labelKey: "sidebar.opponents", path: "/opponents" },
+      // Friends and direct messages: relevant to every sport, so it is priced
+      // for the families everyone belongs to and is never hidden.
+      { feature: "compete.challenges", labelKey: "sidebar.friends", path: "/friends" },
       { feature: "compete.arcade", labelKey: "sidebar.arcade", path: "/arcade" },
     ],
   },
@@ -104,20 +101,22 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     items: [
       { feature: "perform.goals", labelKey: "sidebar.achievements", path: "/achievements" },
       { feature: "perform.identity", labelKey: "sidebar.avatarStudio", path: "/avatar" },
-      { feature: "compete.communities", labelKey: "sidebar.collection", path: "/collection" },
+      { feature: "perform.goals", labelKey: "sidebar.collection", path: "/collection" },
       { feature: "perform.goals", labelKey: "sidebar.eventPacks", path: "/event-packs" },
       { feature: "perform.goals", labelKey: "sidebar.creditsCoins", path: "/market" },
       { feature: "perform.goals", labelKey: "sidebar.subscription", path: "/subscription" },
       { feature: "perform.goals", labelKey: "sidebar.referEarn", path: "/referrals" },
       { feature: "perform.goals", labelKey: "sidebar.notifications", path: "/notifications" },
       { feature: "perform.goals", labelKey: "sidebar.profile", path: "/profile" },
+      { feature: "perform.guardian", labelKey: "sidebar.guardian", path: "/guardian" },
+      { feature: "perform.startingAnalysis", labelKey: "sidebar.startingAnalysis", path: "/starting-analysis" },
+      { feature: "perform.insights", labelKey: "sidebar.insights", path: "/insights" },
     ],
   },
 ];
 
 /** Quick-action sheet entries (bottom nav "+"). */
 export const QUICK_ACTIONS: (NavItemSpec & { descKey: string; icon: string })[] = [
-  { feature: "training.workouts", labelKey: "quickActions.logWorkout", descKey: "quickActions.logWorkoutDesc", path: "/workouts", icon: "Dumbbell" },
   { feature: "compete.events", labelKey: "quickActions.logResult", descKey: "quickActions.logResultDesc", path: "/events", icon: "Trophy" },
   { feature: "recover.recovery", labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery", icon: "HeartPulse" },
   { feature: "perform.vpr", labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr", icon: "Pencil" },

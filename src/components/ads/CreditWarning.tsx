@@ -26,7 +26,12 @@ const CreditWarning = () => {
         initial={{ opacity: 0, y: 50, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 50, scale: 0.9 }}
-        className="fixed bottom-20 left-4 right-4 z-[60] bg-gradient-card border border-energy/30 rounded-2xl p-4 shadow-electric"
+        // Lifted clear of the floating tab bar. `bottom-20` (80px) put this
+        // card inside the bar's own band — the bar's card spans 34–99px above
+        // the floor and the action button pokes to 107px — so at z-60 this
+        // promo was painted straight over the tab bar and stole its taps.
+        // Matches QuickActionSheet and the Coach composer.
+        className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] left-4 right-4 z-[60] bg-gradient-card border border-energy/30 rounded-2xl p-4 shadow-electric"
       >
         <button onClick={() => { setShow(false); setDismissed(true); }} className="absolute top-3 right-3 text-muted-foreground"><X size={16} /></button>
         <div className="flex items-center gap-3 mb-2">

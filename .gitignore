@@ -72,3 +72,15 @@ android/app/build/
 # is checked, and a tracked copy would be one more thing to re-sign whenever the
 # key rotates.
 apk/
+
+# Local Netlify folder
+.netlify
+
+# Web build of the app (scripts/build-web.cjs). Build output, never committed.
+# Note `dist` and `dist-ssr` are listed above; the base name matters to .gitignore,
+# so this has to be spelled out.
+dist-web
+
+.vercel
+.env*
+!.env.example

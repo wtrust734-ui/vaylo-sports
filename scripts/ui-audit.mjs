@@ -118,16 +118,15 @@ const ROUTES = [
   ["event-packs", "/event-packs"],
   ["market", "/market"],
   ["avatar", "/avatar"],
-  ["leaderboard", "/leaderboard"],
-  ["friends", "/friends"],
   ["routines", "/routines"],
+  ["workouts", "/workouts"],
   ["compare", "/compare"],
   ["pricing", "/pricing"],
   ["not-found", "/definitely-not-a-page"],
   // Second tier: everything reachable from the tab bar and the hub pages, so
   // the measured pass covers the whole app rather than the top screens.
   ["training", "/training"],
-  ["workouts", "/workouts"],
+  ["availability", "/availability"],
   ["nutrition", "/nutrition"],
   ["form", "/form"],
   ["mental", "/mental"],
@@ -143,13 +142,14 @@ const ROUTES = [
   ["cross-training", "/cross-training"],
   ["learning", "/learning"],
   ["goals", "/goals"],
-  ["feed", "/feed"],
+  ["guardian", "/guardian"],
+  ["starting-analysis", "/starting-analysis"],
+  ["insights", "/insights"],
   ["pbs", "/pbs"],
-  ["opponents", "/opponents"],
   ["notifications", "/notifications"],
   ["referrals", "/referrals"],
-  ["communities", "/communities"],
   ["challenges", "/challenges"],
+  ["friends", "/friends"],
   ["health-sync", "/health-sync"],
   ["subscription", "/subscription"],
   ["collection", "/collection"],
@@ -157,10 +157,7 @@ const ROUTES = [
 
 const env = readEnvFile(".env");
 const SUPA_URL = process.env.UI_SUPABASE_URL || env.VITE_SUPABASE_URL;
-const SUPA_KEY =
-  process.env.UI_SUPABASE_KEY ||
-  env.VITE_SUPABASE_ANON_KEY ||
-  env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPA_KEY = process.env.UI_SUPABASE_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 if (!SUPA_URL || !SUPA_KEY) {
   console.error("ui-audit: no Supabase URL/key (check .env)");
@@ -518,8 +515,217 @@ async function main() {
           });
         }
       }
+      // ── Things that touch with no gutter, or sit on top of each other ─────
+      // The "RUNNINGTrend" class of defect: a badge or a pill sitting flush
+      // against the text beside it, two chips whose borders meet, a label
+      // butted up against a button. Nothing above sees it — nothing overflows,
+      // nothing is under 44px, the copy is intact — and yet it is the thing an
+      // athlete reads as broken, so it gets its own rule. A second member of the
+      // family is measured here too: two floating layers (two notices, two
+      // sheets) drawn over one another, their copy interleaved.
+      //
+      // How a touch is measured: for every element, look at ADJACENT CHILDREN
+      // (text nodes included, measured with a Range so a bare text node counts),
+      // keep the pairs sharing a visual row, and compare the edges that are
+      // actually visible — a box's border, otherwise the text's ink, never the
+      // empty slack a stretched flex child carries to the end of its row. Under
+      // 3px between those edges, with at least one side a *box* (border,
+      // background or corner radius), is a jam. 3px rather than 4px is
+      // deliberate: 4px and 8px are both real, intended gutters here, and a rule
+      // that fired on them would be ignored within a week. Children of a
+      // flex/grid parent that already sets a gap are exempt — an explicit gutter
+      // cannot jam.
+      const collisions = [];
+      const overlaps = [];
+      const collisionSeen = new Set();
+      const overlapSeen = new Set();
+      const bgAlpha = (el) => {
+        const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(el).backgroundColor);
+        if (!m) return 0;
+        const parts = m[1].split(",").map((v) => parseFloat(v));
+        return parts.length < 4 ? 1 : parts[3];
+      };
+      const positioned = (el) => {
+        const cs = getComputedStyle(el);
+        return cs.position === "fixed" || cs.position === "absolute";
+      };
+      const isBox = (el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        if (cs.pointerEvents === "none") return false;
+        if (el.getAttribute("aria-hidden") === "true") return false;
+        const bordered = ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"]
+          .some((k) => parseFloat(cs[k]) > 0);
+        return bordered || bgAlpha(el) > 0.02 || parseFloat(cs.borderTopLeftRadius) > 0;
+      };
+      // The extent of the characters themselves. Walked text node by text node
+      // rather than with one Range over the subtree, because a Range also returns
+      // the boxes of block children and even of empty decorative elements (a
+      // blurred accent circle counts), which invents overlap that is not there.
+      const inkOf = (node) => {
+        const acc = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity, lines: 0 };
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+          if (!t.textContent.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(t);
+          for (const r of range.getClientRects()) {
+            if (r.width <= 0 || r.height <= 0) continue;
+            acc.left = Math.min(acc.left, r.left);
+            acc.right = Math.max(acc.right, r.right);
+            acc.top = Math.min(acc.top, r.top);
+            acc.bottom = Math.max(acc.bottom, r.bottom);
+            acc.lines += 1;
+          }
+        }
+        return acc.lines ? acc : null;
+      };
+      const piecesOf = (node) => {
+        if (node.nodeType === 3) {
+          if (!node.textContent.trim()) return null;
+          const rects = inkOf(node);
+          if (!rects) return null;
+          return [{ node, box: rects, ink: rects, boxed: false, pos: false, lines: rects.lines }];
+        }
+        if (node.nodeType !== 1) return null;
+        if (!(node.textContent || "").trim()) return null;
+        const rect = node.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return null;
+        const cs = getComputedStyle(node);
+        if (cs.display === "none" || cs.visibility === "hidden") return null;
+        const ink = inkOf(node) || rect;
+        return [{ node, box: rect, ink, boxed: isBox(node), pos: positioned(node), lines: ink.lines || 0 }];
+      };
+      const rectOf = (r) => [r.left, r.top, r.right, r.bottom].map((v) => Math.round(v));
+      const diagOf = (p) => ({
+        tag: p.node.nodeType === 3 ? "#text" : p.node.tagName.toLowerCase() + "." + String(p.node.className || "").trim(),
+        box: rectOf(p.box),
+        ink: rectOf(p.ink),
+        lines: p.lines,
+        pos: getComputedStyle(p.node.parentElement || p.node).position,
+      });
+      const nameOf = (node) => {
+        const raw = node.nodeType === 3
+          ? node.textContent
+          : node.getAttribute("aria-label") || node.textContent || node.tagName;
+        return raw.trim().replace(/\s+/g, " ").slice(0, 36);
+      };
+      const tagOf = (node) => {
+        if (node.nodeType === 3) return "#text";
+        const cls = typeof node.className === "string" ? node.className.trim() : "";
+        return node.tagName.toLowerCase() + (cls ? "." + cls.split(/\s+/).slice(0, 2).join(".") : "");
+      };
+      for (const parent of document.querySelectorAll("body *")) {
+        const pcs = getComputedStyle(parent);
+        if (pcs.display === "none" || pcs.visibility === "hidden") continue;
+        // A flex/grid parent that sets a gutter has already kept these apart.
+        if (Math.max(parseFloat(pcs.columnGap) || 0, parseFloat(pcs.rowGap) || 0) >= 3) continue;
+        const kids = Array.from(parent.childNodes);
+        for (let i = 0; i + 1 < kids.length; i += 1) {
+          const a = piecesOf(kids[i]);
+          const b = piecesOf(kids[i + 1]);
+          if (!a || !b) continue;
+          for (const pa of a) {
+            for (const pb of b) {
+              const rowOverlap = Math.min(pa.ink.bottom, pb.ink.bottom) - Math.max(pa.ink.top, pb.ink.top);
+              const shorter = Math.min(pa.ink.bottom - pa.ink.top, pb.ink.bottom - pb.ink.top);
+              if (rowOverlap < shorter * 0.5) continue;
+              // A floating layer over the content is the whole point of one.
+              if (pa.pos !== pb.pos) continue;
+              if (pa.pos && pb.pos) {
+                const dx = Math.min(pa.box.right, pb.box.right) - Math.max(pa.box.left, pb.box.left);
+                const dy = Math.min(pa.box.bottom, pb.box.bottom) - Math.max(pa.box.top, pb.box.top);
+                if (dx <= 2 || dy <= 2) continue;
+                const key = tagOf(pa.node) + "|" + tagOf(pb.node);
+                if (overlapSeen.has(key)) continue;
+                overlapSeen.add(key);
+                overlaps.push({
+                  parent: tagOf(parent).slice(0, 55),
+                  pair: (tagOf(pa.node) + " / " + tagOf(pb.node)).slice(0, 70),
+                  depth: Math.round(Math.min(dx, dy)),
+                  text: (nameOf(pa.node) + " \u25b8 " + nameOf(pb.node)).slice(0, 64),
+                  parentClass: String(parent.className || ""),
+                  a: diagOf(pa),
+                  b: diagOf(pb),
+                });
+                continue;
+              }
+              if (!pa.boxed && !pb.boxed) continue;
+              // Either direction, so RTL is measured the same way.
+              const ea = pa.boxed ? pa.box : pa.ink;
+              const eb = pb.boxed ? pb.box : pb.ink;
+              const gap = Math.max(eb.left - ea.right, ea.left - eb.right);
+              if (gap > 2.5) continue;
+              const key = tagOf(pa.node) + "|" + tagOf(pb.node) + "|" + Math.round(gap);
+              if (collisionSeen.has(key)) continue;
+              collisionSeen.add(key);
+              collisions.push({
+                parent: tagOf(parent).slice(0, 55),
+                pair: (tagOf(pa.node) + " / " + tagOf(pb.node)).slice(0, 70),
+                gap: Math.round(gap),
+                text: (nameOf(pa.node) + " \u25b8 " + nameOf(pb.node)).slice(0, 64),
+                parentClass: String(parent.className || ""),
+                a: diagOf(pa),
+                b: diagOf(pb),
+              });
+            }
+          }
+        }
+      }
+      // ── Floating layers drawn over one another ────────────────────────────
+      // The touch rule above only compares DOM neighbours, so two notices that
+      // both pin themselves to the bottom of the viewport (a stored-preferences
+      // notice and the terms notice, say) collide without ever being siblings.
+      //
+      // Only position:fixed counts. A viewport-anchored layer is chrome that
+      // floats above the page, so two of them sharing a region is a design
+      // decision that was never made; an absolutely positioned wrapper is page
+      // content, and a fixed banner over page content is what a banner is for.
+      // Only the outermost layer of a nesting is measured, decorative overlays
+      // are skipped, and two layers that share a parent are left alone because
+      // an overlay anchored to its own card is a pattern, not a clash.
+      const layers = [];
+      for (const el of document.querySelectorAll("body *")) {
+        const cs = getComputedStyle(el);
+        if (cs.position !== "fixed") continue;
+        if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") continue;
+        if (cs.pointerEvents === "none") continue;
+        if (el.getAttribute("aria-hidden") === "true") continue;
+        const body = (el.textContent || "").trim().replace(/\s+/g, " ");
+        if (!body) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        layers.push({ el, r, z: cs.zIndex, body });
+      }
+      const outerLayers = layers.filter((a) => !layers.some((b) => b !== a && b.el.contains(a.el)));
+      for (let i = 0; i < outerLayers.length; i += 1) {
+        for (let j = i + 1; j < outerLayers.length; j += 1) {
+          const a = outerLayers[i];
+          const b = outerLayers[j];
+          if (a.el.parentElement === b.el.parentElement) continue;
+          const dx = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+          const dy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+          if (dx <= 2 || dy <= 2) continue;
+          const key = "L|" + Math.round(a.r.top) + "|" + Math.round(b.r.top) + "|" + Math.round(a.r.left);
+          if (overlapSeen.has(key)) continue;
+          overlapSeen.add(key);
+          overlaps.push({
+            parent: "floating layers",
+            pair: (String(a.el.className || "").slice(0, 34) + " / " + String(b.el.className || "").slice(0, 34)),
+            depth: Math.round(Math.min(dx, dy)),
+            text: (a.body.slice(0, 30) + " \u25b8 " + b.body.slice(0, 30)),
+            parentClass: "",
+            a: { tag: a.el.tagName.toLowerCase() + "." + String(a.el.className || ""), box: rectOf(a.r), z: a.z, text: a.body.slice(0, 40) },
+            b: { tag: b.el.tagName.toLowerCase() + "." + String(b.el.className || ""), box: rectOf(b.r), z: b.z, text: b.body.slice(0, 40) },
+          });
+        }
+      }
       const text = document.body.innerText || "";
       return {
+        collisions: collisions.slice(0, 8),
+        collisionCount: collisions.length,
+        overlaps: overlaps.slice(0, 8),
+        overlapCount: overlaps.length,
         smallTargets: smallTargets.slice(0, 20),
         smallTargetCount: smallTargets.length,
         url: location.pathname,
@@ -576,6 +782,8 @@ async function main() {
     if (probe.docWidth > probe.viewport) flags.push(`H-SCROLL ${probe.docWidth}>${probe.viewport}`);
     if (probe.url !== route) flags.push(`redirected to ${probe.url}`);
     if (probe.smallTargetCount) flags.push(`${probe.smallTargetCount} small targets`);
+    if (probe.collisionCount) flags.push(`JAMMED x${probe.collisionCount}`);
+    if (probe.overlapCount) flags.push(`STACKED x${probe.overlapCount}`);
     console.log(
       `${name.padEnd(13)} ${String(probe.textLength).padStart(6)}ch  ${(flags.join(", ") || "ok").padEnd(28)} ${probe.firstLine.slice(0, 3).join(" | ")}`,
     );
@@ -587,6 +795,12 @@ async function main() {
     }
     for (const t of probe.smallTargets || []) {
       console.log(`                target ${t.w}x${t.h}  "${t.label}"`);
+    }
+    for (const c of probe.collisions || []) {
+      console.log(`                jammed (${c.gap}px)  in ${c.parent}\n                  ${c.pair}  "${c.text}"`);
+    }
+    for (const o of probe.overlaps || []) {
+      console.log(`                stacked (${o.depth}px)  in ${o.parent}\n                  ${o.pair}  "${o.text}"`);
     }
     if (probe.badStrings.length) console.log(`               bad text: ${probe.badStrings.join(", ")}`);
   }
@@ -604,6 +818,17 @@ async function main() {
     const verdict = await unlockFlow(cdp);
     flowResults.push(verdict);
     console.log(`[flow:unlock] ${verdict.ok ? "PASS" : "FAIL"} — ${verdict.detail}`);
+  }
+
+  // `--eval="<expression>"` prints the value of any expression evaluated in the
+  // live page on the last visited route. A claim about layout — a card's width,
+  // an element's offset, a computed custom property — is then checked rather
+  // than assumed, which the screenshots alone cannot do. Use it with a route
+  // filter, e.g. `node scripts/ui-audit.mjs learning --eval="document.title"`.
+  const evalArg = process.argv.find((a) => a.startsWith("--eval="));
+  if (evalArg) {
+    const value = await cdp.evaluate(evalArg.slice("--eval=".length));
+    console.log(`[eval] ${JSON.stringify(value, null, 2)}`);
   }
 
   writeFileSync(`${OUT}/report.json`, JSON.stringify({ report, consoleIssues, flows: flowResults }, null, 2));
@@ -625,6 +850,16 @@ async function main() {
       if (r.docWidth > r.viewport) failures.push(`${r.name}: page scrolls sideways (${r.docWidth} > ${r.viewport})`);
       if (r.clippedCount) failures.push(`${r.name}: ${r.clippedCount} elements cut off by their own container`);
       if (r.badStrings?.length) failures.push(`${r.name}: placeholder text on screen (${r.badStrings.join(", ")})`);
+      if (r.collisionCount) {
+        for (const c of r.collisions) {
+          failures.push(`${r.name}: ${c.pair} touch with no gutter (${c.gap}px) — "${c.text}"`);
+        }
+      }
+      if (r.overlapCount) {
+        for (const o of r.overlaps) {
+          failures.push(`${r.name}: ${o.pair} drawn over each other (${o.depth}px deep) — "${o.text}"`);
+        }
+      }
     }
     for (const c of consoleIssues) {
       if (c.kind === "exception") failures.push(`${c.route}: ${c.text}`);
@@ -639,7 +874,9 @@ async function main() {
       for (const f of failures) console.error("  - " + f);
       process.exit(1);
     }
-    console.log("\nui-audit: PASS — every control is at least 44px, nothing scrolls sideways, nothing is cut off");
+    console.log(
+      "\nui-audit: PASS — every control is at least 44px, nothing scrolls sideways, nothing is cut off, nothing is jammed together",
+    );
     process.exit(0);
   }
 

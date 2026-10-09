@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, ShieldAlert, Trash2 } 
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { authRedirectUrl } from "@/lib/share";
+import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
 
 const CONFIRM_PHRASE = "DELETE MY ACCOUNT";
 const REAUTH_FLAG = "vaylo:delete-account-reauth";
@@ -15,7 +15,7 @@ const WARNINGS = [
   "All profile information will be deleted.",
   "Your entire training history, workouts and plans will be deleted.",
   "Achievements, statistics and leaderboard entries will be deleted.",
-  "Friends, followers, groups and messages will be deleted.",
+  "Friendships, communities and messages will be deleted.",
   "Your avatar, purchased cosmetics, coins and credits will be deleted, unless legal requirements force us to retain a record.",
   "Any premium subscription is cancelled according to the billing rules of the store you subscribed through.",
   "This action cannot be undone.",
@@ -65,17 +65,28 @@ export default function DeleteAccount() {
 
   const verifyOAuth = async () => {
     sessionStorage.setItem(REAUTH_FLAG, "1");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: provider as "google" | "apple",
-      options: {
-        redirectTo: authRedirectUrl("/settings/delete-account"),
-        // Force a fresh consent challenge so the re-authentication is meaningful.
+    try {
+      const url = await startOAuth(provider as "google" | "apple", {
+        redirectPath: "/settings/delete-account",
         queryParams: { prompt: "select_account" },
-      },
-    });
-    if (error) {
+      });
+      if (url && usesNativeOAuth()) {
+        const { code, flowId } = await awaitOAuthDeepLink(url);
+        await completeNativeOAuth(buildNativeCallbackUrl(code, flowId));
+        // The callback may arrive without a React remount; consume the flag here
+        // as well as on cold start so the user can proceed without another tap.
+        sessionStorage.removeItem(REAUTH_FLAG);
+        setReauthed(true);
+      }
+      // The browser flow redirects back to /settings/delete-account and the
+      // stored flag is consumed by the mounted screen after session restore.
+    } catch (error) {
       sessionStorage.removeItem(REAUTH_FLAG);
-      toast({ title: "Could not re-authenticate", variant: "destructive" });
+      toast({
+        title: "Could not re-authenticate",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
     }
   };
 
@@ -121,7 +132,7 @@ export default function DeleteAccount() {
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <div className="px-5 pt-12 pb-4 flex items-center gap-3">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-lg hover:bg-muted">
           <ArrowLeft size={18} />
         </button>
@@ -199,7 +210,7 @@ export default function DeleteAccount() {
       <AnimatePresence>
         {showFinal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center px-6">
+            className="fixed inset-0 z-[59] bg-background/80 backdrop-blur-sm flex items-center justify-center px-6">
             <motion.div initial={{ scale: 0.92, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
               className="bg-card border border-destructive/40 rounded-2xl p-5 w-full max-w-sm shadow-card">
               <h3 className="font-display font-bold text-lg mb-2">Delete Account?</h3>

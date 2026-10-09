@@ -37,7 +37,7 @@ const FamilyPickBanner = ({ currency = "USD" }: { currency?: string }) => {
       <div className="min-w-0 flex-1">
         <p className="text-xs font-bold uppercase tracking-wider text-primary">Picked for you</p>
         <p className="truncate text-sm font-semibold">{label}</p>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">{rec.why}</p>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">{rec.why}</p>
       </div>
       <span className="shrink-0 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
         {cost != null ? `${price} credits` : formatLocalPrice(0, currency) === "$0.00" ? `${price} credits` : `${price} credits`}

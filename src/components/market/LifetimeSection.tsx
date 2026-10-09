@@ -23,7 +23,7 @@ export default function LifetimeSection() {
           <Crown size={16} className="text-electric-purple" />
           <h4 className="font-display text-sm font-bold">Lifetime Access</h4>
         </div>
-        <p className="mt-1 text-[11px] text-muted-foreground">One payment. No renewal. Never billed again.</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">One payment. No renewal. Never billed again.</p>
       </div>
 
       {lifetimePlans.map(({ plan, option }, i) => (
@@ -42,13 +42,13 @@ export default function LifetimeSection() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="font-display text-lg font-bold">Lifetime {plan.name}</h3>
-                <p className="text-[11px] text-muted-foreground">{plan.tagline}</p>
+                <p className="text-[12px] text-muted-foreground">{plan.tagline}</p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="font-display text-2xl font-bold text-gradient-electric">
                   {formatPence(option!.price_pence)}
                 </p>
-                <p className="text-[10px] text-muted-foreground">one payment</p>
+                <p className="text-[12px] text-muted-foreground">one payment</p>
               </div>
             </div>
 
@@ -104,7 +104,7 @@ export default function LifetimeSection() {
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-base font-bold">Event Packs</h3>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               Race and competition preparation packs for your sport. Buy once, keep forever.
             </p>
           </div>

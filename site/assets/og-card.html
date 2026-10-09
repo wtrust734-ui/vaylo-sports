@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<title>Vaylo Sports — Open Graph card source</title>
+<!--
+  ==========================================================================
+  THE SOCIAL CARD
+  --------------------------------------------------------------------------
+  This file is NOT published. It is the source for site/assets/og.png — the
+  1200x630 image every page shares as og:image — and it is rasterised by
+  `node scripts/gen-og-image.cjs`.
+
+  It lives here, in the source tree, rather than being drawn at build time
+  because a build machine should not need a browser to produce the site. The
+  PNG is committed; this file is how it is regenerated when the copy changes.
+
+  The design deliberately borrows the site's own tokens (the same #05070f
+  background, the same single accent, the same system font stack) so the card
+  and the landing page it links to read as one thing. The one thing it adds is
+  a light source behind the headline — a card is viewed at a fraction of the
+  page's size in a chat list, and the plain background disappeared entirely at
+  that scale.
+
+  Text is set large on purpose: a card renders at roughly 500x262 in most
+  timelines, and anything below about 30px here is unreadable there.
+  ==========================================================================
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+
+  body {
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #05070f;
+    color: #eef2f9;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The same static light source the hero uses, scaled up. Painted once — no
+     animation, because this is a still. */
+  .glow {
+    position: absolute;
+    inset: -40% -10% auto -20%;
+    height: 150%;
+    background: radial-gradient(closest-side, hsl(217 100% 60% / 0.20), transparent 70%);
+  }
+
+  .card {
+    position: relative;
+    height: 100%;
+    padding: 68px 76px 60px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 58px; height: 58px; display: block; }
+  .brand span { font-size: 27px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .rule {
+    width: 64px;
+    height: 3px;
+    background: #5aa2ff;
+    border-radius: 999px;
+    margin: 42px 0 30px;
+  }
+
+  h1 {
+    font-size: 62px;
+    line-height: 1.06;
+    letter-spacing: -0.032em;
+    font-weight: 800;
+    max-width: 950px;
+  }
+  h1 em { font-style: normal; color: #8fc4ff; font-weight: 800; }
+
+  .facts {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 25px;
+    color: #a9b6cc;
+  }
+  .facts b { color: #eef2f9; font-weight: 650; }
+  .dot { width: 5px; height: 5px; border-radius: 999px; background: #5aa2ff; flex: none; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="card">
+    <div class="brand">
+      <img src="logo.png" alt="" />
+      <span>Vaylo Sports</span>
+    </div>
+
+    <div class="rule"></div>
+
+    <h1>A training log that tells you what your <em>own numbers</em> mean.</h1>
+
+    <div class="facts">
+      <span><b>Every sport</b></span>
+      <span class="dot"></span>
+      <span><b>No ad SDK</b></span>
+      <span class="dot"></span>
+      <span>Android &mdash; not yet on the Play Store</span>
+    </div>
+  </div>
+</body>
+</html>

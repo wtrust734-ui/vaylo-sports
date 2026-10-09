@@ -68,7 +68,7 @@ const rawBadgeFor = (pack: EventPack) => {
 
 function LifetimeBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-electric-purple/40 bg-electric-purple/10 px-2 py-0.5 text-[10px] font-semibold text-electric-purple">
+    <span className="inline-flex items-center gap-1 rounded-full border border-electric-purple/40 bg-electric-purple/10 px-2 py-0.5 text-[12px] font-semibold text-electric-purple">
       <InfinityIcon size={10} /> Lifetime Access
     </span>
   );
@@ -95,32 +95,32 @@ function PackCard({
         <div className="mb-2 flex items-start justify-between gap-2">
           <button onClick={onOpen} className="min-w-0 flex-1 text-start">
             <h3 className="truncate font-display text-sm font-bold">{pack.name}</h3>
-            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{pack.description}</p>
+            <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground">{pack.description}</p>
           </button>
           {badge && (
-            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${badge.color}`}>
+            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-bold ${badge.color}`}>
               <badge.icon size={9} /> {badge.label}
             </span>
           )}
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-electric-purple/10 px-2 py-0.5 text-[10px] font-semibold text-electric-purple">{pack.sport}</span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ds.bg} ${ds.text}`}>{pack.difficulty}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+          <span className="rounded-full bg-electric-purple/10 px-2 py-0.5 text-[12px] font-semibold text-electric-purple">{pack.sport}</span>
+          <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${ds.bg} ${ds.text}`}>{pack.difficulty}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">
             <Clock size={9} /> {pack.weeks}w
           </span>
           {pack.distance && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{pack.distance}</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">{pack.distance}</span>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="font-display text-base font-bold text-primary">
-              {pack.creditPrice.toLocaleString()}<span className="text-[10px] font-semibold"> credits</span>
+              {pack.creditPrice.toLocaleString()}<span className="text-[12px] font-semibold"> credits</span>
             </p>
-            <p className="text-[9px] text-muted-foreground">or {formatLocalPrice(pack.priceCents, currency)} · v{pack.version}</p>
+            <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(pack.priceCents, currency)} · v{pack.version}</p>
           </div>
           {owned ? (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-energy/40 bg-energy/10 px-3 py-2 text-xs font-bold text-energy">
@@ -355,7 +355,7 @@ const EventPacks = () => {
 
     return (
       <div className="min-h-screen bg-background pb-28">
-        <div className="flex items-center gap-3 px-5 pb-4 pt-14">
+        <div className="flex items-center gap-3 px-5 pb-4 pt-[var(--vaylo-screen-top)]">
           <motion.button onClick={() => setDetail(null)} whileTap={{ scale: 0.9 }} className="-ml-1 p-1 text-muted-foreground">
             <ChevronRight size={22} className="rotate-180" />
           </motion.button>
@@ -369,9 +369,9 @@ const EventPacks = () => {
           <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${ds.grad}`} />
           <div className="relative z-10">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-electric-purple/10 px-2 py-0.5 text-[10px] font-semibold text-electric-purple">{detail.sport}</span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{detail.category}</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ds.bg} ${ds.text}`}>{detail.difficulty}</span>
+              <span className="rounded-full bg-electric-purple/10 px-2 py-0.5 text-[12px] font-semibold text-electric-purple">{detail.sport}</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">{detail.category}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${ds.bg} ${ds.text}`}>{detail.difficulty}</span>
               <LifetimeBadge />
             </div>
             <p className="mb-4 text-sm leading-relaxed text-foreground/90">{detail.description}</p>
@@ -379,31 +379,31 @@ const EventPacks = () => {
             <div className="mb-4 grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-border bg-card/60 p-3 text-center">
                 <Target size={14} className="mx-auto mb-1 text-muted-foreground" />
-                <p className="text-[10px] text-muted-foreground">Target event</p>
+                <p className="text-[12px] text-muted-foreground">Target event</p>
                 <p className="truncate text-xs font-display font-bold">{detail.targetEvent}</p>
               </div>
               <div className="rounded-xl border border-border bg-card/60 p-3 text-center">
                 <Calendar size={14} className="mx-auto mb-1 text-muted-foreground" />
-                <p className="text-[10px] text-muted-foreground">Duration</p>
+                <p className="text-[12px] text-muted-foreground">Duration</p>
                 <p className="text-xs font-display font-bold">{detail.weeks} weeks</p>
               </div>
               <div className="rounded-xl border border-primary/30 bg-card/60 p-3 text-center">
                 <Trophy size={14} className="mx-auto mb-1 text-primary" />
-                <p className="text-[10px] text-muted-foreground">Price</p>
+                <p className="text-[12px] text-muted-foreground">Price</p>
                 <p className="text-xs font-display font-bold text-primary">
                   {detail.creditPrice.toLocaleString()} credits
                 </p>
-                <p className="text-[9px] text-muted-foreground">or {formatLocalPrice(detail.priceCents, currency)}</p>
+                <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(detail.priceCents, currency)}</p>
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="mb-4 grid grid-cols-2 gap-2 text-[12px]">
               <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Version</p>
+                <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Version</p>
                 <p className="font-semibold">v{detail.version}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Last updated</p>
+                <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Last updated</p>
                 <p className="font-semibold">{detail.updatedAt}</p>
               </div>
             </div>
@@ -426,7 +426,7 @@ const EventPacks = () => {
             </div>
 
             <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Purchase information</h4>
-            <ul className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 p-3 text-[11px] text-foreground/85">
+            <ul className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 p-3 text-[12px] text-foreground/85">
               <li className="flex items-start gap-2"><Check size={12} className="mt-[2px] shrink-0 text-energy" /> One-time payment — nothing renews and you are never billed again</li>
               <li className="flex items-start gap-2"><InfinityIcon size={12} className="mt-[2px] shrink-0 text-electric-purple" /> Lifetime access — this pack never expires</li>
               <li className="flex items-start gap-2"><Smartphone size={12} className="mt-[2px] shrink-0 text-primary" /> Available on every device you sign in to, restored automatically</li>
@@ -455,7 +455,7 @@ const EventPacks = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold">{r.name}</span>
-                    <span className="block text-[10px] text-muted-foreground">
+                    <span className="block text-[12px] text-muted-foreground">
                       {r.sport} · {r.weeks}w · {r.creditPrice.toLocaleString()} credits
                     </span>
                   </span>
@@ -466,7 +466,15 @@ const EventPacks = () => {
           </div>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/95 p-4 backdrop-blur">
+        {/* Purchase bar, floating above the tab bar.
+
+            This was `fixed inset-x-0 bottom-0` with no z-index at all, so the
+            floating tab bar painted straight over it: the bar's card covers
+            34–99px above the floor and this CTA only had 16px of padding, so
+            "Add to basket" was completely hidden and untappable on a phone.
+            Same treatment as the Coach composer and the Ar save bar. */}
+        <div className="fixed inset-x-0 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-40 px-5">
+          <div className="mx-auto max-w-md">
           {isOwned ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-energy/40 bg-energy/10 py-3.5 text-sm font-bold text-energy">
               <BadgeCheck size={16} /> Purchased · Lifetime Access
@@ -483,6 +491,7 @@ const EventPacks = () => {
               {inBasket ? "In basket" : `Add to basket · ${detail.creditPrice.toLocaleString()} credits`}
             </motion.button>
           )}
+          </div>
         </div>
       </div>
     );
@@ -491,7 +500,7 @@ const EventPacks = () => {
   /* ---------------------------- Browse view ---------------------------- */
   return (
     <div className="min-h-screen bg-background pb-28">
-      <div className="px-5 pb-4 pt-14">
+      <div className="px-5 pb-4 pt-[var(--vaylo-screen-top)]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold">Event Packs</h1>
@@ -499,7 +508,7 @@ const EventPacks = () => {
               Complete event preparation programmes. Pay once with credits, keep them for life.
             </p>
             {profile && typeof profile.credits === "number" && (
-              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary">
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary">
                 <Sparkles size={11} /> {profile.credits.toLocaleString()} credits available
               </p>
             )}
@@ -511,7 +520,7 @@ const EventPacks = () => {
           >
             <ShoppingCart size={18} />
             {basket.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
                 {basket.length}
               </span>
             )}
@@ -519,7 +528,7 @@ const EventPacks = () => {
         </div>
 
         {owned.length > 0 && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-energy/30 bg-energy/10 px-3 py-2 text-[11px] text-energy">
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-energy/30 bg-energy/10 px-3 py-2 text-[12px] text-energy">
             <BadgeCheck size={13} /> You own {owned.length} pack{owned.length === 1 ? "" : "s"} — permanently, on every device.
           </div>
         )}
@@ -558,13 +567,13 @@ const EventPacks = () => {
                   { label: "Difficulty", value: difficulty, set: setDifficulty as (v: string) => void, options: ["All", ...EVENT_PACK_DIFFICULTIES] },
                 ].map((row) => (
                   <div key={row.label}>
-                    <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">{row.label}</p>
+                    <p className="mb-1.5 text-[12px] uppercase tracking-wider text-muted-foreground">{row.label}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {row.options.map((o) => (
                         <button
                           key={o}
                           onClick={() => row.set(o)}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${
                             row.value === o ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"
                           }`}
                         >{o}</button>
@@ -573,31 +582,31 @@ const EventPacks = () => {
                   </div>
                 ))}
                 <div>
-                  <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Duration</p>
+                  <p className="mb-1.5 text-[12px] uppercase tracking-wider text-muted-foreground">Duration</p>
                   <div className="flex flex-wrap gap-1.5">
                     {DURATIONS.map((d) => (
                       <button key={d.key} onClick={() => setDuration(d.key)}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${duration === d.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
+                        className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${duration === d.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
                       >{d.label}</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Price</p>
+                  <p className="mb-1.5 text-[12px] uppercase tracking-wider text-muted-foreground">Price</p>
                   <div className="flex flex-wrap gap-1.5">
                     {PRICES.map((p) => (
                       <button key={p.key} onClick={() => setPrice(p.key)}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${price === p.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
+                        className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${price === p.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
                       >{p.label}</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Sort by</p>
+                  <p className="mb-1.5 text-[12px] uppercase tracking-wider text-muted-foreground">Sort by</p>
                   <div className="flex flex-wrap gap-1.5">
                     {SORTS.map((s) => (
                       <button key={s.key} onClick={() => setSort(s.key)}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${sort === s.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
+                        className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${sort === s.key ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-muted/30 text-muted-foreground"}`}
                       >{s.label}</button>
                     ))}
                   </div>
@@ -605,7 +614,7 @@ const EventPacks = () => {
                 {filtersActive && (
                   <button
                     onClick={() => { setSport("All"); setDifficulty("All"); setDuration("any"); setPrice("any"); setSearch(""); }}
-                    className="w-full rounded-xl border border-border py-2 text-[11px] font-semibold text-muted-foreground"
+                    className="w-full rounded-xl border border-border py-2 text-[12px] font-semibold text-muted-foreground"
                   >Clear filters</button>
                 )}
               </div>
@@ -620,7 +629,7 @@ const EventPacks = () => {
         </div>
       ) : filtersActive ? (
         <div className="px-5 pt-4">
-          <p className="mb-3 text-[11px] text-muted-foreground">{visible.length} pack{visible.length === 1 ? "" : "s"}</p>
+          <p className="mb-3 text-[12px] text-muted-foreground">{visible.length} pack{visible.length === 1 ? "" : "s"}</p>
           <div className="space-y-3">
             {visible.slice(0, 60).map((p) => (
               <PackCard
@@ -634,7 +643,7 @@ const EventPacks = () => {
             <div className="rounded-2xl border border-border bg-card p-8 text-center">
               <Package size={26} className="mx-auto mb-2 text-muted-foreground" />
               <p className="text-sm font-semibold">No packs match those filters</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Try a different sport, difficulty or price range.</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Try a different sport, difficulty or price range.</p>
             </div>
           )}
         </div>
@@ -644,7 +653,7 @@ const EventPacks = () => {
             <section>
               <div className="mb-2.5 px-5">
                 <h2 className="font-display text-base font-bold">Your Library</h2>
-                <p className="text-[11px] text-muted-foreground">Purchased packs — yours forever</p>
+                <p className="text-[12px] text-muted-foreground">Purchased packs — yours forever</p>
               </div>
               <div className="flex gap-3 overflow-x-auto no-scrollbar px-5 pb-1">
                 {packs.filter((p) => owned.includes(p.id)).map((p) => (
@@ -660,7 +669,7 @@ const EventPacks = () => {
             <section key={s.key}>
               <div className="mb-2.5 px-5">
                 <h2 className="font-display text-base font-bold">{s.label}</h2>
-                <p className="text-[11px] text-muted-foreground">{s.blurb}</p>
+                <p className="text-[12px] text-muted-foreground">{s.blurb}</p>
               </div>
               <div className="flex gap-3 overflow-x-auto no-scrollbar px-5 pb-1">
                 {s.items.map((p) => (
@@ -679,7 +688,7 @@ const EventPacks = () => {
           <section>
             <div className="mb-2.5 px-5">
               <h2 className="font-display text-base font-bold">All Event Packs</h2>
-              <p className="text-[11px] text-muted-foreground">{visible.length} programmes across every sport</p>
+              <p className="text-[12px] text-muted-foreground">{visible.length} programmes across every sport</p>
             </div>
             <div className="space-y-3 px-5">
               {visible.slice(0, 30).map((p) => (
@@ -691,7 +700,7 @@ const EventPacks = () => {
               ))}
             </div>
             {visible.length > 30 && (
-              <p className="px-5 pt-3 text-center text-[11px] text-muted-foreground">
+              <p className="px-5 pt-3 text-center text-[12px] text-muted-foreground">
                 Use search or filters to find more of the {visible.length} packs.
               </p>
             )}
@@ -704,7 +713,7 @@ const EventPacks = () => {
         {showBasket && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end bg-background/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[59] flex items-end bg-background/80 backdrop-blur-sm pb-[max(0px,var(--vaylo-inset-bottom))]"
             onClick={() => setShowBasket(false)}
           >
             <motion.div
@@ -726,7 +735,7 @@ const EventPacks = () => {
                       <div key={b.id} className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-bold">{b.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{b.sport} · {b.weeks}w · lifetime access</p>
+                          <p className="text-[12px] text-muted-foreground">{b.sport} · {b.weeks}w · lifetime access</p>
                         </div>
                         <p className="text-xs font-bold text-primary">{b.creditPrice.toLocaleString()} cr</p>
                         <button onClick={() => setBasket(basket.filter((x) => x.id !== b.id))}>
@@ -741,7 +750,7 @@ const EventPacks = () => {
                       {basketCredits.toLocaleString()} credits
                     </span>
                   </div>
-                  <p className="mb-3 text-end text-[10px] text-muted-foreground">
+                  <p className="mb-3 text-end text-[12px] text-muted-foreground">
                     or ${(basketTotal / 100).toFixed(2)} once store billing is live
                   </p>
                   <motion.button
@@ -750,7 +759,7 @@ const EventPacks = () => {
                   >
                     Unlock {basket.length} pack{basket.length === 1 ? "" : "s"} — lifetime access
                   </motion.button>
-                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                  <p className="mt-2 text-center text-[12px] text-muted-foreground">
                     Lifetime access, deducted from your credit balance. Nothing recurs.
                   </p>
                 </>

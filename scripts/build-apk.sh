@@ -1,53 +1,42 @@
 #!/bin/sh
-# Build a signed, installable APK and prove what is in it before handing it over.
-#
-#   bash scripts/build-apk.sh              # release (the one to install)
-#   bash scripts/build-apk.sh --debug      # debug as well
-#
-# Why this is a script and not three commands: the build succeeding says nothing
-# about whether the artefact is any good. A release APK can be unsigned, signed
-# with the debug key, carry write permissions to health data, or have no
-# `versionCode` Play will accept. Each of those was found by hand at least once,
-# and each is one line here, so none of them can come back unnoticed.
-#
-# The checks are deliberately noisy about what they proved. A build log that
-# just says BUILD SUCCESSFUL is exactly the log that hides a wrong signer.
-
+# Build, verify and publish collision-safe Android release artifacts.
 set -e
 
-M="${FREEBUFF_CHECKOUT:-C:/Users/gemme/Downloads/.freebuff}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+M="${FREEBUFF_CHECKOUT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/AppData/Local/Android/Sdk}}"
-JAVA_HOME="${JAVA_HOME:-C:/Program Files/Android/Android Studio/jbr}"
+JAVA_HOME="${JAVA_HOME:-/c/Program Files/Android/Android Studio/jbr}"
 export JAVA_HOME
 
 DEBUG=0
-[ "$1" = "--debug" ] && DEBUG=1
+if [ "${1:-}" = "--debug" ]; then DEBUG=1; fi
 
 cd "$M"
-
-# --- 1. Build the web assets and copy them into the native shell ------------
-# `build:native` is what ships; plain `build` only works served from a root
-# path, which is not the case inside a Capacitor WebView.
 echo "[apk] building web assets"
 npm run cap:sync
 
-# --- 2. Pick the newest build-tools, so this is not pinned to 36.0.0 ---------
 BT="$(ls -1d "$SDK"/build-tools/*/ 2>/dev/null | sort -V | tail -1)"
 if [ -z "$BT" ]; then
   echo "[apk] no build-tools found under $SDK — set ANDROID_HOME" >&2
   exit 1
 fi
-AAPT2="$BT/aapt2"; [ -f "$AAPT2" ] || AAPT2="$AAPT2.exe"
-APKSIGNER="$BT/apksigner"; [ -f "$APKSIGNER" ] || APKSIGNER="$APKSIGNER.bat"
+AAPT2="$BT/aapt2"; [ -f "$AAPT2" ] || AAPT2="$BT/aapt2.exe"
+APKSIGNER="$BT/apksigner"; [ -f "$APKSIGNER" ] || APKSIGNER="$BT/apksigner.bat"
+AAPT2="$(cygpath -w "$AAPT2" 2>/dev/null || printf '%s' "$AAPT2")"
+APKSIGNER="$(cygpath -w "$APKSIGNER" 2>/dev/null || printf '%s' "$APKSIGNER")"
+# apksigner ships as a .bat wrapper that hands JAVA_HOME to java.exe untouched, so
+# it rejects the MSYS-style path Gradle is happy with. Give the wrapper a native path.
+JAVA_HOME_WIN="$(cygpath -w "$JAVA_HOME" 2>/dev/null || printf '%s' "$JAVA_HOME")"
+# aapt2/apksigner are invoked with MSYS_NO_PATHCONV=1, so a POSIX artifact path
+# reaches the Windows binary verbatim and resolves to \c\... — pass native paths.
+winpath() { cygpath -w "$1" 2>/dev/null || printf '%s' "$1"; }
+JARSIGNER_BIN="$JAVA_HOME/bin/jarsigner"
+if [ -f "$JARSIGNER_BIN.exe" ]; then JARSIGNER_BIN="$JARSIGNER_BIN.exe"; fi
 echo "[apk] build-tools: $(basename "$BT")"
 
-# --- 3. Build ---------------------------------------------------------------
 cd "$M/android"
 TASK=":app:assembleRelease"
-[ "$DEBUG" = "1" ] && TASK=":app:assembleDebug $TASK"
-# The AAB is what Play actually consumes, so it is built here rather than left
-# to CI. Same signing config, same source — the two artefacts cannot disagree
-# because they come out of the same invocation.
+if [ "$DEBUG" = "1" ]; then TASK=":app:assembleDebug $TASK"; fi
 TASK="$TASK :app:bundleRelease"
 echo "[apk] gradle $TASK"
 ./gradlew $TASK --console=plain -q || {
@@ -55,33 +44,28 @@ echo "[apk] gradle $TASK"
   exit 1
 }
 
-# --- 4. Verify and publish the release APK ----------------------------------
 REL="$M/android/app/build/outputs/apk/release/app-release.apk"
-if [ ! -f "$REL" ]; then
-  echo "[apk] no release APK at $REL" >&2
+AAB_SRC="$M/android/app/build/outputs/bundle/release/app-release.aab"
+if [ ! -f "$REL" ] || [ ! -f "$AAB_SRC" ]; then
+  echo "[apk] FAIL release APK or AAB missing" >&2
   exit 1
 fi
 
 echo
 echo "[apk] --- release checks ---"
-
-# 4a. Signature. Play refuses a bundle signed with the debug key, and a
-#     sideloaded app signed with the debug key cannot later be replaced by the
-#     Play version without an uninstall — so the signer is checked by name, not
-#     merely asserted to exist.
-SIG="$(MSYS_NO_PATHCONV=1 "$APKSIGNER" verify --print-certs "$REL" 2>&1 || true)"
+SIG="$(MSYS_NO_PATHCONV=1 JAVA_HOME="$JAVA_HOME_WIN" "$APKSIGNER" verify --print-certs "$(winpath "$REL")" 2>&1 || true)"
 DN="$(printf '%s' "$SIG" | grep -m1 "certificate DN:" || true)"
 case "$DN" in
-  *"CN=Vaylo Sports"*) echo "[apk] ok   signed with the Vaylo Sports upload key" ;;
-  *) echo "[apk] FAIL not signed with the upload key: ${DN:-<no cert>}" >&2; exit 1 ;;
+  *"CN=Vaylo Sports"*) echo "[apk] ok   APK signed with the Vaylo Sports upload key" ;;
+  *) echo "[apk] FAIL APK signer is ${DN:-<no cert>}" >&2; exit 1 ;;
 esac
 printf '%s' "$SIG" | grep -m1 "SHA-256 digest" | sed 's/^/[apk]     /'
 
-# 4b. Permissions. The whole point of the Health Connect work is reading health
-#     data and nothing else; a single WRITE permission here would mean the app
-#     can alter what the athlete's own device recorded, and it is a policy
-#     rejection in the Play review.
-PERMS="$("$AAPT2" dump permissions "$REL" 2>/dev/null || true)"
+PERMS="$(MSYS_NO_PATHCONV=1 "$AAPT2" dump permissions "$(winpath "$REL")" 2>/dev/null || true)"
+if [ -z "$PERMS" ]; then
+  echo "[apk] FAIL aapt2 returned no permission list — cannot verify the manifest" >&2
+  exit 1
+fi
 WRITES="$(printf '%s' "$PERMS" | grep -c "WRITE" || true)"
 if [ "$WRITES" != "0" ]; then
   echo "[apk] FAIL $WRITES write permission(s) in the release manifest" >&2
@@ -90,94 +74,135 @@ if [ "$WRITES" != "0" ]; then
 fi
 READS="$(printf '%s' "$PERMS" | grep -c "health.READ" || true)"
 echo "[apk] ok   $READS health read permission(s), 0 write"
-
-# 4c. The seed activity is a debug-only backdoor for populating Health Connect
-#     fixtures. It must not exist in a release, or it is an exported component
-#     anyone can invoke.
 if printf '%s' "$PERMS" | grep -q "HcSeedActivity"; then
   echo "[apk] FAIL HcSeedActivity present in release" >&2
   exit 1
 fi
 echo "[apk] ok   no HcSeedActivity in release"
 
-# 4d. Identity. versionCode has to be higher than the last upload or Play
-#     rejects the bundle outright.
-BADGING="$("$AAPT2" dump badging "$REL" 2>/dev/null || true)"
-echo "[apk] ok   $(printf '%s' "$BADGING" | grep -m1 '^package:')"
-echo "[apk] ok   $(printf '%s' "$BADGING" | grep -m1 "targetSdkVersion")"
-
-# 4e. Nothing sensitive baked into the web bundle that ships inside the APK.
+BADGING="$(MSYS_NO_PATHCONV=1 "$AAPT2" dump badging "$(winpath "$REL")" 2>/dev/null || true)"
+if [ -z "$BADGING" ]; then
+  echo "[apk] FAIL aapt2 returned no badging — cannot verify package, target SDK or version" >&2
+  exit 1
+fi
+PACKAGE="$(printf '%s' "$BADGING" | grep -m1 '^package:' || true)"
+TARGET_SDK="$(printf '%s' "$BADGING" | grep -m1 "targetSdkVersion" || true)"
+case "$PACKAGE" in
+  *"name='com.vaylosports.app'"*) echo "[apk] ok   $PACKAGE" ;;
+  *) echo "[apk] FAIL unexpected package: ${PACKAGE:-<missing>}" >&2; exit 1 ;;
+esac
+case "$TARGET_SDK" in
+  *"targetSdkVersion:'36'"*) echo "[apk] ok   $TARGET_SDK" ;;
+  *) echo "[apk] FAIL unexpected target SDK: ${TARGET_SDK:-<missing>}" >&2; exit 1 ;;
+esac
 LEAKS=$(grep -roE "eyJ[A-Za-z0-9_-]{10,}" "$M/android/app/src/main/assets/public" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$LEAKS" != "0" ]; then
   echo "[apk] FAIL $LEAKS JWT(s) in the shipped web bundle" >&2
   exit 1
 fi
 echo "[apk] ok   0 JWTs in the shipped web bundle"
+if find "$M/android/app/src/main/assets/public" -type f -name '*.map' -print -quit | grep -q .; then
+  echo "[apk] FAIL source maps found in the shipped web bundle" >&2
+  exit 1
+fi
+echo "[apk] ok   no source maps in the shipped web bundle"
 
-# --- 5. Publish --------------------------------------------------------------
-mkdir -p "$M/apk"
+if [ ! -f "$JARSIGNER_BIN" ]; then
+  echo "[apk] FAIL jarsigner not found; cannot verify the AAB" >&2
+  exit 1
+fi
+KEYTOOL_BIN="$JAVA_HOME/bin/keytool"
+if [ -f "$KEYTOOL_BIN.exe" ]; then KEYTOOL_BIN="$KEYTOOL_BIN.exe"; fi
+if [ ! -f "$KEYTOOL_BIN" ]; then
+  echo "[apk] FAIL keytool not found; cannot verify the AAB signer" >&2
+  exit 1
+fi
+CERT="$("$KEYTOOL_BIN" -printcert -jarfile "$AAB_SRC" 2>&1 || true)"
+OWNER="$(printf '%s' "$CERT" | grep -m1 'Owner:' || true)"
+case "$OWNER" in
+  *"CN=Vaylo Sports"*) echo "[apk] ok   AAB signed with the Vaylo Sports upload key" ;;
+  *) echo "[apk] FAIL AAB signer is ${OWNER:-<not a signed jar>}" >&2; exit 1 ;;
+esac
+VOUT="$("$JARSIGNER_BIN" -verify -verbose:summary "$AAB_SRC" 2>&1 || true)"
+case "$VOUT" in
+  *"jar verified."*) echo "[apk] ok   AAB signature verifies" ;;
+  *) echo "[apk] FAIL AAB signature did not verify" >&2; exit 1 ;;
+esac
+
 NAME="$(printf '%s' "$BADGING" | grep -m1 "versionName=" | sed "s/.*versionName='\([^']*\)'.*/\1/")"
 CODE="$(printf '%s' "$BADGING" | grep -m1 "versionCode=" | sed "s/.*versionCode='\([^']*\)'.*/\1/")"
-OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-release.apk"
-cp "$REL" "$OUT"
-
-[ "$DEBUG" = "1" ] && cp \
-  "$M/android/app/build/outputs/apk/debug/app-debug.apk" \
-  "$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-debug.apk"
-
-# --- 6. Publish the AAB, verified the same way ------------------------------
-AAB_SRC="$M/android/app/build/outputs/bundle/release/app-release.aab"
-if [ -f "$AAB_SRC" ]; then
-  AAB_OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-release.aab"
-  cp "$AAB_SRC" "$AAB_OUT"
-  echo
-  echo "[apk] --- AAB checks ---"
-  # The upload key is what Play matches the app to, so an AAB signed with
-  # anything else is rejected at upload with a message that does not mention
-  # signing. jarsigner ships with the JDK, which is not on PATH in every
-  # shell — it sits next to the same JAVA_HOME Gradle just used, so look
-  # there first and the check actually runs instead of reporting
-  # "unavailable" and passing for the wrong reason.
-  JARSIGNER="$(command -v jarsigner || true)"
-  if [ -z "$JARSIGNER" ] && [ -x "$JAVA_HOME/bin/jarsigner" ]; then
-    JARSIGNER="$JAVA_HOME/bin/jarsigner"
-  fi
-  if [ -n "$JARSIGNER" ]; then
-    # Two flag traps here, both of which made this check report FAIL on a
-    # correctly signed AAB:
-    #   * `-printcert` is not an option in JDK 21+ — it exits "Illegal option".
-    #   * `-verify` alone prints only "jar verified."; the signer DN is only
-    #     emitted with `-verbose`. `-certs` does not carry it either.
-    # Both streams are captured, because a broken signature writes to stderr.
-    VOUT="$("$JARSIGNER" -verify -verbose:summary "$AAB_SRC" 2>&1 || true)"
-    OWNER="$(printf '%s' "$VOUT" | grep -m1 'Signed by' || true)"
-    case "$OWNER" in
-      *"CN=Vaylo Sports"*)
-        echo "[apk] ok   AAB signed with the Vaylo Sports upload key"
-        printf '%s' "$OWNER" | sed 's/.*"CN=/[apk]     CN=/;s/".*//' ;;
-      *) echo "[apk] FAIL AAB signer is ${OWNER:-<not a signed jar>}" >&2; exit 1 ;;
-    esac
-    # A self-signed upload key is normal and expected — Play re-signs with
-    # Play App Signing — so the chain warnings above are not a finding. A
-    # *verification* failure would be, so check the summary line explicitly.
-    case "$VOUT" in
-      *"jar verified."*) : ;;
-      *) echo "[apk] FAIL AAB signature did not verify" >&2; exit 1 ;;
-    esac
-    echo "[apk] ok   AAB signature verifies"
-  else
-    echo "[apk] FAIL jarsigner not found; cannot verify the AAB signer" >&2
+# Compare against android/app/build.gradle rather than a literal. The literal
+# used to be "1.2.1 (5)" and silently stopped matching once the app moved to
+# 1.2.7 (11): the check that exists to catch a mis-built artifact was itself the
+# reason no artifact could be built. Gradle is the source of truth for the
+# version, so the assertion reads it there.
+EXPECTED_NAME="$(grep -m1 'versionName project.hasProperty' "$M/android/app/build.gradle" | sed "s/.*: *\"\([^\"]*\)\".*/\1/")"
+EXPECTED_CODE="$(grep -m1 'versionCode project.hasProperty' "$M/android/app/build.gradle" | sed "s/.*: *\([0-9][0-9]*\).*/\1/")"
+if [ -z "$EXPECTED_NAME" ] || [ -z "$EXPECTED_CODE" ]; then
+  echo "[apk] FAIL could not read the expected version out of android/app/build.gradle" >&2
+  exit 1
+fi
+if [ "$NAME" != "$EXPECTED_NAME" ] || [ "$CODE" != "$EXPECTED_CODE" ]; then
+  echo "[apk] FAIL expected version ${EXPECTED_NAME} (${EXPECTED_CODE}) from build.gradle, found ${NAME:-unknown} (${CODE:-unknown})" >&2
+  exit 1
+fi
+echo "[apk] ok   version ${NAME} (${CODE}) matches build.gradle"
+APK_OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-release.apk"
+AAB_OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-release.aab"
+DEBUG_OUT="$M/apk/vaylo-sports-${NAME:-unknown}-${CODE:-0}-debug.apk"
+DEBUG_SRC="$M/android/app/build/outputs/apk/debug/app-debug.apk"
+mkdir -p "$M/apk"
+for candidate in "$APK_OUT" "$AAB_OUT"; do
+  if [ -e "$candidate" ]; then
+    echo "[apk] refusing to overwrite existing artifact: $candidate" >&2
     exit 1
   fi
-  echo "[apk] $AAB_OUT"
-  ls -la "$AAB_OUT"
-else
-  echo "[apk] --   no AAB produced at $AAB_SRC" >&2
+done
+if [ "$DEBUG" = "1" ] && [ -e "$DEBUG_OUT" ]; then
+  echo "[apk] refusing to overwrite existing artifact: $DEBUG_OUT" >&2
+  exit 1
+fi
+if [ "$DEBUG" = "1" ] && [ ! -f "$DEBUG_SRC" ]; then
+  echo "[apk] FAIL debug APK missing at $DEBUG_SRC" >&2
+  exit 1
+fi
+cp "$REL" "$APK_OUT"
+cp "$AAB_SRC" "$AAB_OUT"
+if [ "$DEBUG" = "1" ]; then
+  cp "$DEBUG_SRC" "$DEBUG_OUT"
 fi
 
 echo
-echo "[apk] $OUT"
-ls -la "$M/apk"
-echo "[apk] sha256 $(sha256sum "$OUT" | cut -d' ' -f1)"
-echo
-echo "[apk] install with:  adb install -r $OUT"
+echo "[apk] release APK: $APK_OUT"
+echo "[apk] release AAB: $AAB_OUT"
+ls -lh "$APK_OUT" "$AAB_OUT"
+echo "[apk] APK sha256 $(sha256sum "$APK_OUT" | cut -d' ' -f1)"
+echo "[apk] AAB sha256 $(sha256sum "$AAB_OUT" | cut -d' ' -f1)"
+
+# Record the sums in apk/SHA256SUMS.txt.
+#
+# The script computed and printed these from the beginning but never wrote them
+# anywhere, so the manifest drifted: 1.2.9-13 was built, signed and handed out
+# with no entry at all. That failure is worse than having no manifest, because
+# `sha256sum -c` still prints "OK" for every line it does contain — it verifies
+# the subset that happens to be listed and says nothing about the rest, which
+# reads exactly like a clean bill of health for the whole directory.
+#
+# Appending rather than rewriting keeps the file's history: earlier entries are
+# what other people may already have checked a download against, so an existing
+# line is never touched, and a filename already present is never added twice.
+SUMS="$M/apk/SHA256SUMS.txt"
+touch "$SUMS"
+record_sum() {
+  file="$1"
+  name="$(basename "$file")"
+  if grep -qF " *$name" "$SUMS"; then
+    echo "[apk] manifest already lists $name"
+    return 0
+  fi
+  printf '%s *%s\n' "$(sha256sum "$file" | cut -d' ' -f1)" "$name" >> "$SUMS"
+  echo "[apk] recorded $name in apk/SHA256SUMS.txt"
+}
+record_sum "$APK_OUT"
+record_sum "$AAB_OUT"
+if [ "$DEBUG" = "1" ]; then record_sum "$DEBUG_OUT"; fi

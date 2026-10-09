@@ -48,7 +48,7 @@ const PBs = () => {
   return (
     <div className="min-h-screen bg-background pb-24">
       {confetti && (
-        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+        <div className="fixed inset-0 z-[59] pointer-events-none flex items-center justify-center">
           {Array.from({ length: 30 }).map((_, i) => (
             <motion.div key={i} initial={{ y: 0, x: 0, opacity: 1 }}
               animate={{ y: -200 - Math.random() * 200, x: (Math.random() - 0.5) * 400, opacity: 0 }}
@@ -57,8 +57,8 @@ const PBs = () => {
           ))}
         </div>
       )}
-      <div className="px-5 pt-14 pb-4">
-        <p className="text-[11px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5"><Flame size={12} /> Records</p>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
+        <p className="text-[12px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5"><Flame size={12} /> Records</p>
         <h1 className="text-2xl font-display font-bold mt-1">Personal Bests</h1>
         <p className="text-sm text-muted-foreground mt-1">Wall of records. Add manually or auto-detect from workouts.</p>
       </div>
@@ -90,16 +90,16 @@ const PBs = () => {
               className="bg-card border border-border rounded-2xl p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{p.metric}</p>
+                  <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{p.metric}</p>
                   <p className="text-3xl font-display font-bold text-primary mt-1">{p.value}<span className="text-sm text-muted-foreground ml-1">{p.unit}</span></p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(p.date).toLocaleDateString()}</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">{new Date(p.date).toLocaleDateString()}</p>
                 </div>
                 <button onClick={() => remove(p.id)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 size={14} /></button>
               </div>
               <svg viewBox="0 0 100 100" className="w-full h-16 mt-3" preserveAspectRatio="none">
                 <polyline fill="none" stroke="hsl(var(--primary))" strokeWidth="2" points={points} />
               </svg>
-              <div className="flex items-center gap-1 text-[10px] text-success mt-1"><TrendingUp size={10} /> {p.history.length} entries</div>
+              <div className="flex items-center gap-1 text-[12px] text-success mt-1"><TrendingUp size={10} /> {p.history.length} entries</div>
             </motion.div>
           );
         })}

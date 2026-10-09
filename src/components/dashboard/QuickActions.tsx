@@ -1,11 +1,10 @@
 import { motion, useInView } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Dumbbell, Apple, Brain, Trophy, Activity, Gamepad2, ShoppingBag, ScanLine } from "lucide-react";
+import { Dumbbell, Apple, Brain, Trophy, Gamepad2, ShoppingBag, ScanLine } from "lucide-react";
 import { useRef } from "react";
 
 const actions = [
   { icon: Dumbbell, label: "Train", path: "/training", color: "text-primary", bg: "bg-primary/10" },
-  { icon: Activity, label: "Workouts", path: "/workouts", color: "text-primary", bg: "bg-primary/10" },
   { icon: Apple, label: "Nutrition", path: "/nutrition", color: "text-success", bg: "bg-success/10" },
   { icon: ScanLine, label: "Form", path: "/form", color: "text-info", bg: "bg-info/10" },
   { icon: Gamepad2, label: "Arcade", path: "/arcade", color: "text-energy", bg: "bg-energy/10" },

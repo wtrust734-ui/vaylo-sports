@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { USER_TABLES as SHARED_USER_TABLES } from "../_shared/userTables.ts";
 
 // Max age (seconds) of the auth token that may authorise a deletion.
 const MAX_TOKEN_AGE_SECONDS = 30 * 60;
@@ -41,91 +42,7 @@ function json(body: unknown, status = 200) {
 // so it needs no deletion. `account_deletion_events` is absent by design — it
 // keeps only a salted hash of the user id, no personal data.
 // ---------------------------------------------------------------------------
-const USER_TABLES: [table: string, columns: string[]][] = [
-  ["accountability_groups", ["owner_id"]],
-  ["accountability_members", ["user_id"]],
-  ["achievements", ["user_id"]],
-  ["activity_hypes", ["user_id"]],
-  ["athlete_position", ["user_id"]],
-  ["avatar_items", ["user_id"]],
-  ["avatars", ["user_id"]],
-  ["basket_items", ["user_id"]],
-  ["challenge_participants", ["user_id"]],
-  ["challenges", ["creator_id"]],
-  ["chest_claims", ["user_id"]],
-  ["coach_bookings", ["coach_id"]],
-  ["coach_conversations", ["user_id"]],
-  ["coach_memories", ["user_id"]],
-  ["coach_messages", ["user_id"]],
-  ["coin_transactions", ["user_id"]],
-  ["communities", ["owner_id"]],
-  ["community_members", ["user_id"]],
-  ["community_pinned_avatars", ["user_id"]],
-  ["community_posts", ["user_id"]],
-  ["competition_sessions", ["user_id"]],
-  ["creator_profiles", ["user_id"]],
-  ["credit_transactions", ["user_id"]],
-  ["cue_words", ["user_id"]],
-  ["daily_action_logs", ["user_id"]],
-  ["daily_actions", ["user_id"]],
-  ["equipment", ["user_id"]],
-  ["event_pack_ownership", ["user_id"]],
-  ["event_rivals", ["user_id"]],
-  ["events", ["user_id"]],
-  ["fair_usage_events", ["user_id"]],
-  ["friend_codes", ["user_id"]],
-  ["friend_requests", ["from_user_id", "to_user_id"]],
-  ["friendships", ["user_id", "friend_id"]],
-  ["health_connections", ["user_id"]],
-  ["health_samples", ["user_id"]],
-  ["health_sync_state", ["user_id"]],
-  ["health_workouts", ["user_id"]],
-  ["hrv_baselines", ["user_id"]],
-  ["injury_logs", ["user_id"]],
-  ["learning_feedback", ["user_id"]],
-  ["learning_progress", ["user_id"]],
-  ["marketplace_listings", ["creator_id"]],
-  ["meal_logs", ["user_id"]],
-  ["mental_checkins", ["user_id"]],
-  ["mental_reviews", ["user_id"]],
-  ["notification_prefs", ["user_id"]],
-  ["notifications", ["user_id"]],
-  ["nutrition_plans", ["user_id"]],
-  ["outcome_goals", ["user_id"]],
-  ["performance_logs", ["user_id"]],
-  ["performance_metrics", ["user_id"]],
-  ["plan_events", ["user_id"]],
-  ["points_events", ["user_id"]],
-  ["privacy_settings", ["user_id"]],
-  ["process_goals", ["user_id"]],
-  ["profiles", ["user_id"]],
-  ["purchase_analytics", ["user_id"]],
-  ["recovery_logs", ["user_id"]],
-  ["referral_codes", ["user_id"]],
-  ["referrals", ["referrer_id", "referee_id"]],
-  ["shared_activities", ["user_id"]],
-  ["streaks", ["user_id"]],
-  ["subscriptions", ["user_id"]],
-  ["tactical_plans", ["user_id"]],
-  ["team_assignments", ["assigned_to", "assigned_by"]],
-  ["team_members", ["user_id"]],
-  ["teams", ["owner_id"]],
-  ["training_loads", ["user_id"]],
-  ["training_plans", ["user_id"]],
-  ["user_consumables", ["user_id"]],
-  ["user_profile_cosmetics", ["user_id"]],
-  ["user_purchases", ["user_id"]],
-  ["user_region", ["user_id"]],
-  ["user_rewards", ["user_id"]],
-  ["user_roles", ["user_id"]],
-  ["user_segments", ["user_id"]],
-  ["user_settings", ["user_id"]],
-  ["video_form_analyses", ["user_id"]],
-  ["vpr_snapshots", ["user_id"]],
-  ["water_logs", ["user_id"]],
-  ["weekly_reviews", ["user_id"]],
-  ["workouts", ["user_id"]],
-];
+const USER_TABLES = SHARED_USER_TABLES;
 
 /**
  * Rows that hang off a container the athlete owns. These are removed by the
@@ -309,13 +226,16 @@ Deno.serve(async (req) => {
 
     if (residuals.length > 0 || !identityGone || failures.length > 0) {
       inFlight.delete(userId);
+      // Full detail goes to the function logs for support; the response to the
+      // (by now deleted) caller reports only table names and row counts —
+      // never row contents, error text, or internal identifiers.
       console.error("delete-account: INCOMPLETE", JSON.stringify({ residuals, identityGone, failures }));
       return json({
         error: "incomplete",
         message: "Some data could not be deleted. This has been logged — please contact support.",
-        residuals,
+        residuals: residuals.map((r) => ({ table: r.table, column: r.column, rows: r.rows })),
         identity_removed: identityGone,
-        failures,
+        failure_count: failures.length,
       }, 500);
     }
 

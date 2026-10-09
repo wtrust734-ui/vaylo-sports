@@ -50,17 +50,44 @@
     --navy: 230 47% 14%;
     --navy-deep: 232 50% 7%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(272 82% 44%) 0%, hsl(246 84% 62%) 52%, hsl(217 100% 60%) 100%);
+    /* ── Gradients ────────────────────────────────────────────────────────
+       These are the app's loudest surface, so they are the cheapest place to
+       change how the whole thing reads. All of them were retuned in one pass
+       because 110 of the 243 gradient usages in src/ resolve to
+       `--gradient-primary` alone; editing per screen would have meant missing
+       some and double-editing others.
+
+       What changed, and why it was reading as generated:
+         - `--gradient-primary` was a three-stop 135° sweep across violet →
+           indigo → electric blue, i.e. the three hues that every generative
+           layout reaches for, on the primary colour, on every button. It is
+           now a single-hue vertical ramp, so a raised surface still reads as
+           lit from above but stops looking like a gradient demo.
+         - `--gradient-mesh` put three 600–1000px radial blobs behind every
+           screen. Dropped from three to two, the orange one removed entirely
+           (it read as a warm smudge on a cold palette), and the remaining
+           alphas cut by roughly half.
+         - The halos became directional shadows. A 28px blue bloom around a
+           button is the "AI-generated" tell; a downward shadow is what every
+           physical UI does instead, and it survives a dark background better
+           because it describes where the surface sits, not that it is glowing.
+
+       Deliberately left alone: `--gradient-energy` (orange is semantic — it
+       means energy, and the VPR bars key off it), `--gradient-card` (already
+       a 2%-alpha vertical, and flattening it further makes cards disappear
+       into the page), and `--gradient-glass`. */
+
+    --gradient-primary: linear-gradient(180deg, hsl(217 92% 58%) 0%, hsl(224 88% 47%) 100%);
     --gradient-energy: linear-gradient(135deg, hsl(38 100% 57%) 0%, hsl(28 100% 54%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(233 28% 11% / 0.96), hsl(233 28% 7% / 0.98));
     --gradient-glass: linear-gradient(135deg, hsla(272 84% 62% / 0.10), hsla(217 100% 60% / 0.06));
-    --gradient-electric: linear-gradient(135deg, hsl(272 84% 56%), hsl(246 84% 62%), hsl(280 90% 68%));
-    --gradient-purple: linear-gradient(135deg, hsl(272 84% 62%), hsl(281 90% 72%));
-    --gradient-mesh: radial-gradient(900px 600px at 18% -8%, hsla(272 84% 62% / 0.18), transparent 62%), radial-gradient(760px 520px at 88% 0%, hsla(217 100% 60% / 0.16), transparent 62%), radial-gradient(980px 640px at 50% 118%, hsla(38 100% 57% / 0.08), transparent 66%);
+    --gradient-electric: linear-gradient(135deg, hsl(258 68% 56%), hsl(232 82% 58%));
+    --gradient-purple: linear-gradient(135deg, hsl(272 68% 58%), hsl(286 74% 68%));
+    --gradient-mesh: radial-gradient(1100px 720px at 14% -10%, hsla(224 72% 50% / 0.10), transparent 64%), radial-gradient(900px 620px at 92% -6%, hsla(217 90% 55% / 0.07), transparent 64%);
 
-    --shadow-glow: 0 0 28px hsla(217 100% 60% / 0.22);
+    --shadow-glow: 0 2px 12px -4px hsla(217 100% 46% / 0.5), 0 1px 0 hsla(0 0% 100% / 0.07) inset;
     --shadow-card: 0 10px 36px hsla(232 50% 4% / 0.55), 0 1px 0 hsla(0 0% 100% / 0.06) inset;
-    --shadow-electric: 0 0 42px hsla(217 100% 60% / 0.32);
+    --shadow-electric: 0 6px 20px -8px hsla(217 100% 46% / 0.6);
     --shadow-soft: 0 8px 30px hsla(232 30% 3% / 0.45);
 
     --sidebar-background: 233 28% 7%;
@@ -82,6 +109,23 @@
   html {
     scroll-behavior: smooth;
     scrollbar-color: hsl(var(--border)) transparent;
+    /* Native scroll feel, in two parts.
+
+       `overscroll-behavior-y: none` stops the Android WebView pulling the
+       page past its own bounds and painting the white overscroll glow over the
+       dark UI — on a dark app that flash is very visible, and no native app
+       ever shows it.
+
+       `-webkit-overflow-scrolling: touch` is iOS momentum scrolling. Ignored
+       on Android, so it costs nothing there, and it is what makes a long
+       leaderboard decelerate natively on an iPhone instead of snapping. */
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+    /* Paint the root as well as body. The WebView's own background is white,
+       and `body` only paints its own box — anything above it (the safe-area
+       padding the status bar sits over) showed the WebView's white as a band
+       above the dark UI. Same colour as body so the two are indistinguishable. */
+    background-color: hsl(var(--background));
   }
 
   body {
@@ -108,10 +152,105 @@
      doubling it. One root rule fixes both ends of that.
 
      The bottom inset is deliberately *not* applied to the body. The tab bar is
-     position:fixed and anchors itself to `env(safe-area-inset-bottom)`; giving
+     position:fixed and anchors itself to `--vaylo-inset-bottom`; giving
      the body bottom padding as well would lift page content twice. Content
      clears the tab bar with pb-28 in AppLayout, which is what that padding is
      for. */
+  /* ── The insets, resolved once ───────────────────────────────────────
+     Every inset in the app reads one of these four variables. Nothing
+     calls `env()` directly any more, and the reason is that `env()` alone
+     is not the authoritative value on Android.
+
+     Capacitor 8 registers its SystemBars plugin unconditionally
+     (Bridge.java) and, with the default `insetsHandling: "css"`, reads
+     real `WindowInsetsCompat` for systemBars + displayCutout and injects
+     them onto documentElement as `--safe-area-inset-*` px values. It does
+     that because `env()` is the less reliable of the two: Capacitor's own
+     comment notes the IME case is only corrected natively "in newer
+     WebView versions", so it handles the keyboard offset itself for all
+     of them. Reading the injected value first means a keyboard opening
+     does not leave a stale bottom inset under the tab bar.
+
+     The chain is: injected value → native env() → 0. Both fallbacks are
+     lazy, so a device that reports nothing at all still lays out sanely.
+     Capacitor also zeroes the bottom inset while the IME is visible,
+     which is why nothing may cache these values in JS. */
+  :root {
+    --vaylo-inset-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --vaylo-inset-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+    --vaylo-inset-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    --vaylo-inset-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+
+    /* How far a second bottom-anchored notice has to sit above the floor to
+       clear the terms re-acceptance banner, when that banner is on screen.
+
+       It exists because the banner and the stored-preferences notice are both
+       `position: fixed`, both anchored to the same corner, and neither knows
+       about the other: measured at 390x844 the banner occupies 431-756px and
+       the notice 626-764px, so 130px of the notice sat *under* the banner's
+       translucent card and its text ghosted through the banner's own copy.
+
+       The banner is the only thing that publishes this (its height depends on
+       the copy, so a constant here would go stale the next time the text
+       changes), and it defaults to 0px, which is the plain "no banner" stack:
+       the notice then sits exactly where it always did. */
+    --vaylo-notice-lift: 0px;
+
+    /* Screen-change timing, in two phases, because one 160ms fade read as
+       "the screen blinked and then arrived" rather than as one movement. The
+       outgoing panel fades out first (120ms) while it is still the panel in
+       layout, then the incoming one fades in (240ms) on an ease-out curve. The
+       asymmetry is deliberate: an ease-out arriving panel should still be
+       finishing when the eye expects it done, whereas the departing one wants
+       to be gone early so the swap is not visible as a seam. 360ms end to end
+       is inside the band that reads as deliberate on a 60Hz panel and as
+       instant on a 120Hz one. If you change FADE_OUT_MS in TabShell.tsx,
+       change --vaylo-nav-fade-out here in the same commit — the JS dwell and
+       this duration have to agree or the swap lands on the wrong frame. */
+    --vaylo-nav-fade-out: 140ms;
+    --vaylo-nav-fade: 280ms;
+    --vaylo-nav-fade: 280ms;
+
+    /* ── Spacing scale ────────────────────────────────────────────────────
+       The status-bar inset is already applied to `body` (see below), so
+       `--vaylo-screen-top` is the *design* gutter layered on top of it: the
+       first line of every primary view starts exactly 12px below the status
+       bar, at every breakpoint. One value, so a screen cannot drift.
+
+       The horizontal gutter is the one value here with no token, and it has
+       drifted twice: the dashboard and six detail screens used 16px
+       (`px-4 sm:px-5`, `mx-4 sm:mx-5`, `px-4`) while every other page — and the
+       shared BackBar that sits at the top of every detail screen — used 20px.
+       That meant switching tabs moved the content column 4px sideways, and on
+       those six screens the content sat 4px inside the back arrow above it.
+       They are all `px-5` now. If this value ever needs to be a token, make it
+       one everywhere in the same change: a gutter honoured by some pages and
+       not others is the drift the token was for. */
+    --vaylo-screen-top: 12px;
+    --vaylo-title-gap: 24px;   /* section header → content below it      */
+    --vaylo-card-pad: 16px;    /* card interior                          */
+    --vaylo-card-gap: 16px;    /* between stacked cards                  */
+
+    /* ── Surface + elevation ──────────────────────────────────────────────
+       One border and two elevations. The border is a translucent white at 8%
+       because the app is dark-first and a solid stroke reads as a seam under
+       OLED; the card shadow is deliberately *downward only* (a negative spread
+       keeps it from blooming sideways) so stacks of cards read as one column
+       rather than as a pile of trays. The FAB gets a coloured halo instead, so
+       its elevation cannot be confused with a card's. */
+    --vaylo-surface-border: 1px solid rgba(255, 255, 255, 0.08);
+    --vaylo-elev-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 22px -16px rgba(4, 6, 18, 0.9);
+    --vaylo-elev-fab: 0 10px 30px -8px hsla(217 100% 60% / 0.55), 0 2px 10px rgba(4, 6, 18, 0.55);
+
+    /* ── Navigation glass ─────────────────────────────────────────────────
+       Scoped to the bottom bar and to nothing else (see the mobile perf block
+       below, which turns blur off app-wide). 16px is the value the bar was
+       specified with; saturate(1.2) is what keeps the icons from going grey
+       over a warm-coloured page. */
+    --vaylo-nav-glass: blur(16px) saturate(1.2);
+    --vaylo-nav-surface: hsl(var(--card) / 0.72);
+  }
+
   html {
     /* `clip` rather than `hidden`: it stops the document scrolling sideways
        to reveal an off-screen element without creating a scroll container, so
@@ -121,10 +260,13 @@
     overflow-x: clip;
   }
   body {
-    padding-top: env(safe-area-inset-top, 0px);
-    /* Guarantees a usable minimum on a device that reports a 0px inset rather
-       than none at all. Zero here means the WebView is not edge-to-edge and no
-       padding is wanted; this only ever applies in the degenerate case. */
+    padding-top: var(--vaylo-inset-top);
+    /* No floor is applied on purpose. A 0px inset is not a failure mode to
+       paper over — it is the correct answer on a WebView that is not
+       edge-to-edge, where the status bar already sits outside the content
+       box and padding it again would push the whole app down for nothing.
+       Adding a `max(12px, …)` here would trade a real device for that
+       hypothetical, so the degenerate case is left to resolve to 0. */
     min-height: 100dvh;
   }
 
@@ -259,6 +401,184 @@
   transform: scaleX(-1);
 }
 
+/* ── UI overhaul: motion + compositing primitives ───────────────────────────
+   Three jobs, one place, so a screen never hand-rolls its own timing:
+
+     1. ONE navigation curve and duration for every screen change. The app
+        previously mixed 180ms springy easings with y-offsets, which forced a
+        layout pass per navigation. A pure opacity fade on a promoted layer
+        costs the compositor and nothing else.
+
+     2. `.cv-auto` for below-the-fold sections of long pages. The browser
+        skips layout+paint for off-screen sections entirely (and reserves the
+        intrinsic size so the scrollbar never jumps). Applied to sections, not
+        to every row: content-visibility on a row inside a transformed parent
+        can fight scroll anchoring.
+
+     3. `.gpu-layer` / `.will-transform` for anything that moves under a
+        finger (sheets, drawers). Promoting the layer up-front is what removes
+        the first-frame jitter on swipe-to-dismiss. */
+@layer utilities {
+  /* Navigation fade — the two halves of a crossfade.
+
+     An *animation*, not a transition, and that is the whole trick: a tab panel
+     that is inactive is `display: none` (the `hidden` attribute), and a
+     transition cannot fire on an element coming back from `display: none` — it
+     has no previous rendered value to interpolate from, so the screen would
+     pop in fully opaque and the fade would silently do nothing. An animation
+     restarts every time the element starts being rendered, so the fade fires
+     on every activation, including the first.
+
+     Two rules, because there are two phases. The panel that is leaving keeps
+     its place in layout and animates `data-leaving`; the one arriving takes
+     `data-active`. They are never both true at once, so exactly one panel is
+     painted at any moment and the page height changes only on the swap frame.
+
+     Only `opacity` moves, with no layout properties in play: the cost is one
+     compositor pass instead of a layout + paint + the old y-offset slide. No
+     `will-change` is set — the animation is short and infrequent, and a
+     permanent promotion of a full-page panel is a permanent extra layer on a
+     low-end Android WebView. */
+  .nav-fade {
+    /* The scroll offset is set by hand in TabShell (per-tab scroll memory).
+       Scroll anchoring would compete with it and win on the frame the two
+       panels swap, because the incoming panel is a different height. */
+    overflow-anchor: none;
+  }
+  .nav-fade[data-active="true"] {
+    animation: vaylo-nav-fade var(--vaylo-nav-fade, 280ms) cubic-bezier(0, 0, 0.2, 1) both;
+  }
+  .nav-fade[data-leaving="true"] {
+    animation: vaylo-nav-out var(--vaylo-nav-fade-out, 140ms) cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  /* Detail screens (AppLayout's keyed wrapper) — the SAME curve and duration
+     as the arriving tab phase, but starting from 0.2 opacity rather than 0.
+
+     Measured before this existed: the keyed swap removes the outgoing screen
+     in one frame and animates the incoming one from opacity 0, so the main
+     content area showed bare background for the first ~50ms of every drill-in
+     and every back — a blink on each navigation, and the kind of roughness
+     that reads worse on the APK's WebView than on a desktop browser, where a
+     faster frame makes the ramp less noticeable.
+
+     0.2 is the balance the owner's feedback asked for: high enough that the
+     first painted frame is the screen itself rather than bare background — the
+     blink this rule exists to prevent — and low enough that the ramp is
+     visible as movement instead of reading as an instant swap. It is the same
+     duration, so nothing about it is slower; it is only more legible as a
+     transition. It still honours prefers-reduced-motion through the
+     global zero-duration rule above: instant swap, same as every other
+     animation here. Tabs keep the full 0→1 crossfade in .nav-fade — they have
+     a phase-1 fade-out behind them, so starting them mid-way would pop. */
+  .nav-enter {
+    /* Same reason as .nav-fade: the scroll offset is set by hand on swap, and
+       scroll anchoring would compete with it on the frame panels change. */
+    overflow-anchor: none;
+    animation: vaylo-nav-enter var(--vaylo-nav-fade, 280ms) cubic-bezier(0, 0, 0.2, 1) both;
+  }
+
+  .gpu-layer {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  .will-transform {
+    will-change: transform;
+  }
+  /* Note there is deliberately no `.will-transform-settled` escape hatch: the
+     rule is that `will-transform` is applied by conditional class only while an
+     element is actually moving. A permanent will-change is a permanent extra
+     compositor layer, and on a low-end Android WebView that is memory the
+     compositor cannot reclaim while the screen stays open. */
+
+  /* `--cv-size` is the browser's guess at the section's height while it is off
+     screen. Getting it roughly right is what stops the scrollbar (and any
+     scroll anchoring) from jumping when the section does get rendered, so it is
+     a per-section value with a conservative default rather than one number for
+     every list in the app. `auto <size>` remembers the real measured size after
+     the first render, so a wrong guess costs one frame, not one per scroll. */
+  .cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--cv-size, 360px);
+  }
+
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  /* The card treatment, in one class, so a list item, an action tile and a
+     metrics card cannot end up with three different borders. Use with an
+     explicit radius utility when the surface is not a 16px card. */
+  .card-surface {
+    background-color: hsl(var(--card));
+    border: var(--vaylo-surface-border);
+    border-radius: 1rem;
+    box-shadow: var(--vaylo-elev-card);
+  }
+  .card-pad {
+    padding: var(--vaylo-card-pad);
+  }
+
+  /* ── Tactile press ───────────────────────────────────────────────────── */
+  /* CSS, not a JS animation: the press has to start on touch-down, and a
+     motion component's whileTap waits for the gesture to be recognised.
+     140ms in, so a fast tap still shows a visible dip. Disabled and
+     aria-disabled controls do not move — a press that announces itself on an
+     unavailable action is worse than no press. */
+  .press {
+    transition: transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+  .press:disabled,
+  .press[aria-disabled="true"] {
+    transform: none;
+  }
+
+  /* ── Bottom-bar glass ────────────────────────────────────────────────── */
+  /* The ONE surface where a backdrop blur earns its cost: it is small, it is
+     the only element that continuously scrolls over live content, and without
+     it the bar reads as a slab laid over the page. Applied here and not
+     app-wide — the app-wide blur was stacking 4–6 layers deep and was the
+     single biggest composite cost on low-end Android WebViews (see the perf
+     block at the bottom of this file, which re-disables it everywhere else). */
+  .nav-glass {
+    background-color: var(--vaylo-nav-surface);
+    backdrop-filter: var(--vaylo-nav-glass);
+    -webkit-backdrop-filter: var(--vaylo-nav-glass);
+  }
+
+  /* ── Charts: let the axis labels paint outside the svg ───────────────────
+     Recharts draws a polar chart's angle-axis labels at the outer end of each
+     axis, anchored at the label's own start on the right-hand side. A word wide
+     enough therefore runs past the svg's right edge — and the svg clips to its
+     viewport by default, so it is cut mid-word. The VPR radar rendered
+     "Endurance" as "Enduranc" for exactly this reason.
+
+     The room the label needs already exists: the chart sits inside a card whose
+     24px padding is empty. `overflow: visible` lets the text use it, instead of
+     shrinking the chart or abbreviating every axis name to fit a box that was
+     never the real boundary. The card still clips, so the worst case is a label
+     that reaches the card's own edge rather than one that loses letters. */
+  .recharts-surface {
+    overflow: visible;
+  }
+}
+
+@keyframes vaylo-nav-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vaylo-nav-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes vaylo-nav-enter {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -266,6 +586,12 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  /* The navigation fade is already a two-phase cross-fade, so the zero
+     duration above makes each phase instant. The phase-1 dwell is a JS timer
+     rather than a CSS duration, so it cannot be caught by this block —
+     TabShell checks the same media query and skips the dwell entirely, which
+     is why `prefers-reduced-motion` gets an instant swap rather than an
+     instant swap preceded by 120ms of nothing. */
 }
 
 /* ── Mobile perf: kill the biggest jank sources on phones ─────────────── */
@@ -298,6 +624,16 @@
   /* BottomNav & drawer become opaque so text pops instead of muddy glass */
   .supports-\[backdrop-filter\]\:bg-card\/70 {
     background-color: hsl(var(--card) / 0.98) !important;
+  }
+
+  /* ...with one deliberate exception: the bottom bar keeps its glass. It is
+     explicitly re-enabled here — the same block that turns blur off — so the
+     exception lives next to the rule it makes an exception to, and nobody has
+     to guess later whether the blur survived by accident. One small, fixed
+     element over live content is a bounded cost; blur on every card was not. */
+  .nav-glass {
+    backdrop-filter: var(--vaylo-nav-glass) !important;
+    -webkit-backdrop-filter: var(--vaylo-nav-glass) !important;
   }
 }
 @media (max-width: 768px) {

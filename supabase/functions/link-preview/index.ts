@@ -67,7 +67,28 @@ Deno.serve(async (req) => {
   const id = (url.searchParams.get("id") ?? "").trim();
   const ref = (url.searchParams.get("ref") ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
 
-  const appBase = (Deno.env.get("PUBLIC_APP_URL") ?? "https://vaylosports.com").replace(/\/$/, "");
+  const configuredAppBase = Deno.env.get("PUBLIC_APP_URL")?.trim() ?? "";
+  let appBase = "";
+  try {
+    const parsedAppBase = new URL(configuredAppBase);
+    const hostname = parsedAppBase.hostname.toLowerCase();
+    const preview = [".lovable.app", ".vercel.app", ".netlify.app", ".pages.dev", ".web.app", ".firebaseapp.com", ".github.io", ".onrender.com"]
+      .some((suffix) => hostname.endsWith(suffix)) || hostname === "lovable.app";
+    if (parsedAppBase.protocol === "https:" && !parsedAppBase.username && !parsedAppBase.password &&
+        !parsedAppBase.search && !parsedAppBase.hash && !preview &&
+        hostname !== "localhost" && hostname !== "127.0.0.1" && !hostname.endsWith(".localhost") &&
+        hostname !== "supabase.co" && !hostname.endsWith(".supabase.co")) {
+      appBase = configuredAppBase.replace(/\/$/, "");
+    }
+  } catch {
+    // No canonical host yet: public link previews return a neutral unavailable page.
+  }
+  if (!appBase) {
+    return new Response("Public Vaylo links are not configured.", {
+      status: 503,
+      headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
   const withRef = (path: string) => `${appBase}${path}${ref ? `${path.includes("?") ? "&" : "?"}ref=${ref}` : ""}`;
   const fallbackCard = `${fnBase()}/og-image`;
 

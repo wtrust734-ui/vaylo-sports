@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ad 5 — HOW THE SCORE IS BUILT (18.0s · 1:1)</title>
+<link rel="stylesheet" href="core.css" />
+<style>
+  .stage { width: 1080px; height: 1080px; }
+  .scene { gap: 0; padding: 0 90px; }
+
+  /* This ad contains no adjectives. Every line is a step the viewer can
+     verify themselves. It is the ad to run against a sceptic. */
+  .stepno { font-size: 24px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; color: hsl(var(--electric-glow)); }
+  .h { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 84px; line-height: .96; letter-spacing: -.03em; }
+  .h.sm { font-size: 68px; }
+
+  /* step 1 — the log */
+  .logcard {
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .14);
+    border-radius: 18px; padding: 26px 30px; display: grid; gap: 12px;
+  }
+  .logcard .r { display: flex; justify-content: space-between; font-size: 28px; font-weight: 600; }
+  .logcard .r b { color: hsl(var(--electric-glow)); font-variant-numeric: tabular-nums; }
+
+  /* step 2 — six domains */
+  .dom { display: grid; gap: 15px; }
+  .dom .d { display: grid; grid-template-columns: 200px 1fr 56px; gap: 18px; align-items: center; font-size: 26px; font-weight: 600; }
+  .dom .d span:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .dom .bar-track { height: 20px; }
+
+  /* step 3 — the weighting formula */
+  .formula {
+    display: grid; gap: 14px;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .14);
+    border-radius: 18px; padding: 30px;
+  }
+  .formula .fr { display: grid; grid-template-columns: 230px 1fr 62px; gap: 18px; align-items: center; font-size: 25px; font-weight: 600; }
+  .formula .fr span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: hsl(var(--foreground) / .55); }
+  .formula .bar-track { height: 16px; }
+  .formula .eq { font-family: 'Space Grotesk', sans-serif; font-size: 30px; color: hsl(var(--muted-foreground)); padding-top: 6px; }
+
+  /* step 4 — the result */
+  .res { display: flex; align-items: center; gap: 44px; justify-content: center; }
+  .res .n { font-size: 280px; line-height: .8; }
+  .res .meta { display: grid; gap: 8px; }
+  .res .meta .k { font-size: 22px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+  .res .meta .v { font-size: 38px; font-weight: 700; }
+
+  .cta-btn { height: 64px; font-size: 24px; padding: 0 30px; }
+  .compliance { max-width: 780px; }
+</style>
+</head>
+<body data-guides="0">
+
+<div class="deck">
+  <div class="stage-wrap"><div class="stage" id="stage">
+
+    <div class="guides">
+      <div class="reels-top"></div><div class="reels-right"></div><div class="reels-bottom"></div>
+    </div>
+
+    <!-- ============ 1. YOU LOG IT ============ -->
+    <div class="scene" id="b1">
+      <div class="stepno">Step 1 of 4</div>
+      <div class="h">YOU LOG<br />THE METRICS.</div>
+      <div class="logcard" id="b1-card">
+        <div class="r"><span>5×30m sprint</span><b>4.11s</b></div>
+        <div class="r"><span>Vertical jump</span><b>58cm</b></div>
+        <div class="r"><span>Ball throw</span><b>34m</b></div>
+        <div class="r"><span>Reaction</span><b>218ms</b></div>
+        <div class="r"><span>Control · 1–10</span><b>7</b></div>
+      </div>
+    </div>
+
+    <!-- ============ 2. SIX DOMAINS ============ -->
+    <div class="scene" id="b2">
+      <div class="stepno">Step 2 of 4</div>
+      <div class="h sm">SIX DOMAINS<br />SCORE 0–100.</div>
+      <div class="dom" id="b2-dom">
+        <div class="d"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="71"></span></span><span>71</span></div>
+        <div class="d"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="84"></span></span><span>84</span></div>
+        <div class="d"><span>Endurance</span><span class="bar-track"><span class="bar-fill" data-w="58"></span></span><span>58</span></div>
+        <div class="d"><span>Repeat</span><span class="bar-track"><span class="bar-fill" data-w="66"></span></span><span>66</span></div>
+        <div class="d"><span>Skill</span><span class="bar-track"><span class="bar-fill energy" data-w="49"></span></span><span>49</span></div>
+        <div class="d"><span>Reaction</span><span class="bar-track"><span class="bar-fill" data-w="61"></span></span><span>61</span></div>
+      </div>
+      <div class="h sm" style="font-size:34px;color:hsl(var(--foreground)/.5);font-family:'Inter',sans-serif;font-weight:600;letter-spacing:0">
+        Each domain needs 6 metrics across 4+ areas to unlock.
+      </div>
+    </div>
+
+    <!-- ============ 3. THE WEIGHTING ============ -->
+    <div class="scene" id="b3">
+      <div class="stepno">Step 3 of 4</div>
+      <div class="h sm">YOUR SPORT<br />SETS THE WEIGHTS.</div>
+      <div class="formula">
+        <div class="fr"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="88"></span></span><span>×1.4</span></div>
+        <div class="fr"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="72"></span></span><span>×1.2</span></div>
+        <div class="fr"><span>Endurance</span><span class="bar-track"><span class="bar-fill" data-w="54"></span></span><span>×0.9</span></div>
+        <div class="fr"><span>Reaction</span><span class="bar-track"><span class="bar-fill" data-w="48"></span></span><span>×0.8</span></div>
+        <div class="eq" id="b3-eq">Sport: Football · Weighted by sport profile</div>
+      </div>
+    </div>
+
+    <!-- ============ 4. THE RESULT ============ -->
+    <div class="scene" id="b4">
+      <div class="stepno">Step 4 of 4</div>
+      <div class="h sm">ONE NUMBER.</div>
+      <div class="res">
+        <div class="t-num n grad-text" id="b4-n">0</div>
+        <div class="meta">
+          <div class="k">Performance rating</div>
+          <div class="v">VPR</div>
+          <div class="k" style="color:hsl(var(--energy))">Computed on device</div>
+        </div>
+      </div>
+      <div class="h sm grad-text" id="b4-h" style="text-align:center">YOUR SPORT.<br />YOUR SCORE.</div>
+      <div class="cta-btn" id="b4-cta">VAYLO SPORTS</div>
+      <div class="compliance" id="b4-comp">VPR is calculated from metrics you log. Vaylo Sports is not a medical device and is not professional advice.</div>
+    </div>
+
+  </div></div>
+</div>
+
+<div class="hud">
+  <div class="hud-top">
+    <span class="hud-title">Ad 5 — HOW THE SCORE IS BUILT</span>
+    <span class="hud-meta">18.0s · 1:1 1080×1080 · mechanism explainer · zero adjectives</span>
+    <span class="hud-note">The retargeting/sceptic asset. No claim in it can age badly.</span>
+  </div>
+  <div class="transport">
+    <button class="tb" id="play">▶  Play</button>
+    <button class="tb" id="restart">↺</button>
+    <button class="tb" id="loop" aria-pressed="true">Loop</button>
+    <button class="tb" id="guides" aria-pressed="false">Guides</button>
+    <button class="tb" id="clean">Clean</button>
+    <div class="scrub"><input type="range" id="scrub" value="0" /><div class="beats"></div></div>
+    <span class="tc" id="tc">00:00.00 / 00:18.00</span>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const stage = $('#stage');
+const ad = new VayloAd({ stage, duration: 18, title: 'Ad 5 — HOW THE SCORE IS BUILT' });
+window.ad = ad;
+
+[[0, 'LOG IT'], [4.2, 'SIX DOMAINS'], [9.0, 'WEIGHTING'], [13.2, 'RESULT']].forEach(([t, l]) => ad.beat(t, l));
+
+ad.scene($('#b1'), 0, 4.2);
+ad.scene($('#b2'), 4.2, 9.0);
+ad.scene($('#b3'), 9.0, 13.2);
+ad.scene($('#b4'), 13.2, 18);
+
+/* ---- 1. YOU LOG THE METRICS ---- */
+ad.add($('#b1 .h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,34px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 0.15, to: 0.85, easing: 'cubic-bezier(.16,1,.3,1)' });
+document.querySelectorAll('#b1-card .r').forEach((r, i) => {
+  ad.add(r, [
+    { offset: 0, opacity: 0, transform: 'translateX(-24px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: 0.9 + i * 0.24, to: 0.9 + i * 0.24 + 0.46, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+
+/* ---- 2. SIX DOMAINS ---- */
+ad.add($('#b2 .h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,30px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 4.35, to: 5.0, easing: 'cubic-bezier(.16,1,.3,1)' });
+document.querySelectorAll('#b2-dom .d').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 5.1 + i * 0.42;
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-20px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: t0, to: t0 + 0.3 });
+  ad.drive(t0 + 0.1, t0 + 0.95, (p) => { fill.style.width = `${w * p}%`; });
+});
+ad.add($('#b2 .h.sm:last-child'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 8.0, to: 8.6 });
+
+/* ---- 3. THE WEIGHTING ---- */
+ad.add($('#b3 .h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,30px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 9.15, to: 9.8, easing: 'cubic-bezier(.16,1,.3,1)' });
+document.querySelectorAll('#b3 .fr').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 9.9 + i * 0.44;
+  ad.add(row, [{ offset: 0, opacity: 0, transform: 'translateX(-20px)' }, { offset: 1, opacity: 1, transform: 'translateX(0)' }],
+    { from: t0, to: t0 + 0.3 });
+  ad.drive(t0 + 0.1, t0 + 0.9, (p) => { fill.style.width = `${w * p}%`; });
+});
+ad.add($('#b3-eq'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 12.2, to: 12.8 });
+
+/* ---- 4. THE RESULT ---- */
+ad.add($('#b4 > .h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,28px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 13.35, to: 13.85, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.count($('#b4-n'), 13.9, 15.2, 0, 62);
+ad.add($('#b4-n'), [
+  { offset: 0, transform: 'scale(1)' },
+  { offset: .58, transform: 'scale(1.1)' },
+  { offset: .84, transform: 'scale(.975)' },
+  { offset: 1, transform: 'scale(1)' }
+], { from: 15.2, to: 15.8, easing: 'linear' });
+ad.add($('#b4-h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,30px,0)', filter: 'blur(11px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 15.9, to: 16.5, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#b4-cta'), [
+  { offset: 0, opacity: 0, transform: 'scale(.9)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 16.5, to: 16.95, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#b4-comp'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 16.95, to: 17.4 });
+
+mountPlayer(ad);
+</script>
+</body>
+</html>

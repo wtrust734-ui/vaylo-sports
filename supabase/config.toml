@@ -18,7 +18,6 @@ project_id = "vvwhausdjzdmsyxekrcl"
 # that only exists on your machine. The dev ports here match vite.config.ts (8080)
 # plus Vite's fallback default (5173).
 [auth]
-site_url = "http://localhost:8080"
 additional_redirect_urls = [
   "http://localhost:8080",
   "http://localhost:5173",
@@ -35,10 +34,25 @@ additional_redirect_urls = [
   # capacitor://localhost. Both are the app's own origin, not a public site.
   "https://localhost",
   "capacitor://localhost",
-  # TODO before launch: add the deployed web origin (and its www alias) here and
-  # set site_url to it. Until then every password-reset link points at
-  # localhost, a machine no user has.
+  # --- Deployed web app ---------------------------------------------------
+  # The browser build of this same app. Without this entry Google, Discord and
+  # Facebook sign-in bounce the user back to a URL GoTrue refuses, and every
+  # password-reset email opens localhost — a machine no user has.
+  #
+  # This is server configuration, not app code: no change to the app can make
+  # sign-in work without it, and the failure mode is a login screen that just
+  # quietly refuses, which is why it is worth stating rather than assuming.
+  "https://vaylo-sports-app.netlify.app",
+  # Netlify deploy-preview hostnames, so a branch deploy can finish a sign-in
+  # instead of failing on an unrecognised redirect.
+  "https://*.netlify.app",
 ]
+
+# site_url is where an auth email returns the user to when the request carries
+# no redirect of its own. It must therefore be the real public origin, not the
+# dev server — a password-reset link sent to localhost is a broken link that
+# only the person who asked for it will discover.
+site_url = "https://vaylo-sports-app.netlify.app"
 
 # Email confirmation is OFF while no SMTP provider is configured.
 #
@@ -70,4 +84,104 @@ enable_confirmations = false
 verify_jwt = false
 
 [functions.link-preview]
+verify_jwt = false
+
+# The two endpoints the marketing website's forms post to.
+#
+# Both are called by a static page with no session, so both must accept an
+# unauthenticated request. Declaring that HERE, rather than passing
+# --no-verify-jwt at deploy time, is the difference between a setting and a
+# memory: the flag is recorded nowhere in the repository, so a later redeploy
+# without it silently switches the function back to requiring a JWT and every
+# form on the website starts answering 401.
+#
+# support-request was in exactly that state until 2026-10-04 — live and
+# working, but with its JWT setting living only in a past deploy. Adding it
+# here means the next support-request redeploy cannot break the support form
+# by omission.
+[functions.support-request]
+verify_jwt = false
+
+# The sponsorship questionnaire on the website.
+#
+# Same reasoning as support-request: the person filling it in is a brand, has no
+# Vaylo account and therefore no session, so there is no JWT to present and
+# leaving the default would answer 401 to every company that tried to get in
+# touch — silently, since a failed fetch on a static page looks like nothing at
+# all to the visitor.
+#
+# Safe to expose for the same structural reason as the other website forms. The
+# function validates every field, re-derives the interest answers from a closed
+# key set so a crafted request cannot invent a key, rate-limits on a salted hash
+# of the client address, requires an explicit terms acceptance, and inserts with
+# the service role into a table no client role can read or write. The most a
+# successful call can do is add one row to the enquiry queue and one email.
+[functions.sponsor-enquiry]
+verify_jwt = false
+
+# The support unsubscribe endpoint, opened from the one-click control at the
+# foot of every support reply. Like waitlist-unsubscribe below it is reached by
+# a browser with no session, so it cannot present a JWT and would answer 401 to
+# the one person it exists to help.
+#
+# Safe to expose for the same structural reason: the token is the ticket
+# reference, it is not derived from the address, the GET only renders a
+# confirmation page and changes nothing, and the most a valid token can do is
+# stop reply mail for the single ticket it belongs to. It was deployed without
+# this block and answered 401 to every recipient who clicked.
+[functions.support-request-unsubscribe]
+verify_jwt = false
+
+# The waiting list. Same reasoning, and this one was caught by testing the
+# deployed function rather than the build: it first shipped with the default
+# verify_jwt = true and answered 401 to every signup.
+[functions.waitlist-signup]
+verify_jwt = false
+
+# The unsubscribe endpoint is opened from a link inside an email, so it is
+# reached by a browser that has no session and cannot present a JWT. It is safe
+# to expose for the same structural reason as the signup endpoint: the token is
+# a random UUID that is not derived from the address, the GET only renders a
+# confirmation page and changes nothing, and the most a valid token can do is
+# remove the single person who holds it.
+[functions.waitlist-unsubscribe]
+verify_jwt = false
+
+# The scheduled launch sequence.
+#
+# verify_jwt is OFF here for the same reason it is off for signup, but for a
+# different caller: this endpoint is called by pg_cron through pg_net, and a
+# cron job has no Supabase session and therefore no JWT to present. Making it
+# present one would mean pasting a service-role key into `cron.job`, in plain
+# text, where anyone who can read that table could take it.
+#
+# The gate is a dedicated shared secret instead: the job reads it from Vault at
+# fire time and sends it as `x-cron-secret`, and the function compares it in
+# constant time. The secret lives only in Vault and in this function's secrets,
+# never in this file. Setting this back to true would silently break the
+# schedule (the job would start getting 401s that nobody is watching).
+[functions.waitlist-campaigns]
+verify_jwt = false
+
+# waitlist-broadcast deliberately keeps the default. It mails the whole list,
+# so it requires a valid JWT and then re-checks that the caller holds the
+# service-role key — see the comments in the function for why it is not gated
+# on an admin session instead.
+
+# The Stripe webhook that completes a coach signup.
+#
+# verify_jwt is OFF because the caller is Stripe, which has no Vaylo account and
+# therefore no JWT to present. The security model is not "nobody needs to
+# authenticate" — it is a signed payload: the request must carry a
+# `Stripe-Signature` header that is an HMAC-SHA256 over `timestamp.rawBody` with
+# the endpoint's signing secret, within a five-minute freshness window. The check
+# lives in supabase/functions/_shared/stripeSignature.ts and is unit-tested
+# against digests computed outside this repository.
+#
+# Unlike the public form endpoints above, this one changes state: it is the only
+# writer of `creator_profiles.is_coach`. That is exactly why the signature check is
+# the whole gate, and why there is no path through this function that acts on an
+# unsigned request. With STRIPE_WEBHOOK_SECRET unset it answers 503 rather than
+# trusting anything, so the marketplace can ship before the Stripe account exists.
+[functions.stripe-webhook]
 verify_jwt = false

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>APK screenshot inspector</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101114; overflow: hidden; }
+  /* A fixed window over an absolutely-positioned image. The previous version let
+     the translated image sit in normal flow, so the document grew past the image
+     and the empty area below it rendered as if it were part of the screenshot —
+     which made every region measurement I took from it wrong. */
+  #vp { position: fixed; inset: 0; overflow: hidden; }
+  #im { position: absolute; top: 0; left: 0; display: block; }
+  #badge {
+    position: fixed; top: 0; left: 0; z-index: 9;
+    font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #000e; color: #8fd; padding: 3px 7px; border-radius: 0 0 6px 0;
+    pointer-events: none; white-space: pre;
+  }
+</style>
+</head>
+<body>
+  <div id="badge"></div>
+  <div id="vp"><img id="im" alt="" /></div>
+<script>
+  // ?f=<file> &w=<css width of the whole 1080px screenshot> &x= &y=<pan, in css px>
+  //
+  // The emulator is 1080x2400 at 420dpi, so the app's layout viewport is
+  // 411.4 x 914.3 css px. At w=411 with a 411x914 window the screenshot fills it
+  // exactly, one css pixel of the screenshot per css pixel of the window, which
+  // is the only setting where a defect seen here is certainly a defect in the app
+  // and not an artefact of scaling.
+  const q = new URLSearchParams(location.search);
+  const f = q.get("f") || "01-launch.png";
+  const w = parseFloat(q.get("w") || "411");
+  const x = parseFloat(q.get("x") || "0");
+  const y = parseFloat(q.get("y") || "0");
+  const im = document.getElementById("im");
+  const badge = document.getElementById("badge");
+  im.onload = () => {
+    const k = w / im.naturalWidth;
+    const dh = Math.round(im.naturalHeight * k);
+    badge.textContent =
+      `${f}  w=${w} k=${k.toFixed(3)}  window=${window.innerWidth}x${window.innerHeight}` +
+      `\ntop=+${Math.round(y)}px  shows css y ${Math.round(y / k)}..${Math.round((y + window.innerHeight) / k)}` +
+      ` of 411x${Math.round(im.naturalHeight / 2.625)}`;
+  };
+  im.src = f;
+  im.style.width = w + "px";
+  im.style.left = -x + "px";
+  im.style.top = -y + "px";
+</script>
+</body>
+</html>

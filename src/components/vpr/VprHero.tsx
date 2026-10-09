@@ -92,18 +92,38 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
                 <AnimatedNumber value={overall} duration={1.1} />
               </motion.span>
             )}
-            <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{t("vpr.title")}</span>
+            <span className="mt-1.5 text-[12px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{t("vpr.title")}</span>
           </div>
         </div>
 
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 max-w-full">
+          {/* `flex w-fit`, not `inline-flex`.
+
+              An inline-level box shares a line with whatever follows it, and
+              what follows here is a bare inline <span> (Delta's fallback) — so
+              the badge and the text ran together as "RUNNINGTrend needs 2
+              saves", with the pill's right border touching the T. `space-y-2`
+              only separates BLOCK siblings; an inline one ignores its top
+              margin entirely, which is why the line looked pinned to the pill
+              as well.
+
+              `w-fit` is what keeps it pill-shaped: a plain `flex` would stretch
+              to the column and the rounded border would read as a panel. */}
+          <div className="flex w-fit max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1">
             <Activity size={12} className="text-primary shrink-0" aria-hidden />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground truncate">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted-foreground truncate">
               {sport ?? t("vpr.performance")}
             </span>
           </div>
-          <Delta value={sys.delta} unit={sys.snapshotCount < 2 ? t("vpr.trendNeedsTwo") : undefined} className="text-sm" />
+          {/* Wrapped in a block so it is a row of the stack like its siblings.
+
+              Delta renders an inline element — a bare span when there is no
+              value yet, an inline-flex pill once there is one — so as a direct
+              child here it either merged into the badge's line (no value) or
+              sat flush against the badge with no gutter (value present). */}
+          <div>
+            <Delta value={sys.delta} unit={sys.snapshotCount < 2 ? t("vpr.trendNeedsTwo") : undefined} className="text-sm" />
+          </div>
           <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3">
             {overall == null
               ? t("vpr.logFirstMetric")
@@ -122,7 +142,7 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
             <VprFactorBar key={f.key} label={f.label} value={f.value} weight={f.weight} animated={inView} />
           ))}
           {sys.factors.length > 4 && (
-            <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="pt-1 text-[12px] leading-relaxed text-muted-foreground">
               {t("vpr.lowestVsWeighting", { factor: sys.factors[0].label, sport: sport ?? t("vpr.sportFallback") })}
             </p>
           )}

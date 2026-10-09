@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { appHref } from "@/lib/routerBase";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Gift, Copy, Check, Users, Crown, Trophy } from "lucide-react";
-import { publicAppUrl } from "@/lib/share";
+import { isPreviewHost, publicAppUrl } from "@/lib/share";
+import { isNativeShell } from "@/lib/platform";
 import { promoBonus } from "@/lib/credits";
 import { toast } from "sonner";
 
@@ -38,8 +40,13 @@ export default function Referrals() {
     })();
   }, [user]);
 
-  // Shared links must not point at capacitor://localhost on a device.
-  const link = publicAppUrl(`/auth?ref=${code}`) || `${window.location.origin}/auth?ref=${code}`;
+  // Native and preview builds have no honest public app URL yet: show/copy the
+  // referral code by itself rather than leaking localhost or a preview origin.
+  const canShareLink = !isNativeShell() && !isPreviewHost(window.location.hostname) && !!publicAppUrl();
+  const link = canShareLink ? publicAppUrl(`/auth?ref=${code}`) : "";
+  const shareValue = link || (code ? `Referral code: ${code}` : "");
+  const sharePlaceholder = link ? "Invite link" : "Share this code with friends";
+
 
   const doRedeem = async () => {
     setBusy(true);
@@ -57,8 +64,15 @@ export default function Referrals() {
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(link);
-    setCopied(true); setTimeout(() => setCopied(false), 1500);
+    if (!shareValue) return;
+    try {
+      await navigator.clipboard.writeText(shareValue);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      toast.success(link ? "Invite link copied" : "Referral code copied");
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
   };
 
   const granted = referrals.filter((r) => r.status === "granted").length;
@@ -67,11 +81,11 @@ export default function Referrals() {
   const referrerCredits = promoBonus("referral_referrer");
 
   return (
-    <div className="px-5 pt-8 pb-24 max-w-2xl mx-auto">
+    <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-1"><Gift className="h-6 w-6 text-energy" /> Refer & earn</h1>
       <p className="text-sm text-muted-foreground mb-4">Share Vaylo Sports with friends. They get {refereeCredits} credits, you get {referrerCredits}.</p>
       <a
-        href="/referral-leaderboard"
+        href={appHref("/referral-leaderboard")}
         className="mb-6 flex items-center justify-between rounded-2xl border border-energy/40 bg-energy/10 px-4 py-3 text-sm font-semibold text-energy"
       >
         <span className="flex items-center gap-2"><Trophy size={16} /> Monthly recruiter leaderboard</span>
@@ -85,8 +99,8 @@ export default function Referrals() {
           <p className="text-3xl font-bold font-mono">{code}</p>
         </div>
         <div className="flex gap-2">
-          <Input value={link} readOnly className="font-mono text-xs" />
-          <Button onClick={copy} variant="outline" className="shrink-0">
+          <Input value={shareValue} placeholder={sharePlaceholder} readOnly className="font-mono text-xs" />
+          <Button onClick={copy} disabled={!shareValue} variant="outline" className="shrink-0" aria-label="Copy referral link or code">
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           </Button>
         </div>
@@ -114,7 +128,7 @@ export default function Referrals() {
         </div>
       </div>
 
-      <p className="text-[10px] text-muted-foreground mt-4 text-center">One redemption per account. Rewards are auto-applied. Self-referrals and disposable accounts are not eligible.</p>
+      <p className="text-[12px] text-muted-foreground mt-4 text-center">One redemption per account. Rewards are auto-applied. Self-referrals and disposable accounts are not eligible.</p>
     </div>
   );
 }

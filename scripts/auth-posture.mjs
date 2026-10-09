@@ -25,9 +25,17 @@
 import { readFileSync } from "node:fs";
 
 const env = readFileSync(".env", "utf8");
-const envVar = (k) => ((env.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1] || "").trim().replace(/^["']|["']$/g, "");
-const U = envVar("VITE_SUPABASE_URL");
-const KEY = envVar("VITE_SUPABASE_PUBLISHABLE_KEY");
+const localEnv = (() => {
+  try { return readFileSync(".env.local", "utf8"); } catch { return ""; }
+})();
+const envVar = (source, k) => ((source.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1] || "").trim().replace(/^["']|["']$/g, "");
+const U = envVar(env, "VITE_SUPABASE_URL");
+const KEY = envVar(localEnv, "VITE_SUPABASE_PUBLISHABLE_KEY") || envVar(env, "VITE_SUPABASE_PUBLISHABLE_KEY");
+const keyLooksPublishable = KEY.startsWith("sb_publishable_");
+if (KEY && !keyLooksPublishable) {
+  console.error("auth:posture: refusing a legacy JWT-shaped key; set VITE_SUPABASE_PUBLISHABLE_KEY to the rotatable sb_publishable_ key");
+  process.exit(1);
+}
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CLEANUP = process.argv.includes("--cleanup");
 

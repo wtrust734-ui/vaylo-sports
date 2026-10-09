@@ -44,8 +44,6 @@
     "primaryNav": "मुख्य नेविगेशन"
   },
   "quickActions": {
-    "logWorkout": "वर्कआउट दर्ज करें",
-    "logWorkoutDesc": "सेशन शुरू करें या पूरा करें",
     "logResult": "परिणाम दर्ज करें",
     "logResultDesc": "प्रतियोगिता का परिणाम दर्ज करें",
     "recoveryCheckIn": "रिकवरी चेक-इन",
@@ -58,13 +56,14 @@
     "train": {
       "title": "ट्रेनिंग",
       "subtitle": "सेशन, प्लान और तकनीक।",
-      "primaryCta": "वर्कआउट शुरू करें",
       "groupDaily": "दैनिक ट्रेनिंग",
       "groupProgress": "प्रगति",
       "workouts": "वर्कआउट",
       "workoutsDesc": "सेशन दर्ज करें और समीक्षा करें",
       "trainingPlans": "ट्रेनिंग प्लान",
       "trainingPlansDesc": "आपका सक्रिय प्लान और सप्ताह",
+      "availability": "उपलब्धता",
+      "availabilityDesc": "छुट्टियाँ, परीक्षा और विराम",
       "routines": "रूटीन",
       "routinesDesc": "दोहराए जा सकने वाले वॉर्म-अप और ड्रिल",
       "crossTraining": "क्रॉस-ट्रेनिंग",
@@ -86,6 +85,8 @@
       "vprDesc": "आपकी समग्र रेटिंग और कारक",
       "metricsHub": "मीट्रिक्स हब",
       "metricsHubDesc": "लोड, ट्रेंड और रिकॉर्डिंग",
+      "insights": "विश्लेषण",
+      "insightsDesc": "आपका प्रशिक्षण आज क्या कहता है",
       "skills": "स्किल",
       "skillsDesc": "स्पोर्ट्स स्किल एनालिटिक्स",
       "development": "विकास",
@@ -112,7 +113,7 @@
       "nutrition": "पोषण",
       "nutritionDesc": "भोजन, पानी और लक्ष्य",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "मुकाबला",
@@ -149,7 +150,6 @@
     "readinessDown": "कल से {{value}}",
     "coachInsight": "कोच की सलाह",
     "viewInsight": "सलाह देखें",
-    "startSession": "सेशन शुरू करें",
     "noVprYet": "VPR अनलॉक करने के लिए कुछ सेशन दर्ज करें।",
     "noSessionToday": "कोई सेशन नियोजित नहीं — अपना प्लान देखें।",
     "welcomeBack": "वापसी पर स्वागत है",
@@ -275,6 +275,7 @@
     "activityFeed": "गतिविधि फ़ीड",
     "groupTrain": "ट्रेनिंग",
     "trainingPlans": "ट्रेनिंग प्लान",
+    "availability": "उपलब्धता",
     "workouts": "वर्कआउट",
     "routines": "रूटीन",
     "crossTraining": "क्रॉस-ट्रेनिंग",
@@ -317,6 +318,9 @@
     "profile": "प्रोफ़ाइल",
     "openMenu": "मेनू खोलें",
     "closeMenu": "मेनू बंद करें",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "अभिभावक एक्सेस",
+    "startingAnalysis": "शुरुआती विश्लेषण",
+    "insights": "विश्लेषण"
   }
 }

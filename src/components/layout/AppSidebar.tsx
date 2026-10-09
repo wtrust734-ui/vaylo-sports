@@ -3,30 +3,26 @@ import {
   Dumbbell,
   User,
   Activity,
-  Menu,
   X,
   LogOut,
   Zap,
   ShoppingBag,
   ScanLine,
   Gamepad2,
-  Users,
   MessageSquare,
   Package,
   Medal,
   Target,
-  Swords,
   TrendingUp,
   Fingerprint,
   Flag,
+  CalendarRange,
   Shuffle,
   GraduationCap,
   BarChart3,
   Award,
   Eye,
-  Sparkles,
   Crosshair,
-  Rss,
   Flame,
   Timer,
   Gift,
@@ -38,9 +34,11 @@ import {
   Gauge,
   Scale,
   Brain,
+  ShieldCheck,
   ShieldAlert,
   MapPin,
   Watch,
+  Users,
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
@@ -80,7 +78,6 @@ const navGroups: NavGroup[] = [
     icon: Home,
     items: [
       { icon: Home, labelKey: "sidebar.dashboard", path: "/" },
-      { icon: Rss, labelKey: "sidebar.activityFeed", path: "/feed" },
     ],
   },
   {
@@ -89,12 +86,11 @@ const navGroups: NavGroup[] = [
     icon: Dumbbell,
     items: [
       { icon: Zap, labelKey: "sidebar.trainingPlans", path: "/training" },
-      { icon: Dumbbell, labelKey: "sidebar.workouts", path: "/workouts" },
+      { icon: CalendarRange, labelKey: "sidebar.availability", path: "/availability" },
       { icon: Timer, labelKey: "sidebar.routines", path: "/routines" },
       { icon: Shuffle, labelKey: "sidebar.crossTraining", path: "/cross-training" },
       { icon: Flame, labelKey: "sidebar.pbs", path: "/pbs" },
       { icon: ScanLine, labelKey: "sidebar.formAnalysis", path: "/form" },
-      { icon: Eye, labelKey: "sidebar.arOverlay", path: "/ar-overlay" },
     ],
   },
   {
@@ -130,10 +126,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Calendar, labelKey: "sidebar.events", path: "/events" },
       { icon: Flag, labelKey: "sidebar.challenges", path: "/challenges" },
-      { icon: Trophy, labelKey: "sidebar.leaderboard", path: "/leaderboard" },
       { icon: Users, labelKey: "sidebar.friends", path: "/friends" },
-      { icon: Sparkles, labelKey: "sidebar.communities", path: "/communities" },
-      { icon: Swords, labelKey: "sidebar.opponents", path: "/opponents" },
       { icon: Gamepad2, labelKey: "sidebar.arcade", path: "/arcade" },
     ],
   },
@@ -160,9 +153,27 @@ const navGroups: NavGroup[] = [
       { icon: Gift, labelKey: "sidebar.referEarn", path: "/referrals" },
       { icon: MapPin, labelKey: "sidebar.notifications", path: "/notifications" },
       { icon: User, labelKey: "sidebar.profile", path: "/profile" },
+      { icon: ShieldCheck, labelKey: "sidebar.guardian", path: "/guardian" },
     ],
   },
 ];
+
+/**
+ * Open the navigation drawer from anywhere.
+ *
+ * The persistent hamburger is gone: a fixed control in the top-left corner
+ * covered the first 44px of every screen's own title and had to be cleared by
+ * hand on ~50 pages. Navigation is now entered from where it belongs — the
+ * Profile tab's "All sections" row, and the hub pages themselves — and this
+ * event is the one wire between them, matching the `vaylo:*` event pattern
+ * already used for cross-component actions (see vaylo:add-coin-bundle).
+ */
+export const OPEN_NAV_EVENT = "vaylo:open-nav";
+
+export const openAppNav = (): void => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(OPEN_NAV_EVENT));
+};
 
 const STORAGE_KEY = "vaylo:sidebar-expanded";
 
@@ -301,6 +312,13 @@ const AppSidebar = () => {
     [navigate],
   );
 
+  // Opened by openAppNav() rather than by a button rendered here.
+  useEffect(() => {
+    const open = () => setOpen(true);
+    window.addEventListener(OPEN_NAV_EVENT, open);
+    return () => window.removeEventListener(OPEN_NAV_EVENT, open);
+  }, []);
+
   const handleSignOut = useCallback(async () => {
     await signOut();
     setOpen(false);
@@ -329,7 +347,7 @@ const AppSidebar = () => {
           onClick={() => handleHeaderClick(group)}
           aria-expanded={expandedNow}
           aria-controls={`section-${group.titleKey}`}
-          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
+          className={`press flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
             activeGroup
               ? "bg-white/[0.06] text-foreground"
               : hasActiveChild
@@ -338,7 +356,7 @@ const AppSidebar = () => {
           }`}
         >
           <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[11px] ${
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[12px] ${
               activeGroup
                 ? "border-primary/30 bg-primary/15 text-primary"
                 : hasActiveChild
@@ -357,7 +375,7 @@ const AppSidebar = () => {
               <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-glow" aria-hidden />
             )}
             {!expandedNow && (
-              <span className="min-w-[18px] rounded-full bg-white/[0.06] px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-muted-foreground">
+              <span className="min-w-[18px] rounded-full bg-white/[0.06] px-1.5 py-0.5 text-center text-[12px] font-bold leading-none text-muted-foreground">
                 {group.items.length}
               </span>
             )}
@@ -388,7 +406,7 @@ const AppSidebar = () => {
                         type="button"
                         onClick={() => handleNav(item.path)}
                         aria-current={active ? "page" : undefined}
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all ${
+                        className={`press flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all ${
                           active
                             ? "bg-gradient-primary text-primary-foreground shadow-glow font-semibold border border-white/10"
                             : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground border border-transparent"
@@ -410,14 +428,14 @@ const AppSidebar = () => {
 
   return (
     <>
-      {/* Mobile hamburger — solid (no blur) for WebView perf */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-label={t("sidebar.openMenu")}
-        className="fixed start-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-card shadow-soft text-foreground hover:bg-card/90 lg:hidden"
-      >
-        <Menu size={18} />
-      </button>
+      {/* The mobile hamburger used to be here. It was a `fixed` control in the
+          start-top corner of every screen, which meant page content had to
+          reserve ~56px of vertical space on ~50 pages to avoid sitting under
+          it, and the app's own titles started a third of the way down the
+          screen for a control most taps never needed. Removed per the layout
+          overhaul: the drawer is still the full navigation catalogue, but it is
+          opened deliberately (Profile → All sections, or a hub's own header)
+          through openAppNav(). */}
 
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 start-0 z-30 hidden w-[272px] flex-col border-e border-white/[0.06] bg-card/60 backdrop-blur-2xl lg:flex">
@@ -428,7 +446,7 @@ const AppSidebar = () => {
           </div>
           <div className="min-w-0">
             <span className="block font-display text-[17px] font-bold tracking-tight leading-none">Vaylo</span>
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sports</span>
+            <span className="block text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sports</span>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 pb-4 no-scrollbar" aria-label={t("navigation.sections")}>
@@ -441,7 +459,7 @@ const AppSidebar = () => {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold leading-none">{profile?.full_name || t("dashboard.athleteFallbackName")}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{formatSports(profile?.sport)}</p>
+              <p className="truncate text-[12px] text-muted-foreground">{formatSports(profile?.sport)}</p>
             </div>
           </div>
           <button
@@ -465,23 +483,36 @@ const AppSidebar = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 bg-[#060712]/70 lg:hidden"
+              className="fixed inset-0 z-[57] bg-[#060712]/70 lg:hidden"
             />
             <motion.aside
               initial={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
               transition={{ type: "spring", stiffness: 340, damping: 32 }}
-              className="fixed inset-y-0 start-0 z-50 flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A] lg:hidden shadow-2xl"
+              /* Above the tab bar, not level with it.
+
+                 This drawer was z-50, the same as BottomNav's, and AppLayout
+                 renders <AppSidebar /> before <BottomNav />. Two siblings at
+                 the same z-index paint in DOM order, so the tab bar won: it
+                 stayed visible and tappable on top of the open drawer, and
+                 its pill sat across the drawer's own footer — the row holding
+                 Sign out. Tapping a nav item behind an open drawer also
+                 navigated the page underneath it.
+
+                 57/58 clears the whole floating stack: BottomNav z-50, the
+                 quick-action scrim z-55 and its sheet z-56. A drawer is
+                 modal, so it belongs over all of them. */
+              className="fixed inset-y-0 start-0 z-[58] flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A] lg:hidden shadow-2xl"
             >
-              <div className="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-white/[0.06]">
+              <div className="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,var(--vaylo-inset-top))] border-b border-white/[0.06]">
                 <div className="flex items-center gap-2.5">
                   <div className="h-9 w-9 rounded-xl overflow-hidden bg-gradient-primary shadow-glow flex items-center justify-center">
                     <img src={logo} alt="Vaylo Sports" className="h-9 w-9 object-cover" />
                   </div>
                   <div className="min-w-0 leading-none">
                     <span className="block font-display text-lg font-bold tracking-tight leading-none">Vaylo</span>
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sports</span>
+                    <span className="block text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sports</span>
                   </div>
                 </div>
                 <button
@@ -495,7 +526,7 @@ const AppSidebar = () => {
               <nav className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar" aria-label={t("navigation.sections")}>
                 {navGroupsFiltered.map((g) => renderGroup(g, "mobile"))}
               </nav>
-              <div className="border-t border-white/[0.06] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="border-t border-white/[0.06] px-4 py-4 pb-[max(1rem,var(--vaylo-inset-bottom))]">
                 <CommunityLink />
                 <button
                   type="button"

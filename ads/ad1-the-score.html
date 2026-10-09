@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ad 1 — THE SCORE (25.0s · 9:16)</title>
+<link rel="stylesheet" href="core.css" />
+<style>
+  /* ---- authored at 1080 × 1920, the true 9:16 ad canvas ---- */
+  .stage { width: 1080px; height: 1920px; }
+
+  .scene { gap: 0; }
+
+  /* --- 1. THE WOUND (0.0 – 5.2) --- */
+  #s1 { gap: 60px; }
+  #s1 .head { font-size: 118px; text-align: center; padding: 0 90px; }
+  #s1 .head em { font-style: normal; color: hsl(var(--muted-foreground)); }
+  #s1 .sub { font-size: 40px; color: hsl(var(--foreground) / .5); text-align: center; padding: 0 160px; }
+  #s1 .void {
+    position: absolute; inset: 0; z-index: -1;
+    background: radial-gradient(1100px 800px at 50% 42%, hsla(232 50% 12% / .9), transparent 70%);
+  }
+
+  /* --- 2. THE TRACKING (5.2 – 10.4): a phone full of logged metrics --- */
+  #s2 .col { display: grid; gap: 54px; justify-items: center; }
+  #s2 .cap { font-size: 46px; color: hsl(var(--foreground) / .62); text-align: center; padding: 0 165px; }
+
+  /* --- 3. THE TURN (10.4 – 13.6): the counter lands --- */
+  #s3 { gap: 40px; }
+  #s3 .score { max-width: 100%; }
+  #s3 .score { font-size: 460px; }
+  #s3 .of { font-size: 40px; letter-spacing: .3em; color: hsl(var(--muted-foreground)); font-weight: 800; }
+  #s3 .verdict { font-size: 52px; text-align: center; padding: 0 170px; }
+
+  /* --- 4. THE PROOF (13.6 – 19.8): real VPR screen, all six domains --- */
+  #s4 { gap: 46px; }
+  #s4 .cap { font-size: 38px; color: hsl(var(--foreground) / .58); text-align: center; padding: 0 165px; }
+
+  /* --- 5. THE ARGUMENT (19.8 – 22.6) --- */
+  #s5 { gap: 44px; padding: 0 60px; }
+  #s5 .row { display: flex; align-items: center; gap: 22px; }
+  #s5 .pill {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 38px;
+    padding: 20px 36px; border-radius: 999px; white-space: nowrap;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .2);
+  }
+  #s5 .arrow { font-size: 40px; color: hsl(var(--electric-glow)); }
+  #s5 .pill.on { background: var(--gradient-electric); color: #fff; border-color: transparent; font-size: 29px; }
+
+  /* --- 6. THE CLOSE (22.6 – 25.0) --- */
+  #s6 { gap: 48px; }
+  #s6 .line { font-size: 112px; text-align: center; padding: 0 80px; }
+</style>
+</head>
+<body data-guides="0">
+
+<div class="deck">
+  <div class="stage-wrap"><div class="stage" id="stage">
+
+    <svg width="0" height="0" style="position:absolute">
+      <defs>
+        <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="hsl(272 84% 56%)" />
+          <stop offset="50%" stop-color="hsl(246 84% 62%)" />
+          <stop offset="100%" stop-color="hsl(280 90% 68%)" />
+        </linearGradient>
+      </defs>
+    </svg>
+
+    <div class="guides">
+      <div class="reels-top"></div><div class="reels-right"></div><div class="reels-bottom"></div>
+    </div>
+
+    <!-- ============ 1. THE WOUND ============ -->
+    <div class="scene" id="s1">
+      <div class="void"></div>
+      <div class="t-display head" id="s1-head">
+        <span class="reveal-line"><span>YOU'VE BEEN</span></span>
+        <span class="reveal-line"><span>TRACKING</span></span>
+        <span class="reveal-line"><span><em>FOR YEARS.</em></span></span>
+      </div>
+      <div class="t-body sub" id="s1-sub">Strava. Runtastic. A spreadsheet. A watch that counts but never tells you.</div>
+    </div>
+
+    <!-- ============ 2. THE TRACKING ============ -->
+    <div class="scene" id="s2">
+      <div class="col">
+        <div class="phone" id="s2-phone">
+          <div class="phone-notch"><i></i></div>
+          <div class="ui">
+            <div class="ui-brand">VAYLO SPORTS</div>
+            <div class="ui-eyebrow">Log a metric</div>
+            <div class="ui-card">
+              <div class="ui-row"><span>Vertical jump</span><strong>cm</strong></div>
+              <div class="ui-row"><span>5×30m sprint</span><strong>s</strong></div>
+              <div class="ui-row"><span>Cooper 12min</span><strong>m</strong></div>
+              <div class="ui-row"><span>Ball throw</span><strong>m</strong></div>
+              <div class="ui-row"><span>Reaction</span><strong>ms</strong></div>
+              <div class="ui-row"><span>Skill · Control</span><strong>1–10</strong></div>
+            </div>
+            <div class="ui-foot">Logged. Stored. Shown to you. Never compared to anything.</div>
+          </div>
+        </div>
+        <div class="t-body cap" id="s2-cap">Every workout, every test, every number —<br />logged. And scored by nothing.</div>
+      </div>
+    </div>
+
+    <!-- ============ 3. THE TURN ============ -->
+    <div class="scene" id="s3">
+      <div class="t-label" style="color:hsl(var(--muted-foreground));font-size:34px">Your performance rating</div>
+      <div class="t-num score grad-text" id="s3-score">0</div>
+      <div class="t-label of">OUT OF 100</div>
+      <div class="t-body verdict" id="s3-verdict">One number. Built from what <em>you</em> logged.</div>
+    </div>
+
+    <!-- ============ 4. THE PROOF ============ -->
+    <div class="scene" id="s4">
+      <div class="phone" id="s4-phone">
+        <div class="phone-notch"><i></i></div>
+        <div class="ui">
+          <div class="ui-brand">VAYLO SPORTS PERFORMANCE RATING</div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div class="t-num grad-text" style="font-size:56px" id="s4-score">0</div>
+            <div>
+              <div class="ui-eyebrow">Archetype</div>
+              <div style="font-weight:700;font-size:13px">All-Round Power</div>
+            </div>
+          </div>
+          <div class="ui-card" id="s4-bars">
+            <div class="ui-dom"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="71"></span></span><span>71</span></div>
+            <div class="ui-dom"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="84"></span></span><span>84</span></div>
+            <div class="ui-dom"><span>Endurance</span><span class="bar-track"><span class="bar-fill" data-w="58"></span></span><span>58</span></div>
+            <div class="ui-dom"><span>Repeat</span><span class="bar-track"><span class="bar-fill" data-w="66"></span></span><span>66</span></div>
+            <div class="ui-dom"><span>Skill</span><span class="bar-track"><span class="bar-fill energy" data-w="49"></span></span><span>49</span></div>
+            <div class="ui-dom"><span>Reaction</span><span class="bar-track"><span class="bar-fill" data-w="61"></span></span><span>61</span></div>
+          </div>
+          <div class="ui-foot">Sport: Football · Weighted by sport profile</div>
+        </div>
+      </div>
+      <div class="t-body cap" id="s4-cap">Six domains. Weighted for your sport. Calculated on your device from your own logs.</div>
+    </div>
+
+    <!-- ============ 5. THE ARGUMENT ============ -->
+    <div class="scene" id="s5">
+      <div class="t-display" style="font-size:66px;text-align:center;padding:0 70px">TEN SPORTS.<br /><span style="font-size:52px;color:hsl(var(--foreground)/.5)">ONE SCORE THAT TRAVELS.</span></div>
+      <div style="display:grid;gap:30px;margin-top:20px">
+        <div class="row"><span class="pill">10km</span><span class="arrow">→</span><span class="pill on" style="font-size:32px">Score weighted for running</span></div>
+        <div class="row"><span class="pill">90' kick-out</span><span class="arrow">→</span><span class="pill on">Score weighted for football</span></div>
+        <div class="row"><span class="pill">100m fly</span><span class="arrow">→</span><span class="pill on">Score weighted for sprints</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 6. THE CLOSE ============ -->
+    <div class="scene" id="s6">
+      <div class="t-display line" id="s6-l1"><span class="reveal-line"><span>YOUR SPORT.</span></span></div>
+      <div class="t-display line grad-text" id="s6-l2"><span class="reveal-line"><span>YOUR SCORE.</span></span></div>
+      <div class="cta-btn" id="s6-cta">VAYLO SPORTS</div>
+      <div class="compliance" id="s6-comp">VPR is calculated from metrics you log. Vaylo Sports is not a medical device and is not professional advice. Train to your own ability.</div>
+    </div>
+
+  </div></div>
+</div>
+
+<div class="hud">
+  <div class="hud-top">
+    <span class="hud-title">Ad 1 — THE SCORE</span>
+    <span class="hud-meta">25.0s · 9:16 1080×1920 · brand film · no VO, sound design only</span>
+    <span class="hud-note">Claim: VPR only. No AI. No price.</span>
+  </div>
+  <div class="transport">
+    <button class="tb" id="play">▶  Play</button>
+    <button class="tb" id="restart">↺</button>
+    <button class="tb" id="loop" aria-pressed="true">Loop</button>
+    <button class="tb" id="guides" aria-pressed="false">Guides</button>
+    <button class="tb" id="clean">Clean</button>
+    <div class="scrub"><input type="range" id="scrub" value="0" /><div class="beats"></div></div>
+    <span class="tc" id="tc">00:00.00 / 00:25.00</span>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const stage = $('#stage');
+
+const ad = new VayloAd({ stage, duration: 25, title: 'Ad 1 — THE SCORE' });
+window.ad = ad;
+
+/* ---- beat ruler -------------------------------------------------- */
+[[0, 'HOOK'], [5.2, 'TRACKING'], [10.4, 'TURN'], [13.6, 'PROOF'],
+ [19.8, 'ARGUMENT'], [22.6, 'CLOSE']].forEach(([t, l]) => ad.beat(t, l));
+
+/* ---- scenes ----------------------------------------------------- */
+ad.scene($('#s1'), 0, 5.2);
+ad.scene($('#s2'), 5.2, 10.4);
+ad.scene($('#s3'), 10.4, 13.6);
+ad.scene($('#s4'), 13.6, 19.8);
+ad.scene($('#s5'), 19.8, 22.6);
+ad.scene($('#s6'), 22.6, 25);
+
+/* ---- 1. THE WOUND ------------------------------------------------ */
+const wound = [
+  [0, 0.15], [0.7, 0.5], [1.5, 0.85], [2.6, 1.0], [4.3, 1.0], [5.2, 1.0]
+];
+ad.add($('#s1-head .reveal-line:nth-child(1) > span'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,60px,0)', filter: 'blur(14px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 0.1, to: 0.9, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s1-head .reveal-line:nth-child(2) > span'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,60px,0)', filter: 'blur(14px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 0.45, to: 1.25, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s1-head .reveal-line:nth-child(3) > span'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,60px,0)', filter: 'blur(14px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 0.8, to: 1.6, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s1-sub'), [
+  { offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }
+], { from: 2.1, to: 3.0 });
+/* No scene-level opacity cue here. Scenes cut on their window (ad.scene owns
+   visibility); a fade cue whose window is narrower than its scene would, under
+   backwards fill, hide the scene for its entire life. */
+
+/* ---- 2. THE TRACKING --------------------------------------------- */
+ad.add($('#s2-phone'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,60px,0) scale(.94)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0) scale(1)' }
+], { from: 5.35, to: 6.3, easing: 'cubic-bezier(.16,1,.3,1)' });
+// metric rows land one at a time — this IS the "you've been tracking" proof
+document.querySelectorAll('#s2-phone .ui-card .ui-row').forEach((row, i) => {
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-16px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: 6.0 + i * 0.16, to: 6.0 + i * 0.16 + 0.4 });
+});
+ad.add($('#s2-cap'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,24px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 7.6, to: 8.4 });
+ad.add($('#s2-phone'), [
+  { offset: 0, opacity: 1 }, { offset: 1, opacity: 1 }
+], { from: 5.35, to: 10.4, fill: 'both' });
+
+/* ---- 3. THE TURN — the number lands ------------------------------- */
+ad.add($('#s3'), [
+  { offset: 0, opacity: 0, transform: 'scale(1.14)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 10.4, to: 10.8, easing: 'cubic-bezier(.2,.8,.2,1)' });
+ad.count($('#s3-score'), 10.6, 12.2, 0, 62);
+// overshoot on the landing, then settle — the only "punch" in the film
+ad.add($('#s3-score'), [
+  { offset: 0, transform: 'scale(1)' },
+  { offset: .72, transform: 'scale(1.09)' },
+  { offset: .86, transform: 'scale(.975)' },
+  { offset: 1, transform: 'scale(1)' }
+], { from: 12.2, to: 12.9, easing: 'linear' });
+ad.add($('#s3 .of'), [
+  { offset: 0, opacity: 0, letterSpacing: '.5em' },
+  { offset: 1, opacity: 1, letterSpacing: '.3em' }
+], { from: 12.3, to: 13.0 });
+ad.add($('#s3-verdict'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,20px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 12.8, to: 13.5 });
+
+/* ---- 4. THE PROOF — the real VPR screen -------------------------- */
+ad.add($('#s4-phone'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,50px,0) scale(.95)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0) scale(1)' }
+], { from: 13.6, to: 14.5, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.count($('#s4-score'), 14.3, 15.4, 0, 62);
+// six domain bars fill in sequence — the argument, visually
+document.querySelectorAll('#s4-bars .ui-dom').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 15.0 + i * 0.22;
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-14px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: t0, to: t0 + 0.34 });
+  ad.drive(t0 + 0.1, t0 + 0.9, (p) => { fill.style.width = `${w * p}%`; });
+});
+ad.add($('#s4-cap'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,20px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 17.4, to: 18.2 });
+
+/* ---- 5. THE ARGUMENT — one score, three sports -------------------- */
+const rows = document.querySelectorAll('#s5 .row');
+rows.forEach((row, i) => {
+  const t0 = 19.9 + i * 0.75;
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translate3d(0,28px,0)' },
+    { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+  ], { from: t0, to: t0 + 0.5, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+ad.add($('#s5 > .t-display'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,30px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 19.8, to: 20.4 });
+
+/* ---- 6. THE CLOSE ------------------------------------------------ */
+ad.add($('#s6'), [
+  { offset: 0, opacity: 0, transform: 'scale(1.05)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 22.6, to: 22.9 });
+ad.add($('#s6-l1 > span > span'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,50px,0)', filter: 'blur(12px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 22.75, to: 23.35, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s6-l2 > span > span'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,50px,0)', filter: 'blur(12px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 23.0, to: 23.6, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s6-cta'), [
+  { offset: 0, opacity: 0, transform: 'scale(.9)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 23.7, to: 24.15, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#s6-comp'), [
+  { offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }
+], { from: 24.1, to: 24.6 });
+
+mountPlayer(ad);
+</script>
+</body>
+</html>

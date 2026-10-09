@@ -8,6 +8,8 @@ import {
   getPlan,
   PLAN_LABEL,
 } from "@/config/subscriptionPlans";
+import { deriveEntitlementFlags } from "./subscriptionFlags";
+import { DEMO_MODE, demoPurchases } from "@/lib/demoMode";
 
 // ============================================================================
 // PHASE 2 — NEW SUBSCRIPTION / ENTITLEMENT LOGIC
@@ -101,6 +103,16 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return;
     }
+    if (DEMO_MODE) {
+      // Clone build (docs/WEB-CLONE.md): no entitlement RPC exists. Features
+      // unlocked through the clone's free purchases read back from
+      // localStorage; credits stay at zero, which is the clone's documented
+      // "credits are non-functional" behaviour.
+      setEntitlements(FREE);
+      setPurchases(demoPurchases());
+      setLoading(false);
+      return;
+    }
     try {
       const [entRes, purchRes] = await Promise.all([
         supabase.rpc("get_my_entitlements"),
@@ -132,14 +144,16 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     refresh();
   }, [refresh]);
 
-  const isActive =
-    entitlements.is_lifetime ||
-    entitlements.status === "active" ||
-    entitlements.status === "trial";
+  // The active/refill answers come from the shared, tested derivation
+  // (subscriptionFlags.ts) so client behavior cannot drift from server truth
+  // — get_my_entitlements() zeroes plan data for expired/cancelled rows.
+  const { active: isActive, mayAutoRefill } = deriveEntitlementFlags(entitlements);
 
-  // Auto-apply the monthly credit refill when it becomes due.
+  // Auto-apply the monthly credit refill when it becomes due. The server
+  // (apply_credit_refill) independently re-checks allowance, due date and
+  // active status, so a stale client flag cannot create credits.
   useEffect(() => {
-    if (!user || !isActive || entitlements.monthly_credit_allowance <= 0) return;
+    if (!user || !mayAutoRefill) return;
     const due =
       !entitlements.next_refill_at || new Date(entitlements.next_refill_at) <= new Date();
     if (!due) return;
@@ -152,7 +166,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isActive, entitlements.monthly_credit_allowance, entitlements.next_refill_at]);
+  }, [user, mayAutoRefill, entitlements.next_refill_at]);
 
   const claimRefill = useCallback(async () => {
     if (!user) return;

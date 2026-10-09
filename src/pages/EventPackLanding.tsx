@@ -64,7 +64,7 @@ const EventPackLanding = () => {
 
       {/* Hero */}
       <div className="bg-gradient-to-b from-primary/20 via-primary/5 to-background px-5 pt-20 pb-8">
-        <p className="text-[11px] uppercase tracking-widest text-energy font-semibold">
+        <p className="text-[12px] uppercase tracking-widest text-energy font-semibold">
           {pack.sport} · {pack.category}
         </p>
         <h1 className="text-3xl font-display font-bold mt-2 tracking-tight">{pack.name}</h1>
@@ -108,7 +108,7 @@ const EventPackLanding = () => {
 
         {/* Price + CTA */}
         <div className="mt-8 bg-gradient-to-br from-card via-card to-primary/15 border border-primary/30 rounded-2xl p-5 text-center">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">One-time purchase</p>
+          <p className="text-[12px] uppercase tracking-wider text-muted-foreground">One-time purchase</p>
           <p className="text-4xl font-display font-bold text-primary mt-1">{price}</p>
           <p className="text-xs text-muted-foreground mt-1">Yours forever · works with the free plan</p>
           <motion.button
@@ -119,14 +119,14 @@ const EventPackLanding = () => {
             {user ? "Open in Vaylo Sports" : "Start training — get the plan"}
           </motion.button>
           {!user && (
-            <p className="text-[11px] text-muted-foreground mt-2">
+            <p className="text-[12px] text-muted-foreground mt-2">
               Free account · 50 starter credits · no card needed
             </p>
           )}
         </div>
 
         {/* Brand footer */}
-        <p className="text-[11px] text-muted-foreground text-center mt-8">
+        <p className="text-[12px] text-muted-foreground text-center mt-8">
           Part of <button onClick={() => navigate("/")} className="text-primary font-semibold">Vaylo Sports</button> — the all-sports performance operating system.
         </p>
       </div>

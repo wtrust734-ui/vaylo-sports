@@ -1,7 +1,8 @@
 -- ============================================================================
 -- SPONSORED CONTENT — SERVER-ENFORCED 18+ GATE
 -- ----------------------------------------------------------------------------
--- VAYLO's athletes span roughly 12–30, so sponsored content must never reach a
+-- VAYLO's target market is 18–30-year-old athletes (positioning, not a gate —
+-- no age verification is performed), so sponsored content must never reach a
 -- minor. The rule is enforced HERE, in the database, not in the client: a client
 -- check can be bypassed from a browser console or a raw API call, and this is
 -- the one area where that mistake has legal consequences (UK AADC / GDPR-K,

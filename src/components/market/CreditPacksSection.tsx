@@ -7,10 +7,17 @@ type Props = {
   packs: CreditPack[];
   currency: string;
   loading: boolean;
-  onAdd: (pack: CreditPack) => void;
+  /**
+   * Omitted for under-18s (and for an unknown date of birth), because buying is
+   * adult-only. When it is absent the card shows the price — the cost of a
+   * credit should never be a mystery — but the buy button is visibly disabled
+   * and says why, instead of being a live-looking button that does nothing.
+   */
+  onAdd?: (pack: CreditPack) => void;
 };
 
 export default function CreditPacksSection({ packs, currency, loading, onAdd }: Props) {
+  const canBuy = typeof onAdd === "function";
   if (loading) {
     return <div className="px-5 py-10 text-center text-xs text-muted-foreground">Loading credit packs…</div>;
   }
@@ -41,7 +48,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
           >
             {highlight && (
               <span
-                className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[9px] font-bold text-primary-foreground ${
+                className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold text-primary-foreground ${
                   pack.popular ? "bg-gradient-primary shadow-glow" : "bg-gradient-to-r from-energy to-electric-purple"
                 }`}
               >
@@ -66,18 +73,18 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                   {pack.bonus > 0 && (
                     <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-energy/30 bg-gradient-to-r from-energy/25 to-electric-purple/25 px-2 py-0.5">
                       <Sparkles size={10} className="text-energy" />
-                      <span className="text-[11px] font-bold text-energy">+{pack.bonus} bonus</span>
+                      <span className="text-[12px] font-bold text-energy">+{pack.bonus} bonus</span>
                     </span>
                   )}
                   {pack.label && (
-                    <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{pack.label}</p>
+                    <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{pack.label}</p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="font-display text-2xl font-bold text-gradient-electric">
                     {formatLocalPrice(pack.price_cents, currency)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[12px] text-muted-foreground">
                     {formatLocalPrice(Math.round(perCredit * 100) / 100, currency)} / credit
                   </p>
                 </div>
@@ -92,11 +99,12 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
               />
 
               <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={() => onAdd(pack)}
-                className="mt-3 w-full rounded-2xl bg-gradient-primary py-3 font-bold text-primary-foreground shadow-glow"
+                whileTap={canBuy ? { scale: 0.97 } : undefined}
+                onClick={() => onAdd?.(pack)}
+                disabled={!canBuy}
+                className="mt-3 w-full rounded-2xl bg-gradient-primary py-3 font-bold text-primary-foreground shadow-glow disabled:opacity-50 disabled:shadow-none"
               >
-                Add to basket · {formatLocalPrice(pack.price_cents, currency)}
+                {canBuy ? `Add to basket · ${formatLocalPrice(pack.price_cents, currency)}` : "Purchases are 18+ only"}
               </motion.button>
             </div>
           </motion.div>

@@ -44,8 +44,6 @@
     "primaryNav": "Hoofdnavigatie"
   },
   "quickActions": {
-    "logWorkout": "Training vastleggen",
-    "logWorkoutDesc": "Start of voltooi een sessie",
     "logResult": "Resultaat vastleggen",
     "logResultDesc": "Leg een wedstrijdresultaat vast",
     "recoveryCheckIn": "Herstel-check-in",
@@ -58,13 +56,14 @@
     "train": {
       "title": "Trainen",
       "subtitle": "Sessies, plannen en techniek.",
-      "primaryCta": "Training starten",
       "groupDaily": "Dagelijkse training",
       "groupProgress": "Voortgang",
       "workouts": "Trainingen",
       "workoutsDesc": "Sessies vastleggen en terugkijken",
       "trainingPlans": "Trainingsplannen",
       "trainingPlansDesc": "Je actieve plan en weken",
+      "availability": "Beschikbaarheid",
+      "availabilityDesc": "Vakanties, examens en pauzes",
       "routines": "Routines",
       "routinesDesc": "Herhaalbare warming-ups en oefeningen",
       "crossTraining": "Crosstraining",
@@ -86,6 +85,8 @@
       "vprDesc": "Je algemene beoordeling en factoren",
       "metricsHub": "Metrics-hub",
       "metricsHubDesc": "Belasting, trends en registratie",
+      "insights": "Inzichten",
+      "insightsDesc": "Wat je training vandaag zegt",
       "skills": "Vaardigheden",
       "skillsDesc": "Analyse van sportvaardigheden",
       "development": "Ontwikkeling",
@@ -112,7 +113,7 @@
       "nutrition": "Voeding",
       "nutritionDesc": "Maaltijden, water en doelen",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "Compete",
@@ -149,7 +150,6 @@
     "readinessDown": "{{value}} vs gisteren",
     "coachInsight": "Coach-inzicht",
     "viewInsight": "Bekijk inzicht",
-    "startSession": "Sessie starten",
     "noVprYet": "Log een paar sessies om je VPR te ontgrendelen.",
     "noSessionToday": "Geen sessie gepland — bekijk je plan.",
     "welcomeBack": "Welkom terug",
@@ -275,6 +275,7 @@
     "activityFeed": "Activiteitenfeed",
     "groupTrain": "Trainen",
     "trainingPlans": "Trainingsplannen",
+    "availability": "Beschikbaarheid",
     "workouts": "Trainingen",
     "routines": "Routines",
     "crossTraining": "Crosstraining",
@@ -317,6 +318,9 @@
     "profile": "Profiel",
     "openMenu": "Menu openen",
     "closeMenu": "Menu sluiten",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "Toegang voor voogd",
+    "startingAnalysis": "Startanalyse",
+    "insights": "Inzichten"
   }
 }

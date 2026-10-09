@@ -98,7 +98,7 @@ const Mental = () => {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <div className="px-5 pt-14 pb-3">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-3">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-display font-bold">Mental Gym</motion.h1>
         {readiness !== null && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-muted-foreground">
@@ -119,7 +119,7 @@ const Mental = () => {
                 setTrainTool(null); 
               }
             }}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg text-[10px] font-semibold transition-all ${
+              className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg text-[12px] font-semibold transition-all ${
                 tab === t.id && !raceMode ? "bg-primary text-primary-foreground" : "text-muted-foreground"
               }`}>
               <t.icon size={16} />

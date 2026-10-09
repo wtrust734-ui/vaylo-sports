@@ -14,6 +14,7 @@ import {
 } from "@/lib/health/bridge";
 import {
   connectHealthConnect,
+  disconnectHealthConnect,
   fetchServerSyncState,
   readLocalState,
   resolveHealthStatus,
@@ -36,6 +37,9 @@ export interface UseHealthConnect {
   error: string | null;
   connect: () => Promise<void>;
   sync: () => Promise<void>;
+  /** Stops syncing everywhere and clears this device's stored sync state. */
+  disconnect: () => Promise<void>;
+  disconnecting: boolean;
   managePermissions: () => Promise<void>;
   clearError: () => void;
 }
@@ -49,6 +53,7 @@ export function useHealthConnect(): UseHealthConnect {
   const [checking, setChecking] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -115,6 +120,21 @@ export function useHealthConnect(): UseHealthConnect {
     }
   }, [user, syncing, refresh]);
 
+  const disconnect = useCallback(async () => {
+    if (!user || disconnecting) return;
+    setDisconnecting(true);
+    try {
+      // Revocation of the upstream Health Connect grants is not possible from
+      // the app — the athlete manages those in Health Connect itself (the
+      // Manage button). This stops Vaylo reading: consent cleared locally and
+      // on the server, cursor reset, so no further sync runs.
+      await disconnectHealthConnect(user.id);
+      await refresh();
+    } finally {
+      setDisconnecting(false);
+    }
+  }, [user, disconnecting, refresh]);
+
   const managePermissions = useCallback(async () => {
     await bridgeOpenSettings();
   }, []);
@@ -130,6 +150,8 @@ export function useHealthConnect(): UseHealthConnect {
     error,
     connect,
     sync,
+    disconnect,
+    disconnecting,
     managePermissions,
     clearError: () => setError(null),
   };

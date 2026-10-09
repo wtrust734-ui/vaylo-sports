@@ -44,8 +44,6 @@
     "primaryNav": "기본 탐색"
   },
   "quickActions": {
-    "logWorkout": "운동 기록",
-    "logWorkoutDesc": "세션 시작 또는 마무리",
     "logResult": "결과 기록",
     "logResultDesc": "대회 결과 기록",
     "recoveryCheckIn": "회복 체크인",
@@ -58,13 +56,14 @@
     "train": {
       "title": "훈련",
       "subtitle": "세션, 플랜, 기술.",
-      "primaryCta": "운동 시작",
       "groupDaily": "매일의 훈련",
       "groupProgress": "발전",
       "workouts": "운동",
       "workoutsDesc": "세션 기록 및 복습",
       "trainingPlans": "훈련 플랜",
       "trainingPlansDesc": "활성 플랜과 주간 계획",
+      "availability": "일정과 휴식",
+      "availabilityDesc": "휴가·시험·휴식을 기록하세요",
       "routines": "루틴",
       "routinesDesc": "반복 가능한 워밍업과 드릴",
       "crossTraining": "크로스 트레이닝",
@@ -86,6 +85,8 @@
       "vprDesc": "종합 평가와 요인",
       "metricsHub": "지표 허브",
       "metricsHubDesc": "부하, 추세, 기록",
+      "insights": "인사이트",
+      "insightsDesc": "오늘의 훈련이 말해주는 것",
       "skills": "스킬",
       "skillsDesc": "스포츠 스킬 분석",
       "development": "성장",
@@ -112,7 +113,7 @@
       "nutrition": "영양",
       "nutritionDesc": "식사, 수분, 목표",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "경쟁",
@@ -149,7 +150,6 @@
     "readinessDown": "어제보다 {{value}}",
     "coachInsight": "코치 인사이트",
     "viewInsight": "인사이트 보기",
-    "startSession": "세션 시작",
     "noVprYet": "세션을 몇 번 기록하면 VPR이 열립니다.",
     "noSessionToday": "예정된 세션이 없습니다 — 플랜을 확인하세요.",
     "welcomeBack": "다시 오신 것을 환영해요",
@@ -275,6 +275,7 @@
     "activityFeed": "활동 피드",
     "groupTrain": "훈련",
     "trainingPlans": "훈련 플랜",
+    "availability": "일정과 휴식",
     "workouts": "운동",
     "routines": "루틴",
     "crossTraining": "크로스 트레이닝",
@@ -317,6 +318,9 @@
     "profile": "프로필",
     "openMenu": "메뉴 열기",
     "closeMenu": "메뉴 닫기",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "보호자 접근",
+    "startingAnalysis": "시작 분석",
+    "insights": "인사이트"
   }
 }

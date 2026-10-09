@@ -69,7 +69,7 @@ const Compare = () => {
   const hasData = metrics.length > 0;
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Trophy size={14} /> Athlete Comparison</div>
         <h1 className="text-4xl font-display font-bold mt-2">Stack Up vs <span className="text-gradient-electric">Elite</span></h1>
@@ -106,7 +106,7 @@ const Compare = () => {
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-primary" /> You · {userVpr.overall_vpr} VPR</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-energy" /> {elite.name} · {elite.profile.overall_vpr} VPR</span>
         </div>
-        <p className="mt-3 text-center text-[10px] leading-relaxed text-muted-foreground">Elite profiles are illustrative benchmarks (0–100 indices) — not actual measurements of the named athletes. Your VPR is calculated only from your logged metrics using the same 0–100 scale. Use the gap as a directional training prompt, not a diagnosis.</p>
+        <p className="mt-3 text-center text-[12px] leading-relaxed text-muted-foreground">Elite profiles are illustrative benchmarks (0–100 indices) — not actual measurements of the named athletes. Your VPR is calculated only from your logged metrics using the same 0–100 scale. Use the gap as a directional training prompt, not a diagnosis.</p>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}

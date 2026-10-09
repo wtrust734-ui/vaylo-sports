@@ -84,7 +84,7 @@ export default function PasskeysSetting() {
             ? t("settings.passkeys.working", "Waiting for your device…")
             : t("settings.passkeys.add", "Add a passkey for this device")}
       </motion.button>
-      <p className="text-[11px] text-muted-foreground mt-2">
+      <p className="text-[12px] text-muted-foreground mt-2">
         {t(
           "settings.passkeys.description",
           "Sign in with your fingerprint, face or device PIN — no password needed.",

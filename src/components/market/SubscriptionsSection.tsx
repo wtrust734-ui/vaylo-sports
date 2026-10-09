@@ -46,7 +46,7 @@ export default function SubscriptionsSection() {
         }`}
       >
         {meta?.recommended && (
-          <span className="absolute right-4 top-4 z-10 rounded-full bg-gradient-to-r from-electric-purple to-primary px-2.5 py-1 text-[9px] font-bold text-primary-foreground">
+          <span className="absolute right-4 top-4 z-10 rounded-full bg-gradient-to-r from-electric-purple to-primary px-2.5 py-1 text-[12px] font-bold text-primary-foreground">
             RECOMMENDED
           </span>
         )}
@@ -57,7 +57,7 @@ export default function SubscriptionsSection() {
             </div>
             <div className="min-w-0">
               <h3 className="font-display text-lg font-bold">{plan.name}</h3>
-              <p className="text-[11px] text-muted-foreground">{plan.tagline}</p>
+              <p className="text-[12px] text-muted-foreground">{plan.tagline}</p>
             </div>
           </div>
 
@@ -70,14 +70,14 @@ export default function SubscriptionsSection() {
                   opt.best_value ? "border-primary/50 bg-primary/5" : "border-border bg-muted/20"
                 }`}
               >
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   {PERIOD_LABEL[opt.period]}
                 </p>
                 <p className="font-display text-xl font-bold text-gradient-electric">{formatPence(opt.price_pence)}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   {opt.period === "month" ? "billed monthly" : "billed yearly"}
                 </p>
-                {opt.best_value && <p className="mt-1 text-[9px] font-bold text-primary">BEST VALUE</p>}
+                {opt.best_value && <p className="mt-1 text-[12px] font-bold text-primary">BEST VALUE</p>}
               </div>
             ))}
           </div>
@@ -121,7 +121,7 @@ export default function SubscriptionsSection() {
       {/* Difference explainer */}
       <div className="rounded-2xl border border-border bg-gradient-card p-4">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Which one is right?</h4>
-        <div className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-foreground/85">
+        <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-foreground/85">
           <p>
             <span className="font-semibold text-primary">Credit Plan</span> gives you a fixed 100 credits each cycle.
             You still spend credits per feature, and unused credits roll over up to your limit.
@@ -135,7 +135,7 @@ export default function SubscriptionsSection() {
 
       {SUBSCRIPTION_PLANS.map(renderPlan)}
 
-      <p className="pt-1 text-[10px] leading-relaxed text-muted-foreground">
+      <p className="pt-1 text-[12px] leading-relaxed text-muted-foreground">
         Fair usage: {FAIR_USAGE_POLICY.message}
       </p>
     </div>

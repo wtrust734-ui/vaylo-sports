@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Security &amp; Vulnerability Reporting — full text | Vaylo Sports</title>
+<meta name="description" content="Where to send a flaw, our safe-harbour promise, and what is out of scope." />
+<meta name="theme-color" content="#05070f" />
+<meta name="color-scheme" content="dark light" />
+
+<link rel="canonical" href="https://vaylo-sports.netlify.app/legal/security-disclosure/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Vaylo Sports" />
+<meta property="og:title" content="Security &amp; Vulnerability Reporting — full text | Vaylo Sports" />
+<meta property="og:description" content="Where to send a flaw, our safe-harbour promise, and what is out of scope." />
+<meta property="og:url" content="https://vaylo-sports.netlify.app/legal/security-disclosure/" />
+<meta property="og:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<link rel="icon" href="/assets/logo.png" type="image/png" />
+<link rel="apple-touch-icon" href="/assets/logo.png" />
+<link rel="stylesheet" href="/assets/theme.css?v=1c56690f" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com","url":"https://vaylo-sports.netlify.app","logo":"https://vaylo-sports.netlify.app/assets/logo.png"}</script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/">
+        <img
+          class="brand-mark"
+          src="/assets/logo.png"
+          alt=""
+          width="34"
+          height="34"
+          decoding="async"
+        />
+        <span>Vaylo Sports</span>
+      </a>
+
+      <button
+        type="button"
+        class="nav-toggle"
+        aria-expanded="false"
+        aria-controls="mobile-nav"
+        data-nav-toggle
+      >
+        <span class="visually-hidden">Menu</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+        </svg>
+      </button>
+
+      <nav class="site-nav" aria-label="Main">
+          <a href="/features/">Features</a>
+          <a href="/safety/">Safety</a>
+          <a href="/faq/">FAQ</a>
+          <a href="/waitlist/">Waiting list</a>
+          <a href="/sponsors/">Sponsors</a>
+          <a href="/legal/" aria-current="page">Legal</a>
+          <a href="/support/">Support</a>
+          <a href="/about/">About</a>
+          <a href="/contact/">Contact</a>
+      </nav>
+    </div>
+
+    <div class="mobile-nav" id="mobile-nav" hidden>
+      <div class="shell">
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/safety/">Safety</a></li>
+          <li><a href="/faq/">FAQ</a></li>
+          <li><a href="/waitlist/">Waiting list</a></li>
+          <li><a href="/sponsors/">Sponsors</a></li>
+          <li><a href="/legal/" aria-current="page">Legal</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/about/">About</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+
+    <div class="shell">
+      <a class="back-link" href="/legal/">&larr; All legal documents</a>
+      <article class="doc-body">
+<main>
+  <h1>Security &amp; Vulnerability Reporting</h1>
+  <p class="doc-meta">Version 1.0 &middot; 2 October 2026</p>
+  <p class="doc-meta">Operated by Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
+
+  <div class="note">
+    <strong>The short version.</strong> If you find a security flaw in Vaylo Sports,
+    please tell us privately rather than publishing it. We will acknowledge your
+    report, we will not take legal action against you for good-faith research, and
+    we will credit you if you want to be credited.
+  </div>
+
+  <div class="toc">
+    <strong>On this page</strong>
+    <ol>
+      <li><a href="#report">How to report a vulnerability</a></li>
+      <li><a href="#safe-harbour">Our safe-harbour promise</a></li>
+      <li><a href="#out-of-scope">What is out of scope</a></li>
+      <li><a href="#what-we-do">What we do when you report</a></li>
+      <li><a href="#our-own">A weakness in our own position</a></li>
+    </ol>
+  </div>
+
+  <h2 id="report">How to report a vulnerability</h2>
+  <p>
+    Email <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a> with
+    <strong>Security</strong> in the subject line. Please do not use a public
+    issue tracker, a social media post, or a public support form for a live
+    vulnerability.
+  </p>
+  <p>
+    Useful to include:
+  </p>
+  <ul>
+    <li>what the flaw does and what an attacker could achieve;</li>
+    <li>the steps to reproduce it, or a proof of concept;</li>
+    <li>which part of the product it affects &mdash; app, website, or an API;</li>
+    <li>the app version or build number if it is in the app;</li>
+    <li>anything you have already done, including whether anyone else knows.</li>
+  </ul>
+  <p>
+    Plain text is fine. You do not need to prove exploitability, and you do not
+    need to have read this page before testing.
+  </p>
+
+  <h2 id="safe-harbour">Our safe-harbour promise</h2>
+  <p>
+    If you make a good-faith effort to report a vulnerability, follow the scope
+    below, and give us a reasonable opportunity to fix it before disclosure, we
+    will not pursue legal action against you.
+  </p>
+  <p>
+    "Good faith" means you are trying to help, not trying to cause harm. In
+    practice that means:
+  </p>
+  <ul>
+    <li>you avoid accessing data that is not yours &mdash; no reading other
+        athletes' records, no listing accounts you do not own;</li>
+    <li>you avoid degrading the service for other people &mdash; no denial of
+        service, no exhausting quotas, no mass messaging;</li>
+    <li>you avoid persistence &mdash; no leaving backdoors, no planting
+        anything, no modifying data;</li>
+    <li>you avoid privacy harm &mdash; you do not access or retain personal data
+        beyond the minimum needed to demonstrate the flaw;</li>
+    <li>you give us a reasonable window to fix the issue before you publish
+        technical detail;</li>
+    <li>you tell us plainly if anyone else already knows.</li>
+  </ul>
+  <p>
+    This promise covers you even if you are not a customer, and it does not
+    depend on us agreeing that the flaw is a vulnerability. It is a commitment
+    about how we treat people who come to us in good faith.
+  </p>
+  <div class="warn">
+    <strong>This is not a bug bounty programme.</strong> We do not run one, we do
+    not pay for reports, and we are not going to imply otherwise. This page
+    exists because we would rather hear about a flaw than not.
+  </div>
+
+  <h2 id="out-of-scope">What is out of scope</h2>
+  <p>
+    These are not vulnerabilities, and we will usually close them without a
+    response:
+  </p>
+  <ul>
+    <li>the app or website telling you what it already shows you &mdash; your own
+        data, your own rank, your own settings;</li>
+    <li>a missing security header on a page with no sensitive content;</li>
+    <li>self-XSS, or a flaw that needs you to already control an account;</li>
+    <li>being able to see data that is deliberately public to signed-in
+        athletes, such as a public profile or a leaderboard;</li>
+    <li>social engineering of our staff, or phishing;</li>
+    <li>the absence of a bug bounty;</li>
+    <li>reports generated by an automated scanner with no evidence of a real
+        impact;</li>
+    <li>denial of service, even politely.</li>
+  </ul>
+  <p>
+    If you are unsure whether something is in scope, report it anyway. It costs you
+    an email and it costs us ten minutes.
+  </p>
+
+  <h2 id="what-we-do">What we do when you report</h2>
+  <p>
+    We triage reports by how much damage they could do, not by how interesting
+    they are. A flaw that exposes one athlete's health data outranks a cosmetic
+    one every time.
+  </p>
+  <p>
+    <strong>What we will tell you:</strong> that we received it, our initial
+    severity view, and whether it has been fixed.
+  </p>
+  <p>
+    <strong>What we will not do:</strong> commit to a disclosure deadline, pay a
+    fee, or share the internal details of a fix while it is live.
+  </p>
+  <p>
+    <strong>We do not have a published response-time commitment for security
+    reports</strong>, and we are not going to invent one. If a flaw is being
+    actively exploited we will treat it as an incident, and our incident approach
+    is described in our internal policies &mdash; which we do not publish in full,
+    because a public description of how we detect and respond to intrusion is
+    itself a map of our defences.
+  </p>
+  <p>
+    We will credit you in a release note or a public acknowledgement if you want
+    it and tell us how you would like to be named. If you would rather stay
+    anonymous, we will.
+  </p>
+
+  <h2 id="our-own">A weakness in our own position</h2>
+  <p>
+    We would rather state this than let you find it.
+  </p>
+  <p>
+    We do not currently operate a formal, always-on security response process. We
+    do not run a public bug bounty, we have not published a security
+    certification, and we have not had our systems independently penetration
+    tested. A report from a careful outsider is currently one of the more
+    valuable security inputs we get, and that is not a position we would choose.
+  </p>
+  <p>
+    We are describing that here because a disclosure policy that implies a mature
+    programme would be a false claim, and a false claim in a security document is
+    the worst kind.
+  </p>
+  <p>
+    <strong>If you think you have found something serious, keep telling us until
+    you get a reply.</strong> A month of silence is a failure on our side, not a
+    reason to publish.
+  </p>
+
+  
+</main>
+      </article>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-col"><a class="brand" href="/">
+            <img
+              class="brand-mark"
+              src="/assets/logo.png"
+              alt=""
+              width="34"
+              height="34"
+              decoding="async"
+            />
+            <span>Vaylo Sports</span>
+          </a>
+          <p style="margin-top: 1rem; font-size: 0.92rem">
+            A training log and analysis tool for athletes across many sports. Not a
+            doctor, not a coach, and not a substitute for either.
+          </p>
+          <p style="font-size: 0.92rem">
+            <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>
+          </p>
+        </div>
+      <div class="footer-col">
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="/legal/" aria-current="page">Legal Centre</a></li>
+          <li><a href="/legal/terms/">Terms of Service</a></li>
+          <li><a href="/legal/privacy/">Privacy Policy</a></li>
+          <li><a href="/legal/child-safety/">Child &amp; Young Athlete Safety</a></li>
+          <li><a href="/legal/child-safety/#young-notice">Children's Privacy Notice</a></li>
+          <li><a href="/legal/cookies/">Cookie Policy</a></li>
+          <li><a href="/legal/ai-disclaimer/">AI Disclaimer</a></li>
+          <li><a href="/legal/health-safety/">Training &amp; Medical Disclaimer</a></li>
+          <li><a href="/legal/health-safety/#safety-guidelines">Safety Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/">Community Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/#acceptable-use">Acceptable Use Policy</a></li>
+          <li><a href="/legal/purchases/">Subscription &amp; Billing Terms</a></li>
+          <li><a href="/legal/refunds/">Refund &amp; Cancellation Policy</a></li>
+          <li><a href="/legal/purchases/#virtual-items">Credits &amp; Virtual Items Terms</a></li>
+          <li><a href="/legal/competition-terms/">Competition Terms</a></li>
+          <li><a href="/legal/contact/">Contact / Legal</a></li>
+          <li><a href="/legal/account-deletion/">Delete Account &amp; Data</a></li>
+          <li><a href="/legal/data-rights/">Privacy Rights Request</a></li>
+          <li><a href="/legal/report-safety-concern/">Report a Safety Concern</a></li>
+          <li><a href="/legal/report-content/">Report Content / User</a></li>
+          <li><a href="/legal/security-disclosure/" aria-current="page">Security / Vulnerability Reporting</a></li>
+          <li><a href="/legal/complaints/">Complaints Procedure</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Safety &amp; AI</h2>
+        <ul>
+          <li><a href="/legal/ai-training-advice/">AI Training Advice Disclaimer</a></li>
+          <li><a href="/legal/video-analysis-disclaimer/">Video Analysis Disclaimer</a></li>
+          <li><a href="/legal/injury-guidance/">Injury &amp; Return-to-Training</a></li>
+          <li><a href="/legal/nutrition-disclaimer/">Nutrition Disclaimer</a></li>
+          <li><a href="/legal/mental-wellbeing/">Mental Wellbeing</a></li>
+          <li><a href="/legal/wearable-health-privacy/">Wearable &amp; Health Data</a></li>
+          <li><a href="/legal/ai-data-use/">AI Data Use &amp; Processing</a></li>
+          <li><a href="/legal/advertising/">Advertising &amp; Tracking</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Product</h2>
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/faq/">Questions &amp; Answers</a></li>
+          <li><a href="/whats-new/">What has changed</a></li>
+          <li><a href="/safety/">Safety Centre</a></li>
+          <li><a href="/accessibility/">Accessibility</a></li>
+          <li><a href="/about/">About Vaylo</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/sponsors/">Sponsor Vaylo Sports</a></li>
+          <li><a href="/privacy/">Privacy &amp; Data Centre</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+          <li><a href="/legal/intellectual-property/">Intellectual Property</a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="footer-base">
+        <p style="margin:0">
+          &copy; 2026 Vaylo Sports.
+        </p>
+        <p style="margin:0">
+          Android. <a href="/legal/">All legal documents</a> &middot;
+          <a href="/privacy/">Privacy &amp; data</a> &middot;
+          <a href="/safety/">Safety</a>
+        </p>
+      </div>
+
+      <div class="footer-base" style="margin-top: 1rem; border-top: 0; padding-top: 0">
+        <p style="margin:0; max-width: 70ch">
+          Vaylo Sports does not claim to prevent injury, guarantee performance, or
+          provide medical care. Nothing on this website is medical advice.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+<!-- ----------------------------------------------------------------
+     Cookie and storage notice.
+
+     Rendered on every page but left hidden in the markup, and revealed by
+     initCookieNotice() in site.js only when this device has not already
+     acknowledged it. That order matters: a reader whose browser blocks
+     scripts never sees a notice with an Accept button that cannot do
+     anything, and one whose browser blocks storage sees it every visit
+     rather than being told a preference was saved.
+
+     It reports a fact rather than asking permission, because there is
+     nothing here to consent to: the site sets no cookie at all, and the
+     preferences it keeps are on the reader's own device. The full list is in
+     the Cookie Policy, which is what the link is for.
+     ---------------------------------------------------------------- -->
+  <div
+    class="cookie-notice"
+    data-cookie-notice
+    role="region"
+    aria-label="Cookies and stored preferences"
+    hidden
+  >
+    <div class="shell cookie-notice-inner">
+      <p class="cookie-notice-text">
+        <strong>No tracking cookies.</strong> No advertising or analytics cookies, and
+        no third-party tracker &mdash; only preferences kept on this device.
+        <a href="/legal/cookies/">Cookie Policy</a>
+      </p>
+      <button
+        type="button"
+        class="btn btn-primary cookie-notice-accept"
+        data-cookie-accept
+      >Accept</button>
+    </div>
+  </div>
+
+<!-- config.js MUST come before site.js. Both are deferred, and deferred
+     scripts execute in document order before DOMContentLoaded — so with the
+     reverse order, site.js ran first, found no config, and disabled every form
+     on the site with "not available yet". -->
+<script src="/assets/config.js?v=e5e20b96" defer></script>
+<script src="/assets/site.js?v=f67590ac" defer></script>
+</body>
+</html>

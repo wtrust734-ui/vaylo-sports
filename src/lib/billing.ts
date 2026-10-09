@@ -22,6 +22,8 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { getPlatform, isNative, loadPlugin } from "@/lib/platform";
+import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
+import { DEMO_MODE, demoGrant } from "@/lib/demoMode";
 
 /** Flip to true only once the Play Billing plugin + server verifier are in place. */
 export const STORE_BILLING_ENABLED = false;
@@ -70,6 +72,27 @@ export const isPaymentsUnavailable = (result: PurchaseResult): boolean =>
 export const PAYMENTS_UNAVAILABLE_MESSAGE =
   "Purchases aren't available yet. Credits you earn in the app still unlock Mental Gym, Form Analysis, Injury Management and Event Packs.";
 
+/**
+ * True when the server refused because the closed-test switch is on but the
+ * server's `PAYMENT_MODE` secret is not set to `free`. The two switches have to
+ * agree (see src/config/closedTesting.ts); when they do not, the client is
+ * showing "free" while the server is charging-or-refusing, and the athlete must
+ * be told plainly rather than shown a red failure.
+ */
+export const isFreeGrantUnavailable = (result: PurchaseResult): boolean =>
+  !result.ok && (result.data as { code?: string } | undefined)?.code === "free_grant_unavailable";
+
+export const FREE_GRANT_UNAVAILABLE_MESSAGE =
+  "Free credits aren't switched on for this build yet. Please try again shortly — nothing has been charged.";
+
+/**
+ * Label to show beside a price. While the closed test runs this is "Free"
+ * rather than the money, because showing a price that will not be charged is a
+ * lie the athlete can see through at the basket.
+ */
+export const priceLabelFor = (formattedPrice: string): string =>
+  freeCreditsActive() ? CLOSED_TESTING.label : formattedPrice;
+
 export interface BillingProvider {
   id: "web" | "store";
   label: string;
@@ -116,6 +139,13 @@ async function invokePurchase(
     body: {
       items,
       platform: getPlatform(),
+      // While the closed test runs, tell the server the client believes this is
+      // a free grant. The server does NOT trust this flag on its own: it is
+      // only honoured when PAYMENT_MODE=free is set as a secret, which is the
+      // authority. Sending it means the two switches have to agree, so neither
+      // a stale client nor a forgotten secret can silently start charging (or
+      // silently stop). See src/config/closedTesting.ts.
+      ...(freeCreditsActive() ? { closed_testing: true } : {}),
       ...(verification ? { verification } : {}),
     },
   });
@@ -186,6 +216,14 @@ export async function purchaseItems(
   verification?: PurchaseVerification
 ): Promise<PurchaseResult> {
   if (items.length === 0) return { ok: false, error: "Empty basket" };
+  if (DEMO_MODE) {
+    // Clone build (docs/WEB-CLONE.md): every purchase is free and granted
+    // locally — no Play Billing, no edge function, no charge. Feature unlocks
+    // read the grant back through hasFeature(); credit and coin packs change
+    // no balance, because credits are non-functional in the clone.
+    demoGrant(items.map((i) => i.product_id));
+    return { ok: true, data: { demo_free: true } };
+  }
   return activeBilling().purchase(items, verification);
 }
 

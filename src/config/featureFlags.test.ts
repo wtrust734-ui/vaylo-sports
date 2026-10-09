@@ -15,11 +15,13 @@ import { FEATURE_FLAGS, FLAGGED_ROUTES, isFlagOn, isRouteVisible } from "./featu
  */
 
 describe("launch defaults", () => {
-  it("keeps wearable sync off", () => {
-    // No Garmin/Strava/Fitbit developer agreement has been signed, so no client
-    // id exists and the callback never exchanges a code for a token. This is an
-    // unfinished integration, not a misconfiguration.
-    expect(isFlagOn("wearableSync")).toBe(false);
+  it("ships wearable sync on, with the Health Connect half finished", () => {
+    // Health Connect is complete and shipping: native plugin, six read
+    // permissions, incremental pull. The cloud providers on the same screen are
+    // not wired yet, and the screen says so per provider rather than pretending
+    // (see providers.ts and wearable-oauth). Flipping this back off hides the
+    // whole surface.
+    expect(isFlagOn("wearableSync")).toBe(true);
   });
 
   it("keeps GPS tracking off", () => {
@@ -33,6 +35,13 @@ describe("launch defaults", () => {
     expect(isFlagOn("coachMarketplace")).toBe(false);
   });
 
+  it("keeps every iPhone surface off", () => {
+    // There is no iPhone build. A HealthKit card or a "Continue with Apple"
+    // button would promise one, and the promise would be made to an Android
+    // user reading a screen on the Play Store.
+    expect(isFlagOn("iphone")).toBe(false);
+  });
+
   it("has no AI flag to flip", () => {
     // Deliberate. AI is inside the core pages rather than a separate section,
     // so turning it off would gut the product rather than hide a feature. The
@@ -40,26 +49,30 @@ describe("launch defaults", () => {
     expect(Object.keys(FEATURE_FLAGS)).not.toContain("aiCoach");
   });
 
-  it("defaults every declared flag to off", () => {
+  it("defaults every not-yet-ready flag to off", () => {
     // A guard against someone adding a new feature flag with `true` as the
-    // default. The whole point of this file is that a feature which does not
-    // work must be opt-in, never opt-out.
-    for (const [key, value] of Object.entries(FEATURE_FLAGS)) {
-      expect(value, `${key} should default to false`).toBe(false);
+    // default. A feature that does not work must be opt-in, never opt-out.
+    // `wearableSync` is the deliberate exception — Health Connect is shipping —
+    // so it is named here rather than left to a blanket loop that would have to
+    // be weakened to accommodate it.
+    for (const key of Object.keys(FEATURE_FLAGS)) {
+      if (key === "wearableSync") continue;
+      expect(isFlagOn(key as keyof typeof FEATURE_FLAGS), `${key} should default to false`).toBe(false);
     }
+    expect(isFlagOn("wearableSync")).toBe(true);
   });
 });
 
 describe("isRouteVisible", () => {
-  it("hides the wearable route while the flag is off", () => {
-    expect(isRouteVisible("/health-sync")).toBe(false);
+  it("shows the wearable route while the flag is on", () => {
+    expect(isRouteVisible("/health-sync")).toBe(true);
   });
 
   it("leaves every unflagged route visible", () => {
     // Regression guard for the shape of the helper: a route that is not in the
     // map must never be hidden, or a typo in FLAGGED_ROUTES would silently
     // delete navigation across the app.
-    for (const path of ["/", "/training", "/workouts", "/recover", "/market", "/profile"]) {
+    for (const path of ["/", "/training", "/routines", "/recover", "/market", "/profile"]) {
       expect(isRouteVisible(path), `${path} should stay visible`).toBe(true);
   }
   });

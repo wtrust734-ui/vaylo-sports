@@ -28,19 +28,19 @@ const Development = () => {
   const flag = proj.slope > 1 ? "Late bloomer trajectory" : proj.slope > 0.3 ? "Steady upward trend" : proj.slope < -0.3 ? "Stagnation — change stimulus" : "Plateau";
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><TrendingUp size={14} /> Athlete Development Map</div>
         <h1 className="text-4xl font-display font-bold mt-2">Development <span className="text-gradient-electric">Trajectory</span></h1>
         <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          Projections use a linear regression on your VPR snapshots, age-adjusted against normative athlete data
-          (Malina et al. 2004 growth curves; NSCA position stand on youth training, Faigenbaum et al. 2009;
-          Lloyd & Oliver YPD model 2012). Peak power output typically falls between ages 25–29 (Allen et al. 2015),
-          endurance peaks 27–34 (Lepers & Cattagni 2012), skill-based sports 26–32.
+          Projections use a linear regression on your VPR snapshots, age-adjusted against normative athlete data.
+          Peak power output typically falls between ages 25–29 (Allen et al. 2015), endurance peaks 27–34
+          (Lepers & Cattagni 2012), and skill-based sports 26–32 — which is the window this app is built around
+          (18–30-year-old athletes, from developing through serious and competitive).
         </p>
       </motion.div>
 
-      <div className="bg-energy/5 border border-energy/30 rounded-xl p-3 flex gap-2 text-[11px]">
+      <div className="bg-energy/5 border border-energy/30 rounded-xl p-3 flex gap-2 text-[12px]">
         <span className="text-energy font-bold">Disclaimer:</span>
         <span className="text-muted-foreground">Trajectory forecasts are statistical estimates from limited data, not guarantees. Individual variance is high — training quality, injury history, genetics, and life stress all shift the curve. Use as a directional signal, not a verdict.</span>
       </div>

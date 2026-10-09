@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatLocalPrice } from "@/lib/creditEconomy";
 
 interface Coach { user_id: string; display_name: string; bio?: string; specialties?: string[]; verified?: boolean; }
 
-export default function HumanCoaches({ currency = "USD" }: { currency?: string }) {
+export default function HumanCoaches() {
   const { user } = useAuth();
   const [coaches, setCoaches] = useState<Coach[]>([]);
   type CoachBooking = {
@@ -24,7 +23,12 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("creator_profiles").select("*");
+      // Explicit columns: since the 2026-10-06 audit migration, SELECT on
+      // creator_profiles is column-scoped and payout_email is unreadable by
+      // clients — select("*") would now fail with permission denied.
+      const { data } = await supabase
+        .from("creator_profiles")
+        .select("user_id, display_name, bio, specialties, verified");
       setCoaches((data || []) as Coach[]);
       if (user) {
         const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
@@ -34,16 +38,21 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
     })();
   }, [user]);
 
+  const [booking, setBooking] = useState<string | null>(null);
   const book = async (coach: Coach, minutes: 30 | 60) => {
-    if (!user) return;
+    if (!user || booking) return;
     const starts_at = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
-    const price_cents = minutes === 30 ? 4500 : 8000;
+    setBooking(coach.user_id);
     const { error } = await supabase.from("coach_bookings").insert({
       coach_id: coach.user_id, client_id: user.id, starts_at, duration_minutes: minutes,
-      price_cents, status: "pending", video_link: `https://meet.vaylo.app/${crypto.randomUUID().slice(0, 8)}`,
+      status: "pending",
+      // price_cents and video_link are deliberately NOT sent: the server
+      // trigger nulls/zeroes them (platform prices and provisions sessions;
+      // the marketplace is pre-payment).
     });
+    setBooking(null);
     if (error) { toast.error(error.message); return; }
-    toast.success(`Booked ${minutes}-min session with ${coach.display_name}`);
+    toast.success(`Requested ${minutes}-min session with ${coach.display_name}`);
     const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
     setBookings(b || []);
   };
@@ -61,7 +70,7 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
                   <p className="text-xs text-muted-foreground">{b.duration_minutes} min · {b.status}</p>
                 </div>
                 {b.video_link && (
-                  <a href={b.video_link} target="_blank" rel="noreferrer">
+                  <a href={b.video_link} target="_blank" rel="noreferrer noopener">
                     <Button size="sm" variant="outline"><Video className="h-4 w-4 mr-1" /> Join</Button>
                   </a>
                 )}
@@ -90,19 +99,23 @@ export default function HumanCoaches({ currency = "USD" }: { currency?: string }
                   </div>
                   <div>
                     <p className="font-semibold flex items-center gap-1">{c.display_name}{c.verified && <Check className="h-3 w-3 text-energy" />}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Star className="h-3 w-3 text-energy" /> 4.9 · 120 sessions</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Star className="h-3 w-3 text-energy" /> New coach</p>
                   </div>
                 </div>
                 {c.bio && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{c.bio}</p>}
                 {c.specialties && (
                   <div className="flex flex-wrap gap-1 mb-3">
-                    {c.specialties.slice(0, 3).map((s) => <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{s}</span>)}
+                    {c.specialties.slice(0, 3).map((s) => <span key={s} className="text-[12px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{s}</span>)}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" variant="outline" onClick={() => book(c, 30)}><Calendar className="h-3 w-3 mr-1" /> 30 min · {formatLocalPrice(4500, currency)}</Button>
-                  <Button size="sm" onClick={() => book(c, 60)}>60 min · {formatLocalPrice(8000, currency)}</Button>
+                  <Button size="sm" variant="outline" disabled={booking === c.user_id} onClick={() => book(c, 30)}><Calendar className="h-3 w-3 mr-1" /> 30 min</Button>
+                  <Button size="sm" disabled={booking === c.user_id} onClick={() => book(c, 60)}>60 min</Button>
                 </div>
+                <p className="text-[12px] text-muted-foreground mt-2">
+                  Sessions are free to request while checkout is being built —
+                  pricing and payment arrive with the marketplace launch.
+                </p>
               </motion.div>
             ))}
           </div>

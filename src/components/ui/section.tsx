@@ -12,7 +12,7 @@ export function SectionHeader({ title, icon: Icon, action, actionLabel, onAction
 }) {
   return (
     <div className="flex items-center justify-between mb-3">
-      <h2 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      <h2 className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
         {Icon && <Icon size={12} aria-hidden />}
         {title}
       </h2>
@@ -20,7 +20,7 @@ export function SectionHeader({ title, icon: Icon, action, actionLabel, onAction
         <button
           type="button"
           onClick={onAction}
-          className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-white/[0.07] transition-colors"
+          className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[12px] font-bold text-primary hover:bg-white/[0.07] transition-colors"
         >
           {actionLabel} →
         </button>
@@ -41,7 +41,7 @@ export function Delta({ value, suffix = "", className, unit }: {
 }) {
   if (value == null) {
     return unit ? (
-      <span className={cn("text-[11px] text-muted-foreground", className)}>{unit}</span>
+      <span className={cn("text-[12px] text-muted-foreground", className)}>{unit}</span>
     ) : null;
   }
   const up = value > 0;
@@ -50,7 +50,7 @@ export function Delta({ value, suffix = "", className, unit }: {
   const color = up ? "text-success" : down ? "text-destructive" : "text-muted-foreground";
   const sign = up ? "+" : "";
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[11px] font-bold tabular-nums", color, className)}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[12px] font-bold tabular-nums", color, className)}>
       <Icon size={11} aria-hidden />
       {sign}{value}{suffix}
     </span>
@@ -66,7 +66,7 @@ export function Metric({ label, value, hint, className }: {
   return (
     <div className={cn("min-w-0", className)}>
       <p className="text-xl font-display font-bold tabular-nums leading-none tracking-tight">{value}</p>
-      <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       {hint && <div className="mt-1">{hint}</div>}
     </div>
   );
@@ -91,7 +91,7 @@ export function VprFactorBar({ label, value, weight, animated = true }: {
       </div>
       <span className="w-16 shrink-0 text-right text-xs font-bold tabular-nums">
         {value}
-        {weight != null && <span className="ml-1 text-[10px] font-semibold text-muted-foreground">×{weight.toFixed(2)}</span>}
+        {weight != null && <span className="ml-1 text-[12px] font-semibold text-muted-foreground">×{weight.toFixed(2)}</span>}
       </span>
     </div>
   );

@@ -1,6 +1,16 @@
 // Vaylo Sports Performance Intelligence — pure calculation engines.
 // All functions are deterministic and run client-side.
 
+import { ELEVATED_LOAD_RATIO, REDUCED_LOAD_RATIO, STEADY_LOAD_FLOOR } from "./recoveryAdjust";
+
+/**
+ * The steady band as copy — "0.8–1.3". Derived from the same constants the
+ * comparisons below use, so the sentence an athlete reads can never drift
+ * from the maths that produced it (2026-10-06 audit S3: three hard-coded
+ * literals across three files).
+ */
+const STEADY_BAND_LABEL = `${STEADY_LOAD_FLOOR}–${ELEVATED_LOAD_RATIO}`;
+
 export type Sport = string;
 
 export interface MetricRow {
@@ -84,8 +94,11 @@ const METRIC_RANGES: Record<string, { good: number; elite: number; worldClass?: 
 };
 
 export function metricToIndex(type: string, value: number): number {
+  // Impossible measurements (NaN/±Infinity from dirty or hostile input) index
+  // as 0 — never NaN, which would poison averages and VPR sums downstream.
+  if (!Number.isFinite(value)) return 0;
   const r = METRIC_RANGES[type];
-  if (!r) return Math.max(0, Math.min(100, value));
+  if (!r) return Math.max(0, Math.min(100, Math.round(value)));
   const worldClass = r.worldClass ?? r.elite + (r.elite - r.good) * 0.4;
   // Piecewise: <good -> 0..60, good..elite -> 60..90, elite..worldClass -> 90..100
   let pct: number;
@@ -96,7 +109,7 @@ export function metricToIndex(type: string, value: number): number {
     else if (value >= r.elite) pct = 60 + between(value, r.good, r.elite) * 30;
     else pct = 90 + Math.min(1, between(value, r.elite, worldClass)) * 10;
   } else {
-    if (value <= r.good) pct = Math.max(0, 60 * (value / Math.max(0.001, r.good)) ** 0.9);
+    if (value <= r.good) pct = Math.max(0, 60 * (Math.max(0, value) / Math.max(0.001, r.good)) ** 0.9);
     else if (value <= r.elite) pct = 60 + between(value, r.good, r.elite) * 30;
     else pct = 90 + Math.min(1, between(value, r.elite, worldClass)) * 10;
   }
@@ -111,6 +124,10 @@ const METRIC_TO_BUCKET: Record<string, keyof Omit<VPRScores, "overall_vpr">> = {
   reaction_time: "reaction_efficiency",
   shooting_accuracy: "skill_consistency", passing_accuracy: "skill_consistency", serve_consistency: "skill_consistency", first_touch: "skill_consistency",
 };
+
+export function metricBucket(type: string): keyof Omit<VPRScores, "overall_vpr"> | null {
+  return METRIC_TO_BUCKET[type] ?? null;
+}
 
 export function calculateVPR(metrics: MetricRow[], sport: string, position?: string): VPRScores {
   const buckets: Record<string, number[]> = {
@@ -246,19 +263,25 @@ export function analyzeLoads(loads: LoadRow[], age?: number): LoadAnalysis {
   const strengthShare = total > 0 ? sumAll("strength_load") / total : 0;
 
   const alerts: LoadAnalysis["alerts"] = [];
+  // Every message below is a statement about the training record and nothing
+  // else. This function feeds the Workload advice line on /metrics, so a phrase
+  // like "safe zone", "detraining risk" or "tendon stress accumulating" would
+  // be the app making a claim about the athlete's body from a ratio. The alert
+  // `type`s are a module contract (coreProduct.test) and stay as they are; only
+  // the athlete-facing words are held to the no-diagnosis rule.
   if (ratio > 1.5) alerts.push({ type: "overtraining", message: `Acute load ${(ratio).toFixed(2)}× chronic — high spike. Reduce intensity 20% for 3 days.` });
-  else if (ratio > 1.3) alerts.push({ type: "spike", message: `Load ratio ${ratio.toFixed(2)} is above safe zone (0.8–1.3). Add a recovery session.` });
-  else if (ratio < 0.7 && chronic > 0) alerts.push({ type: "undertraining", message: `Load dropped to ${ratio.toFixed(2)}× chronic. Detraining risk — add a quality session.` });
-  else if (ratio >= 0.8 && ratio <= 1.3) alerts.push({ type: "ok", message: `Load ratio ${ratio.toFixed(2)} sits in the optimal sweet spot.` });
+  else if (ratio > ELEVATED_LOAD_RATIO) alerts.push({ type: "spike", message: `Load ratio ${ratio.toFixed(2)} sits above the ${STEADY_BAND_LABEL} training band. Add a recovery session.` });
+  else if (ratio < REDUCED_LOAD_RATIO && chronic > 0) alerts.push({ type: "undertraining", message: `Load dropped to ${ratio.toFixed(2)}× chronic — a lighter patch than usual. Ease a quality session back in.` });
+  else if (ratio >= STEADY_LOAD_FLOOR && ratio <= ELEVATED_LOAD_RATIO) alerts.push({ type: "ok", message: `Load ratio ${ratio.toFixed(2)} sits inside the ${STEADY_BAND_LABEL} training band.` });
 
-  if (sprintShare > 0.5) alerts.push({ type: "imbalance", message: `Sprint load is ${Math.round(sprintShare * 100)}% of total — tendon stress accumulating. Add aerobic volume.` });
+  if (sprintShare > 0.5) alerts.push({ type: "imbalance", message: `Sprint load is ${Math.round(sprintShare * 100)}% of total, so the week is lopsided toward hard efforts. Add aerobic volume.` });
   if (strengthShare < 0.1 && total > 0) alerts.push({ type: "imbalance", message: `Strength load is only ${Math.round(strengthShare * 100)}%. Add 1–2 strength sessions/week.` });
 
-  if (age && age < 16 && acute > 800) alerts.push({ type: "overtraining", message: `Youth athlete (${age}yo) load above safe threshold. Cap at 800 RPE-min/week.` });
+  if (age && age < 16 && acute > 800) alerts.push({ type: "overtraining", message: `Your recent load is higher than we'd keep a developing athlete's. Cap at 800 RPE-min/week.` });
 
   let injuryRisk: LoadAnalysis["injuryRisk"] = "low";
   if (ratio > 1.5 || (sprintShare > 0.55 && acute > 600)) injuryRisk = "high";
-  else if (ratio > 1.3 || ratio < 0.6) injuryRisk = "moderate";
+  else if (ratio > ELEVATED_LOAD_RATIO || ratio < 0.6) injuryRisk = "moderate";
 
   return { acute: Math.round(acute), chronic: Math.round(chronic), ratio: +ratio.toFixed(2), sprintShare, enduranceShare, strengthShare, alerts, injuryRisk };
 }

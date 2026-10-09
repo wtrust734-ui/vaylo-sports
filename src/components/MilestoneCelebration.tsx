@@ -91,7 +91,7 @@ const MilestoneCelebration = () => {
                 {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
               <div className="text-7xl">{MESSAGES[active].emoji}</div>
-              <p className="text-[11px] uppercase tracking-widest text-primary font-semibold mt-3">Milestone</p>
+              <p className="text-[12px] uppercase tracking-widest text-primary font-semibold mt-3">Milestone</p>
               <h2 className="text-3xl font-display font-bold mt-1">{MESSAGES[active].title}</h2>
               <p className="text-sm text-muted-foreground mt-2">{MESSAGES[active].sub}</p>
               <button onClick={share}

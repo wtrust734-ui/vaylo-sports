@@ -44,8 +44,13 @@ export default function PaywallModal() {
             onClick={(e) => e.stopPropagation()}
             className="relative max-w-md w-full bg-gradient-to-br from-card via-card to-electric-purple/20 border border-electric-purple/40 rounded-3xl p-8 shadow-2xl"
           >
-            <button onClick={hide} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
-              <X className="h-5 w-5" />
+            <button
+              type="button"
+              onClick={hide}
+              aria-label="Close"
+              className="absolute top-4 right-4 -m-3.5 p-3.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" aria-hidden />
             </button>
             <div className="flex justify-center mb-4">
               <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-electric-purple to-energy flex items-center justify-center">

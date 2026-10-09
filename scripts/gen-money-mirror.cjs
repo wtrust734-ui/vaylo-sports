@@ -24,16 +24,30 @@ const coinsSrc = readSrc("src/config/coins.ts");
 const monetisationSrc = readSrc("src/config/monetisation.ts");
 
 // --- parsers ---------------------------------------------------------------
+// Every parser locates a name by its DECLARATION (`export const NAME`), never
+// by its first bare occurrence. That distinction is load-bearing: these configs
+// carry long explanatory comments, and a comment that mentions a constant by
+// name used to win the search. When CREDIT_PACKS was referenced in the pricing
+// comment above its own declaration, parseArray found the comment, took the
+// next `[` from inside it, and returned an empty ladder — which then failed the
+// "packs must be non-empty" invariant with a misleading message rather than
+// saying the parser had lost the plot. Anchoring on the declaration makes a
+// comment mentioning a constant harmless.
+const declarationIndex = (src, name) => {
+  const m = new RegExp(`export\\s+(?:const|let|var)\\s+${name}\\b`).exec(src);
+  if (!m) throw new Error(`Could not find the declaration of ${name}`);
+  return m.index;
+};
+
 const readNumber = (src, name) => {
-  const m = src.match(new RegExp(name + "\\s*=\\s*([0-9.]+)"));
+  const m = src.match(new RegExp(`export\\s+const\\s+${name}\\s*(?::[^=]+)?=\\s*([0-9.]+)`));
   if (!m) throw new Error(`Could not read ${name}`);
   return Number(m[1]);
 };
 
 /** Parses `export const NAME: T[] = [ { ... }, ... ];` */
 const parseArray = (src, arrayName, fields) => {
-  const start = src.indexOf(arrayName);
-  if (start === -1) throw new Error(`Could not find ${arrayName}`);
+  const start = declarationIndex(src, arrayName);
   const open = src.indexOf("[", start);
   const close = src.indexOf("];", open);
   const body = src.slice(open, close);
@@ -55,8 +69,7 @@ const parseArray = (src, arrayName, fields) => {
 
 /** Parses a single `export const NAME: T = { ... };` object literal. */
 const parseObject = (src, name, fields) => {
-  const start = src.indexOf(name);
-  if (start === -1) throw new Error(`Could not find ${name}`);
+  const start = declarationIndex(src, name);
   const open = src.indexOf("{", start);
   const close = src.indexOf("};", open);
   const body = src.slice(open, close);
@@ -72,8 +85,7 @@ const parseObject = (src, name, fields) => {
 
 /** Parses `export const FEATURE_COSTS: Record<...> = { key: 12, ... };` */
 const parseRecord = (src, name) => {
-  const start = src.indexOf(name);
-  if (start === -1) throw new Error(`Could not find ${name}`);
+  const start = declarationIndex(src, name);
   const open = src.indexOf("{", start);
   const close = src.indexOf("};", open);
   const body = src.slice(open, close);
@@ -83,8 +95,7 @@ const parseRecord = (src, name) => {
 };
 
 const parseStringArray = (src, name) => {
-  const start = src.indexOf(name);
-  if (start === -1) throw new Error(`Could not find ${name}`);
+  const start = declarationIndex(src, name);
   const open = src.indexOf("[", start);
   const close = src.indexOf("];", open);
   return [...src.slice(open, close).matchAll(/"([^"]+)"/g)].map((m) => m[1]);

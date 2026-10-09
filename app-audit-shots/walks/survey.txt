@@ -1,0 +1,102 @@
+############ Train -> Routines
+
+--> tap /Train/ at 539,592  ("Training plans — Your active plan and we")
+
+================ Train  (16 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 18.7px×4  81.9px×4  40.0px×3
+  top: y34.7 "Go back" | y90.7 "Training" | y128.0 "Build your body. Sharp" | y227.8 "No training plan yet"
+
+!! no clickable node matching /Routines/ — dumping what is here
+
+================ stuck  (16 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 18.7px×4  81.9px×4  40.0px×3
+  top: y34.7 "Go back" | y90.7 "Training" | y128.0 "Build your body. Sharp" | y227.8 "No training plan yet"
+
+written to app-audit-shots/walks/drill.txt
+############ Train -> Workouts
+
+--> tap /Train/ at 539,841  ("Create Training Plan")
+
+================ Train  (44 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 35.8px×13  18.7px×3  114.7px×2  104.0px×2  248.8px×1
+  top: y34.7 "Go back" | y90.7 "Training" | y128.0 "Build your body. Sharp" | y189.7 "Create Plan"
+
+!! no clickable node matching /Workouts/ — dumping what is here
+
+================ stuck  (44 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 35.8px×13  18.7px×3  114.7px×2  104.0px×2  248.8px×1
+  top: y34.7 "Go back" | y90.7 "Training" | y128.0 "Build your body. Sharp" | y189.7 "Create Plan"
+
+written to app-audit-shots/walks/drill.txt
+############ Perform -> Goals
+
+--> tap /Perform/ at 711,2248  ("Perform")
+
+================ Perform  (19 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 18.7px×12  49.9px×1
+  top: y41.9 "VAYLO SPORTS" | y74.7 "Perform" | y112.8 "How good are you, and " | y160.0 "View your VPR"
+
+--> tap /Goals/ at 539,2170  ("Goals — What you're working towards")
+
+================ Goals  (23 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 18.7px×12  32.8px×3  49.9px×1
+  top: y41.9 "VAYLO SPORTS" | y74.7 "Perform" | y112.8 "How good are you, and " | y160.0 "View your VPR"
+
+written to app-audit-shots/walks/drill.txt
+############ Profile -> Achievements
+
+--> tap /Profile/ at 539,2342  ("Compare — You vs elite profiles")
+
+================ Profile  (36 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×3  32.8px×3  48.0px×2  317.0px×2  18.7px×1
+  top: y34.7 "Go back" | y160.0 "ATHLETE COMPARISON" | y184.0 "Stack Up vs Elite" | y226.7 "Illustrative benchmark"
+
+!! no clickable node matching /Achievements/ — dumping what is here
+
+================ stuck  (36 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×3  32.8px×3  48.0px×2  317.0px×2  18.7px×1
+  top: y34.7 "Go back" | y160.0 "ATHLETE COMPARISON" | y184.0 "Stack Up vs Elite" | y226.7 "Illustrative benchmark"
+
+written to app-audit-shots/walks/drill.txt
+############ Perform -> VPR
+
+--> tap /Perform/ at 711,2248  ("Perform")
+
+================ Perform  (33 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×3  48.0px×2  317.0px×2  18.7px×1  45.0px×1
+  top: y34.7 "Go back" | y160.0 "ATHLETE COMPARISON" | y184.0 "Stack Up vs Elite" | y226.7 "Illustrative benchmark"
+
+!! no clickable node matching /VPR/ — dumping what is here
+
+================ stuck  (33 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×3  48.0px×2  317.0px×2  18.7px×1  45.0px×1
+  top: y34.7 "Go back" | y160.0 "ATHLETE COMPARISON" | y184.0 "Stack Up vs Elite" | y226.7 "Illustrative benchmark"
+
+written to app-audit-shots/walks/drill.txt
+############ Profile -> Legal
+
+--> tap /Profile/ at 929,2248  ("Profile")
+
+================ Profile  (23 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 19.8px×5  40.0px×3  120.0px×2  51.8px×2  18.7px×1
+  top: y34.7 "Profile" | y112.0 "Athlete" | y139.8 "Multi-Sport · Intermed" | y168.0 "Free"
+
+--> tap /Legal/ at 539,1512  ("Legal & Safety All 26 policies, your rig")
+
+================ Legal  (18 labelled nodes)
+  gutters: left 16.0  right 15.6   (body x 16.0..395.8)
+  left edges: 16.0px×7  61.7px×3  18.7px×1
+  top: y34.7 "Go back" | y104.0 "Legal & Safety" | y138.7 "Every document, every " | y219.8 "Your age isn't set"
+
+written to app-audit-shots/walks/drill.txt

@@ -11,23 +11,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import Reveal from "@/components/motion/Reveal";
 import AnimatedNumber from "@/components/motion/AnimatedNumber";
 import { toast } from "sonner";
-import { Target, Flame, AlertTriangle, Check, X, Plus, Sparkles, Trash2, Users, TrendingUp, HelpCircle, Coins } from "lucide-react";
+import { Target, Flame, AlertTriangle, Check, X, Plus, Sparkles, Trash2, TrendingUp, HelpCircle, Coins, Compass, ChevronDown, CheckCircle2, Circle, MinusCircle, Flag } from "lucide-react";
 import { FEATURE_COSTS } from "@/config/credits";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import {
-  type OutcomeGoal, type ProcessGoal, type DailyAction, type ActionLog,
+  type ProcessGoal, type DailyAction, type ActionLog,
   outcomeProgress, requiredRate, reliabilityScore, currentStreak,
   weeklyCompletionForProcess, todayCompletionMap, toggleAction, isoDate,
 } from "@/lib/goals";
+import { ageFromDob } from "@/lib/age";
+import {
+  PHASE_BLURBS, PHASE_LABELS, PROGRESS_LABELS,
+  buildRoadmaps, type DevelopmentPhase, type GoalRoadmap, type RoadmapContext, type RoadmapGoalRow,
+} from "@/lib/roadmap";
+import { loadRoadmapContext, persistRoadmapPatches } from "@/lib/roadmapPlanning";
 import ReactMarkdown from "react-markdown";
 import NaturalLanguageGoalInput from "@/components/goals/NaturalLanguageGoalInput";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
+import { checkStreakAlert } from "@/lib/notificationTriggers";
 
 
 
 const Goals = () => {
-  const { user } = useAuth();
-  const [outcomes, setOutcomes] = useState<OutcomeGoal[]>([]);
+  const { user, profile } = useAuth();
+  // The goal rows carry the roadmap columns as well as the goal itself: the
+  // roadmap extends this table rather than adding a second one.
+  const [outcomes, setOutcomes] = useState<RoadmapGoalRow[]>([]);
+  // The record the roadmaps are derived from. Loading it separately means a
+  // failed read leaves every goal working exactly as it did before.
+  const [roadmapContext, setRoadmapContext] = useState<RoadmapContext>({});
   const [processes, setProcesses] = useState<ProcessGoal[]>([]);
   const [actions, setActions] = useState<DailyAction[]>([]);
   const [logs, setLogs] = useState<ActionLog[]>([]);
@@ -37,6 +49,10 @@ const Goals = () => {
   const [showAction, setShowAction] = useState<string | null>(null);
   const [aiFeedback, setAiFeedback] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  // Gates every destructive mutation on this page. Without it a double-tap on
+  // the (already-confirmed) delete fired two DELETEs and the second reloaded
+  // against rows that no longer existed.
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     if (!user) return;
@@ -48,14 +64,63 @@ const Goals = () => {
       supabase.from("daily_action_logs").select("*").eq("user_id", user.id)
         .gte("log_date", isoDate(new Date(Date.now() - 30 * 86400000))),
     ]);
-    setOutcomes(o.data ?? []);
+    const loadedGoals = (o.data ?? []) as RoadmapGoalRow[];
+    setOutcomes(loadedGoals);
     setProcesses(p.data ?? []);
     setActions(a.data ?? []);
     setLogs(l.data ?? []);
     setLoading(false);
+    // In-app streak alert (fires at most once/day, respects prefs). Skipped
+    // once everything is already done today — no risk, no nudge.
+    const fetchedActions = a.data ?? [];
+    const fetchedLogs = l.data ?? [];
+    if (fetchedActions.length) {
+      const todayKey = isoDate(new Date());
+      const allDoneToday = fetchedActions.every((act) =>
+        fetchedLogs.some((lg) => lg.action_id === act.id && lg.log_date === todayKey && lg.completed));
+      if (!allDoneToday) {
+        const stk = currentStreak(fetchedActions, fetchedLogs);
+        if (stk > 0) {
+          checkStreakAlert(user.id, fetchedActions, fetchedLogs, stk).catch(() => { /* never block the page */ });
+        }
+      }
+    }
+    // Not awaited: the goals are on screen and usable, and the roadmap is a
+    // summary of them. It arrives a moment later, or not at all.
+    loadRoadmap(loadedGoals);
+  };
+
+  /**
+   * Read the athlete's record and turn it into a roadmap for every goal.
+   *
+   * The derived roadmap is written back to the goal rows so the parent view and
+   * an offline session can both read it, and `persistRoadmapPatches` returns no
+   * writes at all when nothing has moved — which is what makes this safe to run
+   * after every load rather than only after an edit.
+   */
+  const loadRoadmap = async (goals: RoadmapGoalRow[]) => {
+    if (!user) return;
+    try {
+      const context = await loadRoadmapContext({
+        userId: user.id,
+        sports: profile?.sport ? [profile.sport] : [],
+        age: ageFromDob(profile?.date_of_birth ?? null),
+      });
+      setRoadmapContext(context);
+      await persistRoadmapPatches(buildRoadmaps(goals, context), goals);
+    } catch {
+      /* a roadmap that cannot be read is a shorter roadmap, not an error */
+    }
   };
 
   useEffect(() => { load(); }, [user]);
+
+  const roadmaps = useMemo(() => buildRoadmaps(outcomes, roadmapContext), [outcomes, roadmapContext]);
+  const roadmapById = useMemo(() => {
+    const map = new Map<string, GoalRoadmap>();
+    for (const r of roadmaps) map.set(r.goalId, r);
+    return map;
+  }, [roadmaps]);
 
   const reliability = useMemo(() => reliabilityScore(actions, logs), [actions, logs]);
   const streak = useMemo(() => currentStreak(actions, logs), [actions, logs]);
@@ -71,8 +136,14 @@ const Goals = () => {
   const handleToggle = async (action: DailyAction) => {
     if (!user) return;
     const done = !todayMap[action.id];
-    const { error } = await toggleAction(action.id, user.id, done);
-    if (error) { toast.error("Failed to update"); return; }
+    // toggleAction throws on failure — catch it here so a rejected promise
+    // doesn't bypass the reload and leave the UI in a stale state.
+    try {
+      await toggleAction(action.id, user.id, done);
+    } catch {
+      toast.error("Failed to update — check your connection and try again.");
+      return;
+    }
     if (done) toast.success("Locked in.");
     load();
   };
@@ -122,9 +193,9 @@ const Goals = () => {
   const goalCost = FEATURE_COSTS.weekly_coach_review;
 
   return (
-    <div className="min-h-screen pb-32 pt-20 px-4 max-w-3xl mx-auto space-y-5">
+    <div className="min-h-screen pb-32 px-5 pt-[var(--vaylo-screen-top)] max-w-3xl mx-auto space-y-5">
       {/* One simple entry point — natural language is the primary way to add a goal */}
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+      <div className="flex items-center gap-2 text-[12px] uppercase tracking-widest text-muted-foreground">
         <HelpCircle size={12} /> How goals work: <span className="text-foreground normal-case font-medium">Set a long-term target → add a weekly habit → tick daily actions.</span>
       </div>
       <NaturalLanguageGoalInput onCreated={load} />
@@ -133,7 +204,7 @@ const Goals = () => {
         <Card className="p-5 bg-gradient-to-br from-primary/15 via-card to-card border-primary/30">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Accountability</p>
+              <p className="text-[12px] uppercase tracking-[0.2em] text-muted-foreground">Accountability</p>
               <h1 className="text-2xl font-display font-bold text-gradient-electric">Goals & Pressure</h1>
             </div>
             <Target className="text-primary" size={28} />
@@ -185,9 +256,23 @@ const Goals = () => {
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <Mini label="Deadline" value={g.deadline ?? "—"} />
-                  <Mini label="Required" value={requiredRate(g)} />
+                  {/* `requiredRate` assumes a bigger-is-better metric, so a
+                      target time prints an em dash. The roadmap knows both
+                      directions, and two different answers on one card is a
+                      contradiction the athlete can see. */}
+                  <Mini
+                    label="Required"
+                    value={
+                      roadmapById.get(g.id)?.progress.requiredRate && roadmapById.get(g.id)!.progress.requiredRate !== "—"
+                        ? roadmapById.get(g.id)!.progress.requiredRate
+                        : requiredRate(g)
+                    }
+                  />
                   <Mini label="Process goals" value={String(linkedProcs.length)} />
                 </div>
+                {roadmapById.get(g.id) && (
+                  <GoalRoadmapPanel goal={g} roadmap={roadmapById.get(g.id)!} onSaved={load} />
+                )}
                 <div className="mt-3 flex flex-wrap justify-between items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => setShowProcess(g.id)}>
                     <Plus size={12} className="mr-1" /> Process goal
@@ -222,13 +307,27 @@ const Goals = () => {
                       <Badge variant="outline" className="text-energy border-energy/40">Close call</Badge>
                     )}
                     <button
+                      aria-label={`Delete goal: ${g.title}`}
                       className="text-xs text-muted-foreground hover:text-destructive transition ml-1"
+                      disabled={deleting}
                       onClick={async () => {
-                        const { error } = await supabase.from("outcome_goals").delete().eq("id", g.id);
-                        if (error) { toast.error(error.message); return; }
-                        load();
+                        // The DB cascades this delete through process_goals,
+                        // daily_actions and daily_action_logs, so the confirm
+                        // must name the blast radius, not just the goal.
+                        const confirmed = window.confirm(
+                          `Delete the goal "${g.title}"? This also permanently deletes its weekly habits, daily actions and all logged history. This can't be undone.`
+                        );
+                        if (!confirmed || deleting) return;
+                        setDeleting(true);
+                        try {
+                          const { error } = await supabase.from("outcome_goals").delete().eq("id", g.id);
+                          if (error) { toast.error(error.message); return; }
+                          load();
+                        } finally {
+                          setDeleting(false);
+                        }
                       }}>
-                      <Trash2 size={14} />
+                      <Trash2 size={14} aria-hidden />
                     </button>
                   </div>
                 </div>
@@ -278,32 +377,51 @@ const Goals = () => {
             <div className="divide-y divide-border">
               {actions.map(a => {
                 const done = !!todayMap[a.id];
+                // A <button> may not contain another <button> (invalid HTML;
+                // screen readers skipped the delete control entirely). The row
+                // is now a div: the toggle is a real checkbox-flavoured button
+                // and the delete control is its sibling.
                 return (
-                  <button
+                  <div
                     key={a.id}
-                    onClick={() => handleToggle(a)}
                     className={`w-full flex items-center gap-3 px-3 py-3 text-start transition ${
                       done ? "bg-success/5" : ""
                     }`}>
-                    <div className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition ${
-                      done ? "bg-success border-success text-success-foreground" : "border-destructive/60 text-destructive"
-                    }`}>
-                      {done ? <Check size={16} /> : <X size={14} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${done ? "line-through text-muted-foreground" : ""}`}>{a.title}</p>
-                    </div>
                     <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        const { error } = await supabase.from("daily_actions").update({ active: false }).eq("id", a.id);
-                        if (error) { toast.error(error.message); return; }
-                        load();
-                      }}
-                      className="text-muted-foreground hover:text-destructive">
-                      <Trash2 size={14} />
+                      role="checkbox"
+                      aria-checked={done}
+                      aria-label={`Mark "${a.title}" as ${done ? "not done" : "done"} today`}
+                      onClick={() => handleToggle(a)}
+                      className="flex flex-1 items-center gap-3 text-start min-w-0">
+                      <span className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition shrink-0 ${
+                        done ? "bg-success border-success text-success-foreground" : "border-destructive/60 text-destructive"
+                      }`} aria-hidden>
+                        {done ? <Check size={16} /> : <X size={14} />}
+                      </span>
+                      <span className={`text-sm font-medium min-w-0 ${done ? "line-through text-muted-foreground" : ""}`}>{a.title}</span>
                     </button>
-                  </button>
+                    <button
+                      aria-label={`Stop tracking action: ${a.title}`}
+                      disabled={deleting}
+                      onClick={async () => {
+                        if (deleting) return;
+                        const confirmed = window.confirm(
+                          `Stop tracking "${a.title}"? It disappears from today's checklist; your logged history stays in your stats. You can add a new action to the same habit later.`
+                        );
+                        if (!confirmed) return;
+                        setDeleting(true);
+                        try {
+                          const { error } = await supabase.from("daily_actions").update({ active: false }).eq("id", a.id);
+                          if (error) { toast.error(error.message); return; }
+                          load();
+                        } finally {
+                          setDeleting(false);
+                        }
+                      }}
+                      className="text-muted-foreground hover:text-destructive shrink-0">
+                      <Trash2 size={14} aria-hidden />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -318,13 +436,13 @@ const Goals = () => {
             <div className="flex items-center gap-2">
               <Sparkles size={18} className="text-primary" />
               <h3 className="font-semibold">Weekly Coach Review</h3>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} /> {goalCost} credits</span>
+              <span className="inline-flex items-center gap-1 text-[12px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} /> {goalCost} credits</span>
             </div>
             <Button size="sm" onClick={runAiReview} disabled={aiLoading}>
               {aiLoading ? "Analyzing…" : `Run Review · ${goalCost} cr`}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground mb-2">Each review costs {goalCost} credits. Your goals, streak and today’s completion are analysed — PBs and recovery are included when available.</p>
+          <p className="text-[12px] text-muted-foreground mb-2">Each review costs {goalCost} credits. Your goals, streak and today’s completion are analysed — PBs and recovery are included when available.</p>
           {aiFeedback ? (
             <div className="prose prose-sm prose-invert max-w-none text-sm">
               <ReactMarkdown>{aiFeedback}</ReactMarkdown>
@@ -335,17 +453,31 @@ const Goals = () => {
         </Card>
       </Reveal>
 
-      {/* Accountability partners hint */}
-      <Reveal delay={0.25}>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Users size={16} className="text-primary" />
-            <h3 className="font-semibold text-sm">Accountability Partners</h3>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">Friends can see your goal progress, weekly consistency and missed actions. Add partners from Friends.</p>
-          <Button size="sm" variant="outline" onClick={() => (window.location.href = "/friends")}>Manage Friends</Button>
-        </Card>
-      </Reveal>
+      {/* An "Accountability Partners" card used to sit here.
+
+          It promised that friends could see your goal progress, weekly
+          consistency and missed actions, and offered a **Manage Friends**
+          button that did `window.location.href = "/friends"`. Both halves were
+          wrong at the same time:
+
+            * /friends is now a redirect to the home screen — the friends
+              surface was removed — so the button reloaded the app and landed
+              the athlete back where they started. `window.location.href` also
+              leaves the app entirely inside the Capacitor shell, the same
+              full-page-navigation mistake the cookie notice documents.
+            * Nothing in the app can send or accept a friend request any more.
+              Four achievements ("Add your first friend", "Have 5 friends",
+              "Popular", "Team Captain"), two challenges ("Social Butterfly",
+              "Friend Network") and the friend-activity notification switch all
+              described the removed feature too — see docs/RELEASE-AUDIT.md,
+              section 3.
+
+          The Friends screen came back on 2026-10-08 (docs/FRIENDS.md), along
+          with the four friend achievements, the "Friend activity" switch and
+          the notifications sentence. This card stays out: it promised that a
+          partner could SEE your goal progress, and that is still not built —
+          messaging is not goal sharing, and a card that advertises a feature
+          which does not exist is worse than no card. */}
 
       {/* Dialogs */}
       <OutcomeDialog open={showOutcome} onClose={() => setShowOutcome(false)} userId={user?.id} onSaved={load} />
@@ -355,9 +487,211 @@ const Goals = () => {
   );
 };
 
+/* -------------------------------------------------------------------------- */
+/* The development roadmap, expanded inside the goal it belongs to            */
+/* -------------------------------------------------------------------------- */
+/* Deliberately not a separate screen. A roadmap is a way of reading one goal,
+ * and putting it on its own page would mean the athlete has to hold the goal in
+ * their head while reading about it. It lives here, collapsed by default, and
+ * opens on the goal it describes.
+ *
+ * Everything it shows is derived (see `src/lib/roadmap.ts`). The only two
+ * things the athlete can set here are their current level and the phase, and
+ * both are the roadmap's inputs rather than its output. */
+
+const PROGRESS_TONE: Record<string, string> = {
+  ahead: "text-success border-success/40",
+  on_track: "text-primary border-primary/40",
+  behind: "text-energy border-energy/40",
+  unknown: "text-muted-foreground border-border",
+};
+
+const INFLUENCE_TONE: Record<string, string> = {
+  positive: "border-success/30 bg-success/5",
+  info: "border-primary/25 bg-primary/5",
+  watch: "border-energy/30 bg-energy/5",
+};
+
+const GoalRoadmapPanel = ({ goal, roadmap, onSaved }: {
+  goal: RoadmapGoalRow;
+  roadmap: GoalRoadmap;
+  onSaved: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [level, setLevel] = useState(goal.current_level ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setLevel(goal.current_level ?? ""); }, [goal.current_level]);
+
+  const save = async (patch: { current_level?: string | null; phase?: string | null }) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("outcome_goals").update(patch).eq("id", goal.id);
+      if (error) { toast.error(error.message); return; }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const { progress } = roadmap;
+
+  return (
+    <div className="mt-3 rounded-lg border border-border/60 bg-muted/20">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-start"
+      >
+        <Compass size={14} className="text-primary shrink-0" aria-hidden />
+        <span className="text-xs font-semibold">Development roadmap</span>
+        <Badge variant="outline" className="text-[12px] py-0">{PHASE_LABELS[roadmap.phase]}</Badge>
+        <Badge variant="outline" className={`text-[12px] py-0 ${PROGRESS_TONE[progress.status]}`}>
+          {PROGRESS_LABELS[progress.status]}
+        </Badge>
+        <ChevronDown size={14} className={`ms-auto shrink-0 transition ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3">
+          <p className="text-[12px] text-muted-foreground">{PHASE_BLURBS[roadmap.phase]}</p>
+
+          {/* Level → target: the two ends of the journey, in the athlete's words */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-md bg-background/60 p-2">
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Where you are</p>
+              <p className="font-medium">{roadmap.currentLevel}</p>
+            </div>
+            <div className="rounded-md bg-background/60 p-2">
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Where you're going</p>
+              <p className="font-medium">{roadmap.target}</p>
+            </div>
+          </div>
+
+          {roadmap.isStale && (
+            <div className="p-2 rounded-md bg-warning/10 border border-warning/30 text-[12px] text-warning flex items-center gap-2">
+              <AlertTriangle size={12} aria-hidden /> This roadmap hasn't moved in {roadmap.staleDays} days. It updates as you log sessions and competitions.
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">{progress.summary}</p>
+            <Progress value={progress.percent} className="h-2" />
+            {progress.daysRemaining != null && (
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <Mini label="Days left" value={String(Math.max(0, progress.daysRemaining))} />
+                <Mini label="Needed per week" value={progress.requiredRate} />
+              </div>
+            )}
+          </div>
+
+          {roadmap.developmentAreas.length > 0 && (
+            <div>
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">Development areas</p>
+              <div className="flex flex-wrap gap-1">
+                {roadmap.developmentAreas.map(area => (
+                  <Badge key={area} variant="secondary" className="text-[12px] font-normal">{area}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">Milestones</p>
+            <ol className="space-y-1">
+              {roadmap.milestones.map(m => (
+                <li key={m.id} className="flex items-start gap-2 text-xs">
+                  {m.status === "achieved"
+                    ? <CheckCircle2 size={13} className="text-success shrink-0 mt-0.5" aria-hidden />
+                    : m.status === "missed"
+                      ? <MinusCircle size={13} className="text-muted-foreground shrink-0 mt-0.5" aria-hidden />
+                      : <Circle size={13} className="text-muted-foreground shrink-0 mt-0.5" aria-hidden />}
+                  <span className={m.status === "achieved" ? "text-muted-foreground line-through" : ""}>
+                    {m.title}
+                    {m.targetDate && <span className="text-muted-foreground"> · {m.targetDate}</span>}
+                    {m.status === "missed" && <span className="text-muted-foreground"> · not this time</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {roadmap.influences.length > 0 && (
+            <div>
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">What's shaping this</p>
+              <div className="space-y-1">
+                {roadmap.influences.map((influence, i) => (
+                  <div key={`${influence.kind}-${i}`} className={`rounded-md border p-2 ${INFLUENCE_TONE[influence.tone]}`}>
+                    <p className="text-xs font-semibold">{influence.label}</p>
+                    <p className="text-[12px] text-muted-foreground">{influence.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {roadmap.priorities.length > 0 && (
+            <div>
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">Current priorities</p>
+              <ul className="space-y-1">
+                {roadmap.priorities.map(p => (
+                  <li key={p} className="text-xs flex gap-2"><Flag size={12} className="text-primary shrink-0 mt-0.5" aria-hidden />{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {roadmap.nextActions.length > 0 && (
+            <div>
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">Next actions</p>
+              <ul className="space-y-1">
+                {roadmap.nextActions.map(a => (
+                  <li key={a} className="text-xs text-muted-foreground flex gap-2"><Check size={12} className="text-success shrink-0 mt-0.5" aria-hidden />{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* The two inputs the athlete owns. Everything else is derived. */}
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              aria-label="Your current level toward this goal"
+              placeholder="Current level (e.g. 4:32 1500m PB)"
+              value={level}
+              maxLength={200}
+              onChange={e => setLevel(e.target.value)}
+              onBlur={() => {
+                const next = level.trim();
+                if (next === (goal.current_level ?? "")) return;
+                save({ current_level: next || null });
+              }}
+            />
+            <select
+              aria-label="Development phase"
+              value={roadmap.phase}
+              disabled={saving}
+              onChange={e => save({ phase: e.target.value as DevelopmentPhase })}
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {(Object.keys(PHASE_LABELS) as DevelopmentPhase[]).map(p => (
+                <option key={p} value={p}>{PHASE_LABELS[p]}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-[12px] text-muted-foreground">
+            The roadmap updates itself from your sessions, competitions, recovery and breaks. Setting a level or a phase tells it where you think you are.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Stat = ({ label, value, suffix, className, icon }: { label: string; value: number; suffix?: string; className?: string; icon?: React.ReactNode }) => (
   <div className="text-center">
-    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1 flex items-center justify-center gap-1">{icon}{label}</p>
+    <p className="text-[12px] uppercase tracking-[0.18em] text-muted-foreground mb-1 flex items-center justify-center gap-1">{icon}{label}</p>
     <p className={`text-2xl font-display font-bold ${className ?? ""}`}>
       <AnimatedNumber value={value} />{suffix}
     </p>
@@ -366,7 +700,7 @@ const Stat = ({ label, value, suffix, className, icon }: { label: string; value:
 
 const Mini = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-md bg-muted/30 p-2">
-    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</p>
     <p className="text-xs font-medium truncate">{value}</p>
   </div>
 );
@@ -379,11 +713,24 @@ const OutcomeDialog = ({ open, onClose, userId, onSaved }: { open: boolean; onCl
   const [f, setF] = useState({ title: "", category: "performance", target_value: "", metric_unit: "", deadline: "", current_value: "0" });
   const submit = async () => {
     if (!f.title || !userId) return;
+    // Numeric goals are clamped to finite, non-negative values; an inverted
+    // target (target < current) is refused rather than producing a negative
+    // progress bar.
+    const num = (v: string) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const target = f.target_value ? num(f.target_value) : null;
+    const current = num(f.current_value) ?? 0;
+    if (target != null && current > target) {
+      toast.error("Target must be greater than or equal to the current value.");
+      return;
+    }
     const { error } = await supabase.from("outcome_goals").insert({
-      user_id: userId, title: f.title, category: f.category,
-      target_value: f.target_value ? Number(f.target_value) : null,
-      current_value: Number(f.current_value || 0),
-      metric_unit: f.metric_unit || null,
+      user_id: userId, title: f.title.slice(0, 120), category: f.category,
+      target_value: target,
+      current_value: current,
+      metric_unit: f.metric_unit.slice(0, 20) || null,
       deadline: f.deadline || null,
     });
     if (error) { toast.error(error.message); return; }
@@ -417,8 +764,12 @@ const ProcessDialog = ({ open, outcomeId, onClose, userId, onSaved }: { open: bo
   const [target, setTarget] = useState("3");
   const submit = async () => {
     if (!title || !userId) return;
+    // Weekly target is 1–14 (the progress math divides by it; 0 would divide
+    // by zero and 500 would make the percentage meaningless).
+    const parsed = parseInt(target, 10);
+    const weeklyTarget = Number.isFinite(parsed) ? Math.max(1, Math.min(14, parsed)) : 3;
     const { error } = await supabase.from("process_goals").insert({
-      user_id: userId, outcome_goal_id: outcomeId, title, weekly_target: Number(target) || 3,
+      user_id: userId, outcome_goal_id: outcomeId, title: title.slice(0, 120), weekly_target: weeklyTarget,
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Process goal added");

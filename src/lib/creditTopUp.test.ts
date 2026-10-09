@@ -3,15 +3,27 @@
 
 import { describe, expect, it } from "vitest";
 
-import { CREDIT_PACKS } from "@/config/credits";
+import { CREDIT_PACKS, FEATURE_COSTS } from "@/config/credits";
 import { bestPackPricePerCredit, planCreditTopUp } from "./creditTopUp";
 
 describe("planCreditTopUp", () => {
   it("finds the cheapest pack covering the gap", () => {
-    // 60 credits: pack_25 (25) can't cover, pack_50 (50+10=60) exactly covers.
-    const plan = planCreditTopUp(60);
+    // Derived from the config rather than written as a literal: this file used
+    // to assert `total === 60` against pack_50's old 50+10 bonus, so raising
+    // the bonus to 15 broke a test about arithmetic rather than about a bug —
+    // and, worse, left a number that would silently go stale again next time.
+    // The rule under test is "smallest pack whose total covers the gap".
+    const pack50 = CREDIT_PACKS.find((p) => p.id === "pack_50")!;
+    const pack25 = CREDIT_PACKS.find((p) => p.id === "pack_25")!;
+    const gap = pack50.credits + (pack50.bonus || 0);
+
+    // The gap must be a real one: the pack below cannot cover it, or the test
+    // would pass without exercising the comparison at all.
+    expect(pack25.credits + (pack25.bonus || 0)).toBeLessThan(gap);
+
+    const plan = planCreditTopUp(gap);
     expect(plan.cheapest?.id).toBe("pack_50");
-    expect(plan.cheapest?.total).toBe(60);
+    expect(plan.cheapest?.total).toBe(gap);
     expect(plan.cheapest?.leftover).toBe(0);
   });
 
@@ -62,8 +74,10 @@ describe("planCreditTopUp", () => {
   });
 
   it("covers real feature costs with the real ladder", () => {
-    // Largest single feature cost in the config is form_analysis_unlock (54).
-    for (const gap of [3, 5, 10, 12, 24, 54]) {
+    // Includes the largest single feature cost in the config, read from it
+    // rather than written down, plus the small gaps an early athlete hits.
+    const largest = Math.max(...Object.values(FEATURE_COSTS));
+    for (const gap of [3, 5, 10, 12, 24, 54, largest]) {
       const plan = planCreditTopUp(gap);
       expect(plan.cheapest, `gap ${gap} must be coverable`).not.toBeNull();
       expect(plan.cheapest!.total).toBeGreaterThanOrEqual(gap);
@@ -85,7 +99,13 @@ describe("planCreditTopUp", () => {
 
 describe("bestPackPricePerCredit", () => {
   it("returns the best rate on the ladder", () => {
-    expect(bestPackPricePerCredit()).toBeCloseTo(CREDIT_PACKS[4].price_cents / 650, 5);
+    // Derived, not hard-coded to a credit count. The old literal divided by
+    // 650 — pack_500's total before the 2026-10-04 bonus increase — so this
+    // test was really asserting a number from a previous economy rather than
+    // that the function finds the best rate.
+    const biggest = CREDIT_PACKS.reduce((a, b) => (a.price_cents > b.price_cents ? a : b));
+    const expected = biggest.price_cents / (biggest.credits + (biggest.bonus || 0));
+    expect(bestPackPricePerCredit()).toBeCloseTo(expected, 5);
   });
 
   it("returns 0 for an empty ladder", () => {

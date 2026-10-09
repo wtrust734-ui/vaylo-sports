@@ -44,8 +44,6 @@
     "primaryNav": "التنقل الرئيسي"
   },
   "quickActions": {
-    "logWorkout": "تسجيل تمرين",
-    "logWorkoutDesc": "ابدأ أو أنهِ جلسة",
     "logResult": "تسجيل نتيجة",
     "logResultDesc": "سجّل نتيجة منافسة",
     "recoveryCheckIn": "تسجيل الاستشفاء",
@@ -58,13 +56,14 @@
     "train": {
       "title": "تدريب",
       "subtitle": "جلسات وخطط وتقنية.",
-      "primaryCta": "بدء التمرين",
       "groupDaily": "التدريب اليومي",
       "groupProgress": "التقدم",
       "workouts": "التمارين",
       "workoutsDesc": "سجّل الجلسات وراجعها",
       "trainingPlans": "خطط التدريب",
       "trainingPlansDesc": "خططك النشطة وأسابيعها",
+      "availability": "التوفر",
+      "availabilityDesc": "العطل والامتحانات والفواصل",
       "routines": "روتينات",
       "routinesDesc": "إحماء وتمارين قابلة للتكرار",
       "crossTraining": "تدريب متقاطع",
@@ -86,6 +85,8 @@
       "vprDesc": "تقييمك العام وعوامله",
       "metricsHub": "مركز المقاييس",
       "metricsHubDesc": "الأحمال والاتجاهات والتسجيل",
+      "insights": "الرؤى",
+      "insightsDesc": "ما يقوله تدريبك اليوم",
       "skills": "المهارات",
       "skillsDesc": "تحليل المهارات الرياضية",
       "development": "التطور",
@@ -112,7 +113,7 @@
       "nutrition": "التغذية",
       "nutritionDesc": "الوجبات والماء والأهداف",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "منافسة",
@@ -149,7 +150,6 @@
     "readinessDown": "{{value}} عن الأمس",
     "coachInsight": "ملاحظة المدرب",
     "viewInsight": "عرض الملاحظة",
-    "startSession": "بدء الجلسة",
     "noVprYet": "سجّل بضع جلسات لفتح مؤشر الأداء.",
     "noSessionToday": "لا توجد جلسة مخططة — راجع خطتك.",
     "welcomeBack": "أهلاً بعودتك",
@@ -275,6 +275,7 @@
     "activityFeed": "نشاط الرياضيين",
     "groupTrain": "تدريب",
     "trainingPlans": "خطط التدريب",
+    "availability": "التوفر",
     "workouts": "التمارين",
     "routines": "روتينات",
     "crossTraining": "تدريب متقاطع",
@@ -317,6 +318,9 @@
     "profile": "الملف",
     "openMenu": "فتح القائمة",
     "closeMenu": "إغلاق القائمة",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "وصول ولي الأمر",
+    "startingAnalysis": "تحليل البداية",
+    "insights": "رؤى"
   }
 }

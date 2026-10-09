@@ -211,7 +211,7 @@ const Events = () => {
     const chartData = getResultsChartData();
     return (
       <div className="min-h-screen bg-background pb-24">
-        <div className="px-5 pt-14 pb-4 flex items-center gap-3">
+        <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
           <motion.button onClick={() => setSelectedEvent(null)} whileTap={{ scale: 0.9 }} className="text-muted-foreground">
             <ChevronRight size={20} className="rotate-180" />
           </motion.button>
@@ -220,7 +220,7 @@ const Events = () => {
 
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
           className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-5 shadow-card text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary mb-2">Countdown</p>
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">Countdown</p>
           <motion.p className="text-3xl font-display font-bold text-primary"
             animate={{ scale: [1, 1.03, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             {getCountdown(selectedEvent.event_date)}
@@ -292,7 +292,7 @@ const Events = () => {
 
           {chartData.length > 0 && (
             <div className="bg-card border border-border rounded-xl overflow-hidden mb-4">
-              <div className="grid grid-cols-3 bg-muted/50 px-4 py-2 text-[10px] font-semibold text-muted-foreground uppercase">
+              <div className="grid grid-cols-3 bg-muted/50 px-4 py-2 text-[12px] font-semibold text-muted-foreground uppercase">
                 <span>Name</span><span className="text-center">Position</span><span className="text-right">Time</span>
               </div>
               {chartData.map((d, i) => (
@@ -398,7 +398,7 @@ const Events = () => {
     const uniqueRivals = getUniqueRivals();
     return (
       <div className="min-h-screen bg-background pb-24">
-        <div className="px-5 pt-14 pb-4">
+        <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
           <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Events</motion.h1>
         </div>
         <div className="px-5 mb-5">
@@ -458,7 +458,7 @@ const Events = () => {
                       <Swords size={16} className="text-primary" />
                       <h3 className="font-display font-bold">{name}</h3>
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{records.length} event{records.length > 1 ? "s" : ""}</span>
+                    <span className="text-[12px] text-muted-foreground">{records.length} event{records.length > 1 ? "s" : ""}</span>
                   </div>
 
                   {records.filter(r => r.position).length > 0 && (
@@ -503,7 +503,7 @@ const Events = () => {
                           {/* Your own result for this event */}
                           {evt && (
                             <div className="mt-2 pt-2 border-t border-border/40">
-                              <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center justify-between text-[12px]">
                                 <span className="text-muted-foreground">Your result: <span className={evt.actual_time ? "text-primary font-semibold" : ""}>{evt.actual_time || "Not logged"}{evt.actual_position ? ` · #${evt.actual_position}` : ""}</span></span>
                                 <button onClick={() => { setEditingMyEventId(isMyEditing ? null : evt.id); setMyEventTime(evt.actual_time || ""); setMyEventPos(evt.actual_position ? String(evt.actual_position) : ""); }}
                                   className="text-primary font-semibold">{isMyEditing ? "Cancel" : (evt.actual_time ? "Edit" : "Log mine")}</button>
@@ -534,7 +534,7 @@ const Events = () => {
   // Main events list
   return (
     <div className="min-h-screen bg-background pb-24">
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Events</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Race day. Your day.</motion.p>
       </div>

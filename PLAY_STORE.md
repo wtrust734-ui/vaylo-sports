@@ -17,18 +17,18 @@ provide" is the list of things that will stop you.
 | Application ID | `com.vaylosports.app` |
 | App name (target) | `VAYLO Sports` |
 | minSdk / targetSdk | 26 (Android 8.0) / 36 |
-| Version code / name | `2` / `1.1.0`, both overridable at build time |
+| Version code / name | `5` / `1.2.1`, both overridable at build time |
 | Release signing | Configured. Upload key `upload` in `android/upload-keystore.jks` |
-| Upload key SHA-256 | `3B:E6:CD:40:CC:7F:21:5C:00:5D:94:32:58:7A:D8:51:89:17:1C:47:E8:53:F9:FA:EE:6B:BD:04:42:76:23:FD` |
+| Upload key SHA-256 | Local upload key; verify fingerprint with `apksigner verify --print-certs` |
 | Upload key valid until | 2054-02-13 (Play requires validity past 2033) |
 | Signed bundle in CI | `.github/workflows/android-release.yml` (manual or `v*` tag) |
 | Privacy policy / terms / deletion pages | Written and **live** (see §1) |
 | Support email | `vaylosportssupport@gmail.com` |
-| Public app URL | `https://vaylosports.lovable.app` |
+| Public app URL | Not configured — no owned canonical domain yet |
 | Store icon + feature graphic | Generated into `store/` |
 | Screenshots | **Not yet captured** — see §6 |
 | Wearable sync / GPS / coach marketplace | Launch-gated **off** via `src/config/featureFlags.ts` |
-| AI features | **Off** — needs `OPENAI_API_KEY`; not flaggable by design |
+| AI features | Enabled in app; availability depends on configured provider secrets |
 
 ---
 
@@ -56,30 +56,26 @@ Ordered by how early they block you.
    before you submit, and re-check before you go public: a reviewer account that
    is still reachable after launch is an open door, and deleting it then means
    re-doing this section for the next reviewer.
-3. **`OPENAI_API_KEY`** as a Supabase secret. Every AI feature returns HTTP 500 in
-   production right now (`supabase/functions/_shared/openai.ts` throws
-   `AI service is not configured`). Set it with
-   `supabase secrets set OPENAI_API_KEY=sk-...` — no redeploy needed.
-   Until then the coach, form analysis, tactical plans, learning recommendations,
-   weekly review and video analysis answer with "This feature isn't switched on
-   yet" rather than the name of the missing environment variable: an internal
-   detail read to a reviewer looks like a broken build. Six features are gated on
-   that one secret, so it is the highest-value thing you can set.
+3. **AI provider secrets** as Supabase secrets. Confirm `OPENAI_API_KEY` is set
+   for OpenAI-backed features and `GOOGLE_API` for Gemini video analysis before
+   expecting those routes to work. Configure secrets through the Supabase project
+   dashboard or authorized CLI; do not put provider credentials in the app bundle.
 
    **Video analysis is separate.** It calls Gemini, not OpenAI, and wants a
    plain API key from Google AI Studio — no service account, no YouTube upload:
 
    ```bash
-   npx supabase secrets set GOOGLE_API=...
+   supabase secrets set GOOGLE_API=...
    ```
 
-   Check what is actually live at any time with `npm run ai:health`, which calls
-   all seven endpoints with a real session and reports which answer.
+   Check configured AI routes through authorized QA; health probes require a
+   signed-in test account and configured provider secrets.
 
-Already handled, for reference: the legal pages are published (§1), and the public
-app URL is set to `https://vaylosports.lovable.app` in `.env.local` (git-ignored)
-and as the `PUBLIC_APP_URL` Supabase secret, so shared links and auth emails now
-point at your site instead of `localhost`. Both were pointing at nothing before.
+The legal pages are published (§1). There is no owned canonical public app
+origin yet: native referral/share links are deliberately omitted, preview-host
+links fail closed, and production web auth-email redirects must wait until an
+owned domain and SMTP are configured. Do not use a Lovable preview URL as the
+public URL or as an auth destination.
 
 ---
 
@@ -137,13 +133,11 @@ The function refuses to serve anything while `legal/operator.json` still holds i
 offering an inbox nobody reads, is worse than one that is temporarily unavailable,
 and this URL is handed to Play.
 
-**Why not your own domain.** `https://vaylosports.lovable.app/privacy` looks as
-though it serves a policy — it answers 200 — but it is a single-page app with a
-catch-all rewrite: `/privacy`, `/account-deletion` and a deliberately invented path
-all return the same 11,428-byte shell. A reviewer who opens it sees the app, not a
-policy, which is a rejection. Serving the documents from an edge function gives a
-URL that actually returns a document today; moving them to a real domain later is a
-copy of `legal/*.html` and a one-line change to `VITE_LEGAL_BASE_URL`.
+**No owned public domain is configured.** Keep the live legal policy URLs on the
+Supabase legal endpoint for Play Console. Do not use a Lovable preview hostname
+for the optional website listing, public sharing, or authentication redirects.
+Once an owned domain exists, host and verify the legal pages there before changing
+the store listing or redirect configuration.
 
 **`legal/` is not bundled into the app.** The in-app Privacy and Terms links in
 Profile → Settings open these URLs in the in-app browser, so there is one copy of
@@ -154,7 +148,7 @@ each document and it cannot drift from what Play reviewed.
 ## 2. Build the signed bundle
 
 Every upload needs a `versionCode` Play has never seen. The committed default is
-`2`; bump it for each upload.
+`5` / `1.2.1`; bump it for each subsequent upload.
 
 **Locally** (needs `android/keystore.properties`, which is git-ignored alongside
 the keystore):
@@ -163,7 +157,7 @@ the keystore):
 npm run build:native
 npx cap sync android
 cd android
-./gradlew bundleRelease -PversionCode=3 -PversionName=1.2.0
+./gradlew bundleRelease -PversionCode=5 -PversionName=1.2.1
 # → app/build/outputs/bundle/release/app-release.aab
 ```
 
@@ -215,7 +209,7 @@ the release can roll out; the ones marked ⚠ change what you can ship.
 | Declaration | Answer |
 |---|---|
 | Privacy policy | The §1 URL |
-| Store listing → Website | `https://vaylosports.lovable.app` (optional field) |
+| Store listing → Website | Leave blank until an owned canonical website is available |
 | App access | **All functionality is not available without special access.** Provide the demo account from §"What only you can provide" as email + password. |
 | Ads | Per §0b — recommended **Yes** |
 | ⚠ Content rating | Fill in the IARC questionnaire honestly. There is **user-generated content** (posts, comments, community messages, DMs) and **social features** (friends, leaderboards, challenges) — both are mandatory disclosures. There are in-app purchases and **simulated rewards** (credits, coins). No violence, no sexual content, no gambling, no controlled substances. Expect a Teen-ish rating. |
@@ -433,10 +427,10 @@ To build a bundle that *shows* one of these, set the override — see
 VITE_ENABLE_wearableSync=true   # or gpsTracking, coachMarketplace
 ```
 
-Overrides are build-time and per-machine. Note that `vaylosports.lovable.app` is
-served by Lovable from its own copy of the code, so **none of this affects the
-live web app** — only builds made from this repository, which is to say the
-Android app.
+Overrides are build-time and per-machine. No owned public website is currently
+configured, so external links from native remain disabled rather than pointing
+to a project preview. Any hosted web deployment must configure its owned origin
+before enabling referral/auth links.
 
 ### Tier 2 — Play Console forms, about 2 hours, all yours
 
@@ -462,13 +456,53 @@ rollout to a closed track, not before production.
 
 ### Tier 4 — after closed testing
 
-Email confirmation · AI keys · wearable vendor agreements · the web/Android
-build divergence (gap 5 below) · legal entity and ICO registration · Supabase
-SMTP for password reset.
+Email confirmation · wearable vendor agreements · owned public domain · legal
+entity and ICO registration · Supabase SMTP for password reset.
 
 One item is mis-tiered and worth knowing: **password-reset email** depends on
 Supabase's built-in sender, which is rate-limited. A reviewer using the account
 you hand them will not hit it; a tester who mistypes their email on signup will.
+
+### Tier 3.5 — cookie / tracking posture (done in this repository)
+
+This app sets **no cookies and no tracking identifiers**, so there is no consent
+gate to build and no consent record to store. The website shows a short cookie
+notice at the foot of the page; pressing Accept writes a single on-device
+`localStorage` entry (`vaylo:cookie-notice`, versioned) recording that the reader
+has seen it. Nothing is sent to Vaylo's servers, nothing is gated, and clearing
+site data brings the notice back — which is the correct behaviour rather than a
+bug. The same notice is now wired into the app shell, so the APK and the
+downloadable web-app clone surface the same notice as the website.
+
+Before you submit, confirm these three things rather than assume:
+
+| | Check | Where |
+|---|---|---|
+| ☐ | No cookie is set by the website on first hit | `curl -c /tmp/cookies.txt -b /tmp/cookies.txt -s -o /dev/null -w '%{http_code}\n' https://vaylo-sports.netlify.app/` then inspect `/tmp/cookies.txt` — should be empty of any Vaylo cookie |
+| ☐ | The cookie notice shows on the live marketing home | Open `https://vaylo-sports.netlify.app/` in a browser; the notice region (`data-cookie-notice`, "No tracking cookies") should be visible once per device, and the Accept button should hide it |
+| ☐ | The Cookie Policy page resolves from the app and from the clone | In-app, `/legal/cookies` opens the `LegalDocument` component; on the clone, the Legal screen links to the Cookie Policy; on the website, `https://vaylo-sports.netlify.app/legal/cookies/` returns HTTP 200 with the full policy ("No cookies at all") |
+
+If the marketing home does **not** show the notice, the website deploy is stale:
+
+```bash
+cd website
+npx netlify deploy --no-build --prod --site=388b0b24-27ee-472b-9197-aa8eb2782493
+curl -s https://vaylo-sports.netlify.app/ | grep -c "data-cookie-notice"
+```
+
+The last deploy of that site failed with **403: account credit usage exceeded** —
+new deploys are blocked until credits are added in the Netlify account. Until that
+clears, the live marketing home stays stale even though `website/index.html` is
+correct. The APK and the clone are unaffected (their notice is in the app bundle,
+not on the marketing host).
+
+Note for the Data safety form: the app collects **no advertising ID**, declares **no
+cookies**, and shares **no advertising or analytics identifiers** with third parties.
+Sponsor placements are labelled and report only aggregate counts. Decline any
+"do you use cookies for advertising/personalisation" prompt that the store or a
+reviewer throws at you — the honest answer for this app is no, with the cookie
+notice as the evidence. The app's advertising-identifier posture is documented in
+`legal/cookies.html` and `legal/advertising.html`.
 
 ### The 14-day clock
 
@@ -490,12 +524,9 @@ than left for a tester to find — see the pre-launch checklist above.
    controls, which also keeps location out of the Data safety form. To turn it
    on properly: add `ACCESS_FINE_LOCATION` plus a WebView geolocation grant, and
    declare location in Data safety.
-2. **AI features are switched off in production** until `OPENAI_API_KEY` is set.
-   The message is now athlete-facing and uniform, but the features themselves
-   are still inert — a reviewer who taps the coach gets a clear "not switched
-   on yet" rather than an error. This is the one gap worth fixing before
-   rollout, because it is a single environment variable rather than missing
-   engineering.
+2. **AI feature availability depends on provider secrets.** Ensure OpenAI routes
+   have `OPENAI_API_KEY` and video form analysis has `GOOGLE_API` configured in
+   Supabase before advertising those routes as available to reviewers.
 3. **Wearable sync is unconfigured.** `wearable-oauth` answers `not_configured` for
    every provider because no vendor OAuth secrets exist — Garmin, Strava and the
    rest each need a developer agreement signed by a human. The `wearableSync`
@@ -504,11 +535,9 @@ than left for a tester to find — see the pre-launch checklist above.
    the secrets do exist.
 4. **Password-reset email delivery** depends on Supabase's SMTP configuration; the
    built-in sender is rate-limited and unsuitable for real users.
-5. **The web app and the Android app are different builds.**
-   `vaylosports.lovable.app` is served by Lovable, not from this repository, and its
-   page title is "Vaylo sports" — lower-case S. The store listing title must be
-   "Vaylo Sports", and if the two builds diverge users will notice. Decide which is
-   canonical before inviting testers.
+5. **No owned canonical website is configured.** Do not put a Lovable preview
+   domain in the Play listing or auth redirect allowlist. Leave the optional
+   website field blank until the owned public origin is selected and deployed.
 6. **No registered legal entity yet.** The policy names "Vaylo Sports" as the data
    controller, which is what a trading name is for, and it works with a working
    contact address. When there is a limited company, put its registered name in

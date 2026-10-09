@@ -62,6 +62,8 @@ onboarding wizard instead of itself.
 | `document.scrollWidth > innerWidth` | The page scrolls sideways |
 | A line that is just `undefined` / `NaN` / `null`, or `x: undefined` | A value failed to render |
 | A word repeated inside one line | Almost always a botched two-tone heading — the sign-in screen shipped "Vaylo Sports Sports" |
+| Two things touching on one line with no gutter | A badge whose border is flush against the words beside it ("RUNNINGTrend needs 2 saves") reads as a layout that fell over — and nothing else here can see it: nothing overflows, no control is under 44px, the copy is intact |
+| Two fixed layers drawn over each other | Two bottom-anchored notices on the same corner: the lower card's text ghosts through the upper one's translucent background. Nothing adjacent-sibling based can see it either, because the two are mounted in different parts of the tree |
 | A console exception or a failed request | Something broke while the screen was loading |
 
 What it deliberately does **not** fail on: an element hanging off the right edge
@@ -85,6 +87,39 @@ correct — elements inside an `overflow-x: auto` ancestor are excluded on purpo
 - **`Identity` showed "Undefined"** in 5xl type as the athlete's archetype
   headline (`VPR` did the same mid-sentence). Both say "not set yet", and the
   VPR line lost a missing space before its progress parenthetical.
+- **"RUNNINGTrend needs 2 saves"** on the VPR hero: the sport badge was
+  `inline-flex`, so it shared a line with the bare inline `<span>` Delta falls
+  back to with no value, and the pill's right border sat flush against the `T`.
+  The badge is `flex w-fit` now and the Delta sits in a block of its own, so
+  both are rows of the same stack.
+- **The terms banner and the stored-preferences notice were drawn over each
+  other**, on every screen, 130px deep: two `position: fixed` cards on the same
+  corner, mounted in different parts of the tree, the lower one's text showing
+  through the upper one's translucent background. The banner now publishes its
+  measured height as `--vaylo-notice-lift` and the notice adds it to its floor
+  offset, so the notice sits above the banner instead of under it.
+- **Featured learning cards rendered ~187px wide** instead of 76vw, so the title
+  wrapped to four lines and the meta line was crushed to 72px against the Read
+  button. `flex-1` (`flex: 1 1 0%`) beat the card's own width inside the
+  horizontal scroller; it is `shrink-0` with an explicit width now, like every
+  other carousel item in the app.
+
+### The touch rule, in detail
+
+Measured on adjacent children only, text nodes included (via a `Range`, so a
+bare text node counts). A pair is on the same row, and then the edges that are
+compared are the ones actually visible: a box's **border**, otherwise the text's
+**ink** — never the empty slack a stretched flex child carries to the end of its
+row, which is what makes the rule usable. Under 3px between those edges, with at
+least one side a box (border, background or corner radius), is a jam. Children of
+a flex or grid parent that already sets `column-gap` are exempt, because an
+explicit gutter cannot jam; that exemption is what keeps a deliberate `gap-1.5`
+from being reported.
+
+So `flex justify-between` with **no** gap is the shape to watch for: the text
+side shrinks to whatever the control leaves it, so its longest line ends flush
+against the control's border. That is one bug class, not four, and the fix is one
+`gap-*` per row.
 
 ## Keeping it honest
 

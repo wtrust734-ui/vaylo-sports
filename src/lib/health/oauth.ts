@@ -55,20 +55,67 @@ export async function oauthStatus(
 }
 
 /**
+ * Where the edge callback's payload can live, depending on the shell:
+ *   web   — the real query:   /health-sync?wearable=garmin&connected=1
+ *   native — HashRouter keeps the query INSIDE the fragment:
+ *           http://localhost/index.html#/health-sync?wearable=garmin&connected=1
+ * URL.searchParams only sees the first shape, so on Android the second one has
+ * to be read out of the hash — otherwise the connection succeeds server-side
+ * and the page stays silent.
+ */
+function redirectParams(url: string): URLSearchParams {
+  const u = new URL(url, window.location.origin);
+  if (u.searchParams.get("wearable") || u.searchParams.get("provider")) return u.searchParams;
+  const hash = u.hash.replace(/^#/, "");
+  const queryAt = hash.indexOf("?");
+  return queryAt >= 0 ? new URLSearchParams(hash.slice(queryAt + 1)) : u.searchParams;
+}
+
+/**
  * Parses a deep-link or redirect URL that carries `?wearable=garmin&connected=1`
  * (set by the edge callback) so the HealthSync page can toast and refresh
- * without polling.
+ * without polling. Reads both locations (see redirectParams).
  */
 export function parseWearableRedirect(url: string): {
   provider: WearableProviderId | null;
   connected: boolean;
 } {
   try {
-    const u = new URL(url, window.location.origin);
-    const p = (u.searchParams.get("wearable") ?? u.searchParams.get("provider") ?? "") as WearableProviderId;
-    const ok = u.searchParams.get("connected") === "1" || u.searchParams.get("status") === "connected";
+    const params = redirectParams(url);
+    const p = (params.get("wearable") ?? params.get("provider") ?? "") as WearableProviderId;
+    const ok = params.get("connected") === "1" || params.get("status") === "connected";
     return { provider: p || null, connected: ok };
   } catch {
     return { provider: null, connected: false };
+  }
+}
+
+/**
+ * Removes the callback params after they have been handled, in either shape
+ * (real query or inside the hash), so a refresh does not re-toast a
+ * connection that was already announced.
+ */
+export function stripWearableRedirect(url: string): string {
+  try {
+    const u = new URL(url, window.location.origin);
+    const clean = (params: URLSearchParams) => {
+      for (const key of ["wearable", "provider", "connected", "status", "reason"]) {
+        params.delete(key);
+      }
+      return params;
+    };
+    if (u.searchParams.get("wearable") || u.searchParams.get("provider")) {
+      u.search = clean(u.searchParams).toString();
+    } else {
+      const hash = u.hash.replace(/^#/, "");
+      const queryAt = hash.indexOf("?");
+      if (queryAt >= 0) {
+        const qs = clean(new URLSearchParams(hash.slice(queryAt + 1))).toString();
+        u.hash = `#${hash.slice(0, queryAt)}${qs ? `?${qs}` : ""}`;
+      }
+    }
+    return u.toString();
+  } catch {
+    return url;
   }
 }

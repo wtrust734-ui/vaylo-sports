@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Trophy, Users, Clock, Target, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { appHref } from "@/lib/routerBase";
 import { joinChallenge } from "@/lib/scoring";
 import { stashPendingJoin } from "@/hooks/usePendingJoin";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
@@ -101,7 +102,7 @@ const ChallengeInvite = () => {
         <Trophy className="text-muted-foreground" size={40} />
         <p className="text-lg font-semibold">Challenge not found</p>
         <p className="text-sm text-muted-foreground">This invite may have expired.</p>
-        <a href="/auth" className="mt-2 rounded-xl bg-gradient-to-r from-electric-purple to-energy px-5 py-2.5 text-sm font-semibold text-white">
+        <a href={appHref("/auth")} className="mt-2 rounded-xl bg-gradient-to-r from-electric-purple to-energy px-5 py-2.5 text-sm font-semibold text-white">
           Start training free →
         </a>
       </div>
@@ -119,7 +120,7 @@ const ChallengeInvite = () => {
           </button>
         )}
         <div className="rounded-3xl border border-electric-purple/30 bg-gradient-to-br from-card via-card to-electric-purple/20 p-6">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-energy mb-2">Vaylo Sports Challenge</p>
+          <p className="text-[12px] font-semibold uppercase tracking-widest text-energy mb-2">Vaylo Sports Challenge</p>
           <h1 className="text-2xl font-display font-bold leading-tight">{ch.title}</h1>
           {ch.description && <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{ch.description}</p>}
 
@@ -157,7 +158,7 @@ const ChallengeInvite = () => {
           </button>
           {!session && (
             <p className="mt-2 text-center text-xs text-muted-foreground">
-              Already have an account? <a href="/auth" className="text-energy underline">Sign in</a> — you'll join right after.
+              Already have an account? <a href={appHref("/auth")} className="text-energy underline">Sign in</a> — you'll join right after.
             </p>
           )}
         </div>
@@ -181,7 +182,7 @@ const ChallengeInvite = () => {
 
         {!session && (
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            AI coaching, challenges and leaderboards for your sport. <a href="/auth" className="text-energy underline">Create a free account</a>.
+            AI coaching, challenges and leaderboards for your sport. <a href={appHref("/auth")} className="text-energy underline">Create a free account</a>.
           </p>
         )}
       </div>

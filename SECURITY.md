@@ -2,9 +2,190 @@
 
 What an attacker can reach, what has been closed, and what is still open.
 
-Last assessed: 28 September 2026, against the live project by driving its own
-public API with the key that ships inside the app. Every finding below was
-reproduced, not inferred from reading the schema.
+Last assessed: **1 October 2026** (previously 30 September 2026), against the
+live project by driving its own public API with the key that ships inside the
+app and by running the Supabase security advisor directly against the database.
+Every finding below was reproduced, not inferred from reading the schema.
+
+---
+
+## Metered video analysis, fail-closed share links, signed release — 1 October 2026
+
+Third pass, from an APK audit rather than the security advisor. Three findings:
+the video endpoint ran unmetered, public share links pointed somewhere the
+project does not control, and the release artifact was unverifiable.
+
+- **Video analysis is metered, and the free tier is one Flash a week.**
+  `video-form-analysis` ran no charge at all: an 18 MiB body went to Gemini on
+  the caller's tab and the ledger never saw it. It now charges
+  `public.credit_cost('video_form_analysis')` — 12 credits — through
+  `spendForUser()` before the provider call, with the ledger as the authority
+  rather than a client-supplied flag. The 6 MiB cap replaces the old 18 MiB one,
+  and model selection is server-side: `gemini-3.8-flash` by default,
+  `gemini-3.1-pro-preview` only inside the premium allowance.
+- **The free window is a union, not a count of history.** One complimentary
+  Flash per rolling 7 days comes from `reserve_video_analysis_slot()` — a
+  reservation row with `expires_at`, which survives history deletion — and the
+  function *also* counts non-deleted `video_form_analyses` rows from the last
+  7 days. Charging is required when either counter says the slot is spent, so
+  deleting an analysis cannot hand back a free run. A quota RPC error fails
+  **closed** with 503 rather than letting the call through uncharged.
+- **Premium is capped by cost, not by generosity.** Lifetime and subscription
+  plans get at most 10 Pro calls per rolling 30 days (`p_limit: 10`); past that
+  Flash stays available at 12 credits. An Unlimited plan is *not* exempt here —
+  the spend goes through `credits_spend_metered`, which is `service_role`-only
+  and bills real cost. `premiumTier` reads `expires_at` and deliberately stops
+  reading the stored `unlimited_credits` flag, the same lapsed-subscription trap
+  as `guard.hasEntitlement()`.
+- **Replays and parallel uploads are claimed, not hoped against.** Each request
+  carries a `request_id` behind a partial UNIQUE index; `claim_video_analysis_request`
+  grants one in-flight request per key and `releaseRequestClaim()` frees it on
+  every failure path, so two tabs cannot double-debit and a refused request does
+  not burn the key. Provider errors refund through `refundCredits()`.
+- **Public share links fail closed.** `link-preview` returned 503 with no owned
+  domain, but the app kept building share URLs from the preview origin, so a
+  published link could be handed to a third party pointing at a `.lovable.app`
+  preview. `configuredPublicBase()` now accepts a public base only when
+  `VITE_PUBLIC_APP_URL` is an owned HTTPS host that is not local, not a preview
+  suffix and not a Supabase host; otherwise native shares stay linkless.
+  Inbound legacy Lovable deep links are still accepted — failing closed on
+  outbound must not lock out the users already on the old build.
+- **The release artifact is signed and verified.** `1.2.1-5` builds through
+  `scripts/build-apk.sh`, which fails closed if `apksigner` or `aapt2` produce
+  no output rather than passing vacuously. Verified in the artifact: signer
+  `CN=Vaylo Sports`, package `com.vaylosports.app`, targetSdk 36, six
+  health *read* permissions and zero write ones, no `HcSeedActivity` (the test
+  stub), and no JWT or source map anywhere in the shipped JS bundle. Shipped
+  bytes are recorded in `apk/SHA256SUMS.txt`; superseded artifacts are left in
+  place, so the older checksums still verify.
+
+**Deployment drift is now visible and worth naming.** An edge function deploy
+ships the whole `_shared` tree into *that one function's* bundle, so the copies
+running in `coach-chat`, `ai-analyze` and the rest are still the previous
+`guard.ts` — while the working copy already has the metered `spendForUser()`
+with `billUnlimited` and `hasEntitlement()` reading `expires_at`. `video-form-analysis`
+is at version 7 with the new code; the others are not. Redeploy the remaining
+AI functions before relying on shared-guard changes taking effect there.
+
+Still open from this pass: the nested-route cold-start fix and the deep-link
+allowlist cannot be exercised on a device from here, and App Links still needs
+`assetlinks.json` on a domain you control.
+
+---
+
+## AI, health, privacy and deletion hardening — 30 September 2026
+
+Second pass, covering the AI edge functions, video analysis, health/wearable
+sync, and account deletion.
+
+- **`ai-service` (the generic AI endpoint) now charges.** It previously let the
+  client name ANY catalog feature and ran it without a charge — a free-AI hole
+  next to the dedicated functions that pay. Features are now validated against
+  the server catalog first; a small allowlist of light-copy features is free by
+  product decision but re-checked against the economy table on every call (an
+  admin pricing one later takes effect immediately); everything else is charged
+  through `spendForUser()` at the exact price the economy table names for that
+  feature string, before the provider call.
+- **`guard.spendForUser()` accepts an idempotency key.** The ledger's partial
+  UNIQUE index already enforced replay protection; the wrapper now lets callers
+  pass a key, so function-level retries cannot double-charge.
+- **Coach memories are server-authoritative.** `[MEMORY_SAVE: …]` lines used to
+  be parsed by the browser after the stream finished — a closed tab dropped
+  memories and a doctored client could fabricate any memory row it wanted. The
+  coach-chat function now tees the SSE stream, reassembles the full reply, and
+  persists memories server-side with clamped fields. The client only refreshes
+  its memory list. Memories remain inspectable and deletable in the app.
+- **A safety contract ships in every AI feature prompt.** No diagnosis
+  language, emergency-symptom escalation, crisis-line routing for self-harm
+  disclosures, refusal of doping and dangerous-practice requests, no nutrition
+  prescriptions for minors — appended to every feature via `base()`, marked
+  non-overridable by athlete data.
+- **Output validation.** `generate-plan` now validates the returned plan's
+  structure (7-day weeks, safe types, clamped durations) and refunds on
+  malformed output; `learning-recommend` sanitizes every client-supplied
+  string that reaches the prompt, verifies the tool-call name, and only
+  accepts recommended lesson ids that exist in the real list.
+- **Video analysis entitlement matches the money.** The premium tier check
+  trusted `unlimited_credits` and `status='active'` without reading
+  `expires_at` — the exact lapsed-subscription trap documented in
+  `guard.hasEntitlement()`. It now reads the timestamp. The free-tier window
+  excludes rows the athlete deleted, deleted rows carry `deleted_at`, and a
+  `delete_expired_ai_data()` maintenance RPC enforces the documented 30-day
+  retention (unsaved analyses + rate-limit counters) from a scheduled job.
+  Superseded on 1 October: the free window is now a quota reservation unioned
+  with the non-deleted history count, so it can no longer be reset by deleting
+  an analysis. See the section above.
+- **Log hygiene.** No AI function logs raw provider bodies or exception text
+  to the client anymore; internal detail stays in server logs behind stable
+  user-facing messages.
+- **Account deletion covers the AI counters.** `ai_call_events` — the durable
+  rate-limit table with a `user_id` — was missing from the deletion registry,
+  so usage rows survived account deletion. Added; `account_deletion_events`
+  stays out by design (salted hash only), and the three service-only telemetry
+  ledgers stay FK-free deliberately. Incomplete deletions now report table
+  names and counts, never row contents.
+- **Wearable OAuth stores no tokens.** The callback no longer persists an
+  `oauth_state` value into `health_connections.metadata`; connection rows
+  carry only status and a linked timestamp. Disconnect is idempotent and
+  documented as stopping future syncs without deleting imported data.
+- **Health data deletion is a first-class control.** The Wearables page gains
+  "Delete imported data": removes all imported `health_workouts` /
+  `health_samples` rows, resets the sync cursor and local state — separate
+  from disconnecting, which was the only control before.
+- **Ledger CHECK corrected.** The `amount <> 0` CHECK from the security pass
+  would have broken `credits_spend` for Unlimited subscribers (zero-amount
+  audit rows are its documented behavior). It now allows zero only for the
+  `unlimited_plan` source — verified against live data first (no zero rows
+  existed yet).
+
+---
+
+## Hardened on 30 September 2026
+
+`20260930064813_security_hardening_ownership_and_grants.sql` plus
+`20260930064921_explicit_deny_policies_for_service_only_tables.sql` closed the
+remaining structural gaps the advisor could see:
+
+- **Ownership is now guaranteed by the database.** 53 more `user_id` columns got
+  a real foreign key to `auth.users(id) ON DELETE CASCADE` (55 lacked one; the
+  3 service-only telemetry ledgers are deliberately excluded so their history
+  survives account hard-deletes), and `friendships.friend_id` got its own FK.
+  Before this, deleting an auth user left orphan rows behind forever and nothing
+  prevented a row pointing at a non-existent user. Live audit first: the only
+  orphans in the whole database were 7 default `free` subscription rows for
+  already-deleted accounts, which the migration deletes explicitly and by name
+  before the constraint lands.
+- **Balances cannot go negative and ledgers cannot hold noise.** CHECKs:
+  `profiles.credits >= 0`, `profiles.coins >= 0`, ledger `amount <> 0`,
+  credit `balance_after >= 0`, `event_pack_ownership.price_cents >= 0`. Each
+  was verified against live data (zero violations) before being added.
+- **Identity invariants.** `friendships_not_self`, `referrals_not_self`, and a
+  UNIQUE index on `achievements (user_id, type, title)` so a retry can never
+  mint a second identical medal. All were probed live after applying: the
+  database refused each bad write with the expected SQLSTATE.
+- **The advisor's actionable WARNs are resolved.**
+  `guard_achievement_claims()` — a trigger function that was still
+  anon-executable over REST (lint 0028) — and `has_unlimited_credits(uuid)`,
+  which answered an entitlement question about *somebody else* (an oracle), are
+  both revoked from clients. Trigger invocation does not consult EXECUTE, so
+  neither change affects app behaviour. The remaining 36 "authenticated can
+  execute SECURITY DEFINER" WARNs were re-checked one by one rather than
+  blindly revoked: every such function derives the caller from `auth.uid()`,
+  validates inputs, and is required for the client to spend/grant through the
+  closed write paths. They are the design, not a leak — see §Open.
+- **"RLS enabled, no policy" said what it meant.** The four service-only tables
+  (`ai_call_events`, `brands`, `brand_placements`, `brand_metrics`) now carry
+  an explicit `USING (false) WITH CHECK (false)` policy. Grants were already
+  revoked, so this changes nothing at runtime; it documents intent and clears
+  lint 0008.
+- **25 user_id lookups got their index.** Every RLS policy evaluates
+  `user_id = auth.uid()`; 25 tables had no index leading on `user_id`, so each
+  authenticated scan read the whole table. `coin_transactions` got a
+  `(user_id, created_at desc)` composite instead, matching the newest-first
+  history reads.
+
+All six new invariant probes were added to `npm run security:check` (now 24
+checks) and pass against the live project.
 
 ---
 

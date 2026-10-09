@@ -30,7 +30,26 @@ const toLf = (src: string) => src.replace(/\r\n?/g, "\n");
 
 const TYPES = toLf(readFileSync(resolve(ROOT, "src/integrations/supabase/types.ts"), "utf8"));
 const DELETE_FN = toLf(readFileSync(resolve(ROOT, "supabase/functions/delete-account/index.ts"), "utf8"));
+// The registry moved to _shared/userTables.ts so that account deletion and the
+// Article 20 export cannot drift apart — a table in one and not the other means
+// either data survives deletion or an export quietly under-delivers. The
+// invariant under test is unchanged; only its location moved.
+const USER_TABLES_MODULE = toLf(
+  readFileSync(resolve(ROOT, "supabase/functions/_shared/userTables.ts"), "utf8"),
+);
+const VIDEO_QUOTA_MIGRATION = toLf(readFileSync(resolve(ROOT, "supabase/migrations/20260930181355_video_analysis_quota_and_metered_spend.sql"), "utf8"));
+const VIDEO_REQUEST_MIGRATION = toLf(readFileSync(resolve(ROOT, "supabase/migrations/20260930183648_video_analysis_request_claims.sql"), "utf8"));
 
+const MIGRATED_USER_TABLES: Record<string, { migration: string; declaration: string }> = {
+  video_analysis_quota_reservations: {
+    migration: VIDEO_QUOTA_MIGRATION,
+    declaration: "CREATE TABLE IF NOT EXISTS public.video_analysis_quota_reservations (",
+  },
+  video_analysis_request_claims: {
+    migration: VIDEO_REQUEST_MIGRATION,
+    declaration: "CREATE TABLE IF NOT EXISTS public.video_analysis_request_claims (",
+  },
+};
 /** Columns that identify an athlete's ownership of a row. */
 const USER_KEY = /^(user_id|owner_id|creator_id|coach_id|assigned_to|assigned_by|from_user_id|to_user_id|friend_id|referrer_id|referee_id|athlete_id|requester_id|recipient_id|player_id)$/;
 
@@ -90,7 +109,11 @@ function parseRegistry(src: string): Map<string, string[]> {
 }
 
 const schemaTables = parseSchemaTables(TYPES);
-const registry = parseRegistry(DELETE_FN);
+for (const [table, { migration, declaration }] of Object.entries(MIGRATED_USER_TABLES)) {
+  const definition = migration.split(declaration)[1]?.split(");", 1)[0] ?? "";
+  if (definition.includes("user_id uuid")) schemaTables.set(table, ["user_id"]);
+}
+const registry = parseRegistry(USER_TABLES_MODULE);
 
 describe("delete-account registry", () => {
   it("points at real tables and real columns", () => {
@@ -122,6 +145,8 @@ describe("delete-account registry", () => {
       }
     }
     expect(missing).toEqual([]);
+    expect(VIDEO_QUOTA_MIGRATION).toContain("CREATE TABLE IF NOT EXISTS public.video_analysis_quota_reservations");
+    expect(VIDEO_REQUEST_MIGRATION).toContain("CREATE TABLE IF NOT EXISTS public.video_analysis_request_claims");
   });
 
   it("parsed enough of the schema to be meaningful", () => {

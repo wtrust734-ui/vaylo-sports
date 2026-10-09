@@ -65,7 +65,7 @@ const LanguageSetting = () => {
           </motion.span>
         </span>
       </button>
-      <p className="text-[11px] text-muted-foreground mt-1">{t("settings.languageDesc")}</p>
+      <p className="text-[12px] text-muted-foreground mt-1">{t("settings.languageDesc")}</p>
 
       {open && (
         <motion.div
@@ -87,7 +87,7 @@ const LanguageSetting = () => {
             <span className="flex items-center justify-between gap-2">
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold truncate">{t("settings.languageAutomatic")}</span>
-                <span className="block text-[11px] text-muted-foreground">{t("settings.languageAutomaticDesc")}</span>
+                <span className="block text-[12px] text-muted-foreground">{t("settings.languageAutomaticDesc")}</span>
               </span>
               {pref === AUTO && <Check size={16} className="shrink-0 text-primary" />}
             </span>
@@ -106,7 +106,7 @@ const LanguageSetting = () => {
               <span className="flex items-center justify-between gap-2">
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-semibold truncate">{l.nativeName}</span>
-                  <span className="block text-[11px] text-muted-foreground">{l.name}</span>
+                  <span className="block text-[12px] text-muted-foreground">{l.name}</span>
                 </span>
                 {pref === l.code && <Check size={16} className="shrink-0 text-primary" />}
               </span>

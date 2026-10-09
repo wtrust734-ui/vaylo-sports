@@ -6,7 +6,7 @@
 //
 // Money model summary (see MONEY.md):
 //   1 credit = 7.5 coins
-//   best credit pack      $0.03845/credit  → $0.00513/coin if converted
+//   best credit pack      $0.03786/credit  → $0.00505/coin if converted
 //   top coin bundle       $0.00500/coin     (beats converting: coins for cash are the better deal)
 //   first-purchase bundle $0.00284/coin             (best rate in the app, one per account)
 // ============================================================================
@@ -21,37 +21,37 @@ export const CREDIT_PACKS: CreditPack[] = [
   {
     "id": "pack_25",
     "credits": 25,
-    "bonus": 0,
+    "bonus": 5,
     "price_cents": 249,
     "label": "Starter"
   },
   {
     "id": "pack_50",
     "credits": 50,
-    "bonus": 10,
+    "bonus": 15,
     "price_cents": 499,
     "label": "Boost"
   },
   {
     "id": "pack_120",
     "credits": 120,
-    "bonus": 25,
+    "bonus": 45,
     "price_cents": 999,
     "label": "Popular"
   },
   {
     "id": "pack_200",
     "credits": 200,
-    "bonus": 50,
+    "bonus": 90,
     "price_cents": 1499,
     "label": "Power"
   },
   {
     "id": "pack_500",
     "credits": 500,
-    "bonus": 150,
+    "bonus": 160,
     "price_cents": 2499,
-    "label": "Max"
+    "label": "Elite"
   }
 ];
 
@@ -222,11 +222,11 @@ export const COIN_GRANTS: Record<string, number> = {
 
 /** Product id → credits granted (base + bonus). */
 export const CREDIT_GRANTS: Record<string, number> = {
-  "pack_25": 25,
-  "pack_50": 60,
-  "pack_120": 145,
-  "pack_200": 250,
-  "pack_500": 650,
+  "pack_25": 30,
+  "pack_50": 65,
+  "pack_120": 165,
+  "pack_200": 290,
+  "pack_500": 660,
   "credits_20": 20,
   "credits_50": 50,
   "credits_100": 100,

@@ -39,7 +39,7 @@ class ErrorBoundary extends Component<Props, State> {
           <p className="mt-2 text-sm text-muted-foreground">
             This screen hit an unexpected error. Your training data is safe.
           </p>
-          <p className="mt-3 break-words rounded-lg bg-muted p-2 text-[11px] text-muted-foreground">
+          <p className="mt-3 break-words rounded-lg bg-muted p-2 text-[12px] text-muted-foreground">
             {error.message || "Unknown error"}
           </p>
           <div className="mt-5 flex gap-2">

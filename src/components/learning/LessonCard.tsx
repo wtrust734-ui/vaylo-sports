@@ -38,21 +38,34 @@ export function FeaturedCard({ lesson, saved, onOpen, onToggleSave, index = 0 }:
          the whole page wide — and this card is also used outside the featured
          scroller. Below `sm` the width is now a fraction of the viewport, which
          is both safe at 320px and better as a carousel: the next card peeks in,
-         so the section reads as scrollable instead of as a single card. */
-      className="press relative w-[76vw] max-w-[380px] min-w-0 flex-1 cursor-pointer overflow-hidden rounded-3xl border border-electric-purple/25 bg-gradient-to-br from-navy via-card to-electric-purple/15 p-5 shadow-card sm:w-auto sm:min-w-[330px]"
+         so the section reads as scrollable instead of as a single card.
+
+         `shrink-0`, not `flex-1 min-w-0`. `flex-1` is `flex: 1 1 0%`, and in the
+         horizontal scroller this card lives in that basis wins over the width
+         above: the three featured cards split the visible 390px row evenly
+         instead of each sizing to 76vw, so each measured 109px wide (not 296) —
+         the meta line below was crushed to 72px and wrapped to three lines with
+         its text touching the Read button. A carousel item must be sized by
+         itself and never shrink; that is what the sibling scrollers
+         (CompactCard and the rest) already do. */
+      className="press relative w-[76vw] max-w-[380px] shrink-0 cursor-pointer overflow-hidden rounded-3xl border border-electric-purple/25 bg-gradient-to-br from-navy via-card to-electric-purple/15 p-5 shadow-card sm:w-[330px]"
     >
       <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-electric-purple/25 blur-2xl" />
       <div className="relative flex items-start justify-between gap-2">
-        <span className="rounded-full bg-electric-purple/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-electric-purple">
+        <span className="rounded-full bg-electric-purple/15 px-2.5 py-1 text-[12px] font-bold tracking-wider text-electric-purple">
           {(lesson.sports?.[0] || "ALL SPORTS").toUpperCase()} · {categoryFor(lesson).toUpperCase()}
         </span>
         <SaveButton saved={saved} onClick={(event) => onToggleSave(lesson, event)} />
       </div>
       <h3 className="relative mt-12 font-display text-2xl font-bold leading-tight">{lesson.title}</h3>
       <p className="relative mt-2 line-clamp-2 text-sm text-muted-foreground">{lesson.summary}</p>
-      <div className="relative mt-4 flex items-center justify-between">
-        <p className="text-[11px] font-medium text-muted-foreground">{metaText(lesson)}</p>
-        <span className="flex items-center gap-1 rounded-xl bg-white px-3 py-2 text-xs font-bold text-navy-deep">
+      /* `gap-3` is the gutter between the meta line and the Read button. A flex
+         row with `justify-between` and no gap has none: the text side shrinks
+         to the width the button leaves, so its longest line ends flush against
+         the button's border — the "RUNNINGTrend" defect, one layer in. */
+      <div className="relative mt-4 flex items-center justify-between gap-3">
+        <p className="min-w-0 text-[12px] font-medium text-muted-foreground">{metaText(lesson)}</p>
+        <span className="flex shrink-0 items-center gap-1 rounded-xl bg-white px-3 py-2 text-xs font-bold text-navy-deep">
           Read <ArrowRight className="inline" size={13} />
         </span>
       </div>
@@ -68,12 +81,12 @@ export function CompactCard({ lesson, saved, onOpen, onToggleSave }: BaseProps) 
       className="press-card w-[190px] shrink-0 cursor-pointer rounded-2xl border border-border bg-card p-4 hover:border-electric-purple/40 sm:w-[210px]"
     >
       <div className="flex justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-electric-purple">{typeFor(lesson)}</span>
+        <span className="text-[12px] font-bold uppercase tracking-wide text-electric-purple">{typeFor(lesson)}</span>
         <SaveButton saved={saved} onClick={(event) => onToggleSave(lesson, event)} size={16} />
       </div>
       <h3 className="mt-4 line-clamp-3 font-bold leading-snug">{lesson.title}</h3>
       <p className="mt-2 line-clamp-2 text-xs leading-4 text-muted-foreground">{lesson.summary}</p>
-      <div className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-1 text-[12px] text-muted-foreground">
         <Clock3 size={12} /> {lesson.duration}
       </div>
     </article>
@@ -89,12 +102,12 @@ export function LessonRow({ lesson, saved, completed, onOpen, onToggleSave }: Ba
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-electric-purple">
+          <span className="text-[12px] font-bold uppercase tracking-wider text-electric-purple">
             {categoryFor(lesson)} · {typeFor(lesson)}
           </span>
           <h3 className="mt-2 font-bold leading-snug group-hover:text-electric-purple">{lesson.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{lesson.summary}</p>
-          <p className="mt-3 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <p className="mt-3 flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
             {metaText(lesson)}
             {completed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-electric-purple/10 px-2 py-0.5 font-semibold text-electric-purple">
@@ -116,7 +129,7 @@ export function ContinueCard({ lesson, onOpen }: { lesson: Lesson; onOpen: (less
       onClick={() => onOpen(lesson)}
       className="press-card rounded-2xl border border-border bg-card p-4 text-start hover:border-electric-purple/40"
     >
-      <p className="text-[10px] font-bold uppercase tracking-wider text-electric-purple">{categoryFor(lesson)}</p>
+      <p className="text-[12px] font-bold uppercase tracking-wider text-electric-purple">{categoryFor(lesson)}</p>
       <p className="mt-2 text-sm font-bold leading-snug">{lesson.title}</p>
       <p className="mt-2 text-xs text-muted-foreground">{lesson.duration} read · {difficultyFor(lesson)}</p>
     </button>

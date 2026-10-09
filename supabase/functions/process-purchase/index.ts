@@ -42,13 +42,25 @@ const corsHeaders = {
 // anything else — including the default — takes no money at all.
 // See CAPACITOR.md §3 for the Play Console + secrets runbook.
 
-// Modes: `store` verifies a Google Play token, `test` trusts the client (local
-// work only, and it grants nothing that is priced in money), anything else is
-// inert. The default used to be `test`, which meant losing the secret silently
-// restored a mode that trusts the client — a footgun aimed at production, since
-// a missing secret is exactly what a deploy goes wrong on. Failing shut is the
-// better default: nobody is charged, and the reason is in the log.
+// Modes: `store` verifies a Google Play token, `free` grants credits without
+// payment (closed testing only — see src/config/closedTesting.ts), `test`
+// trusts the client (local work only, and it grants nothing that is priced in
+// money), anything else is inert. The default used to be `test`, which meant
+// losing the secret silently restored a mode that trusts the client — a footgun
+// aimed at production, since a missing secret is exactly what a deploy goes
+// wrong on. Failing shut is the better default: nobody is charged, and the
+// reason is in the log.
 const PAYMENT_MODE = Deno.env.get("PAYMENT_MODE") ?? "disabled";
+
+/**
+ * Products that may never be granted by the free path.
+ *
+ * Unlimited credits are not a credit pack — one free `infinite_lifetime` is
+ * every AI feature in the app, forever, for nothing, and unlike a free pack it
+ * cannot be sized. Closed testing is meant to exercise the credit flow, so the
+ * free path stops at the credit ladder.
+ */
+const FREE_GRANT_BLOCKED = new Set(UNLIMITED_PACKS.map((p) => p.id));
 
 type Verification =
   | { verified: true; reference: string }
@@ -58,6 +70,14 @@ interface RequestBody {
   items?: unknown[];
   platform?: string;
   verification?: { reference?: string; receipt?: string };
+  /**
+   * Set by the client when it believes credits are free (closed testing).
+   * NOT trusted on its own: it is only honoured when the server's PAYMENT_MODE
+   * secret is `free`, so the client flag and the secret have to agree. A stale
+   * client cannot start granting for free, and a forgotten secret cannot start
+   * charging a tester.
+   */
+  closed_testing?: boolean;
 }
 
 /**
@@ -214,6 +234,11 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Closed-testing free grants. Both switches must agree: the server secret
+    // (the authority) and the client's own flag (so the UI and the server are
+    // describing the same deal to the athlete).
+    const freeGrant = PAYMENT_MODE === "free" && body.closed_testing === true;
+
     // Payment verification is only meaningful for a basket that contains a
     // product priced in money. A feature unlock or an Event Pack is paid for in
     // credits the athlete earned, and the credit balance is the authority — it
@@ -228,7 +253,25 @@ Deno.serve(async (req) => {
       return PRODUCT_PRICES[id] != null || id.startsWith("offer_");
     });
 
-    if (basketHasMoney) {
+    if (freeGrant) {
+      // Nothing is charged and nothing is verified, but an unlimited pack is
+      // still refused — it is not a size-limited product (see FREE_GRANT_BLOCKED).
+      const blockedUnlimited = (items as BasketItem[]).find((i) =>
+        FREE_GRANT_BLOCKED.has(String(i?.product_id || ""))
+      );
+      if (blockedUnlimited) {
+        return new Response(
+          JSON.stringify({
+            error: "Unlimited is not free during closed testing. Credit packs are.",
+            code: "free_grant_excluded",
+            product_id: String(blockedUnlimited.product_id),
+          }),
+          { status: 402, headers: corsHeaders }
+        );
+      }
+    }
+
+    if (basketHasMoney && !freeGrant) {
       const verification = await verifyStorePurchase(items, body);
       // Explicit comparison rather than `!verification.verified`: the negation
       // form does not narrow this union under the compiler options used here, so
@@ -337,11 +380,19 @@ Deno.serve(async (req) => {
       // catalogue and an open wallet. Set PAYMENT_MODE=store once Play Billing
       // is live and this branch stops applying.
       // -------------------------------------------------------------------------
-      if (priceCents > 0 && PAYMENT_MODE !== "store") {
+      // The free path skips this: it is the deliberate exception, and it is
+      // gated on the secret above, not on anything the client sent.
+      if (priceCents > 0 && PAYMENT_MODE !== "store" && !freeGrant) {
+        // Distinguish "the client thinks this is free but the server disagrees"
+        // from "nobody has configured payments". They need different messages:
+        // the first is a deployment mistake to report, the second is expected.
+        const mismatched = PAYMENT_MODE === "free" && body.closed_testing !== true;
         return new Response(
           JSON.stringify({
-            error: "Paid purchases are not available yet. Credits earned in the app can still be spent on unlocks and Event Packs.",
-            code: "payments_not_available",
+            error: mismatched
+              ? "Free credits are not switched on for this build. Nothing has been charged."
+              : "Paid purchases are not available yet. Credits earned in the app can still be spent on unlocks and Event Packs.",
+            code: mismatched ? "free_grant_unavailable" : "payments_not_available",
             product_id: productId,
           }),
           { status: 503, headers: corsHeaders }
@@ -596,6 +647,9 @@ Deno.serve(async (req) => {
       bonus_added: bonusToAdd,
       coins_added: coinsToAdd,
       infinite: !!infiniteGrant,
+      // Told plainly to the client so the receipt can say "free during closed
+      // testing" rather than implying money changed hands.
+      free: freeGrant,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: corsHeaders });

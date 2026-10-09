@@ -9,8 +9,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        /* The one control every screen shares, so it is where the app's
+           overall loudness is actually decided. The glow on hover used to be
+           `hover:shadow-electric` — a button that lit up when you pointed at
+           it. Brightness carries the same affordance and is not a bloom. */
         default:
-          "bg-gradient-primary text-primary-foreground shadow-glow hover:shadow-electric hover:brightness-[1.04] active:brightness-[0.98] border border-white/10",
+          "bg-gradient-primary text-primary-foreground shadow-glow hover:brightness-[1.07] active:brightness-[0.97] border border-white/10",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm border border-white/5",
         outline:
           "border border-white/10 bg-white/[0.04] backdrop-blur hover:bg-white/[0.07] hover:border-white/15 text-foreground shadow-sm",

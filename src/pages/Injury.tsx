@@ -151,7 +151,14 @@ const Injury = () => {
   const avgSoreness = recovery.length ? recovery.reduce((a, b) => a + (b.soreness || 5), 0) / recovery.length : 5;
   const avgSleep = recovery.length ? recovery.reduce((a, b) => a + (b.sleep_quality || 5), 0) / recovery.length : 5;
 
-  // Predictive risk score 0-100
+  // Training-strain score 0-100.
+  //
+  // The arithmetic is unchanged and the screen still shows a number: what
+  // changed in Phase 7 is what the number CLAIMS to be. Nothing here has been
+  // validated against an injury outcome, so printing "Current Risk: HIGH RISK"
+  // would be a medical finding invented from a load ratio. It is a strain
+  // reading built from the athlete's own log, labelled as one, with the same
+  // "training measure, not a medical assessment" line /metrics uses.
   let risk = 0;
   if (analysis.ratio > 1.5) risk += 35; else if (analysis.ratio > 1.3) risk += 20;
   if (analysis.sprintShare > 0.5) risk += 15;
@@ -161,15 +168,26 @@ const Injury = () => {
   if (injuries.filter((i) => i.status === "active").length > 0) risk += 20;
   risk = Math.min(100, risk);
 
-  const riskTier = risk >= 65 ? { label: "HIGH RISK", color: "destructive", action: "Reduce load 30% for 5 days. Add 2 mobility sessions." }
-    : risk >= 40 ? { label: "ELEVATED", color: "energy", action: "Cap intensity below 80%. Prioritize sleep & soft-tissue work." }
-    : { label: "PROTECTED", color: "primary", action: "Keep current load. Maintain mobility routine." };
+  const riskTier = risk >= 65 ? { label: "HEAVY LOAD", color: "destructive", action: "Reduce load 30% for 5 days. Add 2 mobility sessions." }
+    : risk >= 40 ? { label: "BUILDING", color: "energy", action: "Cap intensity below 80%. Prioritize sleep & soft-tissue work." }
+    : { label: "STEADY", color: "primary", action: "Keep current load. Maintain mobility routine." };
 
   const submitInjury = async () => {
     if (!user) return;
-    const plan = planForInjury(form.body_part, form.severity);
+    // Mirror the injury_logs DB checks: severity 1–10, closed status set,
+    // body part from the product list, bounded note length. A malicious or
+    // broken client cannot store a fabricated status/severity combination.
+    const severity = Math.max(1, Math.min(10, Math.round(Number(form.severity) || 1)));
+    const bodyPart = BODY_PARTS.includes(form.body_part) ? form.body_part : "Other";
+    const status = "active";
+    const plan = planForInjury(bodyPart, severity);
     const { error } = await supabase.from("injury_logs").insert({
-      user_id: user.id, ...form, recovery_protocol: plan.join("\n"),
+      user_id: user.id,
+      body_part: bodyPart,
+      severity,
+      status,
+      notes: (form.notes || "").replace(/\p{C}/gu, " ").slice(0, 1000) || null,
+      recovery_protocol: plan.join("\n"),
     });
     if (error) toast.error(error.message);
     else {
@@ -188,19 +206,19 @@ const Injury = () => {
 
   if (!unlocked) {
     return (
-      <div className="min-h-screen p-6 pt-20 pb-24 max-w-lg mx-auto">
-        <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest mb-2"><ShieldAlert size={14} /> Predictive Injury Engine</div>
+      <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-lg mx-auto">
+        <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest mb-2"><ShieldAlert size={14} /> Training strain & recovery</div>
         <h1 className="text-4xl font-display font-bold">Injury <span className="text-gradient-electric">Management</span></h1>
         <div className="mt-8 p-6 rounded-2xl border-2 border-primary/40 bg-card/40 backdrop-blur space-y-4">
-          <div className="text-sm text-muted-foreground">Unlock predictive risk scoring, evidence-led recovery scaffolds, and automatic protocol generation whenever you log an injury.</div>
+          <div className="text-sm text-muted-foreground">Unlock a training-strain reading, evidence-led recovery scaffolds, and automatic protocol generation whenever you log an injury.</div>
           <ul className="text-sm space-y-1.5">
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Real-time risk 0–100 from load, recovery, sleep</li>
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Body-part specific return-to-play plans</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Strain reading 0–100 from your load, recovery and sleep</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Body-area specific return-to-training plans</li>
             <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Load & A:C ratio tracking</li>
           </ul>
           <div className="text-3xl font-display font-bold">{creditCost("injury_management_unlock")} <span className="text-sm text-muted-foreground">credits · one-time</span></div>
           <Button onClick={unlockInjury} disabled={unlocking} className="w-full">{unlocking ? "Unlocking..." : `Unlock for ${creditCost("injury_management_unlock")} credits`}</Button>
-          <div className="text-[11px] text-muted-foreground">Your balance: {profile?.credits ?? 0} credits</div>
+          <div className="text-[12px] text-muted-foreground">Your balance: {profile?.credits ?? 0} credits</div>
         </div>
       </div>
     );
@@ -210,11 +228,11 @@ const Injury = () => {
   const chartData = loads.slice(-28).map((l) => ({ date: l.log_date.slice(5), load: l.total_rpe }));
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><ShieldAlert size={14} /> Predictive Injury Engine</div>
+        <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><ShieldAlert size={14} /> Training strain & recovery</div>
         <h1 className="text-4xl font-display font-bold mt-2">Injury <span className="text-gradient-electric">Management</span></h1>
-        <p className="text-muted-foreground mt-1 text-sm">Real-time risk forecasting from your load, recovery, and trends.</p>
+        <p className="text-muted-foreground mt-1 text-sm">How your recent load, recovery and trends add up — a training measure, not a medical assessment.</p>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
@@ -222,7 +240,7 @@ const Injury = () => {
           riskTier.color === "destructive" ? "border-destructive/40" : riskTier.color === "energy" ? "border-energy/40" : "border-primary/40"
         }`}>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">Current Risk</div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">Current strain</div>
           <span className={`text-xs font-bold px-3 py-1 rounded-full ${
             riskTier.color === "destructive" ? "bg-destructive/20 text-destructive" : riskTier.color === "energy" ? "bg-energy/20 text-energy" : "bg-primary/20 text-primary"
           }`}>{riskTier.label}</span>
@@ -238,7 +256,7 @@ const Injury = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
           className="p-5 rounded-2xl bg-card/40 border border-border">
-          <h3 className="font-semibold mb-3">Risk Drivers</h3>
+          <h3 className="font-semibold mb-3">What's driving this</h3>
           <ul className="space-y-2 text-sm">
             <li className="flex justify-between"><span>A:C Ratio</span><span className={analysis.ratio > 1.3 ? "text-destructive" : "text-primary"}>{analysis.ratio.toFixed(2)}</span></li>
             <li className="flex justify-between"><span>Sprint share</span><span>{Math.round(analysis.sprintShare * 100)}%</span></li>
@@ -282,9 +300,9 @@ const Injury = () => {
               <input type="range" min={1} max={10} value={form.severity} onChange={(e) => setForm({ ...form, severity: Number(e.target.value) })} className="w-full" />
             </div>
             <Textarea placeholder="Notes / how it happened" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            <div className="text-[11px] text-muted-foreground p-2 rounded-lg bg-energy/5 border border-energy/20 flex gap-2">
+            <div className="text-[12px] text-muted-foreground p-2 rounded-lg bg-energy/5 border border-energy/20 flex gap-2">
               <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
-              <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-play scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
+              <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-training scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
             </div>
             <Button onClick={submitInjury} className="w-full">Save & generate plan</Button>
           </motion.div>
@@ -308,7 +326,7 @@ const Injury = () => {
                 </div>
                 {i.recovery_protocol && (
                   <div className="mt-2 pt-2 border-t border-border/40">
-                    <div className="text-[10px] uppercase tracking-widest text-primary mb-1">Recovery Plan</div>
+                    <div className="text-[12px] uppercase tracking-widest text-primary mb-1">Recovery Plan</div>
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       {i.recovery_protocol.split("\n").map((line: string, idx: number) => (
                         <li key={idx} className="flex gap-2"><span className="text-primary">•</span><span>{line}</span></li>

@@ -1,310 +1,358 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, useInView } from "framer-motion";
-import { Play, Square, Clock, MapPin, Plus, Navigation, Eye } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Dumbbell, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Tables } from "@/integrations/supabase/types";
-import RPEModal from "@/components/RPEModal";
-import { triggerMilestone } from "@/components/MilestoneCelebration";
-import ShareActivityButton from "@/components/feed/ShareActivityButton";
-import { fetchMyShareKeys, shareKey, workoutShareInput } from "@/lib/activitySharing";
-import { isFlagOn } from "@/config/featureFlags";
+import { loadColumnsFor } from "@/lib/recoveryPlanning";
 
-type Workout = Tables<"workouts">;
+// ============================================================================
+// WORKOUTS — the log, and only the log
+// ----------------------------------------------------------------------------
+// This screen exists to record a session that has already happened. There is
+// deliberately no Start button, no timer and no elapsed clock: the Android
+// build declares no location permission (see the note in featureFlags.ts), so
+// anything that offered to track a live workout would be a control that
+// silently does nothing — the athlete would press it, get a stopwatch, and
+// discover the distance never moves.
+//
+// What replaced the old workout logger is the manual entry path that Wearables
+// already had: the same columns, the same pricing, written by the same helper,
+// so a session recorded here is indistinguishable from one that arrived from a
+// watch and is read by the recovery, streak and analytics screens.
+// ============================================================================
 
-const workoutTypes = [
-  { value: "run", label: "Run", icon: "🏃" },
-  { value: "gym", label: "Gym", icon: "🏋️" },
-  { value: "cycle", label: "Cycle", icon: "🚴" },
-  { value: "swim", label: "Swim", icon: "🏊" },
-  { value: "hiit", label: "HIIT", icon: "⚡" },
-  { value: "sport", label: "Sport", icon: "⚽" },
-];
+/** The sports the manual path prices. Matches the list Wearables offers. */
+const SESSION_TYPES = ["run", "cycle", "swim", "gym", "hiit", "sport", "yoga", "row"] as const;
+
+type SessionType = (typeof SESSION_TYPES)[number];
+
+const TYPE_LABELS: Record<SessionType, string> = {
+  run: "Run",
+  cycle: "Ride",
+  swim: "Swim",
+  gym: "Gym",
+  hiit: "HIIT",
+  sport: "Sport",
+  yoga: "Yoga",
+  row: "Row",
+};
+
+interface WorkoutRow {
+  id: string;
+  title: string;
+  type: string | null;
+  sport: string | null;
+  duration_minutes: number | null;
+  distance_km: number | string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+const inputClass =
+  "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25";
+
+const cardClass =
+  "rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[var(--vaylo-elev-card)]";
+
+/** The athlete's own sport, when it is one this form can price. */
+const defaultType = (sport: string | null | undefined): SessionType => {
+  const needle = (sport ?? "").toLowerCase();
+  const hit = SESSION_TYPES.find((t) => needle.includes(t));
+  if (hit) return hit;
+  if (needle.includes("bike") || needle.includes("cycl")) return "cycle";
+  if (needle.includes("weight") || needle.includes("strength")) return "gym";
+  if (needle.includes("football") || needle.includes("basket") || needle.includes("rugby")) return "sport";
+  return "run";
+};
+
+const fmtDate = (iso: string | null) => {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return "Undated";
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+};
 
 const Workouts = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const navigate = useNavigate();
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
-  const [showNew, setShowNew] = useState(false);
-  const [type, setType] = useState("run");
-  const [elapsed, setElapsed] = useState(0);
+  const { user, profile } = useAuth();
+
+  const [type, setType] = useState<SessionType>(() => defaultType(profile?.sport));
+  const [duration, setDuration] = useState("");
   const [distance, setDistance] = useState("");
-  const [gpsTracking, setGpsTracking] = useState(false);
-  const [gpsDistance, setGpsDistance] = useState(0);
-  const watchIdRef = useRef<number | null>(null);
-  const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
-  const historyRef = useRef(null);
-  const historyInView = useInView(historyRef, { once: true, margin: "-30px" });
+  const [calories, setCalories] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const [rpePending, setRpePending] = useState<{ id: string; type: string; duration: number } | null>(null);
-  // Which of these sessions the athlete has already published to the feed.
-  const [sharedKeys, setSharedKeys] = useState<Set<string>>(new Set());
-  const DEFAULT_AR = ["pace", "heart_rate", "distance", "duration", "cadence", "power"];
-  const [arMetrics, setArMetrics] = useState<string[]>(DEFAULT_AR);
-  const [liveHR, setLiveHR] = useState<number>(0);
+  const [rows, setRows] = useState<WorkoutRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  useEffect(() => { if (user) { fetchWorkouts(); fetchArSettings(); fetchSharedKeys(); } }, [user]);
+  // The profile arrives after the first render, so the default sport follows it
+  // until the athlete picks a type themselves.
+  const [touchedType, setTouchedType] = useState(false);
+  useEffect(() => {
+    if (!touchedType && profile?.sport) setType(defaultType(profile.sport));
+  }, [profile?.sport, touchedType]);
 
-  const fetchSharedKeys = async () => {
+  const load = useCallback(async () => {
     if (!user) return;
-    setSharedKeys(await fetchMyShareKeys(user.id));
-  };
-
-  const fetchArSettings = async () => {
-    if (!user) return;
-    // Only select columns that exist. Selecting a nonexistent column makes PostgREST
-    // reject the entire request, which meant saved AR metrics never loaded at all.
-    const { data } = await supabase.from("user_settings").select("ar_metrics").eq("user_id", user.id).maybeSingle();
-    if (data) {
-      const d = data as { ar_metrics?: string[] | null };
-      if (Array.isArray(d.ar_metrics) && d.ar_metrics.length > 0) setArMetrics(d.ar_metrics);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("workouts")
+        .select("id,title,type,sport,duration_minutes,distance_km,completed_at,created_at")
+        .eq("user_id", user.id)
+        .order("completed_at", { ascending: false, nullsFirst: false })
+        .limit(20);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setRows((data ?? []) as WorkoutRow[]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [user]);
+
   useEffect(() => {
-    if (!activeWorkout) return;
-    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(interval);
-  }, [activeWorkout]);
+    void load();
+  }, [load]);
 
-  // Simulated live heart-rate while workout active (real value comes from wearable bridge)
-  useEffect(() => {
-    if (!activeWorkout) { setLiveHR(0); return; }
-    const base = 130;
-    const iv = setInterval(() => setLiveHR(base + Math.round(Math.sin(Date.now() / 5000) * 15 + Math.random() * 10)), 1500);
-    return () => clearInterval(iv);
-  }, [activeWorkout]);
-
-  // GPS tracking
-  useEffect(() => {
-    if (!gpsTracking || !activeWorkout) return;
-    if (!navigator.geolocation) { toast({ title: "GPS not available" }); return; }
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        if (lastPosRef.current) {
-          const d = haversine(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
-          if (d > 0.005) { setGpsDistance(prev => prev + d); lastPosRef.current = { lat: latitude, lng: longitude }; }
-        } else {
-          lastPosRef.current = { lat: latitude, lng: longitude };
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    );
-    watchIdRef.current = id;
-    return () => { if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current); };
-  }, [gpsTracking, activeWorkout]);
-
-  const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  const fetchWorkouts = async () => {
-    if (!user) return;
-    const { data } = await supabase.from("workouts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20);
-    setWorkouts(data || []);
-  };
-
-  const startWorkout = async () => {
-    if (!user) return;
-    const typeLabel = workoutTypes.find(w => w.value === type)?.label || type;
-    const { data, error } = await supabase.from("workouts").insert({
-      user_id: user.id, title: `${typeLabel} Workout`, type, started_at: new Date().toISOString()
-    }).select().single();
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-    setActiveWorkout(data); setElapsed(0); setShowNew(false); setGpsDistance(0); lastPosRef.current = null;
-    toast({ title: "Workout started", description: "Live overlay is now visible on this screen." });
-  };
-
-  const stopWorkout = async () => {
-    if (!activeWorkout || !user) return;
-    const durationMin = Math.round(elapsed / 60);
-    const finalDist = gpsTracking && gpsDistance > 0 ? gpsDistance : (distance ? parseFloat(distance) : null);
-    const { error } = await supabase.from("workouts").update({
-      completed: true, completed_at: new Date().toISOString(), duration_minutes: durationMin,
-      distance_km: finalDist ? parseFloat(finalDist.toFixed(2)) : null,
-    }).eq("id", activeWorkout.id);
-    if (!error) {
-      toast({ title: "Workout Complete! 💪", description: `${durationMin} min logged.` });
-      setRpePending({ id: activeWorkout.id, type: activeWorkout.type || "", duration: durationMin });
-      const wid = activeWorkout.id;
-      setActiveWorkout(null); setElapsed(0); setDistance(""); setGpsTracking(false); setGpsDistance(0);
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
-      lastPosRef.current = null;
-      fetchWorkouts();
-      // Milestones
-      const { count } = await supabase.from("workouts").select("*", { count: "exact", head: true }).eq("user_id", user.id).eq("completed", true);
-      if (count === 1) triggerMilestone("first_workout");
-      else if (count === 50) triggerMilestone("workouts_50");
+  const logSession = async () => {
+    if (!user || saving) return;
+    const minutes = Number(duration);
+    if (!minutes || minutes <= 0) {
+      toast.error("How long was it? Enter the minutes.");
+      return;
+    }
+    const km = distance ? Number(distance) : null;
+    const kcal = calories ? Number(calories) : null;
+    const trimmed = notes.trim();
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("workouts").insert({
+        user_id: user.id,
+        title: `${TYPE_LABELS[type]} session`,
+        type,
+        // The load is priced from the sport, so this has to be the same value
+        // the recovery read prices against — the type the athlete chose.
+        sport: type,
+        ...loadColumnsFor({ sport: type, durationMinutes: minutes, distanceKm: km }),
+        started_at: new Date(Date.now() - minutes * 60_000).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_minutes: minutes,
+        distance_km: km,
+        calories_burned: kcal,
+        completed: true,
+        notes: trimmed || null,
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success("Session logged.");
+      setDuration("");
+      setDistance("");
+      setCalories("");
+      setNotes("");
+      setTouchedType(false);
+      await load();
+    } finally {
+      setSaving(false);
     }
   };
 
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60;
-    return `${h > 0 ? h + ":" : ""}${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  const remove = async (id: string) => {
+    if (!user) return;
+    setConfirmId(null);
+    const { error } = await supabase.from("workouts").delete().eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Session deleted.");
+    await load();
   };
 
   return (
-    <div className="min-h-screen app-mesh bg-background">
-      <div className="px-5 pt-12 pb-4">
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Workouts</motion.h1>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Track every session.</motion.p>
+    <div className="min-h-screen bg-background pb-28">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
+        <p className="text-[12px] font-semibold uppercase tracking-widest text-primary">Training</p>
+        <h1 className="mt-1 text-2xl font-display font-bold">Workouts</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Log a session you have already finished. Nothing here tracks a live workout — Vaylo Sports
+          has no location access on this device, so distance is the figure you type in.
+        </p>
       </div>
 
-      {activeWorkout && (
-        <motion.div initial={{ opacity: 0, y: 15, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="mx-5 mb-5 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card overflow-hidden p-5 relative">
-          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
-          <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">Active</span>
-          </div>
-          <h3 className="font-display font-bold text-lg">{activeWorkout.title}</h3>
-          <motion.div className="text-4xl font-display font-bold text-primary mt-4 text-center"
-            animate={{ scale: [1, 1.02, 1] }} transition={{ duration: 1, repeat: Infinity }}>
-            {formatTime(elapsed)}
-          </motion.div>
-          {gpsTracking && gpsDistance > 0 && (
-            <p className="text-center text-sm text-muted-foreground mt-2">
-              <Navigation size={12} className="inline mr-1" />{gpsDistance.toFixed(2)} km (GPS)
-            </p>
-          )}
+      {/* ── Log a finished session ── */}
+      <section className="px-5">
+        <div className={`${cardClass} p-4`}>
+          <h2 className="flex items-center gap-2 text-sm font-bold">
+            <Plus size={14} className="text-primary" aria-hidden /> Log a session
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            It counts exactly the same as a session that arrives from a watch.
+          </p>
 
-          {arMetrics.length > 0 && (
-            <div className="mt-4 p-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1"><Eye size={11} /> Overlay</span>
-                <button onClick={() => navigate(`/ar-overlay?workout=${activeWorkout.id}&type=${activeWorkout.type || "run"}`)}
-                  className="text-[10px] text-primary underline">Fullscreen</button>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                {arMetrics.slice(0, 6).map((m) => {
-                  const val = m === "pace" ? (gpsDistance > 0 && elapsed > 0 ? `${(elapsed / 60 / gpsDistance).toFixed(2)}` : "—")
-                    : m === "heart_rate" ? (liveHR ? `${liveHR}` : "—")
-                    : m === "distance" ? `${gpsDistance.toFixed(2)}`
-                    : m === "duration" ? formatTime(elapsed)
-                    : m === "cadence" ? "172"
-                    : m === "power" ? "245"
-                    : "—";
-                  const unit = m === "pace" ? "min/km" : m === "heart_rate" ? "bpm" : m === "distance" ? "km" : m === "cadence" ? "spm" : m === "power" ? "W" : "";
-                  return (
-                    <div key={m} className="rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur py-2">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{m.replace("_", " ")}</div>
-                      <div className="font-display font-bold text-sm text-primary">{val}</div>
-                      <div className="text-[9px] text-muted-foreground">{unit}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {!gpsTracking && (
-
-            <div className="mt-4">
-              <label className="text-xs text-muted-foreground mb-1 block">Distance (km)</label>
-              <input type="number" step="0.01" placeholder="0.00" value={distance} onChange={(e) => setDistance(e.target.value)}
-                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/30 transition-colors" />
-            </div>
-          )}
-          <motion.button onClick={stopWorkout} whileTap={{ scale: 0.98 }}
-            className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground font-semibold py-3 rounded-xl mt-4">
-            <Square size={18} /> Stop & Save
-          </motion.button>
-          </div>
-        </motion.div>
-      )}
-
-      {!activeWorkout && (
-        <div className="px-5 mb-5">
-          {!showNew ? (
-            <motion.button onClick={() => setShowNew(true)} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
-              <Plus size={18} /> Start workout
-            </motion.button>
-          ) : (
-            <motion.div initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-4 space-y-3 overflow-hidden relative">
-              <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
-              <div className="relative space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                {workoutTypes.map((w) => (
-                  <motion.button key={w.value} onClick={() => setType(w.value)} whileTap={{ scale: 0.93 }}
-                    className={`p-2 rounded-xl text-center border text-xs font-medium transition-all duration-200 ${type === w.value ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`}>
-                    <span className="text-lg block">{w.icon}</span>{w.label}
-                  </motion.button>
+          <div className="mt-3 space-y-3">
+            <div>
+              <label htmlFor="session-type" className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                Sport
+              </label>
+              <select
+                id="session-type"
+                value={type}
+                onChange={(e) => {
+                  setTouchedType(true);
+                  setType(e.target.value as SessionType);
+                }}
+                className={`${inputClass} mt-1.5`}
+              >
+                {SESSION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABELS[t]}
+                  </option>
                 ))}
-              </div>
-              {/* GPS is launch-gated (featureFlags.ts). The Android manifest
-                  declares no location permission, so the watch never resolves
-                  and the checkbox silently does nothing — a control that looks
-                  live and isn't. Hidden rather than disabled, so the athlete is
-                  not offered a feature this build cannot deliver. The manual
-                  distance field above is unaffected and still records distance. */}
-              {isFlagOn("gpsTracking") && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input type="checkbox" checked={gpsTracking} onChange={e => setGpsTracking(e.target.checked)} className="accent-primary" />
-                  <Navigation size={14} /> Track with GPS
-                </label>
-              )}
-              <div className="flex gap-2">
-                <button onClick={() => setShowNew(false)} className="px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-                <motion.button onClick={startWorkout} whileTap={{ scale: 0.98 }}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow border border-white/10">
-                  <Play size={16} /> Start
-                </motion.button>
-              </div>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      )}
+              </select>
+            </div>
 
-      <div ref={historyRef} className="px-5">
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3">Recent Workouts</h3>
-        <div className="space-y-3 mb-8">
-          {workouts.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No workouts yet. Start your first one!</p>}
-          {workouts.map((w, i) => (
-            <motion.div key={w.id} initial={{ opacity: 0, x: -15 }} animate={historyInView ? { opacity: 1, x: 0 } : {}}
-              transition={{ delay: i * 0.06, duration: 0.4 }}
-              whileHover={{ x: 4, transition: { duration: 0.2 } }}
-              className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-4 hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-sm">{w.title}</h4>
-                  <div className="flex items-center gap-3 mt-1">
-                    {w.duration_minutes && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock size={12} /> {w.duration_minutes} min</span>}
-                    {w.distance_km && <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin size={12} /> {Number(w.distance_km)} km</span>}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground">{new Date(w.created_at).toLocaleDateString()}</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="session-duration" className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                  Minutes
+                </label>
+                <input
+                  id="session-duration"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder="45"
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  className={`${inputClass} mt-1.5`}
+                />
               </div>
-              {w.completed && (
-                <div className="mt-3">
-                  <ShareActivityButton
-                    input={workoutShareInput(w)}
-                    shared={sharedKeys.has(shareKey("workout", w.id))}
-                    onToggle={(shared) => setSharedKeys(prev => {
-                      const next = new Set(prev);
-                      if (shared) next.add(shareKey("workout", w.id));
-                      else next.delete(shareKey("workout", w.id));
-                      return next;
-                    })}
-                  />
-                </div>
-              )}
-            </motion.div>
-          ))}
+              <div>
+                <label htmlFor="session-distance" className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                  Distance (km)
+                </label>
+                <input
+                  id="session-distance"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  placeholder="Optional"
+                  value={distance}
+                  onChange={(e) => setDistance(e.target.value)}
+                  className={`${inputClass} mt-1.5`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="session-calories" className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                Calories
+              </label>
+              <input
+                id="session-calories"
+                type="number"
+                inputMode="numeric"
+                placeholder="Optional"
+                value={calories}
+                onChange={(e) => setCalories(e.target.value)}
+                className={`${inputClass} mt-1.5`}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="session-notes" className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                Notes
+              </label>
+              <textarea
+                id="session-notes"
+                rows={3}
+                placeholder="How it went, how it felt, what to change next time."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className={`${inputClass} mt-1.5 resize-none`}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void logSession()}
+              disabled={saving}
+              className="press flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+            >
+              <Check size={16} aria-hidden /> {saving ? "Saving…" : "Save session"}
+            </button>
+          </div>
         </div>
-      </div>
-      <RPEModal open={!!rpePending} workoutId={rpePending?.id} type={rpePending?.type} duration={rpePending?.duration}
-        onClose={() => setRpePending(null)} />
+      </section>
+
+      {/* ── Recent sessions ── */}
+      <section className="px-5 pt-6">
+        <h2 className="mb-2.5 px-1 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+          Recent sessions
+        </h2>
+
+        {loading && rows.length === 0 && (
+          <p className="px-1 text-sm text-muted-foreground">Loading your sessions…</p>
+        )}
+
+        {!loading && rows.length === 0 && (
+          <div className={`${cardClass} p-4 text-sm text-muted-foreground`}>
+            Nothing logged yet. Add the session you just finished and it will appear here.
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {rows.map((row) => {
+            const km = row.distance_km == null ? null : Number(row.distance_km);
+            return (
+              <div key={row.id} className={`${cardClass} flex items-start gap-3 p-3.5`}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+                  <Dumbbell size={17} className="text-primary" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-semibold leading-tight">{row.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {fmtDate(row.completed_at ?? row.created_at)}
+                    {row.duration_minutes ? ` · ${row.duration_minutes} min` : ""}
+                    {km ? ` · ${km.toFixed(2)} km` : ""}
+                  </p>
+                </div>
+                {confirmId === row.id ? (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void remove(row.id)}
+                      className="press flex min-h-[44px] items-center rounded-xl border border-destructive/40 px-3 text-xs font-semibold text-destructive"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      className="press flex min-h-[44px] items-center rounded-xl border border-white/[0.08] px-3 text-xs font-semibold text-muted-foreground"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${row.title}`}
+                    onClick={() => setConfirmId(row.id)}
+                    className="press flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-muted-foreground"
+                  >
+                    <Trash2 size={15} aria-hidden />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 };

@@ -5,7 +5,14 @@ import BottomSheet from "@/components/ui/bottom-sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { purchaseItems, isPaymentsUnavailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing";
+import {
+  purchaseItems,
+  isPaymentsUnavailable,
+  isFreeGrantUnavailable,
+  PAYMENTS_UNAVAILABLE_MESSAGE,
+  FREE_GRANT_UNAVAILABLE_MESSAGE,
+} from "@/lib/billing";
+import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { COINS_PER_CREDIT } from "@/config/coins";
 import { planTopUp, type BundleOffer } from "@/lib/topUp";
@@ -66,6 +73,11 @@ export default function CoinTopUpSheet({
         onClose();
         return;
       }
+      // Closed-test switch and server secret disagree — nothing was charged.
+      if (isFreeGrantUnavailable(result)) {
+        toast({ title: "Free coins aren't on yet", description: FREE_GRANT_UNAVAILABLE_MESSAGE });
+        return;
+      }
       toast({
         title: result.cancelled ? "Purchase cancelled" : "Purchase failed",
         description: result.cancelled ? undefined : result.error,
@@ -75,9 +87,12 @@ export default function CoinTopUpSheet({
     }
     hapticSuccess();
     await refreshProfile();
+    const wasFree = result.data?.free === true;
     toast({
-      title: `${offer.total.toLocaleString()} Coins added`,
-      description: itemName ? `You can afford ${itemName} now.` : undefined,
+      title: `${offer.total.toLocaleString()} Coins added${wasFree ? " — free" : ""}`,
+      description: wasFree
+        ? `Nothing was charged — ${CLOSED_TESTING.label.toLowerCase()}.`
+        : itemName ? `You can afford ${itemName} now.` : undefined,
     });
     onClose();
   };
@@ -120,20 +135,22 @@ export default function CoinTopUpSheet({
           {offer.total.toLocaleString()} Coins
         </span>
         {offer.bonus > 0 && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-energy">
+          <span className="text-[12px] font-bold uppercase tracking-wider text-energy">
             incl. {offer.bonus.toLocaleString()} bonus
           </span>
         )}
         {offer.first_purchase_only && (
-          <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+          <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-primary">
             One time
           </span>
         )}
         <span className={`${offer.first_purchase_only ? "" : "ml-auto"} text-sm font-bold tabular-nums`}>
-          {price(offer.price_cents)}
+          {freeCreditsActive()
+            ? <><span className="text-success">Free</span> <s className="text-muted-foreground font-normal text-[12px]">{price(offer.price_cents)}</s></>
+            : price(offer.price_cents)}
         </span>
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      <p className="mt-1.5 text-[12px] text-muted-foreground">
         {highlight === "cheapest"
           ? `Closes your ${gap.toLocaleString()} Coin gap${
               offer.leftover > 0 ? ` with ${offer.leftover.toLocaleString()} left over` : ""
@@ -160,7 +177,7 @@ export default function CoinTopUpSheet({
               {plan.cheapest ? (
                 renderOffer(plan.cheapest, "cheapest")
               ) : (
-                <p className="rounded-2xl border border-border bg-card/60 p-3.5 text-[11px] text-muted-foreground">
+                <p className="rounded-2xl border border-border bg-card/60 p-3.5 text-[12px] text-muted-foreground">
                   No bundle covers that gap yet — the Market has the full ladder.
                 </p>
               )}
@@ -179,7 +196,7 @@ export default function CoinTopUpSheet({
                   <p className="text-sm font-semibold">
                     Or convert {plan.convertCredits} credits
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[12px] text-muted-foreground">
                     Instant — you have {credits.toLocaleString()} credits (1 credit = {COINS_PER_CREDIT} Coins).
                   </p>
                 </div>
@@ -197,7 +214,7 @@ export default function CoinTopUpSheet({
                 onClose();
                 navigate("/market");
               }}
-              className="mt-3 flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              className="mt-3 flex w-full items-center justify-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
             >
               <Sparkles size={12} /> See all bundles in the Market
             </button>

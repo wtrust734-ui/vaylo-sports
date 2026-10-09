@@ -25,9 +25,17 @@ import { readFileSync } from "node:fs";
 
 const env = readFileSync(".env", "utf8");
 const envVar = (k) => ((env.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1] || "").trim().replace(/^["']|["']$/g, "");
+const localEnv = (() => {
+  try { return readFileSync(".env.local", "utf8"); } catch { return ""; }
+})();
+const localEnvVar = (k) => ((localEnv.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1] || "").trim().replace(/^["']|["']$/g, "");
 
 const URL_BASE = envVar("VITE_SUPABASE_URL");
-const ANON = envVar("VITE_SUPABASE_PUBLISHABLE_KEY");
+const ANON = localEnvVar("VITE_SUPABASE_PUBLISHABLE_KEY") || envVar("VITE_SUPABASE_PUBLISHABLE_KEY");
+if (ANON && !ANON.startsWith("sb_publishable_")) {
+  console.error("security-check: refusing a legacy JWT-shaped key; set VITE_SUPABASE_PUBLISHABLE_KEY to the rotatable sb_publishable_ key");
+  process.exit(1);
+}
 if (!URL_BASE || !ANON) {
   console.error("security-check: VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY missing from .env");
   process.exit(1);
@@ -301,6 +309,124 @@ for (const [name, body] of [
   const bal1 = (await (await fetch(`${URL_BASE}/rest/v1/profiles?select=credits&user_id=eq.${me}`, { headers: authHeaders })).json())[0]?.credits;
   check("An empty basket is a 400, not a success", seen.length === 0 && bal0 === bal1,
     seen.length ? seen.join(" | ") : `3 malformed baskets all refused · balance ${bal0} -> ${bal1}`);
+}
+
+// ---------------------------------------------------------------------------
+// Database invariants added by 20260930070000_security_hardening_ownership_and_grants.
+// Each probe must be REFUSED. Nothing inserted here can survive: every write
+// below violates a CHECK, a UNIQUE index, an FK, or a revoked grant, and the
+// duplicate-achievement probe cleans up after itself.
+{
+  // Zero-amount ledger rows are noise; CHECK amount <> 0 (and the INSERT grant
+  // is revoked, so either way the write must fail).
+  const r = await fetch(`${URL_BASE}/rest/v1/coin_transactions`, {
+    method: "POST", headers: { ...authHeaders, Prefer: "return=minimal" },
+    body: JSON.stringify({ amount: 0, reason: "security-check probe" }),
+  });
+  check("A client cannot insert a zero-amount ledger row", r.status >= 400, `HTTP ${r.status}`);
+
+  // Negative recorded balance in the credit ledger.
+  const r2 = await fetch(`${URL_BASE}/rest/v1/credit_transactions`, {
+    method: "POST", headers: { ...authHeaders, Prefer: "return=minimal" },
+    body: JSON.stringify({ amount: 1, reason: "security-check probe", balance_after: -5 }),
+  });
+  check("A client cannot record a negative balance_after", r2.status >= 400, `HTTP ${r2.status}`);
+
+  // You cannot be your own friend.
+  const r3 = await fetch(`${URL_BASE}/rest/v1/friendships`, {
+    method: "POST", headers: { ...authHeaders, Prefer: "return=minimal" },
+    body: JSON.stringify({ user_id: me, friend_id: me }),
+  });
+  check("A client cannot befriend themselves", r3.status >= 400, `HTTP ${r3.status}`);
+
+  // One identical achievement per athlete: the second identical insert must hit
+  // the UNIQUE index even though INSERT is otherwise allowed by RLS.
+  const dupTitle = "security-check-dup-probe-x9";
+  const dupHeaders = { ...authHeaders, Prefer: "return=minimal" };
+  const first = await fetch(`${URL_BASE}/rest/v1/achievements`, {
+    method: "POST", headers: dupHeaders,
+    body: JSON.stringify({ user_id: me, type: "milestone", title: dupTitle, description: "probe" }),
+  });
+  const second = await fetch(`${URL_BASE}/rest/v1/achievements`, {
+    method: "POST", headers: dupHeaders,
+    body: JSON.stringify({ user_id: me, type: "milestone", title: dupTitle, description: "probe" }),
+  });
+  await fetch(`${URL_BASE}/rest/v1/achievements?title=eq.${dupTitle}&user_id=eq.${me}`, { method: "DELETE", headers: authHeaders });
+  check("A duplicate achievement claim is rejected (one per athlete/type/title)",
+    first.status < 400 && second.status >= 400,
+    `first HTTP ${first.status} · duplicate HTTP ${second.status}`);
+
+  // guard_achievement_claims is a trigger function, not an API: anon must not
+  // be able to invoke it over REST.
+  const r4 = await fetch(`${URL_BASE}/rest/v1/rpc/guard_achievement_claims`, {
+    method: "POST", headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  check("Anon cannot call the guard_achievement_claims trigger function", r4.status >= 400, `HTTP ${r4.status}`);
+
+  // has_unlimited_credits(otherUser) was an entitlement oracle about somebody
+  // else; now revoked from clients.
+  const r5 = await sb.rpc("has_unlimited_credits", { _user: me });
+  check("has_unlimited_credits is no longer client-executable", !!r5.error, r5.error ? `refused · ${r5.error.message.slice(0, 80)}` : "returned a value");
+}
+
+// ---------------------------------------------------------------------------
+// Friend messaging (20261008120000_friends_messaging_and_unfriend.sql).
+// A message is friends-only, direction-proof about blocks, and readable by its
+// two participants alone. None of that is enforced by a screen, so all of it is
+// probed from the wire: the app is not the authority here, Postgres is.
+{
+  // A uuid nobody can be friends with, so every probe below is the negative
+  // case the triggers exist for.
+  const stranger = "00000000-0000-4000-8000-000000000000";
+
+  // Anon holds no privilege on the table at all — a permission error, not an
+  // empty list.
+  const anonRead = await restAnon("direct_messages?select=id");
+  check("Anon cannot read direct messages", anonRead.status >= 400, `HTTP ${anonRead.status}`);
+
+  // ...and a signed-in athlete can read their own, so this is RLS rather than a
+  // blanket refusal.
+  const mine = await fetch(`${URL_BASE}/rest/v1/direct_messages?select=id&limit=1`, { headers: authHeaders });
+  check("An athlete can read their own messages", mine.status === 200, `HTTP ${mine.status}`);
+
+  // A message to somebody who is not a friend is refused by the trigger.
+  const notFriend = await post("direct_messages", {
+    sender_id: me, recipient_id: stranger, body: "security-check probe",
+  });
+  const nfText = (await notFriend.text()).trim();
+  check("A message to somebody who is not a friend is refused",
+    !notFriend.ok && /friends/i.test(nfText),
+    `HTTP ${notFriend.status} · ${nfText.slice(0, 110)}`);
+
+  // ...and so is one written as somebody else.
+  const spoof = await post("direct_messages", {
+    sender_id: stranger, recipient_id: me, body: "security-check probe",
+  });
+  const spText = (await spoof.text()).trim();
+  check("A message cannot be sent as another athlete",
+    !spoof.ok, `HTTP ${spoof.status} · ${spText.slice(0, 110)}`);
+
+  // No UPDATE grant: a recipient cannot rewrite the words they were sent.
+  const rewrite = await fetch(`${URL_BASE}/rest/v1/direct_messages?id=eq.${stranger}`, {
+    method: "PATCH", headers: authHeaders,
+    body: JSON.stringify({ body: "rewritten" }),
+  });
+  const rwText = (await rewrite.text()).trim();
+  check("A message cannot be rewritten after it is sent",
+    !rewrite.ok, `HTTP ${rewrite.status} · ${rwText.slice(0, 110)}`);
+
+  // The two RPCs are callable by an athlete, and answer for a stranger without
+  // changing anything.
+  const u = await sb.rpc("unfriend", { p_friend_id: stranger });
+  check("unfriend() is callable and refuses a non-friend",
+    !u.error && u.data === false,
+    u.error ? `refused · ${u.error.message.slice(0, 80)}` : `returned ${JSON.stringify(u.data)}`);
+
+  const marked = await sb.rpc("mark_messages_read", { p_friend_id: stranger });
+  check("mark_messages_read() is callable and changes nothing for a stranger",
+    !marked.error && marked.data === 0,
+    marked.error ? `refused · ${marked.error.message.slice(0, 80)}` : `returned ${JSON.stringify(marked.data)}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -141,6 +141,10 @@ const Avatar = () => {
   const applyItem = (item: AvatarItem) => {
     setLoadout((p) => ({ ...p, [item.category]: item.id }));
     setPreviewItem(null);
+    // Persist immediately — the avatar must survive a tab close, and the DB
+    // trigger now refuses unowned paid items, so an out-of-date `owned` set
+    // surfaces as an error rather than silently desyncing from the server.
+    void persistLoadout({ ...loadout, [item.category]: item.id });
   };
 
   const purchase = async (item: AvatarItem) => {
@@ -218,9 +222,9 @@ const Avatar = () => {
       </div>
 
       {/* ============= HEADER ============= */}
-      <div className="relative px-5 pt-14 pb-3">
+      <div className="relative px-5 pt-[var(--vaylo-screen-top)] pb-3">
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-primary font-bold">
+          <div className="flex items-center gap-2 text-[12px] uppercase tracking-[0.24em] text-primary font-bold">
             <Sparkles size={12} /> Avatar Studio
           </div>
           <h1 className="text-3xl font-display font-black mt-1 leading-tight">
@@ -285,7 +289,7 @@ const Avatar = () => {
               <span className="text-sm font-display font-bold tabular-nums text-white">{coins.toLocaleString()}</span>
             </div>
             <button onClick={() => navigate("/market")}
-              className="text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">
+              className="text-[12px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">
               + Top Up
             </button>
           </div>
@@ -299,7 +303,7 @@ const Avatar = () => {
                 </div>
               ) : null}
             </div>
-            <span className="text-[10px] uppercase tracking-wider text-white/50">drag to rotate</span>
+            <span className="text-[12px] uppercase tracking-wider text-white/50">drag to rotate</span>
           </div>
         </motion.div>
       </div>
@@ -332,7 +336,7 @@ const Avatar = () => {
                     : "bg-card/40 border-border text-muted-foreground hover:text-foreground",
                 )}>
                 <Icon size={18} />
-                <span className="text-[10px] font-bold uppercase tracking-wider">{meta.label}</span>
+                <span className="text-[12px] font-bold uppercase tracking-wider">{meta.label}</span>
                 {meta.free && <span className="text-[8px] font-bold text-success uppercase">Free</span>}
               </motion.button>
             );
@@ -351,7 +355,7 @@ const Avatar = () => {
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
           {FILTERS.map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={cn("shrink-0 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95",
+              className={cn("shrink-0 text-[12px] uppercase tracking-wider font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95",
                 filter === f ? "bg-foreground text-background" : "bg-card/60 text-muted-foreground border border-border")}>
               {f}
             </button>
@@ -359,7 +363,7 @@ const Avatar = () => {
           <span className="w-px bg-border mx-1" />
           {(["all", "common", "rare", "epic", "legendary", "mythic"] as const).map((r) => (
             <button key={r} onClick={() => setRarityFilter(r)}
-              className={cn("shrink-0 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95",
+              className={cn("shrink-0 text-[12px] uppercase tracking-wider font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95",
                 rarityFilter === r ? "bg-foreground/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
               {r}
             </button>
@@ -412,7 +416,7 @@ const Avatar = () => {
                   )}
 
                   {/* Rarity chip */}
-                  <span className="absolute top-1.5 left-1.5 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full backdrop-blur"
+                  <span className="absolute top-1.5 left-1.5 text-[12px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full backdrop-blur"
                     style={{ background: `${meta.color}25`, color: meta.color, border: `1px solid ${meta.color}55` }}>
                     {meta.label}
                   </span>
@@ -430,14 +434,14 @@ const Avatar = () => {
                 </div>
 
                 <div className="p-2">
-                  <p className="text-[11px] font-bold truncate">{item.name}</p>
+                  <p className="text-[12px] font-bold truncate">{item.name}</p>
                   <div className="flex items-center justify-between mt-0.5">
                     {isOwned ? (
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-success">Owned</span>
+                      <span className="text-[12px] uppercase tracking-wider font-bold text-success">Owned</span>
                     ) : item.cost === 0 ? (
-                      <span className="text-[10px] uppercase font-bold text-primary">Free</span>
+                      <span className="text-[12px] uppercase font-bold text-primary">Free</span>
                     ) : (
-                      <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold tabular-nums",
+                      <span className={cn("inline-flex items-center gap-1 text-[12px] font-bold tabular-nums",
                         canAfford ? "text-energy" : "text-destructive")}>
                         <Coins size={10} /> {item.cost}
                       </span>
@@ -467,13 +471,14 @@ const Avatar = () => {
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 320, damping: 34 }}
-              className="fixed left-0 right-0 bottom-0 z-50 rounded-t-3xl border-t border-border overflow-hidden"
+              className="fixed left-0 right-0 bottom-0 z-[59] rounded-t-3xl border-t border-border overflow-hidden"
               style={{
                 background: "linear-gradient(180deg, hsl(220 60% 10%), hsl(220 80% 5%))",
                 boxShadow: `0 -20px 60px ${RARITY_META[detail.rarity].glow}`,
               }}>
               <div className="mx-auto w-10 h-1 rounded-full bg-white/20 mt-2" />
-              <div className="p-5 pb-8">
+              {/* `pb-8` (32px) was under the home indicator on a 34px inset. */}
+              <div className="p-5 pb-[max(2rem,var(--vaylo-inset-bottom))]">
                 <div className="flex items-center gap-3">
                   <div className="w-24 h-24 rounded-2xl flex items-center justify-center overflow-hidden border border-white/10"
                     style={{ background: RARITY_META[detail.rarity].gradient }}>
@@ -484,7 +489,7 @@ const Avatar = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: RARITY_META[detail.rarity].color }}>
+                    <div className="text-[12px] uppercase tracking-wider font-bold" style={{ color: RARITY_META[detail.rarity].color }}>
                       {RARITY_META[detail.rarity].label} · {CATEGORY_META[detail.category].label}
                     </div>
                     <h3 className="text-xl font-display font-black leading-tight">{detail.name}</h3>
@@ -505,9 +510,27 @@ const Avatar = () => {
                       <Check size={13} /> Equip
                     </button>
                   ) : detail.cost === 0 ? (
-                    <button onClick={() => { setOwned((s) => new Set(s).add(detail.id)); applyItem(detail); setDetail(null); }}
-                      className="col-span-2 rounded-xl bg-gradient-electric py-2.5 text-xs font-black uppercase tracking-wider text-white active:scale-95">
-                      Unlock (Free)
+                    <button
+                      onClick={async () => {
+                        // Free items go through the same server grant as paid
+                        // ones so ownership persists across devices. (This
+                        // button previously only mutated local state — a
+                        // reload silently reverted the unlock.)
+                        if (purchasingId) return;
+                        setPurchasingId(detail.id);
+                        const { error } = await supabase.rpc("purchase_avatar_item_coins", {
+                          p_item_id: detail.id, p_category: detail.category, p_rarity: detail.rarity, p_cost: 0,
+                        });
+                        setPurchasingId(null);
+                        if (error) { toast.error(error.message); return; }
+                        setOwned((s) => new Set(s).add(detail.id));
+                        applyItem(detail);
+                        setDetail(null);
+                        toast.success("Unlocked!");
+                      }}
+                      disabled={purchasingId === detail.id}
+                      className="col-span-2 rounded-xl bg-gradient-electric py-2.5 text-xs font-black uppercase tracking-wider text-white flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-60 shadow-glow-electric">
+                      {purchasingId === detail.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Unlock (Free)
                     </button>
                   ) : (
                     <button onClick={() => purchase(detail)}
@@ -521,7 +544,7 @@ const Avatar = () => {
 
                 {!owned.has(detail.id) && detail.cost > 0 && coins < detail.cost && (
                   <button onClick={() => setTopUp({ gap: detail.cost - coins, itemName: detail.name })}
-                    className="mt-2 w-full rounded-xl border border-energy/40 py-2 text-[11px] uppercase tracking-wider font-bold text-energy active:scale-95">
+                    className="mt-2 w-full rounded-xl border border-energy/40 py-2 text-[12px] uppercase tracking-wider font-bold text-energy active:scale-95">
                     + Top up {detail.cost - coins} Coins
                   </button>
                 )}
@@ -531,7 +554,7 @@ const Avatar = () => {
         )}
       </AnimatePresence>
 
-      <p className="text-center text-[10px] text-muted-foreground mt-8 px-8">
+      <p className="text-center text-[12px] text-muted-foreground mt-8 px-8">
         Identity edits are free. Cosmetics unlock with Coins (1 credit = 7.5 Coins) · Get Coins in the Market · Your athlete appears everywhere in Vaylo Sports.
       </p>
 

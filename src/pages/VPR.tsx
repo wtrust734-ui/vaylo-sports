@@ -101,7 +101,7 @@ const VPRPage = () => {
   if (loading) return <div className="min-h-screen app-mesh flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <div className="min-h-screen app-mesh p-6 pt-20 pb-28 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen app-mesh px-5 pt-[var(--vaylo-screen-top)] pb-28 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Activity size={14} /> Vaylo Sports Performance Rating</div>
         <h1 className="text-4xl font-display font-bold mt-2">VPR <span className="text-gradient-electric">{vpr.overall_vpr}</span></h1>

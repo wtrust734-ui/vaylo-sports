@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Zap, Sparkles, X, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { purchaseItems, isPaymentsUnavailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing";
+import { appHref } from "@/lib/routerBase";
+import {
+  purchaseItems,
+  isPaymentsUnavailable,
+  isFreeGrantUnavailable,
+  PAYMENTS_UNAVAILABLE_MESSAGE,
+  FREE_GRANT_UNAVAILABLE_MESSAGE,
+} from "@/lib/billing";
+import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { formatLocalPrice } from "@/lib/creditEconomy";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +71,12 @@ const CreditTopUpSheet = () => {
         completeTopUp(null);
         return;
       }
+      // Closed-test switch and server secret disagree — nothing was charged.
+      // The athlete is left in the sheet so they can retry once it is on.
+      if (isFreeGrantUnavailable(result)) {
+        toast({ title: "Free credits aren't on yet", description: FREE_GRANT_UNAVAILABLE_MESSAGE });
+        return;
+      }
       toast({
         title: result.cancelled ? "Purchase cancelled" : "Purchase failed",
         description: result.cancelled ? undefined : result.error,
@@ -72,9 +86,12 @@ const CreditTopUpSheet = () => {
     }
     hapticSuccess();
     await refreshProfile();
+    const wasFree = result.data?.free === true;
     toast({
-      title: `+${offer.total.toLocaleString()} credits`,
-      description: request.reasonLabel ? "Pick up right where you left off." : undefined,
+      title: `+${offer.total.toLocaleString()} credits${wasFree ? " — free" : ""}`,
+      description: wasFree
+        ? `Nothing was charged — ${CLOSED_TESTING.label.toLowerCase()}. Pick up right where you left off.`
+        : request.reasonLabel ? "Pick up right where you left off." : undefined,
     });
     completeTopUp(plan);
   };
@@ -98,20 +115,22 @@ const CreditTopUpSheet = () => {
           {offer.total.toLocaleString()} credits
         </span>
         {offer.bonus > 0 && (
-          <span className="rounded-full bg-energy/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-energy">
+          <span className="rounded-full bg-energy/15 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-energy">
             incl. {offer.bonus} bonus
           </span>
         )}
         {kind === "upgrade" && (
-          <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+          <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-primary">
             Better value
           </span>
         )}
         <span className={`${kind === "upgrade" ? "" : "ml-auto"} text-sm font-bold tabular-nums`}>
-          {formatLocalPrice(offer.price_cents, region.currency)}
+          {freeCreditsActive()
+            ? <><span className="text-success">Free</span> <s className="text-muted-foreground font-normal text-[12px]">{formatLocalPrice(offer.price_cents, region.currency)}</s></>
+            : formatLocalPrice(offer.price_cents, region.currency)}
         </span>
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      <p className="mt-1.5 text-[12px] text-muted-foreground">
         {kind === "cheapest"
           ? `Covers your ${request.shortfall.toLocaleString()} credit gap${offer.leftover > 0 ? ` with ${offer.leftover.toLocaleString()} left over` : ""}.`
           : `${offer.total.toLocaleString()} credits to spend — more credits per dollar.`}
@@ -134,7 +153,9 @@ const CreditTopUpSheet = () => {
           exit={{ y: 40, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md rounded-t-3xl border border-white/[0.08] bg-card p-5 shadow-electric sm:rounded-3xl"
+          // A bottom sheet on phones, so the buy button needs the home inset —
+          // `p-5` alone left it under the gesture bar.
+          className="w-full max-w-md rounded-t-3xl border border-white/[0.08] bg-card p-5 pb-[max(1.25rem,var(--vaylo-inset-bottom))] shadow-electric sm:rounded-3xl"
         >
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -145,7 +166,7 @@ const CreditTopUpSheet = () => {
                 <h3 className="font-display text-base font-bold">
                   {request.shortfall.toLocaleString()} more credits needed
                 </h3>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
                   {request.reasonLabel
                     ? `Top up to finish: ${request.reasonLabel}.`
                     : "Top up now and pick up where you left off."}
@@ -166,7 +187,7 @@ const CreditTopUpSheet = () => {
             {plan?.cheapest ? (
               renderOffer(plan.cheapest, "cheapest")
             ) : (
-              <p className="rounded-2xl border border-border bg-card/60 p-3.5 text-[11px] text-muted-foreground">
+              <p className="rounded-2xl border border-border bg-card/60 p-3.5 text-[12px] text-muted-foreground">
                 That gap is larger than any single pack — the Market has the full ladder.
               </p>
             )}
@@ -174,13 +195,13 @@ const CreditTopUpSheet = () => {
           </div>
 
           <div className="mt-4 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
               <ShieldCheck size={12} className="text-emerald-400" />
-              Price verified server-side at purchase
+              {freeCreditsActive() ? CLOSED_TESTING.label : "Price verified server-side at purchase"}
             </span>
             <a
-              href="/market"
-              className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary hover:underline"
+              href={appHref("/market")}
+              className="inline-flex items-center gap-1 text-[12px] font-bold uppercase tracking-wider text-primary hover:underline"
             >
               <Sparkles size={11} /> All packs
             </a>

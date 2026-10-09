@@ -13,10 +13,40 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+
+        <!-- The app draws a near-black UI (#0a0b13) edge to edge. Without these
+             the system paints a light status bar with dark icons, leaving a
+             bright white band above a dark app on every screen. Transparent bar
+             + light icons lets the app's own background show through. -->
+        <item name="android:statusBarColor">#05070f</item>
+        <item name="android:navigationBarColor">#05070f</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 
 
+    <!-- This is the theme MainActivity actually runs under (see the
+         android:theme on <activity> in AndroidManifest.xml), so the bar
+         attributes have to live HERE and not only on AppTheme.NoActionBar.
+
+         The status-bar strip was rendering white above the near-black UI: the
+         system drew a light bar over a light window background. Transparent bar
+         + light (white) icons, and a dark window background so the strip behind
+         the bar can never flash or sit white. `#05070f` matches the
+         SplashScreen.backgroundColor in capacitor.config.ts so the two tell the
+         same story. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:windowBackground">#05070f</item>
+        <!-- Opaque dark rather than transparent: on this device the strip above
+             the WebView is painted by the window/bar, so a transparent value let
+             the light default show through as a white band. Dark bar + white
+             icons either way the strip is drawn. -->
+        <item name="android:statusBarColor">#05070f</item>
+        <item name="android:navigationBarColor">#05070f</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 </resources>

@@ -86,7 +86,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
         title="Profile cosmetics"
         subtitle="Identity only — nothing here changes your training."
         headerRight={
-          <span className="flex items-center gap-1 self-center rounded-full border border-energy/30 bg-energy/10 px-2.5 py-1 text-[11px] font-bold text-energy">
+          <span className="flex items-center gap-1 self-center rounded-full border border-energy/30 bg-energy/10 px-2.5 py-1 text-[12px] font-bold text-energy">
             <Coins size={11} /> {coins.toLocaleString()}
           </span>
         }
@@ -97,7 +97,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                 key={t}
                 type="button"
                 onClick={() => setType(t)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${
                   t === type
                     ? "bg-primary text-primary-foreground"
                     : "border border-border text-muted-foreground hover:text-foreground"
@@ -109,7 +109,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
           </div>
         }
       >
-        <p className="pb-2 text-[11px] text-muted-foreground">{TYPE_META[type].blurb}</p>
+        <p className="pb-2 text-[12px] text-muted-foreground">{TYPE_META[type].blurb}</p>
         {loading && <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>}
         {!loading && visible.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">Nothing in this slot yet.</p>
@@ -130,7 +130,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                 className={`flex items-center gap-3 rounded-2xl border p-3 ${meta.border} ${owned ? "" : "bg-card/40"}`}
               >
                 <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[12px] font-black"
                   style={{ background: meta.gradient, color: color ?? "#fff" }}
                 >
                   {def.type === "title" ? cosmeticLabel(def).slice(0, 3) : <Lock size={14} />}
@@ -141,11 +141,11 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                     <p className="truncate text-sm font-semibold" style={color ? { color } : undefined}>
                       {cosmeticLabel(def)}
                     </p>
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ${meta.bg} ${meta.text}`}>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase ${meta.bg} ${meta.text}`}>
                       {meta.label}
                     </span>
                   </div>
-                  <p className="truncate text-[11px] text-muted-foreground">{def.description ?? def.category}</p>
+                  <p className="truncate text-[12px] text-muted-foreground">{def.description ?? def.category}</p>
                 </div>
 
                 {isEquipped ? (
@@ -153,7 +153,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                     type="button"
                     onClick={() => handleUnequip(slot)}
                     disabled={busy !== null}
-                    className="shrink-0 rounded-xl border border-border px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground disabled:opacity-60"
+                    className="shrink-0 rounded-xl border border-border px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground disabled:opacity-60"
                   >
                     {busy === slot ? <Loader2 size={12} className="animate-spin" /> : "Unequip"}
                   </button>
@@ -162,7 +162,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                     type="button"
                     onClick={() => handleEquip(def.id, cosmeticLabel(def))}
                     disabled={busy !== null}
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"
+                    className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"
                   >
                     {busy === def.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                     Equip
@@ -172,7 +172,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                     type="button"
                     onClick={() => handleBuy(def.id, cosmeticLabel(def), price ?? 0)}
                     disabled={busy !== null || !price}
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-energy px-3 py-2 text-[11px] font-bold text-background disabled:opacity-40"
+                    className="flex shrink-0 items-center gap-1 rounded-xl bg-energy px-3 py-2 text-[12px] font-bold text-background disabled:opacity-40"
                   >
                     {busy === def.id ? (
                       <Loader2 size={12} className="animate-spin" />

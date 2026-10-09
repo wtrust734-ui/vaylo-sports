@@ -52,7 +52,7 @@ export function CategoryGrid({ counts, onSelect }: { counts: Record<string, numb
             </span>
             <h2 className="mt-4 text-sm font-bold">{category.label}</h2>
             <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">{category.description}</p>
-            <span className="mt-3 block text-[11px] font-semibold text-electric-purple">{count || "New"} lessons</span>
+            <span className="mt-3 block text-[12px] font-semibold text-electric-purple">{count || "New"} lessons</span>
           </motion.button>
         );
       })}

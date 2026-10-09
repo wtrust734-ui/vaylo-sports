@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Training log and analysis for athletes in every sport | Vaylo Sports</title>
+<meta name="description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Read how it handles your data and your safety." />
+<meta name="theme-color" content="#05070f" />
+<meta name="color-scheme" content="dark light" />
+
+<link rel="canonical" href="https://vaylo-sports.netlify.app/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Vaylo Sports" />
+<meta property="og:title" content="Training log and analysis for athletes in every sport | Vaylo Sports" />
+<meta property="og:description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Read how it handles your data and your safety." />
+<meta property="og:url" content="https://vaylo-sports.netlify.app/" />
+<meta property="og:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<link rel="icon" href="/assets/logo.png" type="image/png" />
+<link rel="apple-touch-icon" href="/assets/logo.png" />
+<link rel="stylesheet" href="/assets/theme.css?v=1c56690f" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com","url":"https://vaylo-sports.netlify.app","logo":"https://vaylo-sports.netlify.app/assets/logo.png"}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Vaylo Sports","inLanguage":"en-GB","url":"https://vaylo-sports.netlify.app"}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Vaylo Sports","applicationCategory":"SportsApplication","operatingSystem":"Android","inLanguage":"en-GB","description":"An all-sports training log with analysis attached: record what you train, and read load, recovery, readiness and the limiter most likely holding you back.","url":"https://vaylo-sports.netlify.app"}</script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/" aria-current="page">
+        <img
+          class="brand-mark"
+          src="/assets/logo.png"
+          alt=""
+          width="34"
+          height="34"
+          decoding="async"
+        />
+        <span>Vaylo Sports</span>
+      </a>
+
+      <button
+        type="button"
+        class="nav-toggle"
+        aria-expanded="false"
+        aria-controls="mobile-nav"
+        data-nav-toggle
+      >
+        <span class="visually-hidden">Menu</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+        </svg>
+      </button>
+
+      <nav class="site-nav" aria-label="Main">
+          <a href="/features/">Features</a>
+          <a href="/safety/">Safety</a>
+          <a href="/faq/">FAQ</a>
+          <a href="/waitlist/">Waiting list</a>
+          <a href="/sponsors/">Sponsors</a>
+          <a href="/legal/">Legal</a>
+          <a href="/support/">Support</a>
+          <a href="/about/">About</a>
+          <a href="/contact/">Contact</a>
+      </nav>
+    </div>
+
+    <div class="mobile-nav" id="mobile-nav" hidden>
+      <div class="shell">
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/safety/">Safety</a></li>
+          <li><a href="/faq/">FAQ</a></li>
+          <li><a href="/waitlist/">Waiting list</a></li>
+          <li><a href="/sponsors/">Sponsors</a></li>
+          <li><a href="/legal/">Legal</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/about/">About</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+
+  <section class="hero">
+    <div class="shell hero-grid hero-lift">
+      <div>
+        <p class="eyebrow">For athletes in every sport</p>
+        <h1>A training log that tells you what your <span class="hl">own numbers</span> mean.</h1>
+        <p class="lead" style="margin-top:1.25rem">
+          Vaylo Sports records what you actually train, then works it back to you:
+          load, readiness, recovery, and the limiter most likely holding you
+          back. It works across running, cycling, swimming, team sports, racket
+          sports, combat sports and everything in between.
+        </p>
+        <p class="lead" style="margin-top:1rem">
+          It is a tool for organising and understanding your own training. It is
+          not a doctor, not a physio, and not a coach — and it will tell you when
+          to stop rather than push on.
+        </p>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="/features/">See what is in the app</a>
+          <a class="btn btn-secondary" href="/safety/">How we keep you safe</a>
+        </div>
+      </div><div class="card hero-aside reveal">
+        <p class="eyebrow" style="margin-bottom:1.1rem">At a glance</p>
+        <ul class="prose-list">
+          <li><strong>Android only, for now.</strong> There is no iOS build, and no Play Store listing yet — we will not link to one that does not exist.</li>
+          <li><strong>26 features across 6 areas</strong> are working today, and the ones that are not are listed below rather than hidden.</li>
+          <li><strong>No advertising or analytics SDK</strong> and no advertising identifier. Sponsored placements are labelled and 18+.</li>
+          <li><strong>Private by default.</strong> Sharing is per activity and yours to withdraw, and a minor's profile cannot be public.</li>
+        </ul>
+      </div>
+    </div>
+  </section><section class="section section-tight reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Straight answers</p>
+        <h2>What works, what does not, and what is switched off</h2>
+
+        <p class="lead"><p>Most apps of this kind blur that line. Vaylo does not, so here it is
+        before you install anything.</p></p>
+      </div>
+
+    <div class="grid grid-3"><div class="card reveal">
+        <h3 style="margin-top:0">Working today</h3>
+        <p style="font-size:0.95rem">
+          <strong>26 features across 6 areas</strong> — logging,
+          metrics, the Limiter Test, injury scaffolding, nutrition, the Learning
+          Hub, event packs and the community side. Open the app and they run.
+        </p>
+      </div><div class="card reveal">
+        <h3 style="margin-top:0">Built, not yet switched on</h3>
+        <p style="font-size:0.95rem">
+          <strong>6 AI features.</strong> The
+          server capability that runs them is not enabled, so the app says so when
+          you open them. We list them rather than pretend.
+        </p>
+      </div><div class="card reveal">
+        <h3 style="margin-top:0">Deliberately off</h3>
+        <p style="font-size:0.95rem">
+          <strong>3 integrations.</strong> Wearable
+          sync, GPS and the coach marketplace are disabled for stated reasons. No
+          data moves to or from them.
+        </p>
+      </div>
+    </div>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">All sports</p>
+        <h2>Not a running app</h2>
+
+        <p class="lead"><p>Vaylo Sports was built around a training log, not around one sport.
+      You pick your sport — or more than one — and the app adapts. Here is the
+      list the app actually offers, which is a closed list because an
+      everything-for-everyone picker would be useless to you.</p></p>
+      </div>
+      <ul class="tag-list">
+        <li>Running</li>
+        <li>Cycling</li>
+        <li>Swimming</li>
+        <li>Football</li>
+        <li>Basketball</li>
+        <li>Tennis</li>
+        <li>Rugby</li>
+        <li>Athletics</li>
+        <li>Triathlon</li>
+        <li>Boxing</li>
+        <li>MMA</li>
+        <li>Cricket</li>
+        <li>Gym / Weightlifting</li>
+        <li>CrossFit</li>
+        <li>Climbing</li>
+        <li>Rowing</li>
+        <li>Volleyball</li>
+        <li>Hockey</li>
+        <li>Badminton</li>
+        <li>Gymnastics</li>
+        <li>Wrestling</li>
+        <li>Golf</li>
+        <li>Combat Sports</li>
+        <li>Martial Arts</li>
+        <li>Other</li>
+      </ul>
+      <div class="btn-row">
+        <a class="btn btn-secondary" href="/features/">All features</a>
+        <a class="btn btn-secondary" href="/legal/health-safety/">How Vaylo handles training load</a>
+      </div>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">The app</p>
+        <h2>What you actually get</h2>
+
+        <p class="lead"><p>A summary. The full list, with the honest status of each feature, is
+        on the <a href="/features/">features page</a>.</p></p>
+      </div>
+
+    <div class="grid grid-2"><div class="card reveal">
+        <h3 style="margin-top:0">Train and log</h3>
+        <ul class="prose-list">
+  <li><strong>Performance Log.</strong> Log sessions with RPE, duration, notes and form. It is the record everything else is calculated from.</li>
+  <li><strong>Training plans.</strong> Week-by-week plans built from what you have logged, your sport and your availability.</li>
+  <li><strong>Routines.</strong> Your own repeatable sessions, with history, so a good week is not rebuilt from memory.</li>
+  <li><strong>Goals and event preparation.</strong> Set goals, track them against your log, and work towards a specific event.</li>
+</ul>
+      </div><div class="card reveal">
+        <h3 style="margin-top:0">Understand your training</h3>
+        <ul class="prose-list">
+  <li><strong>Performance Dashboard.</strong> Readiness, acute load, A:C ratio, calories, protein and an injury-risk flag, calculated from your own entries.</li>
+  <li><strong>VPR performance rating.</strong> A single rating built from the metrics you log. Arithmetic on your data — not a prediction and not AI.</li>
+  <li><strong>Limiter Test.</strong> Find which limiter is holding you back, then work on that one rather than guessing.</li>
+  <li><strong>Development trajectory.</strong> A trend line across your own VPR history. It describes what happened; it does not forecast what will.</li>
+  <li><strong>Equipment Tracker.</strong> Log the gear you train on and rotate it before it becomes the problem.</li>
+</ul>
+      </div><div class="card reveal">
+        <h3 style="margin-top:0">Recovery, injury and the body</h3>
+        <ul class="prose-list">
+  <li><strong>Recovery tracking.</strong> Sleep, soreness, mood and energy, and how they read next to your training load.</li>
+  <li><strong>Injury Management.</strong> A generic return-to-play scaffold to organise a rehab you have already been given. It does not diagnose, and it carries a permanent notice telling you to see a physiotherapist or doctor.</li>
+  <li><strong>Nutrition.</strong> Calorie and protein tracking against your training. Restricted to athletes aged 18 and over.</li>
+  <li><strong>Form analysis.</strong> Upload video of a lift or movement and review it frame by frame against your own earlier sets.</li>
+</ul>
+      </div><div class="card reveal">
+        <h3 style="margin-top:0">Skill and tactics</h3>
+        <ul class="prose-list">
+  <li><strong>Learning Hub.</strong> Written lessons, drills and quizzes across sports, including load management for growing athletes.</li>
+  <li><strong>Tactical analysis.</strong> Organise opponents, read matchups and keep notes on what worked.</li>
+  <li><strong>Cross-training.</strong> Work out what a second sport is doing for your first one, and where the two are pulling against each other.</li>
+  <li><strong>Compare.</strong> Put two periods side by side and see what actually changed.</li>
+</ul>
+      </div>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="/features/">See every feature</a>
+    </div>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Why it is built this way</p>
+        <h2>Three things Vaylo will not do</h2>
+
+      </div>
+      <div class="grid grid-3"><div class="card reveal">
+          <h3 style="margin-top:0">It will not diagnose you</h3>
+          <p>Injury Management organises a rehab a professional has already given
+          you. It does not diagnose, and it carries a permanent on-screen notice
+          telling you to see a physiotherapist or doctor for sharp, persistent or
+          worsening pain.</p>
+        </div><div class="card reveal">
+          <h3 style="margin-top:0">It will not feed your data to advertisers</h3>
+          <p>There is no advertising SDK, no analytics SDK and no advertising
+          identifier in the app. Sponsored placements are 18+, always labelled, and
+          report back to brands as anonymous counts — never your name, location or
+          training data.</p>
+          <p style="margin-bottom:0"><a href="/legal/advertising/">Advertising &amp; tracking disclosure</a></p>
+        </div><div class="card reveal">
+          <h3 style="margin-top:0">It will not hide a limitation</h3>
+          <p>Where a number is plain arithmetic on what you logged, we say so. Where
+          a sentence was written by a language model, we say that too — and explain
+          why it can be confidently wrong.</p>
+          <p style="margin-bottom:0"><a href="/legal/ai-disclaimer/">AI &amp; coaching disclaimer</a></p>
+        </div>
+      </div>
+    </div>
+  </section><section class="section section-alt reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Safety</p>
+        <h2>Built for younger athletes as well as adults</h2>
+
+        <p class="lead"><p>For athletes under 18, Vaylo switches off the things a young person can
+      be harmed by, and caps training volume by age. None of it is a substitute
+      for a parent, a coach or a doctor.</p></p>
+      </div>
+      <div class="grid grid-4"><div class="card reveal"><h3 style="margin-top:0;font-size:1rem">No advertising</h3><p style="font-size:0.92rem">Never shown to anyone under 18. Enforced by the database, not the interface.</p></div><div class="card reveal"><h3 style="margin-top:0;font-size:1rem">No nutrition advice</h3><p style="font-size:0.92rem">Calorie and weight features are blocked for under-18s, with an explanation.</p></div><div class="card reveal"><h3 style="margin-top:0;font-size:1rem">Private by default</h3><p style="font-size:0.92rem">A minor's profile cannot be made public at all.</p></div><div class="card reveal"><h3 style="margin-top:0;font-size:1rem">Age-capped volume</h3><p style="font-size:0.92rem">Sessions, minutes and rest days capped by age band.</p></div>
+      </div>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="/safety/">Visit the Safety Centre</a>
+        <a class="btn btn-secondary" href="/legal/child-safety/">Child &amp; young athlete safety</a>
+      </div>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Trust</p>
+        <h2>Read the documents before you decide</h2>
+
+        <p class="lead"><p>Everything Vaylo claims about your data, its limits and its liabilities is
+      written down in public, in plain English, and linked from every page of this
+      site.</p></p>
+      </div>
+      <div class="grid grid-2"><div class="card reveal">
+          <h3 style="margin-top:0">Your data</h3>
+          <p>What is collected, why, which third parties process it, how long it is
+          kept, and how to get a copy or delete it — without emailing us.</p>
+          <p style="margin-bottom:0"><a href="/privacy/">Privacy &amp; data centre</a> &middot;
+          <a href="/legal/privacy/">Privacy Policy</a></p>
+        </div><div class="card reveal">
+          <h3 style="margin-top:0">Delete your account</h3>
+          <p>Self-service deletion in the app is immediate and verified. This page
+          explains exactly what is removed, and what the one anonymous record is
+          for.</p>
+          <p style="margin-bottom:0"><a href="/delete-account/">Account deletion</a></p>
+        </div>
+      </div>
+    </div>
+  </section><section class="section section-alt reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Get started</p>
+        <h2>Try Vaylo Sports</h2>
+
+        <p class="lead"><p>Android only, at the moment.</p></p>
+      </div>
+      <div class="btn-row"><div class="card reveal" style="max-width: 34rem">
+  <h3 style="margin-top:0">Not on the Play Store yet</h3>
+  <p style="font-size:0.95rem">
+    Vaylo Sports has not been published to Google Play. There is no listing to
+    link to, and we are not going to put a dead button here. If you already
+    have it installed, everything in this website applies to your account.
+  </p>
+  <p style="font-size:0.95rem;margin-bottom:0">
+    <a href="/features/">See what is in the app</a> &middot;
+    <a href="/support/">Get support</a>
+  </p>
+</div>
+        <a class="btn btn-secondary" href="/support/">Support centre</a>
+        <a class="btn btn-secondary" href="/about/">About Vaylo</a>
+      </div>
+    </div>
+  </section>
+  </main>
+  <footer class="site-footer">
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-col"><a class="brand" href="/">
+            <img
+              class="brand-mark"
+              src="/assets/logo.png"
+              alt=""
+              width="34"
+              height="34"
+              decoding="async"
+            />
+            <span>Vaylo Sports</span>
+          </a>
+          <p style="margin-top: 1rem; font-size: 0.92rem">
+            A training log and analysis tool for athletes across many sports. Not a
+            doctor, not a coach, and not a substitute for either.
+          </p>
+          <p style="font-size: 0.92rem">
+            <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>
+          </p>
+        </div>
+      <div class="footer-col">
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="/legal/">Legal Centre</a></li>
+          <li><a href="/legal/terms/">Terms of Service</a></li>
+          <li><a href="/legal/privacy/">Privacy Policy</a></li>
+          <li><a href="/legal/child-safety/">Child &amp; Young Athlete Safety</a></li>
+          <li><a href="/legal/child-safety/#young-notice">Children's Privacy Notice</a></li>
+          <li><a href="/legal/cookies/">Cookie Policy</a></li>
+          <li><a href="/legal/ai-disclaimer/">AI Disclaimer</a></li>
+          <li><a href="/legal/health-safety/">Training &amp; Medical Disclaimer</a></li>
+          <li><a href="/legal/health-safety/#safety-guidelines">Safety Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/">Community Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/#acceptable-use">Acceptable Use Policy</a></li>
+          <li><a href="/legal/purchases/">Subscription &amp; Billing Terms</a></li>
+          <li><a href="/legal/refunds/">Refund &amp; Cancellation Policy</a></li>
+          <li><a href="/legal/purchases/#virtual-items">Credits &amp; Virtual Items Terms</a></li>
+          <li><a href="/legal/competition-terms/">Competition Terms</a></li>
+          <li><a href="/legal/contact/">Contact / Legal</a></li>
+          <li><a href="/legal/account-deletion/">Delete Account &amp; Data</a></li>
+          <li><a href="/legal/data-rights/">Privacy Rights Request</a></li>
+          <li><a href="/legal/report-safety-concern/">Report a Safety Concern</a></li>
+          <li><a href="/legal/report-content/">Report Content / User</a></li>
+          <li><a href="/legal/security-disclosure/">Security / Vulnerability Reporting</a></li>
+          <li><a href="/legal/complaints/">Complaints Procedure</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Safety &amp; AI</h2>
+        <ul>
+          <li><a href="/legal/ai-training-advice/">AI Training Advice Disclaimer</a></li>
+          <li><a href="/legal/video-analysis-disclaimer/">Video Analysis Disclaimer</a></li>
+          <li><a href="/legal/injury-guidance/">Injury &amp; Return-to-Training</a></li>
+          <li><a href="/legal/nutrition-disclaimer/">Nutrition Disclaimer</a></li>
+          <li><a href="/legal/mental-wellbeing/">Mental Wellbeing</a></li>
+          <li><a href="/legal/wearable-health-privacy/">Wearable &amp; Health Data</a></li>
+          <li><a href="/legal/ai-data-use/">AI Data Use &amp; Processing</a></li>
+          <li><a href="/legal/advertising/">Advertising &amp; Tracking</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Product</h2>
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/faq/">Questions &amp; Answers</a></li>
+          <li><a href="/whats-new/">What has changed</a></li>
+          <li><a href="/safety/">Safety Centre</a></li>
+          <li><a href="/accessibility/">Accessibility</a></li>
+          <li><a href="/about/">About Vaylo</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/sponsors/">Sponsor Vaylo Sports</a></li>
+          <li><a href="/privacy/">Privacy &amp; Data Centre</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+          <li><a href="/legal/intellectual-property/">Intellectual Property</a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="footer-base">
+        <p style="margin:0">
+          &copy; 2026 Vaylo Sports.
+        </p>
+        <p style="margin:0">
+          Android. <a href="/legal/">All legal documents</a> &middot;
+          <a href="/privacy/">Privacy &amp; data</a> &middot;
+          <a href="/safety/">Safety</a>
+        </p>
+      </div>
+
+      <div class="footer-base" style="margin-top: 1rem; border-top: 0; padding-top: 0">
+        <p style="margin:0; max-width: 70ch">
+          Vaylo Sports does not claim to prevent injury, guarantee performance, or
+          provide medical care. Nothing on this website is medical advice.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+<!-- ----------------------------------------------------------------
+     Cookie and storage notice.
+
+     Rendered on every page but left hidden in the markup, and revealed by
+     initCookieNotice() in site.js only when this device has not already
+     acknowledged it. That order matters: a reader whose browser blocks
+     scripts never sees a notice with an Accept button that cannot do
+     anything, and one whose browser blocks storage sees it every visit
+     rather than being told a preference was saved.
+
+     It reports a fact rather than asking permission, because there is
+     nothing here to consent to: the site sets no cookie at all, and the
+     preferences it keeps are on the reader's own device. The full list is in
+     the Cookie Policy, which is what the link is for.
+     ---------------------------------------------------------------- -->
+  <div
+    class="cookie-notice"
+    data-cookie-notice
+    role="region"
+    aria-label="Cookies and stored preferences"
+    hidden
+  >
+    <div class="shell cookie-notice-inner">
+      <p class="cookie-notice-text">
+        <strong>No tracking cookies.</strong> No advertising or analytics cookies, and
+        no third-party tracker &mdash; only preferences kept on this device.
+        <a href="/legal/cookies/">Cookie Policy</a>
+      </p>
+      <button
+        type="button"
+        class="btn btn-primary cookie-notice-accept"
+        data-cookie-accept
+      >Accept</button>
+    </div>
+  </div>
+
+<!-- config.js MUST come before site.js. Both are deferred, and deferred
+     scripts execute in document order before DOMContentLoaded — so with the
+     reverse order, site.js ran first, found no config, and disabled every form
+     on the site with "not available yet". -->
+<script src="/assets/config.js?v=e5e20b96" defer></script>
+<script src="/assets/site.js?v=f67590ac" defer></script>
+</body>
+</html>

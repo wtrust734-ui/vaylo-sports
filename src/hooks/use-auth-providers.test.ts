@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
 
-import { enabledSocialProviders, parseAuthMethods, passkeySupported, normalisePhone } from "./use-auth-providers";
+import {
+  enabledSocialProviders,
+  fetchAuthMethods,
+  parseAuthMethods,
+  passkeySupported,
+  normalisePhone,
+  useAuthMethods,
+} from "./use-auth-providers";
 
 describe("enabledSocialProviders", () => {
   it("reports nothing when the settings payload is missing", () => {
@@ -74,5 +82,88 @@ describe("normalisePhone", () => {
 describe("passkeySupported", () => {
   it("returns a boolean and never throws", () => {
     expect(typeof passkeySupported()).toBe("boolean");
+  });
+});
+
+// The bug behind these: one failed or hung /auth/v1/settings fetch used to
+// answer "password only" forever, hiding Google / Discord / passkey on the
+// app's startup sign-in screen until a restart.
+describe("useAuthMethods", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const okPayload = {
+    external: { email: true, google: true, discord: true, phone: false },
+    passkeys_enabled: true,
+  };
+
+  it("keeps retrying after failed settings fetches and then shows the methods", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("offline"))
+      .mockRejectedValueOnce(new TypeError("offline"))
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(okPayload) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useAuthMethods());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Unknown, not "nothing enabled": nothing renders while unanswered.
+    expect(result.current).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // First backoff step (1.5s) fails too.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(result.current).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Second step (3s) is the one that gets through.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      // The success path hops through response.json(); drain the microtasks so
+      // setMethods has landed before we look.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.current).toEqual({
+      providers: ["google", "discord"],
+      passkeys: true,
+      email: true,
+      phone: false,
+    });
+
+    // Success ends the loop — no polling for the rest of the session.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("fetchAuthMethods", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not pin a failure: the next caller retries instead of getting password-only forever", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await fetchAuthMethods();
+    expect(first).toEqual({ providers: [], passkeys: false, email: false, phone: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Same page load, later call — a second request goes out because the
+    // failure was evicted from the module cache.
+    await fetchAuthMethods();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

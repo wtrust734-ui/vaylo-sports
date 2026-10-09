@@ -56,21 +56,56 @@ export function parseAuthMethods(body: unknown): AuthMethods {
   };
 }
 
+/** "Password only" — the safe answer when the settings genuinely say so. */
+const NO_METHODS: AuthMethods = { providers: [], passkeys: false, email: false, phone: false };
+
+/**
+ * A cold-start on mobile is exactly when the network is least reliable, and a
+ * WebView fetch with no deadline can hang for minutes rather than fail. Six
+ * seconds is long enough for GoTrue's tiny settings payload and short enough
+ * that the sign-in buttons are not missing while a phone is still holding a
+ * radio handshake.
+ */
+const SETTINGS_TIMEOUT_MS = 6000;
+
+/**
+ * One attempt at the settings. `null` means *unknown* (offline, timeout, HTML
+ * error page) — deliberately distinct from a successful payload that says
+ * "nothing enabled", because only one of those is worth retrying.
+ */
+function requestAuthMethods(): Promise<AuthMethods | null> {
+  const signal =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? AbortSignal.timeout(SETTINGS_TIMEOUT_MS)
+      : undefined;
+  return fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY ?? "" },
+    signal,
+  })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((body) => (body ? parseAuthMethods(body) : null))
+    .catch(() => null);
+}
+
 let cached: Promise<AuthMethods> | null = null;
 
 /**
- * One request per page load — the answer only changes when an operator edits the
- * project's auth settings. Any failure (offline, blocked request, HTML error
- * page) means "password only", never an error the user has to read.
+ * One request per session — the answer only changes when an operator edits the
+ * project's auth settings. Failures answer "password only" for the caller that
+ * hit them, but are NOT pinned into the cache: an earlier version cached the
+ * failure for the lifetime of the page, so one offline cold start hid Google /
+ * Discord / passkey until the app was restarted. Dropping the cache on failure
+ * makes the next mount (or the `online` listener in useAuthMethods) try again.
  */
 export function fetchAuthMethods(): Promise<AuthMethods> {
   if (!cached) {
-    cached = fetch(`${SUPABASE_URL}/auth/v1/settings`, {
-      headers: { apikey: SUPABASE_PUBLISHABLE_KEY ?? "" },
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => parseAuthMethods(body))
-      .catch(() => ({ providers: [], passkeys: false, email: false, phone: false }) as AuthMethods);
+    cached = requestAuthMethods().then((methods) => {
+      if (!methods) {
+        cached = null;
+        return NO_METHODS;
+      }
+      return methods;
+    });
   }
   return cached;
 }
@@ -103,17 +138,53 @@ export function normalisePhone(raw: string): string | null {
   return /^\+[1-9]\d{7,14}$/.test(digits) ? digits : null;
 }
 
-/** Callers render nothing until this resolves, so a dead button never flashes. */
+/** Retries while the settings are unknown: 0s, 1.5s, 3s, 5s, 8s, 13s. */
+const RETRY_DELAYS_MS = [1500, 3000, 5000, 8000, 13000];
+
+/**
+ * Callers render nothing until this resolves, so a dead button never flashes.
+ *
+ * "Resolves" used to mean "the first attempt finished, however it went": a
+ * single failed or hung request left the section hidden — no Google, no
+ * Discord, no passkey — for the whole session, which is exactly the missing-
+ * buttons report from the app's startup screen. Unknown now stays unknown
+ * only *temporarily*: bounded backoff retries, plus an immediate retry when
+ * the browser says the network came back.
+ */
 export function useAuthMethods(): AuthMethods | null {
   const [methods, setMethods] = useState<AuthMethods | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetchAuthMethods().then((m) => {
-      if (active) setMethods(m);
-    });
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const load = () => {
+      requestAuthMethods().then((answer) => {
+        if (!active) return;
+        if (answer) {
+          setMethods(answer);
+          return;
+        }
+        const delay = RETRY_DELAYS_MS[attempt];
+        attempt += 1;
+        if (delay !== undefined) timer = setTimeout(load, delay);
+      });
+    };
+
+    const onOnline = () => {
+      if (!active) return;
+      clearTimeout(timer);
+      attempt = 0;
+      load();
+    };
+
+    load();
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
+      window.removeEventListener("online", onOnline);
+      clearTimeout(timer);
     };
   }, []);
 

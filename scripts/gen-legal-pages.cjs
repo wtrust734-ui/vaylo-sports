@@ -42,12 +42,42 @@ const OPERATOR_FILE = path.join(LEGAL_DIR, "operator.json");
 const DEFAULT_TARGET = path.join(root, "supabase", "functions", "legal", "pages.generated.ts");
 const TARGET = process.argv[2] ? path.resolve(root, process.argv[2]) : DEFAULT_TARGET;
 
-/** slug -> source file. The slug is the URL path segment. */
-const PAGES = {
-  privacy: "privacy.html",
-  terms: "terms.html",
-  "account-deletion": "account-deletion.html",
-};
+/**
+ * slug -> source file, from legal/pages.json.
+ *
+ * The manifest lives in JSON rather than here because two generators read it:
+ * this one, which embeds the documents into the edge function, and
+ * scripts/gen-website.cjs, which renders the public website. When they were
+ * separate lists, adding a document to the website but not to the function
+ * would have produced a legal centre with a link to a 404 — the exact failure
+ * that is invisible until someone follows it.
+ */
+function loadPages() {
+  const manifestPath = path.join(LEGAL_DIR, "pages.json");
+  if (!fs.existsSync(manifestPath)) fail("missing legal/pages.json");
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch (e) {
+    fail(`legal/pages.json is not valid JSON: ${e.message}`);
+  }
+  const pages = manifest && manifest.pages;
+  if (!pages || typeof pages !== "object" || Object.keys(pages).length === 0) {
+    fail("legal/pages.json needs a non-empty \"pages\" object");
+  }
+
+  // Google Play reviews the privacy policy and the data deletion page by URL.
+  // Losing either from the manifest breaks the store listing, so a manifest
+  // without them fails here rather than in production.
+  for (const required of ["privacy", "account-deletion"]) {
+    if (!pages[required]) {
+      fail(`legal/pages.json is missing "${required}", which Google Play requires`);
+    }
+  }
+  return pages;
+}
+
+const PAGES = loadPages();
 
 /** Tokens the operator details are substituted into. */
 const REQUIRED_TOKENS = ["%%OPERATOR_NAME%%", "%%CONTACT_EMAIL%%"];
@@ -77,11 +107,32 @@ function loadOperator() {
   return { operatorName: raw.operatorName.trim(), contactEmail: raw.contactEmail.trim() };
 }
 
+/**
+ * Titles are read out of HTML, so "Child &amp; Young Athlete Safety" arrives with
+ * its ampersand already entity-encoded. Every consumer escapes for itself — the
+ * website runs the title through `esc()` — so leaving the entity in place made
+ * those pages publish `&amp;amp;` in their meta tags and print a literal
+ * "&amp;" in the browser tab. Decoding here means each consumer escapes exactly
+ * once, which is the only arrangement that survives either of them. */
+const ENTITIES = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&nbsp;": " ",
+};
+
+function decodeEntities(text) {
+  return text.replace(/&(?:amp|lt|gt|quot|#39|apos|nbsp);/g, (match) => ENTITIES[match] ?? match);
+}
+
 function titleOf(html, file) {
   const match = html.match(/<title>([^<]*)<\/title>/i);
   if (!match) fail(`${file} has no <title>`);
   // "Privacy Policy — Vaylo Sports" reads as "Privacy Policy" in a nav list.
-  return match[1].split("\u2014")[0].split(" - ")[0].trim();
+  return decodeEntities(match[1]).split("\u2014")[0].split(" - ")[0].trim();
 }
 
 function assertSelfContained(html, file) {
@@ -132,6 +183,32 @@ for (const [slug, file] of Object.entries(PAGES)) {
   }
 
   entries.push({ slug, title: titleOf(html, file), html });
+}
+
+// The cross-link block is generated, not hand-written. With 26 documents a
+// hand-maintained list in every file is a list that silently goes stale the
+// moment a page is added — and a legal page that does not link to the
+// complaints procedure is worse than one that does. Rewriting it here means the
+// source files can keep a placeholder and pages.json stays the single registry.
+function renderNav(currentSlug) {
+  const items = entries
+    .filter((page) => page.slug !== currentSlug)
+    .map((page) => `      <li><a href="${page.slug}">${page.title}</a></li>`)
+    .join("\n");
+  return (
+    `  <nav class="nav">\n` +
+    `    <strong>Other documents</strong>\n` +
+    `    <ol>\n${items}\n    </ol>\n` +
+    `  </nav>`
+  );
+}
+
+for (const entry of entries) {
+  const replaced = entry.html.replace(/<nav class="nav"[\s\S]*?<\/nav>/i, renderNav(entry.slug));
+  if (replaced === entry.html && /<nav class="nav"/i.test(entry.html)) {
+    fail(`${entry.slug} has a <nav class="nav"> block that could not be regenerated`);
+  }
+  entry.html = replaced;
 }
 
 for (const token of REQUIRED_TOKENS) {

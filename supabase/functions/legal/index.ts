@@ -91,9 +91,20 @@ function shell(title: string, body: string): string {
 `;
 }
 
+/** Titles are plain text out of the generator, so they are escaped once here. */
+const ENTITIES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ENTITIES[c] ?? c);
+
 function indexPage(): string {
   const links = Object.entries(LEGAL_PAGES)
-    .map(([slug, page]) => `<li><a href="${slug}">${page.title}</a></li>`)
+    .map(([slug, page]) => `<li><a href="${slug}">${escapeHtml(page.title)}</a></li>`)
     .join("\n    ");
   return shell(
     "Legal",
@@ -109,14 +120,7 @@ function indexPage(): string {
 function notFoundPage(slug: string): string {
   // The requested path is echoed back, so it is escaped — it is attacker-supplied
   // text arriving in a response that advertises a strict CSP.
-  const entities: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  };
-  const shown = slug.replace(/[&<>"']/g, (c) => entities[c] ?? c);
+  const shown = escapeHtml(slug);
   return shell(
     "Not found",
     `<h1>No document called "${shown}"</h1>

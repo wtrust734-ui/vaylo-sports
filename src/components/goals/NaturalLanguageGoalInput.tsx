@@ -86,7 +86,7 @@ const NaturalLanguageGoalInput = ({ onCreated }: { onCreated?: () => void }) => 
 
   return (
     <div className="mb-5 bg-gradient-card border border-electric-purple/30 rounded-2xl p-4">
-      <p className="text-[11px] uppercase tracking-widest text-electric-purple font-semibold flex items-center gap-1.5">
+      <p className="text-[12px] uppercase tracking-widest text-electric-purple font-semibold flex items-center gap-1.5">
         <Sparkles size={12} /> Natural Language Goal
       </p>
       <div className="flex gap-2 mt-2">
@@ -99,7 +99,7 @@ const NaturalLanguageGoalInput = ({ onCreated }: { onCreated?: () => void }) => 
       {parsed && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           className="mt-3 bg-background/40 border border-border rounded-xl p-3 space-y-2">
-          <div className="flex flex-wrap gap-2 text-[11px]">
+          <div className="flex flex-wrap gap-2 text-[12px]">
             <Chip label="Target" value={parsed.target_value ? `${parsed.target_value} ${parsed.metric_unit || ""}` : "—"} />
             <Chip label="Deadline" value={parsed.deadline || "—"} />
             <Chip label="Category" value={parsed.category} />

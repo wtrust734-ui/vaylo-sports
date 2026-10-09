@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ad 4 — ONE SPORT (12.0s · 9:16)</title>
+<link rel="stylesheet" href="core.css" />
+<style>
+  .stage { width: 1080px; height: 1920px; }
+  .scene { gap: 0; }
+
+  /* ---------- 1. THE CHALLENGE (0.0 – 2.6) ---------- */
+  #a1 { gap: 44px; padding: 0 150px; }
+  #a1 .h { font-size: 128px; text-align: center; line-height: .92; }
+  #a1 .h .neg { color: hsl(var(--muted-foreground)); }
+  #a1 .sub { font-size: 40px; text-align: center; color: hsl(var(--foreground) / .55); }
+
+  /* ---------- 2. THE APP, FOOTBALL ONLY (2.6 – 6.2) ---------- */
+  #a2 { gap: 44px; }
+  #a2 .cap { font-size: 40px; text-align: center; color: hsl(var(--foreground) / .6); padding: 0 150px; }
+
+  /* ---------- 3. THE RATING (6.2 – 9.2) ---------- */
+  #a3 { gap: 36px; }
+  #a3 .cap { font-size: 40px; text-align: center; color: hsl(var(--foreground) / .6); padding: 0 150px; }
+
+  /* ---------- 4. THE CLOSE (9.2 – 12.0) ---------- */
+  #a4 { gap: 40px; padding: 0 140px; }
+  #a4 .h { font-size: 112px; text-align: center; line-height: .94; }
+  #a4 .sports { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  #a4 .sports .sp {
+    font-size: 26px; font-weight: 700; padding: 12px 22px; border-radius: 999px;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .18); color: hsl(var(--foreground) / .7);
+  }
+  #a4 .sports .sp.on { background: var(--gradient-electric); color: #fff; border-color: transparent; }
+</style>
+</head>
+<body data-guides="0">
+
+<div class="deck">
+  <div class="stage-wrap"><div class="stage" id="stage">
+
+    <div class="guides">
+      <div class="reels-top"></div><div class="reels-right"></div><div class="reels-bottom"></div>
+    </div>
+
+    <!-- ============ 1. THE CHALLENGE ============ -->
+    <div class="scene" id="a1">
+      <div class="t-display h" id="a1-h">
+        <span class="reveal-line"><span>FOOTBALL</span></span>
+        <span class="reveal-line"><span class="neg">IS NOT A</span></span>
+        <span class="reveal-line"><span class="neg">FITNESS APP.</span></span>
+      </div>
+      <div class="t-body sub" id="a1-sub">It has its own demands. Most apps average them away.</div>
+    </div>
+
+    <!-- ============ 2. THE APP, FOOTBALL ONLY ============ -->
+    <div class="scene" id="a2">
+      <div class="phone" id="a2-phone">
+        <div class="phone-notch"><i></i></div>
+        <div class="ui">
+          <div class="ui-brand">LEARNING</div>
+          <div class="ui-eyebrow">Get better at your sport</div>
+          <div style="background:hsl(var(--card));border:1px solid hsl(var(--muted-foreground) / .14);border-radius:12px;padding:11px;font-size:12px;color:hsl(var(--foreground) / .5)">football finishing technique</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <span class="ui-chip">All Sports</span>
+            <span class="ui-chip on">Football</span>
+            <span class="ui-chip">Rugby</span>
+          </div>
+          <div class="ui-card">
+            <div class="ui-eyebrow">Event pack · Striker Finishing</div>
+            <div style="font-weight:700;font-size:14px">Shooting technique and po…</div>
+            <div class="ui-foot">Football · Advanced · 8 weeks</div>
+          </div>
+        </div>
+      </div>
+      <div class="t-body cap" id="a2-cap">Technique, packs and analytics —<br />filtered to the sport you actually play.</div>
+    </div>
+
+    <!-- ============ 3. THE RATING ============ -->
+    <div class="scene" id="a3">
+      <div class="phone" id="a3-phone">
+        <div class="phone-notch"><i></i></div>
+        <div class="ui">
+          <div class="ui-brand">VAYLO SPORTS PERFORMANCE RATING</div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div class="t-num grad-text" style="font-size:56px" id="a3-n">0</div>
+            <div>
+              <div class="ui-eyebrow">Archetype</div>
+              <div style="font-weight:700;font-size:13px">Explosive Finisher</div>
+            </div>
+          </div>
+          <div class="ui-card" id="a3-dom">
+            <div class="ui-dom"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="86"></span></span><span>86</span></div>
+            <div class="ui-dom"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="74"></span></span><span>74</span></div>
+            <div class="ui-dom"><span>Skill</span><span class="bar-track"><span class="bar-fill" data-w="68"></span></span><span>68</span></div>
+            <div class="ui-dom"><span>Endurance</span><span class="bar-track"><span class="bar-fill" data-w="57"></span></span><span>57</span></div>
+          </div>
+          <div class="ui-foot">Sport: Football · Weighted by sport profile</div>
+        </div>
+      </div>
+      <div class="t-body cap" id="a3-cap">A footballer's rating is not a swimmer's. The weighting changes the number.</div>
+    </div>
+
+    <!-- ============ 4. THE CLOSE ============ -->
+    <div class="scene" id="a4">
+      <div class="t-display h" id="a4-h"><span class="grad-text">ONE SPORT.</span><br />ONE SCORE.</div>
+      <div class="sports" id="a4-sports">
+        <span class="sp on">Football</span>
+        <span class="sp">Running</span>
+        <span class="sp">Basketball</span>
+        <span class="sp">Cycling</span>
+        <span class="sp">Swimming</span>
+        <span class="sp">Tennis</span>
+        <span class="sp">Rugby</span>
+        <span class="sp">Golf</span>
+        <span class="sp">Athletics</span>
+        <span class="sp">Cricket</span>
+        <span class="sp">MMA</span>
+        <span class="sp">Triathlon</span>
+      </div>
+      <div class="cta-btn" id="a4-cta">VAYLO SPORTS</div>
+      <div class="compliance" id="a4-comp">VPR is calculated from metrics you log. Vaylo Sports is not a medical device and is not professional advice.</div>
+    </div>
+
+  </div></div>
+</div>
+
+<div class="hud">
+  <div class="hud-top">
+    <span class="hud-title">Ad 4 — ONE SPORT</span>
+    <span class="hud-meta">12.0s · 9:16 1080×1920 · football-only cutdown</span>
+    <span class="hud-note">Vertical-specificity bet. Ad 1 says "ten sports"; this commits to one.</span>
+  </div>
+  <div class="transport">
+    <button class="tb" id="play">▶  Play</button>
+    <button class="tb" id="restart">↺</button>
+    <button class="tb" id="loop" aria-pressed="true">Loop</button>
+    <button class="tb" id="guides" aria-pressed="false">Guides</button>
+    <button class="tb" id="clean">Clean</button>
+    <div class="scrub"><input type="range" id="scrub" value="0" /><div class="beats"></div></div>
+    <span class="tc" id="tc">00:00.00 / 00:12.00</span>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const stage = $('#stage');
+const ad = new VayloAd({ stage, duration: 12, title: 'Ad 4 — ONE SPORT' });
+window.ad = ad;
+
+[[0, 'CHALLENGE'], [2.6, 'THE APP'], [6.2, 'THE RATING'], [9.2, 'CLOSE']].forEach(([t, l]) => ad.beat(t, l));
+
+ad.scene($('#a1'), 0, 2.6);
+ad.scene($('#a2'), 2.6, 6.2);
+ad.scene($('#a3'), 6.2, 9.2);
+ad.scene($('#a4'), 9.2, 12);
+
+/* ---- 1. THE CHALLENGE ---- */
+[0.08, 0.32, 0.56].forEach((t, i) => {
+  ad.add($(`#a1-h .reveal-line:nth-child(${i + 1}) > span`), [
+    { offset: 0, opacity: 0, transform: 'translate3d(0,56px,0)', filter: 'blur(13px)' },
+    { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+  ], { from: t, to: t + 0.62, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+ad.add($('#a1-sub'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 1.3, to: 1.9 });
+
+/* ---- 2. THE APP ---- */
+ad.add($('#a2-phone'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,54px,0) scale(.94)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0) scale(1)' }
+], { from: 2.7, to: 3.6, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#a2-phone .ui > div:nth-child(4) .ui-chip.on'), [
+  { offset: 0, transform: 'scale(1)' }, { offset: .5, transform: 'scale(1.14)' }, { offset: 1, transform: 'scale(1)' }
+], { from: 3.9, to: 4.35, easing: 'linear' });
+ad.add($('#a2-cap'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,22px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 4.4, to: 5.1 });
+
+/* ---- 3. THE RATING ---- */
+ad.add($('#a3-phone'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,54px,0) scale(.94)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0) scale(1)' }
+], { from: 6.3, to: 7.2, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.count($('#a3-n'), 7.1, 8.1, 0, 62);
+document.querySelectorAll('#a3-dom .ui-dom').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 7.7 + i * 0.2;
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-18px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: t0, to: t0 + 0.3 });
+  ad.drive(t0 + 0.08, t0 + 0.82, (p) => { fill.style.width = `${w * p}%`; });
+});
+ad.add($('#a3-cap'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,22px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 8.4, to: 9.0 });
+
+/* ---- 4. THE CLOSE ---- */
+ad.add($('#a4-h'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,40px,0)', filter: 'blur(12px)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)', filter: 'blur(0)' }
+], { from: 9.3, to: 9.9, easing: 'cubic-bezier(.16,1,.3,1)' });
+document.querySelectorAll('#a4-sports .sp').forEach((chip, i) => {
+  ad.add(chip, [
+    { offset: 0, opacity: 0, transform: 'scale(.8)' },
+    { offset: 1, opacity: 1, transform: 'scale(1)' }
+  ], { from: 9.85 + i * 0.045, to: 9.85 + i * 0.045 + 0.3, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+ad.add($('#a4-cta'), [
+  { offset: 0, opacity: 0, transform: 'scale(.9)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 10.7, to: 11.1, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#a4-comp'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 11.1, to: 11.5 });
+
+mountPlayer(ad);
+</script>
+</body>
+</html>

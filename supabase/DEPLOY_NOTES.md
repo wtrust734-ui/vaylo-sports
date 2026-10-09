@@ -605,3 +605,526 @@ to have obviously never been used. That lint is noise at this traffic level and
   were resolved by the policy-role narrowing). Merging the rest changes
   authorisation semantics for no measurable gain at this traffic level, so they
   are left alone deliberately.
+
+---
+
+## Scheduled launch emails — 2026-10-04
+
+Added `20261004170000_waitlist_campaigns.sql` and the `waitlist-campaigns`
+edge function. The waiting list now sends itself a dated sequence: countdowns on
+2 December 2026, 25 December 2026 and 31 December 2026, and the launch email on
+1 January 2027 (all 08:00 UTC — an hour before the 09:00 daily job, so each is
+already due when the job runs rather than landing on the same timestamp).
+
+### One manual step is required, and it is not in the migration
+
+The `pg_cron` job reaches the function through `pg_net` and authenticates with a
+shared secret, not a JWT. That secret has to exist in two places — the function's
+environment and Supabase Vault — and a migration cannot hold it without
+committing it. Run once:
+
+```
+sh scripts/set-waitlist-cron-secret.sh
+```
+
+It generates a random value, sets `WAITLIST_CRON_SECRET` as a function secret,
+and stores the same value in Vault as `waitlist_cron_secret` (which
+`public.waitlist_trigger_campaigns()` reads at fire time). It is idempotent, so
+re-running it rotates the secret. Until it is run, the daily job logs a warning
+and sends nothing.
+
+### Applied state
+
+- Migration pushed to `vvwhausdjzdmsyxekrcl` (extensions `pg_cron` + `pg_net`,
+  two campaign tables, five RPCs, the trigger, and the daily job
+  `waitlist-campaigns-daily` at `0 9 * * *`, confirmed in `cron.job`).
+- `waitlist-campaigns` deployed with `verify_jwt = false` (per `config.toml`),
+  gated on the `x-cron-secret` header.
+- `waitlist-signup` redeployed so the confirmation email carries the launch date
+  (it previously said there was no release date).
+
+### Verified live
+
+- No secret / wrong secret → **403**; GET → **405**.
+- Real trigger through `net.http_post` → **200** (`net._http_response`), which
+  proves the Vault secret matches the function's; nothing was due, correctly.
+- Recipient RPC, claim/mark/release RPCs driven directly: a second claim returns
+  `false`; a `sent` row is never reclaimable.
+- End-to-end send with the first countdown temporarily dated to now: real message
+  accepted by Gmail, ledger row written `sent`, campaign marked `done`,
+  `last_emailed_at` set. The date was then reverted and the test state cleared.
+
+### Product note before 1 January 2027
+
+- **The launch email links the Play listing only if `PLAY_STORE_URL` is set.**
+  Set it (a `https://play.google.com/...` URL) once the listing is published, or
+  the launch message points at the site instead and says the link is not
+  published yet.
+- **Nothing here checks that the app is actually live.** The launch email asserts
+  it is. If the date slips, move `LAUNCH_AT` (and the countdown dates) in the
+  function's `campaigns()` before the day; a countdown that is more than a few
+  days late is skipped automatically, but the launch email is never skipped.
+- The site copy, the waiting-list terms and the confirmation email were updated
+  in the same change so none of them still claims there is no release date.
+
+---
+
+## Marketing site hosting — Vercel is live, Netlify is blocked (2026-10-04)
+
+- **Live:** https://vaylo-site-6c1b6bc7.vercel.app — Vercel project
+  `vaylo-site-6c1b6bc7`, scope `virello1`, serving `website/`.
+- **Netlify is blocked account-wide** (credit usage exceeded), so
+  `npm run site:deploy` fails with `JSONHTTPError: Forbidden`. The Netlify copy at
+  https://vaylo-sports.netlify.app is therefore **stale and still contradicts the
+  launch date** — add credits or retire that site. It is a live, wrong page until
+  then.
+- `website/vercel.json` is now **emitted by `scripts/gen-website.cjs`** from
+  `site/vercel.json`. Do not place it by hand: the generator does
+  `rmSync(website)` first, so anything hand-placed is destroyed on the next build
+  and the deploy that follows serves the `/play/` deep links as 404s, with no build
+  error. `src/lib/website.test.ts` now asserts it is generated and correct.
+
+### Deploy the site (Vercel)
+
+```
+node scripts/gen-website.cjs                                            # website/
+MSYS_NO_PATHCONV=1 WEB_OUT_DIR=website/play VITE_BASE=/play/ \
+  node scripts/build-web.cjs                                            # website/play/
+cd website && npx vercel link --yes --project vaylo-site-6c1b6bc7 \
+  --scope virello1 && npx vercel deploy --prod --yes
+```
+
+`MSYS_NO_PATHCONV=1` is required under Git Bash: otherwise `VITE_BASE=/play/` is
+mangled into a Windows path (`C:/Program Files/Git/play/`) and the build refuses.
+`vercel link` writes `website/.vercel/` and `website/.env.local`; `website.test.ts`
+treats those as deploy artifacts rather than site output, so they do not read as a
+stale build.
+
+### Verified after the 2026-10-04 deploy
+
+`/`, `/waitlist/`, `/legal/privacy/`, `/legal/waitlist-terms/`, `/app/`, `/play/`,
+`/play/training` → **200**; `/play/assets/*.js` → **200**; unknown path → **404**;
+headers `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`,
+`Referrer-Policy: strict-origin-when-cross-origin`. The waiting-list page names
+1 January 2027 and has zero occurrences of the old "no date" copy. A duplicate
+signup from the live origin returned "You are on the list." with **no new row and
+no second email**.
+
+## Health Connect + wearables enabled — 2026-10-04 (APK 17 / 1.2.13)
+
+### What changed in the repo
+
+- `src/config/featureFlags.ts` — `wearableSync` now defaults to **true**, so
+  `/health-sync` is reachable from the sidebar, the Recover hub and the
+  personalisation catalog instead of redirecting to `/recover`. `VITE_ENABLE_wearableSync`
+  still overrides it at build time.
+- `android/app/src/main/AndroidManifest.xml` — the six Health Connect **read**
+  permissions are declared for the first time (they had been commented out with
+  a "TO RE-ENABLE" block). Read-only: no WRITE permission is requested, and
+  `scripts/build-apk.sh` fails the build if one ever appears.
+- `android/app/build.gradle` — versionCode 17 / versionName 1.2.13.
+- `src/lib/androidNative.test.ts` — one matcher fix. The manifest ordering test
+  did `indexOf("<application")`, which matched an XML *comment* that says
+  "Declared before `<application>`" rather than the element, so
+  `queriesAt < applicationAt` was comparing against the wrong offset. This was
+  already failing before this release was enabled; it now matches the element
+  (`"<application\n"`).
+
+Nothing else moved. `HealthPermissions.VERSION` (Kotlin) and
+`HEALTH_PERMISSIONS_VERSION` (TypeScript) stay at **1** — the permission catalog
+did not change, only whether it is declared.
+
+### Verified
+
+`npm run typecheck` 0 · `npx vitest run` **868 passed** · `npx eslint .` 0 errors,
+64 pre-existing `exhaustive-deps` warnings · `sh scripts/build-apk.sh` green:
+
+```
+[apk] ok   6 health read permission(s), 0 write
+[apk] ok   no HcSeedActivity in release
+[apk] ok   package: name='com.vaylosports.app' versionCode='17' versionName='1.2.13'
+[apk] ok   version 1.2.13 (17) matches build.gradle
+```
+
+Artifacts `apk/vaylo-sports-1.2.13-17-release.{apk,aab}`; `apk/SHA256SUMS.txt`
+now 21 entries, all verify.
+
+### Backend confirmed live
+
+`wearable-oauth` edge function ACTIVE. Tables `health_connections`,
+`health_sync_state`, `health_workouts`, `health_samples` all present. Native
+Health Connect sync needs none of the vendor secrets below — it is the plugin,
+not the edge function.
+
+### Known gap: the cloud providers are a stub, and no secret can fix that
+
+Do not promise a reviewer direct Garmin/Fitbit/Strava import. `wearable-oauth`
+records a `health_connections` row on callback but **never exchanges the code for
+a token and never persists one**, and `/sync` only touches `last_sync_at` and
+returns `{workouts: 0, samples: 0}`. Its `stateStore` is also an in-memory
+`Map`, so a callback that arrives after the isolate recycles has no `userId` and
+is silently dropped. Setting `<PROVIDER>_CLIENT_ID` / `_CLIENT_SECRET` changes
+the UI from "coming soon" to a redirect that goes nowhere useful.
+
+Until that is built, Health Connect is the only working import path on Android.
+The app says so per-provider rather than pretending.
+
+### Manual steps, in order
+
+1. Play Console → App content → **Health Connect declaration**: the declaration
+   questionnaire must match the six permissions in the manifest. An app that
+   declares Health Connect permissions without completing this is rejected.
+2. Play Console → Policy → **Privacy policy**: the URL must be reachable and
+   must name Health Connect / wearable data. `legal/wearable-health-privacy.html`
+   already exists.
+3. App content → **Data safety**: heart rate, sleep, steps, distance, calories
+   and exercise sessions are health and fitness data collected by the app.
+4. Upload `apk/vaylo-sports-1.2.13-17-release.aab` to **internal testing**
+   first, then closed testing.
+5. A new personal Play account needs 12 testers opted in for 14 continuous days
+   before production access.
+6. On the device: install Health Connect if absent (Android 13 and below),
+   then Connect → grant each permission → Sync.
+7. Vendor OAuth (optional, and pointless until the stub is finished): sign each
+   developer agreement, then `supabase secrets set GARMIN_CLIENT_ID=…`, plus
+   `WEARABLE_OAUTH_CALLBACK_URL` and `WEARABLE_OAUTH_APP_URL`.
+
+### Never device-tested
+
+The APK has still never been launched on a device or emulator. Health Connect
+end-to-end sync is verified structurally only: the permissions are in the built
+manifest and the JS/native wiring is asserted by tests.
+
+---
+
+## Notifications, onboarding reachability and the legal pass — 2026-10-04 (APK 18 / 1.2.14)
+
+One batch of eight product requests. What was verified, and what still needs a
+human, is below. Nothing in this section has been run on a real device.
+
+### 1. Sign-in methods missing from the startup screen
+
+The methods were never removed — `Auth.tsx` renders them from what GoTrue
+reports (`/auth/v1/settings`: google, discord, facebook and passkeys all
+`true`). The failure mode was the fetch: one failed or hung request answered
+"password only" for the rest of the session (the result was pinned in a
+module-level cache), so a cold start on a bad connection hid every button.
+`src/hooks/use-auth-providers.ts` now has a 6 s timeout, does NOT cache a
+failure, retries with backoff (1.5/3/5/8/13 s) and retries immediately on
+`online`. Verified in a dev harness that boots the app as the Android shell
+with `?failsettings=3` fault injection: three injected failures, then the
+buttons. Pinned by tests in `src/hooks/use-auth-providers.test.ts`.
+
+### 2. Continue button hard to tap on a phone
+
+`Onboarding.tsx`'s action bar was a static row 20 px from the viewport bottom.
+On Android 15+ (targetSdk 36) the WebView is edge-to-edge, so that strip is
+inside the gesture/3-button navigation area and taps there are swallowed by the
+system. The bar is now `sticky bottom-0` with
+`pb-[max(1.25rem,var(--vaylo-inset-bottom))]` — the same inset variable the tab
+bar and every bottom sheet already use. Measured at 390x844 with a simulated
+48 px inset: button bottom edge 48 px above the viewport, the bar pinned to the
+viewport bottom at every scroll position.
+
+### 3. Workouts deleted, and wearable sessions made visible
+
+Executed on production (the destructive option chosen explicitly):
+
+```sql
+delete from public.health_samples;
+delete from public.health_workouts;
+delete from public.workouts;
+```
+
+Row counts afterwards: 0 / 0 / 0. No FK blocked it (only
+`health_samples.workout_id -> health_workouts`, `ON DELETE SET NULL`).
+
+Synced sessions used to appear only on the Health Sync screen: health_workouts
+is a separate table from the app's own `workouts`, and nothing mirrored it. The
+Workouts screen now reads both and lists wearable imports in their own section
+("Synced from your devices") with a link to Health Sync.
+
+### 4. Logo on every legal document
+
+Already applied before this batch and regenerated here: the gradient `.mark`
+placeholder in all 27 `legal/*.html` pages is the real logo, inlined as a data
+URI (the pages are served three ways — `srcDoc` iframe, the marketing site and
+the edge function — and only a data URI has no base URL to resolve against).
+
+### 5. Under-18s and refunds
+
+Payments stay off (`PAYMENT_MODE=free`, and the free path needs
+`closed_testing: true`), so nobody can buy anything today. The written
+commitment now exists in three places: `refunds.html` section 4 opens with an
+unconditional refund for any purchase made by or for someone under 18 ("if you
+call it up"), `purchases.html` section 8 is rewritten around it, and
+`terms.html` section 1 points at it. `child-safety.html` was updated so it no
+longer claims minors simply cannot buy.
+
+**Still open:** `Market.tsx` gates the buying surfaces to 18+ with the copy
+"Purchases are 18+ only". Docs and code disagree until that gate is relaxed
+(a decision for the owner, since it is a Children's Code control). It is inert
+while checkout is off.
+
+### 6. Notifications
+
+New in this build: `@capacitor/local-notifications`, wired through
+`src/lib/localNotifications.ts`. The app's existing triggers (streak at risk,
+today's session unlogged, challenge ending in three days) now post to the
+device's notification shade as well as the in-app inbox, so they survive the
+app being closed. No Firebase project, no credential, no server. Quiet hours
+(`notification_prefs`) are honoured before anything is posted. A tap on a
+notification routes through `safeNotificationLink()`, like the in-app inbox.
+
+**What this is not:** server-sent push. A trigger only runs while the app is
+open, so nothing arrives on a phone that has not run the app. That still needs
+the Firebase project described in
+`android/app/src/main/res/values/vaylo_fcm.xml` (four empty strings today).
+
+### 7. Height and weight asked at signup, and disclosed
+
+`Onboarding.tsx` has a new optional step ("Height and weight") after the date of
+birth, bounds-checked (90-250 cm, 25-300 kg), written to
+`profiles.height_cm` / `profiles.weight_kg`. Blank is allowed and blank does not
+wipe an existing value. The privacy policy (now **Version 1.2 · Effective 4
+October 2026**) says in "What we collect" that these are asked on their own step,
+are optional, and are used only for load sizing and trends — never public, never
+sold, never used for advertising.
+
+**Known gap, not fixed here:** `child-safety.html` claims nutrition and
+weight-advice features are switched off for under-18s. Nothing in the app
+actually gates on age for those features (`ageBand()` is only used for
+purchases, communities and advertising). The documents overstate what the code
+does.
+
+### 8. Unsubscribe on every email
+
+Verified rather than rebuilt: all three senders (`waitlist-signup`,
+`waitlist-broadcast`, `waitlist-campaigns`) carry the link, and `_shared/email.ts`
+already sends `List-Unsubscribe` plus `List-Unsubscribe-Post: One-Click`. Proof
+run end to end: a test row was inserted, the deployed endpoint was POSTed to
+with the one-click body, and it answered 200 and set `unsubscribed_at`; the test
+row was then deleted. The recipient queries on both broadcast and the campaign
+claim functions filter `unsubscribed_at is null`.
+
+Transactional account emails (confirmation, password reset) are sent by Supabase
+Auth, not by this code, and cannot carry an unsubscribe link — they are not
+marketing mail.
+
+### Deployed in this batch
+
+- `legal` edge function redeployed; `/functions/v1/legal/privacy` serves
+  "Version 1.2 · Effective 4 October 2026" and `/purchases` serves the rewritten
+  section 8.
+- Website redeployed to `vaylo-site-6c1b6bc7` (scope `virello1`): `/legal/privacy/`
+  and `/legal/purchases/` show the new text, `/play/` builds and serves
+  `assets/index-Djxp1w9D.js`.
+- `playMount.test.ts` was fixed while doing this: it identified the entry chunk
+  as "the largest .js", which stopped being true once the inlined legal pages
+  made `LegalDocument-*.js` (718 kB) larger than the entry (473 kB). It now
+  reads the module script out of `website/play/index.html`.
+
+### Checks
+
+`npm run typecheck` 0 · `npx vitest run` 870 passed / 57 files · `npx eslint .`
+0 errors · `npm run ui:audit` clean (one expected 404 route) · APK built and
+verified (see below).
+
+### Manual steps
+
+1. Try the new APK on a device and confirm the notification shade copy appears
+   for a workout reminder; this path is untested on hardware.
+2. Decide the under-18 purchase gate (see section 5 above) before checkout is
+   ever switched on.
+3. Create the Firebase project to enable server-sent push, then fill the four
+   values in `vaylo_fcm.xml` and store the service account in the edge
+   function's secrets.
+4. Play Console: the Health Connect declaration from the previous section is
+   still outstanding.
+
+---
+
+## 2026-10-08 — Friend messaging, unfriending and block coherence
+
+One migration: `20261008120000_friends_messaging_and_unfriend.sql` — the
+`direct_messages` table with its RLS, the `guard_direct_message()` and
+`notify_direct_message()` triggers, `mark_messages_read()`, `unfriend()`, the
+block-coherence trigger on `user_blocks`, an "already friends" guard on
+`friend_requests`, and the two tables added to the `supabase_realtime`
+publication. Feature documentation: [docs/FRIENDS.md](../docs/FRIENDS.md).
+
+### Applied with `db query --file`, NOT `db push`
+
+```bash
+supabase db query --linked --file supabase/migrations/20261008120000_friends_messaging_and_unfriend.sql
+```
+
+`supabase db push --linked` was deliberately not used, and should not be used
+until the history is repaired. `supabase migration list --linked` shows the
+remote history has drifted from this tree: the remote table carries timestamps
+that exist only remotely (for example `20261005172750`, `20261006153551`) while
+marking most of the local files as unapplied (`20261005090000`,
+`20261005210000`, `20261006140000`, …) even though their objects are demonstrably
+live — `security:check`'s probes for `has_unlimited_credits` (20260930064813) and
+the RLS narrowings in 20261006140000 all pass against the live database. A push
+would therefore have tried to re-run dozens of already-applied files, several of
+which are not idempotent (bare `add constraint`, seed inserts). Repairing the
+history is its own task.
+
+**The SQL was validated before it was applied.** The same file was run with a
+deliberate `select 1/0` appended: the Management API executes a batch in one
+transaction (verified first with a probe table that did not survive the error),
+so every statement ran against the live schema and nothing was committed.
+
+Re-running the file is safe: every statement is `if not exists`,
+`create or replace`, `drop policy/trigger if exists`, or wrapped in a
+`duplicate_object` guard. It has been applied twice (the second time to add the
+privilege revoke and the `blocked_with()` policy).
+
+### Verified live
+
+- `npm run security:check` — **PASS, 31 checks** (7 new: anon refused on
+  `direct_messages`, own messages readable, a non-friend's message refused, a
+  spoofed sender refused, `UPDATE` refused at privilege level, `unfriend()` and
+  `mark_messages_read()` callable and inert for a stranger).
+- A throwaway transaction against the live database with real JWT claims, run as
+  two real accounts: **21/21 assertions**, from accepting a friend request through
+  to a block hiding the conversation from both athletes, with every row it created
+  deleted before the commit. This is what found the two bugs worth recording —
+  see docs/FRIENDS.md, "Two traps this file has already fallen into".
+
+### Manual steps
+
+1. Delete the two probe accounts (`authposture.*@example.com`) — they are the
+   fixtures the transaction probe uses, and they were already listed for deletion
+   in docs/RELEASE-AUDIT.md.
+2. Nobody reads `content_reports` yet: the moderation queue is still the largest
+   operational gap, and this migration adds a second stream of user content
+   (messages) that can be reported.
+3. Server-sent push for a message still needs the Firebase project
+   (`npm run push:ready`: NOT READY); today a message only writes a bell entry.
+
+### APK 20 / 1.2.16 built — the friends release
+
+The mobile artifact was rebuilt so the shipped app actually contains the surface
+described above. `versionCode 20 / versionName 1.2.16` in
+`android/app/build.gradle`, built with `sh scripts/build-apk.sh` (release):
+
+```
+[apk] ok   APK signed with the Vaylo Sports upload key
+[apk] ok   6 health read permission(s), 0 write
+[apk] ok   no HcSeedActivity in release
+[apk] ok   package: name='com.vaylosports.app' versionCode='20' versionName='1.2.16'
+[apk] ok   targetSdkVersion:'36'
+[apk] ok   0 JWTs in the shipped web bundle
+[apk] ok   no source maps in the shipped web bundle
+[apk] ok   AAB signed with the Vaylo Sports upload key
+[apk] ok   AAB signature verifies
+[apk] ok   version 1.2.16 (20) matches build.gradle
+```
+
+Artifacts `apk/vaylo-sports-1.2.16-20-release.{apk,aab}`, both appended to
+`apk/SHA256SUMS.txt` and re-checked with `sha256sum -c`:
+
+- APK `58fcd504ce297e06150880d36208e6eaff203704c0be81114e66913c42182141`
+- AAB `76e8f57e7ff9dd5e8fb2e7aba31b00432a3ba91d85d05cbfc93e851e7fa318eb`
+
+WebView-only, as the build.gradle entry says: `cap sync` found the same **8**
+plugins as 1.2.14/1.2.15 (app, browser, haptics, keyboard, local-notifications,
+share, splash-screen, status-bar), no manifest or permission changed, and the
+friends code is in the shipped bundle — `assets/Friends-*.js` and
+`assets/FriendChat-*.js` in `android/app/src/main/assets/public`.
+
+To put 1.2.16 in front of testers, upload
+`apk/vaylo-sports-1.2.16-20-release.aab` to the Play **internal testing** track.
+The earlier manual steps (moderation queue, push, the two probe accounts) still
+stand and are not build blockers.
+
+### 2026-10-08 — legal documents corrected: the in-app deletion path was wrong
+
+Four published documents told an athlete to reach deletion at *Profile → Settings
+→ Delete Account*. There is no Delete Account inside Settings. The real route is
+the **Delete account permanently** button at the bottom of the Profile screen,
+under *Sign Out*; the same screen is also reachable from *Profile → Legal &
+Safety → Delete your account*. Anyone following the document as written would
+have opened Settings and found nothing.
+
+Corrected, with the version line bumped on each:
+
+| Document | Was | Now |
+|---|---|---|
+| `legal/privacy.html` (§11) | 1.3 | **1.4** |
+| `legal/account-deletion.html` (the whole in-app step list, now four steps: the button, the re-authentication, `DELETE MY ACCOUNT` + the acknowledgement, then the confirmation) | 1.0 | **1.1** |
+| `legal/data-rights.html` | 1.1 | **1.2** |
+| `legal/contact.html` | 1.0 | **1.1** |
+
+The wording deliberately does not name the Apple sign-in provider: neither does
+any other legal document, and `src/lib/appleHidden.test.ts` fails the build if one
+does. It says "sign in with the provider you normally use" instead, which is true
+of both.
+
+**Still owed: redeploy the legal function, or the published mirror keeps the old
+path.**
+
+```bash
+node scripts/gen-legal-pages.cjs          # done — 27 pages, pages.generated.ts rewritten
+supabase functions deploy legal --no-verify-jwt --project-ref vvwhausdjzdmsyxekrcl
+```
+
+The website already carries the corrected text (it embeds `legal/*.html` and was
+regenerated), so the app, the Netlify site and the Supabase function will agree
+again once that deploy runs.
+
+### 2026-10-09 — the nutrition plan became an AI plan, and the price followed
+
+`generate-nutrition-plan` was written but **not deployed**, so the Nutrition
+screen's "Generate plan" button called a function that 404'd against the live
+project. Deployed:
+
+```bash
+npx supabase functions deploy generate-nutrition-plan --use-api --yes
+```
+
+- Adult-only, checked against the **dossier** before the charge: an unknown date
+  of birth is refused exactly like an under-18 (`viewer_is_adult` is the rule,
+  not a client gate).
+- Charged per week (`nutrition_plan_week` × weeks) up-front by the server and
+  refunded on every failure path, Nutrition Pack owners free.
+- One model call per two weeks, in parallel; a chunk that is not a complete
+  7-day week is a failed call rather than a partial plan, and the app's own
+  week numbers and calorie/macro targets are stamped back onto the answer.
+
+**Verified live**, not just typechecked: with an adult date of birth on the
+review account, a 1-week plan came back **200 in 33s** — 7 days, 28 meals, real
+food with portions (`Breakfast/Skyr banana oats 506kcal`), the stored columns
+mirroring week 1. The date of birth was restored afterwards.
+
+```
+review account credits: 34 -> 26   (8 credits, before the price below)
+```
+
+#### The price was stale in the database
+
+`src/config/credits.ts` priced the AI nutrition plan at **15** a week (its
+provider ceiling is $0.006/week, asserted by `pricing.test.ts` and
+`scripts/credit-economy-model.mjs`), but `economy_config.feature_costs` still
+said **8**, so the button displayed a price the server did not charge. Applied
+directly, because the migration is not part of a pushed batch:
+
+```bash
+node scripts/run-sql.cjs "UPDATE public.economy_config SET value = (value::jsonb || '{\"nutrition_plan_week\": 15}'::jsonb) WHERE key = 'feature_costs' AND region = 'GLOBAL'"
+```
+
+`credit_cost('nutrition_plan_week')` now returns 15 (calorie_scan 12,
+training_plan_week 20, nutrition_pack_unlock 30 — all matching the client), and
+the migration's own assertion block was run against the live database: 26x its
+provider ceiling after Google Play's 30%, still cheaper than a training week.
+
+Migration `20261009160000_nutrition_plan_ai_pricing.sql` remains the durable
+record and is safe to re-run: the jsonb merge is idempotent, `plan_data` already
+exists (it is the column the plan is stored in), and its checks now pass either
+way. `generate-plan` and `edit-plan` are both already deployed and unchanged.
+
+**Still owed from 2026-10-08:** `supabase functions deploy legal --no-verify-jwt`.
+The published purchases page now also carries the 15-credit nutrition price, so
+the app and the served documents disagree until that deploy runs.

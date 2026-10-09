@@ -35,7 +35,7 @@ const Identity = () => {
   }).sort((a, b) => a[1] - b[1]).slice(0, 2);
 
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Fingerprint size={14} /> Performance Identity</div>
         <h1 className="text-4xl font-display font-bold mt-2">Your <span className="text-gradient-electric">Archetype</span></h1>

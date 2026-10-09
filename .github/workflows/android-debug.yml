@@ -78,8 +78,8 @@ jobs:
         run: npm test
 
       - name: Build web assets for the native shell
-        # `build:native` (base "./") is what ships in the APK; plain `build`
-        # (base "/") only works when the page is served from a root path.
+        # `build:native` is what ships in the APK; the root-absolute base is
+        # safe because the native app uses HashRouter for nested routes.
         run: npm run build:native
 
       - name: Sync Capacitor Android assets

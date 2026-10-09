@@ -10,6 +10,24 @@ const corsHeaders = {
 const MAX_LESSONS = 150;
 const MAX_COMPLETED = 400;
 
+/**
+ * Untrusted content arrives here as lesson titles, categories, sport and goal
+ * tags the client has loaded (and occasionally authored). Every value is
+ * clamped and stripped before it reaches the prompt: no control characters,
+ * no fence/role markers, bounded length. The model output is additionally
+ * validated below — a recommendation is kept ONLY if it matches an id from
+ * the lesson list, so the model can never inject an arbitrary action or id.
+ */
+function sanitizeLessonText(value: string, maxLen: number): string {
+  return value
+    .replace(/\p{C}/gu, " ")
+    .replace(/```+/g, "'")
+    .replace(/^\s*(system|assistant|developer|user)\s*:/gim, "note:")
+    .replace(/\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)\b/gi, "")
+    .trim()
+    .slice(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -40,10 +58,17 @@ Deno.serve(async (req) => {
       });
     }
     const completedIds: string[] = Array.isArray(body?.completedIds) ? body.completedIds.slice(0, MAX_COMPLETED) : [];
-    const masteryByCategory = body?.masteryByCategory ?? {};
-    const sport = body?.sport ?? "general";
+    // Mastery values are clamped numbers; keys are sanitized category strings.
+    const masteryRaw = (body?.masteryByCategory && typeof body.masteryByCategory === "object" ? body.masteryByCategory : {}) as Record<string, unknown>;
+    const masteryByCategory: Record<string, number> = {};
+    for (const [k, v] of Object.entries(masteryRaw).slice(0, 20)) {
+      const key = sanitizeLessonText(k, 40);
+      const num = Number(v);
+      if (key && Number.isFinite(num)) masteryByCategory[key] = Math.max(0, Math.min(100, Math.round(num)));
+    }
+    const sport = sanitizeLessonText(String(body?.sport ?? "general"), 40) || "general";
     const goals = body?.goals ?? [];
-    const experience = body?.experience ?? "intermediate";
+    const experience = sanitizeLessonText(String(body?.experience ?? "intermediate"), 40) || "intermediate";
     interface LessonSummary {
       id: string;
       category: string;
@@ -51,7 +76,15 @@ Deno.serve(async (req) => {
       sports?: string[];
       goals?: string[];
     }
-    const allLessons: LessonSummary[] = Array.isArray(body?.allLessons) ? (body.allLessons as LessonSummary[]).slice(0, MAX_LESSONS) : [];
+    const allLessons: LessonSummary[] = Array.isArray(body?.allLessons)
+      ? (body.allLessons as LessonSummary[]).slice(0, MAX_LESSONS).map((l) => ({
+          id: sanitizeLessonText(String(l?.id ?? ""), 80),
+          category: sanitizeLessonText(String(l?.category ?? ""), 40),
+          title: sanitizeLessonText(String(l?.title ?? ""), 140),
+          sports: Array.isArray(l?.sports) ? l.sports.slice(0, 6).map((s: unknown) => sanitizeLessonText(String(s ?? ""), 30)) : [],
+          goals: Array.isArray(l?.goals) ? l.goals.slice(0, 6).map((g: unknown) => sanitizeLessonText(String(g ?? ""), 40)) : [],
+        }))
+      : [];
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
 
@@ -60,7 +93,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ recommendations: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const goalsList = Array.isArray(goals) ? goals.join(", ") : String(goals || "none");
+    const goalsList = Array.isArray(goals)
+      ? goals.slice(0, 12).map((g: unknown) => sanitizeLessonText(String(g ?? ""), 120)).join(", ")
+      : sanitizeLessonText(String(goals || ""), 120) || "none";
     const prompt = `You are a sport performance coach. Recommend the 5 most impactful next lessons for THIS specific athlete.
 
 Athlete:
@@ -103,18 +138,32 @@ Return exactly 5 lesson IDs from the list above.`;
 
     if (resp.status === 429) return new Response(JSON.stringify({ error: "Rate limit" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (!resp.ok) {
-      const t = await resp.text();
-      console.error("OpenAI:", resp.status, t);
+      // Status + marker only — never the raw provider body.
+      console.error("OpenAI:", resp.status, "upstream_error");
       return new Response(JSON.stringify({ error: "AI failure" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const data = await resp.json();
-    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    const valid = ((args.recommendations ?? []) as string[]).filter((id: string) => remaining.some((l) => l.id === id));
+    // Validate the model's output shape before trusting it: the tool call must
+    // be the one we requested, the arguments must parse, and every returned id
+    // must exist in the actual lesson list.
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.type !== "function" || toolCall?.function?.name !== "recommend_lessons") {
+      return new Response(JSON.stringify({ recommendations: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    let args: { recommendations?: unknown };
+    try {
+      args = JSON.parse(typeof toolCall.function.arguments === "string" ? toolCall.function.arguments : "{}");
+    } catch {
+      return new Response(JSON.stringify({ recommendations: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const valid = (Array.isArray(args.recommendations) ? args.recommendations : [])
+      .filter((id: unknown): id is string => typeof id === "string" && remaining.some((l) => l.id === id))
+      .slice(0, 5);
 
     return new Response(JSON.stringify({ recommendations: valid }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("learning-recommend error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    console.error("learning-recommend error:", e instanceof Error ? e.name : e);
+    return new Response(JSON.stringify({ error: "Recommendations are unavailable right now. Please try again." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

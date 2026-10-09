@@ -15,8 +15,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * configuration alone does not make a plugin reachable from JS: `loadPlugin` in
  * src/lib/platform.ts holds the static import registry that does.
  *
- * The native bundle is built with `npm run build:native` (Vite `--mode native`,
- * which sets base './' so the WebView can load assets relatively). See
+ * The native bundle is built with `npm run build:native` and root-absolute assets.
+ * Native HashRouter keeps nested route refreshes inside the local bundle. See
  * CAPACITOR.md.
  */
 const config: CapacitorConfig = {
@@ -41,12 +41,21 @@ const config: CapacitorConfig = {
       launchAutoHide: true,
     },
     StatusBar: {
-      // LIGHT means light *content* — i.e. white clock, battery and signal
-      // icons. The previous value was DARK, which asks Android for dark icons
-      // on a #05070f background: the clock and battery were effectively
-      // invisible. This is the single most-cited visual bug in the app and it
-      // was one word in this file.
-      style: "LIGHT",
+      // The polarity here is the opposite of what it looks like, and it was
+      // documented backwards. In @capacitor/status-bar's Android implementation
+      // (StatusBar.java:51):
+      //
+      //     windowInsetsControllerCompat.setAppearanceLightStatusBars(!style.equals("DARK"));
+      //
+      // So the value names the *status bar*, not the icons:
+      //   "DARK"  -> isAppearanceLightStatusBars(false) -> WHITE icons
+      //   "LIGHT" -> isAppearanceLightStatusBars(true)  -> DARK icons
+      //
+      // "LIGHT" was therefore asking Android for dark icons, and on API 35+
+      // that makes the system paint a light scrim behind them — the bright
+      // white band that sat above the near-black app on every screen. "DARK"
+      // is the value that gives white icons on the dark UI.
+      style: "DARK",
       backgroundColor: "#05070f",
       // Edge-to-edge, deliberately, to match `viewport-fit=cover` in index.html
       // and the `env(safe-area-inset-*)` padding the CSS now applies once at

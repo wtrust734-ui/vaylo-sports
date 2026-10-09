@@ -44,8 +44,6 @@
     "primaryNav": "メインナビゲーション"
   },
   "quickActions": {
-    "logWorkout": "ワークアウトを記録",
-    "logWorkoutDesc": "セッションを開始または終了",
     "logResult": "結果を記録",
     "logResultDesc": "大会の結果を記録",
     "recoveryCheckIn": "リカバリーチェックイン",
@@ -58,13 +56,14 @@
     "train": {
       "title": "トレーニング",
       "subtitle": "セッション、プラン、テクニック。",
-      "primaryCta": "ワークアウトを開始",
       "groupDaily": "毎日のトレーニング",
       "groupProgress": "進捗",
       "workouts": "ワークアウト",
       "workoutsDesc": "セッションを記録・振り返る",
       "trainingPlans": "トレーニングプラン",
       "trainingPlansDesc": "実行中のプランと週次計画",
+      "availability": "予定と休養",
+      "availabilityDesc": "休暇・試験・休養期間を記録",
       "routines": "ルーティン",
       "routinesDesc": "繰り返し使えるウォームアップとドリル",
       "crossTraining": "クロストレーニング",
@@ -86,6 +85,8 @@
       "vprDesc": "総合評価とその要因",
       "metricsHub": "メトリクスハブ",
       "metricsHubDesc": "負荷、傾向、記録",
+      "insights": "インサイト",
+      "insightsDesc": "今日のトレーニングが示すこと",
       "skills": "スキル",
       "skillsDesc": "競技スキルの分析",
       "development": "育成",
@@ -112,7 +113,7 @@
       "nutrition": "栄養",
       "nutritionDesc": "食事、水分、目標",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "コンペ",
@@ -149,7 +150,6 @@
     "readinessDown": "昨日より {{value}}",
     "coachInsight": "コーチのインサイト",
     "viewInsight": "インサイトを見る",
-    "startSession": "セッションを開始",
     "noVprYet": "数回セッションを記録すると VPR が解放されます。",
     "noSessionToday": "予定されたセッションはありません — プランを確認しましょう。",
     "welcomeBack": "おかえりなさい",
@@ -275,6 +275,7 @@
     "activityFeed": "アクティビティフィード",
     "groupTrain": "トレーニング",
     "trainingPlans": "トレーニングプラン",
+    "availability": "予定と休養",
     "workouts": "ワークアウト",
     "routines": "ルーティン",
     "crossTraining": "クロストレーニング",
@@ -317,6 +318,9 @@
     "profile": "プロフィール",
     "openMenu": "メニューを開く",
     "closeMenu": "メニューを閉じる",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "保護者アクセス",
+    "startingAnalysis": "スタート時分析",
+    "insights": "インサイト"
   }
 }

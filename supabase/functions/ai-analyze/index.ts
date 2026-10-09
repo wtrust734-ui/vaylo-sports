@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
-import { MODELS } from "../_shared/aiModels.ts";
+import { GEMINI_MODELS, MODELS } from "../_shared/aiModels.ts";
+import { geminiGenerate } from "../_shared/google.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import {
@@ -51,13 +52,23 @@ Deno.serve(async (req) => {
     const image = validImagePayload(body.image_base64);
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) return json({ error: "API key not configured" }, 500);
+    const GOOGLE_API = Deno.env.get("GOOGLE_API");
 
     if (type !== "form_analysis" && type !== "calorie_scan" && type !== "stats_insight" && type !== "tactical_prep") {
       return json({ error: "Invalid type" }, 400);
     }
     if ((type === "form_analysis" || type === "calorie_scan") && !image) {
       return json({ error: "A valid image is required for this analysis (JPEG, PNG, WebP or HEIC up to 8MB)." }, 400);
+    }
+
+    // Provider split, checked BEFORE the charge so an unconfigured provider
+    // can never debit a credit for a call that cannot happen: FORM ANALYSIS
+    // runs on the Google API — the same decision as the video path — and
+    // everything else runs on OpenAI. See aiProviderRouting.test.ts.
+    if (type === "form_analysis") {
+      if (!GOOGLE_API) return json({ error: "Form analysis is not configured." }, 500);
+    } else if (!OPENAI_API_KEY) {
+      return json({ error: "API key not configured" }, 500);
     }
 
     // ---- Server-side charging (authoritative; honours Unlimited subscriptions) ----
@@ -74,7 +85,7 @@ Deno.serve(async (req) => {
 
     let spend: Awaited<ReturnType<typeof spendForUser>> | null = null;
     if (chargeFeature) {
-      spend = await spendForUser(userId, chargeFeature, `AI ${type}`, { source: "ai-analyze" });
+      spend = await spendForUser(req, userId, chargeFeature, `AI ${type}`, { source: "ai-analyze" });
       if (!spend.success) {
         const shortfall = spend.shortfall ?? 0;
         return json({
@@ -119,7 +130,7 @@ ${dossierText}`;
         ...(image ? [{ type: "image_url", image_url: { url: image } }] : []),
       ];
     } else if (type === "calorie_scan") {
-      systemPrompt = `You are a certified sports dietitian analysing a food photo for Vaylo Sports. Accuracy matters — an athlete will log this.
+      systemPrompt = `You estimate the nutrition content of a food photo for Vaylo Sports, using standard reference macro densities. The athlete is an adult aged 18–30; you are an estimator, not a dietitian and not a clinician. Accuracy matters — an athlete will log this.
 
 WORKFLOW (follow strictly):
 1. Identify every visible food/drink component (not just the main item). Note cooking method (fried, grilled, raw, etc.).
@@ -173,6 +184,51 @@ ${dossierText}`;
       ];
     }
 
+    // ---- Form analysis: the Google path ---------------------------------
+    // Photo form analysis runs on Gemini (product decision: every form
+    // analysis feature, photo and video, uses the Google API). Returned early
+    // so the OpenAI branch below keeps one shape for the other three types.
+    if (type === "form_analysis") {
+      const dataUrl = image ?? "";
+      const comma = dataUrl.indexOf(",");
+      const mime = /^data:([^;]+);base64,/.exec(dataUrl)?.[1] ?? "image/jpeg";
+      const gemini = await geminiGenerate({
+        model: GEMINI_MODELS.FLASH,
+        apiKey: GOOGLE_API!,
+        systemText: systemPrompt + (langDirective ? "\n\n" + langDirective : ""),
+        parts: [
+          { text: prompt || "Analyze this athlete's form in detail." },
+          ...(comma > 0
+            ? [{ inlineData: { mimeType: mime, data: dataUrl.slice(comma + 1) } }]
+            : []),
+        ],
+      });
+      if (!gemini.ok) {
+        // Charged but nothing delivered — refund before reporting the failure.
+        if (chargedUserId) {
+          await refundCredits({
+            supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+            serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+            userId: chargedUserId,
+            amount: charged,
+            reason: "AI form_analysis failed — auto refund",
+          });
+          chargedUserId = null;
+        }
+        if (gemini.status === 429) {
+          return json({ error: "Rate limited. Please try again in a moment." }, 429);
+        }
+        // Status is logged inside the adapter; the client gets a stable message.
+        return json({ error: "AI analysis failed" }, 500);
+      }
+      return json({
+        result: gemini.text || "Analysis unavailable.",
+        cost: spend?.cost ?? 0,
+        balance: spend?.balance ?? null,
+      });
+    }
+
+    // ---- Everything else: OpenAI -----------------------------------------
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -203,8 +259,8 @@ ${dossierText}`;
       if (aiResponse.status === 402) {
         return json({ error: "AI credits exhausted." }, 402);
       }
-      const t = await aiResponse.text();
-      console.error("AI error:", aiResponse.status, t);
+      // Status + marker only — never the raw provider body.
+      console.error("AI error:", aiResponse.status, "upstream_error");
       return json({ error: "AI analysis failed" }, 500);
     }
 
@@ -223,6 +279,8 @@ ${dossierText}`;
       }).catch(() => undefined);
       chargedUserId = null;
     }
-    return json({ error: err instanceof Error ? err.message : "Unexpected server error" }, 500);
+    // Internal details stay in logs; the client gets a stable message.
+    console.error("ai-analyze error:", err instanceof Error ? err.name : err);
+    return json({ error: "The analysis could not be completed. Please try again." }, 500);
   }
 });

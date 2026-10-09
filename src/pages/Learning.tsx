@@ -183,12 +183,12 @@ export default function Learning() {
   const isFiltering = query.trim().length > 0 || sport !== "All Sports" || filters.category !== "All" || filters.difficulty !== "All" || filters.time !== "All" || filters.type !== "All";
 
   return (
-    <main className="min-h-screen overflow-hidden pb-28 pt-20">
+    <main className="min-h-screen overflow-hidden pb-28 pt-[var(--vaylo-screen-top)]">
       {/* 1 — Hero */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-6">
+      <section className="mx-auto max-w-6xl px-5">
         <div className="relative overflow-hidden rounded-[2rem] border border-electric-purple/25 bg-gradient-to-br from-electric-purple/20 via-card to-navy-deep p-6 shadow-card sm:p-9">
           <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-electric-purple/20 blur-3xl" />
-          <p className="relative text-[11px] font-bold tracking-[0.24em] text-electric-purple">LEARNING</p>
+          <p className="relative text-[12px] font-bold tracking-[0.24em] text-electric-purple">LEARNING</p>
           <h1 className="relative mt-3 max-w-xl font-display text-4xl font-black tracking-tight sm:text-5xl">
             Get Better at <span className="text-gradient-electric">Your Sport.</span>
           </h1>
@@ -236,7 +236,7 @@ export default function Learning() {
 
       {/* 4 — Featured */}
       <PageSection title="Featured learning" subtitle="High-value knowledge, built for the moments that matter.">
-        <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+        <div className="no-scrollbar -mx-5 flex gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:px-0">
           {featured.map((lesson, index) => (
             <FeaturedCard
               key={lesson.id}
@@ -252,7 +252,7 @@ export default function Learning() {
 
       {/* 5 — Popular */}
       <PageSection title="Popular right now" subtitle="What athletes are reading and saving this week.">
-        <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+        <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:px-0">
           {popular.map((lesson) => (
             <CompactCard
               key={lesson.id}
@@ -292,10 +292,10 @@ export default function Learning() {
                 onClick={() => openLesson(lesson)}
                 className="press-card cursor-pointer rounded-2xl border border-border bg-card/70 p-4 hover:border-electric-purple/45"
               >
-                <p className="text-[10px] font-bold uppercase tracking-wider text-electric-purple">{reason}</p>
+                <p className="text-[12px] font-bold uppercase tracking-wider text-electric-purple">{reason}</p>
                 <h3 className="mt-2 font-bold leading-snug">{lesson.title}</h3>
                 <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{lesson.summary}</p>
-                <p className="mt-3 text-[11px] font-medium text-muted-foreground">
+                <p className="mt-3 text-[12px] font-medium text-muted-foreground">
                   {categoryFor(lesson)} · {lesson.duration} read · {difficultyFor(lesson)}
                 </p>
               </article>
@@ -306,7 +306,7 @@ export default function Learning() {
 
       {/* 8 — Quick Learn */}
       <PageSection title="Quick Learn" subtitle="Useful sport science in under 90 seconds.">
-        <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+        <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:px-0">
           {quickLearn.map((lesson) => (
             <CompactCard
               key={lesson.id}

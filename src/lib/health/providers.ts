@@ -221,7 +221,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     family: "cloud",
     platforms: ["android", "ios", "web"],
     blurb: "Most connected fitness network — workouts + segments",
-    why: "Strava connects to almost every watch (Garmin, COROS, Polar, Apple, …). Linking Strava imports the same normalized workouts as a convenience hub.",
+    why: "Strava connects to almost every watch (Garmin, COROS, Polar, …). Linking Strava imports the same normalized workouts as a convenience hub.",
     healthConnectBridged: false,
     healthKitBridged: false,
     helpUrl: "https://www.strava.com/",

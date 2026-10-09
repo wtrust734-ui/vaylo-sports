@@ -1,20 +1,29 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Star, Filter, ShoppingBag, Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Search, Star, ShoppingBag, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import CoachPlanCard from "@/components/coach/CoachPlanCard";
+import { COACH_COMMISSION_PERCENT } from "@/config/coachMarketplace";
 
 interface Listing {
-  id: string; creator_id: string; title: string; description?: string;
-  category: string; price_cents: number; duration_minutes?: number;
-  cover_url?: string; rating?: number; sales_count: number;
+  // Required, not optional: a row always has these columns (the table's default is
+  // null), and `description?: string` is what stopped a Listing being usable as a
+  // CoachPlan — an absent property is not the same type as one that is null.
+  id: string; creator_id: string; title: string; description: string | null;
+  category: string; price_cents: number; duration_minutes: number | null;
+  cover_url: string | null; rating: number | null; sales_count: number;
+  // Added for the coach marketplace. A coach plan is a listing with a duration in
+  // weeks and its own currency; everything else in this table is a program or a
+  // guide that no purchase path prices yet.
+  is_coach_plan: boolean; weeks: number | null; currency: string; active: boolean;
 }
 
-const CATEGORIES = ["all", "program", "meal_plan", "session", "guide"];
+const CATEGORIES = ["all", "plan", "program", "meal_plan", "session", "guide"];
 
 export default function CreatorMarketplace() {
   const { user } = useAuth();
@@ -25,14 +34,19 @@ export default function CreatorMarketplace() {
   const [sort, setSort] = useState<"new" | "popular" | "price">("popular");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const q = supabase.from("marketplace_listings").select("*").eq("active", true);
-      const { data } = await q;
-      setListings((data || []) as Listing[]);
-      setLoading(false);
-    })();
+  // useCallback rather than an inline async body: the buy flow re-reads the list
+  // after a purchase so the sales count is current, and that means the loader is
+  // referenced from two places. A bare function recreated each render would make
+  // the effect below re-run on every render.
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("marketplace_listings").select("*").eq("active", true);
+    setListings((data || []) as Listing[]);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const filtered = listings
     .filter((l) => cat === "all" || l.category === cat)
@@ -43,13 +57,15 @@ export default function CreatorMarketplace() {
       return 0;
     });
 
-  const buy = async (l: Listing) => {
-    // Payments are not connected yet — say so plainly instead of faking a purchase.
-    toast.info(`Checkout isn't live yet — ${l.title} can't be bought today.`);
+  const notPurchasable = (l: Listing) => {
+    // Only a coaching plan has a purchase path. A program or a guide published by
+    // a creator has no price the server will honour, so the honest answer is that
+    // it cannot be bought — rather than a checkout that fails somewhere later.
+    toast.info(`"${l.title}" isn't purchasable yet — coaching plans are.`);
   };
 
   return (
-    <div className="px-5 pt-8 pb-24 max-w-5xl mx-auto">
+    <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto">
       <div className="flex items-start justify-between mb-4 gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><ShoppingBag className="h-6 w-6 text-electric-purple" /> Marketplace</h1>
@@ -91,7 +107,13 @@ export default function CreatorMarketplace() {
         </div>
        ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((l, i) => (
+          {filtered.map((l, i) =>
+            // A coaching plan has a price the server honours and a buyer flow to
+            // go with it. Anything else in this table is a creator's program or
+            // guide with no purchase path, and is rendered as a card that says so.
+            l.is_coach_plan ? (
+              <CoachPlanCard key={l.id} plan={l} onBought={() => void load()} />
+            ) : (
             <motion.div
               key={l.id}
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
@@ -99,21 +121,34 @@ export default function CreatorMarketplace() {
             >
               <div className="aspect-video bg-gradient-to-br from-electric-purple/40 to-energy/20" style={l.cover_url ? { backgroundImage: `url(${l.cover_url})`, backgroundSize: "cover" } : {}} />
               <div className="p-4">
-                <p className="text-[10px] uppercase tracking-wider text-electric-purple font-semibold">{l.category}</p>
+                <p className="text-[12px] uppercase tracking-wider text-electric-purple font-semibold">{l.category}</p>
                 <h3 className="font-semibold mt-1 line-clamp-1">{l.title}</h3>
                 {l.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{l.description}</p>}
                 <div className="flex items-center justify-between mt-3">
                   <div className="text-lg font-bold">${(l.price_cents / 100).toFixed(2)}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-1"><Star className="h-3 w-3 text-energy" /> {l.rating?.toFixed(1) ?? "—"}</div>
                 </div>
-                <Button onClick={() => buy(l)} className="w-full mt-3 h-10">Buy</Button>
+                <Button onClick={() => notPurchasable(l)} variant="outline" className="w-full mt-3 h-10">
+                  Not for sale yet
+                </Button>
               </div>
             </motion.div>
-          ))}
+            )
+          )}
         </div>
        )}
 
-      <p className="text-[10px] text-muted-foreground mt-6 text-center">Vaylo Sports charges a 20% platform fee on creator sales.</p>
+      <p className="text-[12px] text-muted-foreground mt-6 text-center">
+        Coaches set their own prices. You pay that price plus Vaylo's {COACH_COMMISSION_PERCENT}%
+        fee, and the coach receives exactly what they asked for.
+      </p>
+      <p className="text-[12px] text-muted-foreground mt-2 text-center">
+        Are you a coach?{" "}
+        <Link to="/coach-studio" className="underline">
+          Set your prices in the coach studio
+        </Link>
+        .
+      </p>
     </div>
   );
 }

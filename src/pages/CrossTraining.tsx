@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shuffle, Dumbbell, Heart, Move, Zap, Shield, Clock, Sparkles, AlertTriangle, Target, type LucideIcon } from "lucide-react";
+import { Shuffle, Dumbbell, Heart, Move, Zap, Shield, Clock, Sparkles, AlertTriangle, Target, Lock, Check, ArrowRight, type LucideIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { buildClientDossier, getLocalPBs } from "@/lib/athleteDossier";
-import { calculateVPR } from "@/lib/performance";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useUnlockFeature } from "@/hooks/useUnlockFeature";
+import { useToast } from "@/hooks/use-toast";
+import { creditCost } from "@/lib/credits";
+import { hapticSuccess, hapticWarning } from "@/lib/haptics";
+import { buildClientDossier } from "@/lib/athleteDossier";
+import { metricBucket } from "@/lib/performance";
 
 type Exercise = { name: string; focus: string; sets: string; benefit: string; phase: string[]; impact?: "low" | "high" };
 
@@ -102,6 +108,35 @@ const FOCUS_META: Record<string, { icon: LucideIcon; tone: string }> = {
   Recovery: { icon: Heart, tone: "bg-primary/10 text-primary border-primary/30" },
 };
 
+/**
+ * Which VPR bucket each cross-training focus actually develops.
+ *
+ * This is the whole basis of the transfer report below, so it is stated once,
+ * here, instead of being implied by exercise copy: a "Mobility" block is only
+ * worth recommending over a "Power" block if the athlete's logged reaction and
+ * skill numbers say so, and that comparison needs a declared mapping.
+ *
+ * Deliberately no entry for Recovery — recovery work is prescribed by readiness
+ * and injuries, not by a scoring bucket, so it is left out of the transfer
+ * ranking rather than mapped to something it does not train.
+ */
+const FOCUS_TO_BUCKETS: Record<string, string[]> = {
+  Aerobic: ["endurance_capacity"],
+  Strength: ["power_index"],
+  Power: ["speed_index", "power_index"],
+  Mobility: ["skill_consistency", "reaction_efficiency"],
+  Prehab: ["reaction_efficiency"],
+};
+
+const BUCKET_LABEL: Record<string, string> = {
+  speed_index: "Speed",
+  power_index: "Power",
+  endurance_capacity: "Endurance",
+  repeatability: "Repeatability",
+  skill_consistency: "Skill",
+  reaction_efficiency: "Reaction",
+};
+
 function bucketToFocus(bucket: string): string[] {
   switch (bucket) {
     case "speed_index": return ["Power", "Aerobic"];
@@ -115,7 +150,14 @@ function bucketToFocus(bucket: string): string[] {
 }
 
 const CrossTraining = () => {
-  const { profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+  const { hasFeature, refresh: refreshEntitlements } = useSubscription();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const unlock = useUnlockFeature();
+  const [unlockingTransfer, setUnlockingTransfer] = useState(false);
+  const hasCrossSport = hasFeature("cross_sport");
+  const transferPrice = creditCost("cross_sport_unlock");
   const profileSport = profile?.sport?.split(",")[0]?.trim();
   const sports = Object.keys(LIBRARY).filter((s) => s !== "default");
   const initialSport = profileSport && LIBRARY[profileSport] ? profileSport : sports[0];
@@ -142,19 +184,28 @@ const CrossTraining = () => {
     const injuries = (dossier.injuries as { status?: string; body_part?: string }[] | undefined) || [];
     const activeInjuries = injuries.filter((i) => i.status !== "resolved");
     const recovery = (dossier.recovery as { readiness_score?: number | null }[] | undefined) || [];
-    // 65 is a ranking default, not a measurement: with no recovery logs we
-    // assume "fine" so nothing gets pushed into the recovery bucket. It is
-    // deliberately not shown to the athlete — see `hasRecovery` below.
-    const hasRecovery = recovery.length > 0;
-    const readinessAvg = hasRecovery ? recovery.reduce((a, b) => a + (b.readiness_score || 50), 0) / recovery.length : 65;
+    // Readiness is only computed from real, non-null logged scores. No invented
+    // 65/50 defaults — without logs we simply have no readiness signal.
+    const readinessScores = recovery.map((r) => r.readiness_score).filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+    const hasRecovery = readinessScores.length > 0;
+    const readinessAvg = hasRecovery ? readinessScores.reduce((a, b) => a + b, 0) / readinessScores.length : null;
     const outcomeGoals = (dossier.outcomeGoals as { title: string; category?: string }[] | undefined) || [];
     const vpr = dossier.vpr as Record<string, number | undefined> | null | undefined;
 
-    // weakest buckets
+    // Weakest buckets: rank ONLY buckets backed by metrics the athlete has
+    // actually logged. A bucket the athlete never tested is "unknown", not a
+    // 50 — recommending training for it would fabricate a weakness.
+    const recentMetrics = (dossier.recentMetrics as { metric_type: string }[] | undefined) || [];
+    const presentBuckets = new Set<string>();
+    for (const m of recentMetrics) {
+      const b = metricBucket(m.metric_type);
+      if (b) presentBuckets.add(b);
+    }
     let weakestBuckets: string[] = [];
-    if (vpr && typeof vpr === "object") {
-      const buckets = ["speed_index", "power_index", "endurance_capacity", "skill_consistency", "reaction_efficiency", "repeatability"] as const;
-      const entries = buckets.map((b) => ({ b, v: Number(vpr?.[b] ?? 50) })).sort((a, b) => a.v - b.v);
+    if (vpr && typeof vpr === "object" && presentBuckets.size > 0) {
+      const entries = Array.from(presentBuckets)
+        .map((b) => ({ b, v: Number(vpr[b] ?? 0) }))
+        .sort((a, b) => a.v - b.v);
       weakestBuckets = entries.slice(0, 2).map((e) => e.b);
     }
 
@@ -175,11 +226,12 @@ const CrossTraining = () => {
     // also include default low-impact options as fallback if injuries
     const extended = avoidHighImpact ? [...pool, ...LIBRARY.default] : pool;
 
+    const lowReadiness = readinessAvg !== null && readinessAvg < 55;
     const scored = extended.map((e) => {
       let score = 0;
       const reasons: string[] = [];
       if (weakFocuses.has(e.focus)) { score += 3; reasons.push(`Targets weak spot: ${e.focus}`); }
-      if (readinessAvg < 55 && (e.focus === "Mobility" || e.focus === "Recovery" || e.phase.includes("recovery"))) { score += 2; reasons.push("Low readiness — recovery priority"); }
+      if (lowReadiness && (e.focus === "Mobility" || e.focus === "Recovery" || e.phase.includes("recovery"))) { score += 2; reasons.push("Low readiness — recovery priority"); }
       if (e.phase.includes(phase)) { score += 1; }
       // penalise high impact when injured
       if (avoidHighImpact && e.impact === "high") { score -= 5; reasons.push("Avoid high impact (injury)"); }
@@ -198,8 +250,9 @@ const CrossTraining = () => {
     return {
       weakestBuckets,
       weakFocuses: Array.from(weakFocuses),
-      readinessAvg: Math.round(readinessAvg),
+      readinessAvg: readinessAvg !== null ? Math.round(readinessAvg) : null,
       hasRecovery,
+      hasWeakBuckets: weakestBuckets.length > 0,
       activeInjuries,
       outcomeGoals: outcomeGoals.slice(0, 2),
       picks: deduped,
@@ -214,12 +267,233 @@ const CrossTraining = () => {
     [filtered, forYou],
   );
 
+  /**
+   * THE TRANSFER REPORT — what this sport's cross-training is actually worth to
+   * THIS athlete, read from the metrics they have logged.
+   *
+   * This is the feature that `cross_sport_unlock` pays for. It was priced in the
+   * Market for months with nothing behind it, which is the one state a priced
+   * feature must never be in: the shop advertised a thing that did not exist.
+   *
+   * Rules it follows, all of them about not inventing anything:
+   *
+   *   * A focus area is only scored from buckets the athlete has ACTUALLY logged.
+   *     A bucket with no metrics is reported as unmeasured, not as 0/50 — the
+   *     same rule the "For you" rail above already follows.
+   *   * "Carries over" means the athlete's own numbers are already strong there,
+   *     so more of the same work is the wrong spend; "gap" means the numbers are
+   *     low and a block here is the right spend.
+   *   * No AI call and no provider: this is arithmetic on the athlete's record,
+   *     so it is priced as a one-off entitlement rather than a metered feature.
+   */
+  const transfer = useMemo(() => {
+    // One shape in every state, deliberately. This project compiles with
+    // `strict: false`, where a boolean discriminant does not narrow a union —
+    // so a discriminated result would type-check here and fail at the render
+    // site. Empty arrays mean "nothing to show", not "unknown".
+    type Row = { focus: string; score: number | null; develops: string[] };
+    const none = {
+      ready: false,
+      measured: 0,
+      carries: [] as Row[],
+      gaps: [] as Row[],
+      unmeasured: [] as string[],
+    };
+    if (!dossier) return none;
+    const recentMetrics = (dossier.recentMetrics as { metric_type: string }[] | undefined) || [];
+    const vpr = dossier.vpr as Record<string, number | undefined> | null | undefined;
+    const present = new Set<string>();
+    for (const m of recentMetrics) {
+      const b = metricBucket(m.metric_type);
+      if (b) present.add(b);
+    }
+    if (!vpr || present.size === 0) return { ...none, measured: present.size };
+
+    const pool = LIBRARY[sport] || LIBRARY.default;
+    const focuses = Array.from(new Set(pool.map((e) => e.focus)));
+    const rows: Row[] = focuses
+      .map((focus) => {
+        const buckets = (FOCUS_TO_BUCKETS[focus] ?? []).filter((b) => present.has(b));
+        if (buckets.length === 0) {
+          return { focus, score: null as number | null, develops: FOCUS_TO_BUCKETS[focus] ?? [] };
+        }
+        const values = buckets.map((b) => Number(vpr[b] ?? 0));
+        return {
+          focus,
+          score: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+          develops: FOCUS_TO_BUCKETS[focus] ?? [],
+        };
+      })
+      .filter((r) => r.develops.length > 0);
+
+    const scored = rows.filter((r) => r.score !== null);
+    const carries = scored
+      .filter((r) => (r.score as number) >= 60)
+      .sort((a, b) => (b.score as number) - (a.score as number));
+    const gaps = scored
+      .filter((r) => (r.score as number) < 60)
+      .sort((a, b) => (a.score as number) - (b.score as number));
+    const unmeasured = Array.from(new Set(rows.flatMap((r) => r.develops))).filter((b) => !present.has(b));
+
+    return { ready: true, measured: present.size, carries, gaps, unmeasured };
+  }, [dossier, sport]);
+
+  const buyCrossSport = async () => {
+    if (!user) {
+      toast({ title: "Sign in to unlock", description: "Unlocks live on your account, so they restore on any device.", variant: "destructive" });
+      return;
+    }
+    setUnlockingTransfer(true);
+    try {
+      const res = await unlock("cross_sport");
+      if (res.status === "failed") {
+        hapticWarning();
+        toast({ title: "Couldn't unlock Cross-Sport Analysis", description: res.error, variant: "destructive" });
+        return;
+      }
+      hapticSuccess();
+      await Promise.all([refreshEntitlements(), refreshProfile()]);
+      toast({ title: "Cross-Sport Analysis unlocked", description: "Your transfer report is below. It is yours permanently." });
+    } finally {
+      setUnlockingTransfer(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen p-6 pt-20 pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Shuffle size={14} /> Cross-Training Library</div>
         <h1 className="text-4xl font-display font-bold mt-2">Smart <span className="text-gradient-electric">Cross-Training</span></h1>
         <p className="text-muted-foreground mt-1 text-sm">Sport-specific transfer work, dialed into your training phase — now tailored to your gaps, goals and recovery.</p>
+      </motion.div>
+
+      {/* Cross-Sport Analysis — the paid feature on this screen. Locked it is a
+          real product with a real price and a real purchase; unlocked it is the
+          report computed from the athlete's own logged metrics. Either state is
+          complete: the library below works without it, so a locked card is not a
+          dead screen. */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.04 }}
+        className={`rounded-2xl border p-5 ${hasCrossSport ? "border-electric-purple/30 bg-gradient-to-br from-electric-purple/10 via-card to-card" : "border-border bg-card/60"}`}
+      >
+        <div className="flex items-center gap-2">
+          <Shuffle size={16} className={hasCrossSport ? "text-electric-purple" : "text-muted-foreground"} />
+          <span className="text-xs font-bold uppercase tracking-widest text-electric-purple">Cross-Sport Analysis</span>
+          {hasCrossSport && (
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-energy/40 bg-energy/10 px-2 py-0.5 text-[12px] font-bold text-energy">
+              <Check size={10} /> Unlocked
+            </span>
+          )}
+        </div>
+
+        {!hasCrossSport ? (
+          <>
+            <h2 className="mt-2 font-display text-lg font-bold">What is your other training actually worth?</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              A transfer report built from the metrics you have logged: which of your strengths carry into {sport},
+              which focus areas are worth a block, and which numbers are still unmeasured.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={buyCrossSport}
+                disabled={unlockingTransfer}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+              >
+                <Lock size={15} />
+                {unlockingTransfer ? "Unlocking…" : `Unlock for ${transferPrice} credits — once, forever`}
+              </motion.button>
+              <button
+                onClick={() => navigate("/vpr")}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground underline underline-offset-2"
+              >
+                Log more metrics first <ArrowRight size={12} />
+              </button>
+            </div>
+            <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+              The library, phase planner and personalised picks below stay free — this only adds the report.
+            </p>
+          </>
+        ) : !transfer?.ready ? (
+          <>
+            <h2 className="mt-2 font-display text-lg font-bold">Nothing to read yet — and that is honest</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              A transfer report needs VPR buckets backed by metrics you have actually logged. You have
+              {" "}
+              {transfer?.measured ?? 0} of 6 areas measured, so a report would be a guess rather than a reading.
+              Log a few tests and this fills in — the library below works in the meantime.
+            </p>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate("/vpr")}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm font-semibold"
+            >
+              Log metrics <ArrowRight size={14} />
+            </motion.button>
+          </>
+        ) : (
+          <>
+            <h2 className="mt-2 font-display text-lg font-bold">Your transfer report for {sport}</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Computed from your own logged metrics — {transfer.measured} of 6 areas measured. Not an AI estimate.
+            </p>
+
+            {transfer.carries.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[12px] font-bold uppercase tracking-wider text-energy">Carries over — already strong</p>
+                <div className="mt-2 space-y-2">
+                  {transfer.carries.map((r) => (
+                    <div key={r.focus} className="flex items-center gap-3">
+                      <span className="w-20 shrink-0 text-xs font-semibold">{r.focus}</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-energy" style={{ width: `${r.score}%` }} />
+                      </span>
+                      <span className="w-10 shrink-0 text-end font-mono text-xs text-muted-foreground">{r.score}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
+                  More of this is not your next gain — it is maintenance. Keep it ticking over.
+                </p>
+              </div>
+            )}
+
+            {transfer.gaps.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[12px] font-bold uppercase tracking-wider text-primary">Worth a block — your lowest by bucket</p>
+                <div className="mt-2 space-y-2">
+                  {transfer.gaps.map((r) => (
+                    <div key={r.focus} className="flex items-center gap-3">
+                      <span className="w-20 shrink-0 text-xs font-semibold">{r.focus}</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-primary" style={{ width: `${r.score}%` }} />
+                      </span>
+                      <span className="w-10 shrink-0 text-end font-mono text-xs text-muted-foreground">{r.score}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
+                  Start with the lowest bar; the phase selector below orders the work around it.
+                </p>
+              </div>
+            )}
+
+            {transfer.gaps.length === 0 && transfer.carries.length > 0 && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                No weak area to attack with cross-training right now — this is a maintenance block.
+              </p>
+            )}
+
+            {transfer.unmeasured.length > 0 && (
+              <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                Not measured yet: {transfer.unmeasured.map((b) => BUCKET_LABEL[b] ?? b).join(", ")}. Those areas are left out of
+                the ranking rather than assumed to be weak.
+              </p>
+            )}
+          </>
+        )}
       </motion.div>
 
       {/* For You — personalised */}
@@ -228,42 +502,42 @@ const CrossTraining = () => {
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={16} className="text-primary" />
           <span className="text-xs font-bold uppercase tracking-widest text-primary">For you</span>
-          {dossierLoading && <span className="text-[10px] text-muted-foreground ml-auto">Loading your dossier…</span>}
-          {!dossierLoading && forYou && <span className="text-[10px] text-muted-foreground ml-auto">{forYou.hasRecovery ? `Readiness ${forYou.readinessAvg}/100` : "No readiness logged"}{forYou.activeInjuries.length ? ` · ${forYou.activeInjuries.length} active injury` : ""}</span>}
+          {dossierLoading && <span className="text-[12px] text-muted-foreground ml-auto">Loading your dossier…</span>}
+          {!dossierLoading && forYou && <span className="text-[12px] text-muted-foreground ml-auto">{forYou.hasRecovery && forYou.readinessAvg !== null ? `Readiness ${forYou.readinessAvg}/100` : "No readiness logged"}{forYou.activeInjuries.length ? ` · ${forYou.activeInjuries.length} active injury` : ""}</span>}
         </div>
         {!dossierLoading && forYou ? (
           <>
             <div className="flex flex-wrap gap-1.5 mt-2 mb-3">
               {forYou.weakestBuckets.length ? forYou.weakestBuckets.map((b) => (
-                <span key={b} className="text-[10px] px-2 py-1 rounded-full bg-energy/10 text-energy border border-energy/20 flex items-center gap-1"><Target size={10} /> Weak: {b.replace("_", " ")}</span>
-              )) : <span className="text-[10px] px-2 py-1 rounded-full bg-muted/40 border border-border">Log metrics to unlock VPR-based picks</span>}
+                <span key={b} className="text-[12px] px-2 py-1 rounded-full bg-energy/10 text-energy border border-energy/20 flex items-center gap-1"><Target size={10} /> Weak: {b.replace("_", " ")}</span>
+              )) : <span className="text-[12px] px-2 py-1 rounded-full bg-muted/40 border border-border">Log performance metrics to unlock VPR-based picks</span>}
               {forYou.activeInjuries.slice(0, 2).map((inj, i: number) => (
-                <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1"><AlertTriangle size={10} /> {inj.body_part} · {inj.status}</span>
+                <span key={i} className="text-[12px] px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1"><AlertTriangle size={10} /> {inj.body_part} · {inj.status}</span>
               ))}
               {forYou.outcomeGoals.map((g) => (
-                <span key={g.title} className="text-[10px] px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">{g.title}</span>
+                <span key={g.title} className="text-[12px] px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">{g.title}</span>
               ))}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {forYou.picks.map(({ e, reasons }, idx) => {
                 const meta = FOCUS_META[e.focus] ?? FOCUS_META.Prehab;
                 const Icon = meta.icon;
-                const isRecovery = forYou.readinessAvg < 55 && (e.focus === "Mobility" || e.focus === "Recovery");
+                const isRecovery = forYou.readinessAvg !== null && forYou.readinessAvg < 55 && (e.focus === "Mobility" || e.focus === "Recovery");
                 return (
                   <motion.div key={e.name + idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 + idx * 0.04 }}
                     className={`p-4 rounded-xl border ${isRecovery ? "border-success/40 bg-success/5" : "border-primary/20 bg-card/60"} hover:border-primary/40 transition-colors`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${meta.tone}`}><Icon size={10} /> {e.focus}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">{e.sets}</span>
+                      <span className={`text-[12px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${meta.tone}`}><Icon size={10} /> {e.focus}</span>
+                      <span className="text-[12px] text-muted-foreground font-mono">{e.sets}</span>
                     </div>
                     <h3 className="font-semibold text-sm">{e.name}</h3>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{e.benefit}</p>
-                    {reasons.length > 0 && <p className="text-[11px] text-primary mt-2 leading-tight">↳ {reasons[0]}</p>}
+                    {reasons.length > 0 && <p className="text-[12px] text-primary mt-2 leading-tight">↳ {reasons[0]}</p>}
                   </motion.div>
                 );
               })}
             </div>
-            {forYou.hasRecovery && forYou.readinessAvg < 50 && (
+            {forYou.hasRecovery && forYou.readinessAvg !== null && forYou.readinessAvg < 50 && (
               <p className="text-xs text-energy mt-3 flex items-center gap-1.5"><AlertTriangle size={12} /> Readiness is low — favour mobility & aerobic picks above; push hard sessions to next week.</p>
             )}
             {forYou.activeInjuries.length > 0 && (
@@ -305,7 +579,7 @@ const CrossTraining = () => {
               <Clock size={14} className={phase === p.v ? "text-primary" : "text-muted-foreground"} />
               <span className="font-semibold text-sm">{p.l}</span>
             </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">{p.desc}</div>
+            <div className="text-[12px] text-muted-foreground mt-0.5">{p.desc}</div>
           </button>
         ))}
       </motion.div>
@@ -336,7 +610,7 @@ const CrossTraining = () => {
                 className="group p-5 rounded-2xl bg-card/40 border border-border hover:border-primary/40 transition-all hover:shadow-glow">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold">{e.name}</h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${meta.tone}`}>
+                  <span className={`text-[12px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${meta.tone}`}>
                     <Icon size={10} /> {e.focus}
                   </span>
                 </div>

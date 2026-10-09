@@ -86,6 +86,14 @@ export default {
       },
       // Elevation ramp for the dark foundation. Use these instead of ad-hoc
       // shadow-[...] strings so depth is consistent across screens.
+      //
+      // The `glow-*` entries are the only halos left in the ramp, and they are
+      // the deliberate exception to the "directional shadows, not bloom" rule
+      // in index.css: they are reserved for the few surfaces that are meant to
+      // look energetic (a live streak, an active tier). Everything else uses
+      // `elev-*` — or `shadow-glow`, which is now a directional shadow in
+      // index.css rather than the 28px blue bloom it used to be, which is what
+      // de-slopped 126 call sites at once.
       boxShadow: {
         "elev-1": "0 1px 2px hsl(222 50% 3% / 0.5)",
         "elev-2": "0 8px 24px hsl(222 50% 3% / 0.45)",

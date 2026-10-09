@@ -138,7 +138,7 @@ const AIDev = () => {
 
           {selected && (
             <div className="rounded-xl bg-muted/50 border border-border p-3 space-y-2">
-              <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="flex flex-wrap gap-2 text-[12px]">
                 <span className="px-2 py-1 rounded-lg bg-primary/15 text-primary font-semibold flex items-center gap-1">
                   <Cpu size={11} /> {selected.model}
                 </span>
@@ -148,7 +148,7 @@ const AIDev = () => {
               </div>
               <details>
                 <summary className="text-xs text-muted-foreground cursor-pointer">System prompt</summary>
-                <pre className="mt-2 text-[11px] whitespace-pre-wrap text-muted-foreground max-h-56 overflow-auto">{selected.system}</pre>
+                <pre className="mt-2 text-[12px] whitespace-pre-wrap text-muted-foreground max-h-56 overflow-auto">{selected.system}</pre>
               </details>
             </div>
           )}
@@ -196,7 +196,7 @@ const AIDev = () => {
               <CheckCircle2 size={16} className="text-primary" />
               <h4 className="font-semibold text-sm">{result.feature}</h4>
             </div>
-            <div className="flex flex-wrap gap-2 text-[11px] mb-3">
+            <div className="flex flex-wrap gap-2 text-[12px] mb-3">
               <span className="px-2 py-1 rounded-lg bg-primary/15 text-primary font-semibold flex items-center gap-1">
                 <Cpu size={11} /> {result.model}
               </span>

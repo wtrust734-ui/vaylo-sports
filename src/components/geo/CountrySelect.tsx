@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Check, X, Globe } from "lucide-react";
-import { COUNTRIES, CONTINENTS, countryFlag, normaliseCountryCode, type Country } from "@/lib/geo";
+import { COUNTRIES, CONTINENTS, normaliseCountryCode, type Country } from "@/lib/geo";
 
 interface Props {
   /** Selected ISO alpha-2 code, or null. */
@@ -67,7 +67,7 @@ const CountrySelect = ({ value, onChange, variant = "field", label = "Country", 
         )}
         {grouped.map(({ continent, countries }) => (
           <div key={continent}>
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">{continent}</p>
+            <p className="text-[12px] uppercase tracking-widest text-muted-foreground font-semibold mb-1.5">{continent}</p>
             <div className="space-y-1">
               {countries.map((c) => {
                 const isSelected = c.code === selected?.code;
@@ -79,9 +79,8 @@ const CountrySelect = ({ value, onChange, variant = "field", label = "Country", 
                       isSelected ? "bg-primary/15 border-primary text-primary" : "bg-card border-border hover:border-primary/40"
                     }`}
                   >
-                    <span className="text-base leading-none">{countryFlag(c.code)}</span>
                     <span className="flex-1 truncate">{c.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{c.currency}</span>
+                    <span className="text-[12px] text-muted-foreground">{c.currency}</span>
                     {isSelected && <Check size={14} />}
                   </button>
                 );
@@ -102,7 +101,7 @@ const CountrySelect = ({ value, onChange, variant = "field", label = "Country", 
         className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-border bg-card text-start text-sm hover:border-primary/40 transition-colors"
         aria-label={`Choose your ${label.toLowerCase()}`}
       >
-        <span className="text-base leading-none">{selected ? countryFlag(selected.code) : <Globe size={16} className="text-muted-foreground" />}</span>
+        <Globe size={16} className="text-muted-foreground" aria-hidden />
         <span className={`flex-1 truncate ${selected ? "" : "text-muted-foreground"}`}>
           {selected ? selected.name : `Choose your ${label.toLowerCase()}`}
         </span>

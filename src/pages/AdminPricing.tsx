@@ -196,7 +196,7 @@ export default function AdminPricing() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           className="text-3xl font-display font-bold text-gradient-electric flex items-center gap-2">
           <Shield className="text-primary" /> Pricing Admin
@@ -220,12 +220,12 @@ export default function AdminPricing() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full bg-electric-purple/20 text-electric-purple text-[10px] font-bold">TIER {tier.code}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-electric-purple/20 text-electric-purple text-[12px] font-bold">TIER {tier.code}</span>
                     <input value={tier.name}
                       onChange={(e) => setTiers((p) => p.map((x) => x.id===tier.id ? {...x, name:e.target.value} : x))}
                       className="bg-transparent font-bold text-base outline-none border-b border-transparent focus:border-border" />
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">{tier.description}</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">{tier.description}</p>
                 </div>
                 <button onClick={() => saveTier(tier)} disabled={savingId===tier.id}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50">
@@ -235,7 +235,7 @@ export default function AdminPricing() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Credit packs</h4>
+                  <h4 className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">Credit packs</h4>
                   <div className="space-y-1.5">
                     {tier.packs.map((p, i: number) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
@@ -251,7 +251,7 @@ export default function AdminPricing() {
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Unlimited</h4>
+                  <h4 className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">Unlimited</h4>
                   <div className="space-y-1.5">
                     {tier.infinite.map((p, i: number) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
@@ -285,7 +285,7 @@ export default function AdminPricing() {
                 <Globe2 size={14} className="text-muted-foreground" />
                 <span className="font-mono text-xs w-10 text-muted-foreground">{c.country_code}</span>
                 <span className="flex-1 truncate">{c.country_name}</span>
-                <span className="text-[11px] text-muted-foreground w-12">{c.currency}</span>
+                <span className="text-[12px] text-muted-foreground w-12">{c.currency}</span>
                 <select value={c.tier_code} onChange={(e) => updateCountryTier(c.country_code, e.target.value)}
                   className="bg-background border border-border rounded px-2 py-1 text-xs">
                   {tiers.map((t) => <option key={t.code} value={t.code}>{t.code}</option>)}
@@ -334,7 +334,7 @@ export default function AdminPricing() {
 const StatCard = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string | number }) => (
   <div className="bg-card border border-border rounded-2xl p-3">
     <Icon size={14} className="text-electric-purple mb-1" />
-    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</p>
     <p className="text-xl font-display font-bold">{value}</p>
   </div>
 );

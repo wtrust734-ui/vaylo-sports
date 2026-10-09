@@ -1,0 +1,98 @@
+
+================ home — 22 labelled nodes
+content box: css x  18.7..392.0   (viewport 0.0..411.4)  left gap 18.7  right gap 19.4
+nodes outside the viewport: 0
+| y  40.8.. 59.8  x  45.7..163.8  GOOD EVENING
+| y  75.8..104.8  x  18.7..392.0  Athlete.
+| y 144.0..313.9  x  35.8..205.0  —VPR
+| y 181.0..197.0  x 245.0..357.0  PERFORMANCE
+| y 210.7..235.8  x 216.0..374.9  Trend needs 2 saves
+| y 242.7..282.7  x 216.0..374.9  Log a metric to get your first score
+| y 349.0..393.9  x 328.8..392.0  Plan →
+| y 361.9..381.0  x  18.7.. 66.7  TODAY
+| y 424.0..440.0  x  51.8..205.0  TODAY'S SCHEDULE
+| y 523.8..552.8  x  35.8..374.9  No training plan yet
+| y 555.8..573.0  x  35.8..374.9  Create a plan to see your daily schedule
+| y 587.8..634.7  x  35.8..374.9  Create Plan
+| y 681.9..726.9  x 302.9..392.0  Check in →
+| y 694.9..713.9  x  18.7..117.7  READINESS
+| y 737.9..832.0  x  18.7..392.0  No check-in today Two minutes to log sleep, so
+| y 824.0..880.8  x 176.8..233.9  Open quick actions
+  y 830.9..881.9  x  30.9.. 86.9  Home
+  y 830.9..881.9  x 110.9..163.8  Train
+  y 830.9..881.9  x 240.8..313.9  Perform
+  y 830.9..881.9  x 323.8..387.8  Profile
+| y 850.7..869.7  x  18.7..149.7  COACH INSIGHT
+| y 896.8..914.3  x  35.8..374.9  Log a recovery check-in and a metric to unlock
+
+================ train — 17 labelled nodes
+content box: css x  18.7..392.0   (viewport 0.0..411.4)  left gap 18.7  right gap 19.4
+nodes outside the viewport: 0
+| y  41.9.. 57.9  x  49.9..165.7  VAYLO SPORTS
+| y  74.7..105.9  x  18.7..392.0  Train
+| y 112.8..136.8  x  18.7..302.9  Sessions, plans and technique.
+| y 160.0..178.7  x  18.7..392.0  DAILY TRAINING
+| y 187.8..262.9  x  18.7..392.0  Training plans — Your active plan and weeks
+| y 269.0..344.0  x  18.7..392.0  Workouts — Log and review sessions
+| y 350.9..425.9  x  18.7..392.0  Availability — Holidays, exams and breaks
+| y 432.0..506.7  x  18.7..392.0  Routines — Repeatable warm-ups and drills
+| y 513.9..589.0  x  18.7..392.0  Cross-training — Build supporting abilities
+| y 610.7..630.9  x  18.7..392.0  PROGRESS
+| y 638.9..713.9  x  18.7..392.0  Personal bests — Every PB in one list
+| y 720.8..795.8  x  18.7..392.0  Form analysis — Check your technique
+| y 824.0..880.8  x 176.8..233.9  Open quick actions
+  y 830.9..881.9  x  30.9.. 86.9  Home
+  y 830.9..881.9  x 110.9..163.8  Train
+  y 830.9..881.9  x 240.8..313.9  Perform
+  y 830.9..881.9  x 323.8..387.8  Profile
+
+================ perform — 19 labelled nodes
+content box: css x  18.7..392.0   (viewport 0.0..411.4)  left gap 18.7  right gap 19.4
+nodes outside the viewport: 0
+| y  41.9.. 57.9  x  49.9..165.7  VAYLO SPORTS
+| y  74.7..105.9  x  18.7..392.0  Perform
+| y 112.8..136.8  x  18.7..302.9  How good are you, and what's next.
+| y 160.0..208.8  x  18.7..392.0  View your VPR
+| y 227.8..246.9  x  18.7..392.0  PERFORMANCE
+| y 256.0..329.9  x  18.7..392.0  VPR — Your overall rating and factors
+| y 336.8..411.8  x  18.7..392.0  Metrics hub — Loads, trends and logging
+| y 418.7..493.0  x  18.7..392.0  Insights — What your training says today
+| y 499.8..574.9  x  18.7..392.0  Skills — Sport-skill analytics
+| y 581.7..656.0  x  18.7..392.0  Development — Progression over time
+| y 678.9..697.9  x  18.7..392.0  ATHLETE PROFILE
+| y 706.7..781.7  x  18.7..392.0  Identity — Your performance fingerprint
+| y 789.0..864.0  x  18.7..392.0  Goals — What you're working towards
+| y 824.0..880.8  x 176.8..233.9  Open quick actions
+  y 830.9..881.9  x  30.9.. 86.9  Home
+  y 830.9..881.9  x 110.9..163.8  Train
+  y 830.9..881.9  x 240.8..313.9  Perform
+  y 830.9..881.9  x 323.8..387.8  Profile
+| y 869.7..914.3  x  18.7..392.0  Compare — You vs elite profiles
+
+================ profile — 22 labelled nodes
+content box: css x  18.7..392.0   (viewport 0.0..411.4)  left gap 18.7  right gap 19.4
+nodes outside the viewport: 0
+| y  34.7.. 69.0  x  18.7..392.0  Profile
+| y 112.0..141.0  x 120.0..182.9  Athlete
+| y 139.8..160.8  x 120.0..290.7  Multi-Sport · Intermediate
+| y 168.0..184.0  x 128.0..154.7  Free
+  y 168.0..184.0  x 176.8..237.0  46 credits
+| y 201.9..246.9  x  40.0..370.7  COSMETICS (0 EQUIPPED)
+| y 307.8..326.9  x  40.0..136.8  CURRENT PLAN
+| y 329.9..358.9  x  67.8..109.0  Free
+| y 385.9..405.0  x  51.8..187.8  Credit balance
+| y 403.8..432.8  x  51.8..187.8  46
+| y 459.8..504.8  x  40.0..370.7  See plans
+| y 544.8..606.9  x  19.8..390.9  Legal & Safety All 26 policies, your rights, a
+| y 605.0..666.7  x  19.8..390.9  Notifications Your alerts and what may be sent
+| y 665.9..728.0  x  19.8..390.9  Achievements Badges, milestones & challenges
+| y 726.9..789.0  x  19.8..390.9  Market Credits, subscriptions & features
+| y 786.7..849.9  x  19.8..390.9  Edit profile Weight, height, goals, sport, dat
+| y 824.0..880.8  x 176.8..233.9  Open quick actions
+  y 830.9..881.9  x  30.9.. 86.9  Home
+  y 830.9..881.9  x 110.9..163.8  Train
+  y 830.9..881.9  x 240.8..313.9  Perform
+  y 830.9..881.9  x 323.8..387.8  Profile
+| y 848.0..909.7  x  19.8..390.9  Settings Language, passkeys, country, currency
+
+written to app-audit-shots/walks/transcript.txt

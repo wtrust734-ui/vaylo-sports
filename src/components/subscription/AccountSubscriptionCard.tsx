@@ -64,7 +64,7 @@ export default function AccountSubscriptionCard({ compact = false }: { compact?:
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Current plan</p>
+          <p className="text-[12px] uppercase tracking-wide text-muted-foreground">Current plan</p>
           <div className="flex items-center gap-2 mt-1">
             {hasUnlimitedCredits ? (
               <InfinityIcon className="h-5 w-5 text-electric-purple" />
@@ -73,14 +73,14 @@ export default function AccountSubscriptionCard({ compact = false }: { compact?:
             )}
             <h3 className="text-xl font-bold">{loading ? "…" : entitlements.plan_label}</h3>
             {isLifetime && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-electric-purple/15 text-electric-purple px-2 py-0.5 rounded-full">
+              <span className="flex items-center gap-1 text-[12px] font-semibold uppercase tracking-wide bg-electric-purple/15 text-electric-purple px-2 py-0.5 rounded-full">
                 <Crown className="h-3 w-3" /> Lifetime
               </span>
             )}
           </div>
         </div>
         {!isFree && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide bg-muted px-2 py-1 rounded-full">
+          <span className="text-[12px] font-semibold uppercase tracking-wide bg-muted px-2 py-1 rounded-full">
             {isLifetime ? "Owned" : STATUS_LABEL[entitlements.status] || entitlements.status}
           </span>
         )}
@@ -88,20 +88,20 @@ export default function AccountSubscriptionCard({ compact = false }: { compact?:
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-muted/40 p-3">
-          <p className="text-[11px] text-muted-foreground">Credit balance</p>
+          <p className="text-[12px] text-muted-foreground">Credit balance</p>
           <p className="text-lg font-bold">
             {hasUnlimitedCredits ? "Unlimited" : entitlements.credits}
           </p>
         </div>
         {entitlements.monthly_credit_allowance > 0 && (
           <div className="rounded-2xl bg-muted/40 p-3">
-            <p className="text-[11px] text-muted-foreground">Monthly allowance</p>
+            <p className="text-[12px] text-muted-foreground">Monthly allowance</p>
             <p className="text-lg font-bold">{entitlements.monthly_credit_allowance}</p>
           </div>
         )}
         {entitlements.monthly_credit_allowance > 0 && (
           <div className="rounded-2xl bg-muted/40 p-3">
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <p className="text-[12px] text-muted-foreground flex items-center gap-1">
               <RefreshCw className="h-3 w-3" /> Next refill
             </p>
             <p className="text-sm font-semibold">{fmtDate(entitlements.next_refill_at)}</p>
@@ -109,7 +109,7 @@ export default function AccountSubscriptionCard({ compact = false }: { compact?:
         )}
         {!isLifetime && !isFree && (
           <div className="rounded-2xl bg-muted/40 p-3">
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <p className="text-[12px] text-muted-foreground flex items-center gap-1">
               <CalendarClock className="h-3 w-3" />
               {entitlements.cancel_at_period_end ? "Access until" : "Renews"}
             </p>

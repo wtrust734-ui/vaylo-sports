@@ -44,8 +44,6 @@
     "primaryNav": "Principale"
   },
   "quickActions": {
-    "logWorkout": "Registra allenamento",
-    "logWorkoutDesc": "Avvia o concludi una sessione",
     "logResult": "Registra un risultato",
     "logResultDesc": "Annota un risultato di gara",
     "recoveryCheckIn": "Check-in recupero",
@@ -58,13 +56,14 @@
     "train": {
       "title": "Allena",
       "subtitle": "Sessioni, piani e tecnica.",
-      "primaryCta": "Avvia allenamento",
       "groupDaily": "Allenamento quotidiano",
       "groupProgress": "Progressi",
       "workouts": "Allenamenti",
       "workoutsDesc": "Registra e rivedi le sessioni",
       "trainingPlans": "Piani di allenamento",
       "trainingPlansDesc": "Il tuo piano attivo e le settimane",
+      "availability": "Disponibilità",
+      "availabilityDesc": "Vacanze, esami e pause",
       "routines": "Routine",
       "routinesDesc": "Riscaldamenti ed esercizi ripetibili",
       "crossTraining": "Allenamento incrociato",
@@ -86,6 +85,8 @@
       "vprDesc": "La tua valutazione complessiva e i fattori",
       "metricsHub": "Centro metriche",
       "metricsHubDesc": "Carichi, trend e registrazioni",
+      "insights": "Approfondimenti",
+      "insightsDesc": "Cosa dice oggi il tuo allenamento",
       "skills": "Abilità",
       "skillsDesc": "Analisi delle abilità sportive",
       "development": "Sviluppo",
@@ -112,7 +113,7 @@
       "nutrition": "Nutrizione",
       "nutritionDesc": "Pasti, acqua e obiettivi",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "Gareggia",
@@ -149,7 +150,6 @@
     "readinessDown": "{{value}} vs ieri",
     "coachInsight": "Consiglio del coach",
     "viewInsight": "Vedi il consiglio",
-    "startSession": "Avvia sessione",
     "noVprYet": "Registra qualche sessione per sbloccare il tuo VPR.",
     "noSessionToday": "Nessuna sessione pianificata — controlla il tuo piano.",
     "welcomeBack": "Bentornato",
@@ -275,6 +275,7 @@
     "activityFeed": "Feed attività",
     "groupTrain": "Allena",
     "trainingPlans": "Piani di allenamento",
+    "availability": "Disponibilità",
     "workouts": "Allenamenti",
     "routines": "Routine",
     "crossTraining": "Allenamento incrociato",
@@ -317,6 +318,9 @@
     "profile": "Profilo",
     "openMenu": "Apri menu",
     "closeMenu": "Chiudi menu",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "Accesso del tutore",
+    "startingAnalysis": "Analisi iniziale",
+    "insights": "Approfondimenti"
   }
 }

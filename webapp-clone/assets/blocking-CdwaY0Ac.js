@@ -1,0 +1,1 @@
+import{s}from"./index-BgfS_xTn.js";async function i(o){const{data:{user:r},error:a}=await s.auth.getUser();if(a||!r)return{ok:!1,error:"Your session has expired. Sign in again."};const{error:e}=await s.from("user_blocks").insert({blocker_id:r.id,blocked_id:o});return e?{ok:!1,error:e.message}:{ok:!0}}export{i as b};

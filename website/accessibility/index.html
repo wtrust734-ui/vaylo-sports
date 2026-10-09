@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Accessibility | Vaylo Sports</title>
+<meta name="description" content="What the Vaylo Sports website does for keyboard, screen reader, reduced-motion and low-vision users, what has not been checked yet, and how to report a barrier." />
+<meta name="theme-color" content="#05070f" />
+<meta name="color-scheme" content="dark light" />
+
+<link rel="canonical" href="https://vaylo-sports.netlify.app/accessibility/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Vaylo Sports" />
+<meta property="og:title" content="Accessibility | Vaylo Sports" />
+<meta property="og:description" content="What the Vaylo Sports website does for keyboard, screen reader, reduced-motion and low-vision users, what has not been checked yet, and how to report a barrier." />
+<meta property="og:url" content="https://vaylo-sports.netlify.app/accessibility/" />
+<meta property="og:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://vaylo-sports.netlify.app/assets/og.png" />
+<meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
+<link rel="icon" href="/assets/logo.png" type="image/png" />
+<link rel="apple-touch-icon" href="/assets/logo.png" />
+<link rel="stylesheet" href="/assets/theme.css?v=1c56690f" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com","url":"https://vaylo-sports.netlify.app","logo":"https://vaylo-sports.netlify.app/assets/logo.png"}</script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/">
+        <img
+          class="brand-mark"
+          src="/assets/logo.png"
+          alt=""
+          width="34"
+          height="34"
+          decoding="async"
+        />
+        <span>Vaylo Sports</span>
+      </a>
+
+      <button
+        type="button"
+        class="nav-toggle"
+        aria-expanded="false"
+        aria-controls="mobile-nav"
+        data-nav-toggle
+      >
+        <span class="visually-hidden">Menu</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+        </svg>
+      </button>
+
+      <nav class="site-nav" aria-label="Main">
+          <a href="/features/">Features</a>
+          <a href="/safety/">Safety</a>
+          <a href="/faq/">FAQ</a>
+          <a href="/waitlist/">Waiting list</a>
+          <a href="/sponsors/">Sponsors</a>
+          <a href="/legal/">Legal</a>
+          <a href="/support/">Support</a>
+          <a href="/about/">About</a>
+          <a href="/contact/">Contact</a>
+      </nav>
+    </div>
+
+    <div class="mobile-nav" id="mobile-nav" hidden>
+      <div class="shell">
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/safety/">Safety</a></li>
+          <li><a href="/faq/">FAQ</a></li>
+          <li><a href="/waitlist/">Waiting list</a></li>
+          <li><a href="/sponsors/">Sponsors</a></li>
+          <li><a href="/legal/">Legal</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/about/">About</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+
+    <div class="shell">
+      <div style="padding-top:2.5rem">
+        <p class="eyebrow">Accessibility</p>
+        <h1>What this site does, and what has not been checked</h1>
+        <p class="lead" style="margin-top:1rem">
+          This statement covers the website you are reading. It says what is
+          built in, and then it says plainly what has not been tested, because
+          the second list is the one that is usually left out.
+        </p>
+      </div>
+
+      <div class="note">
+        <p style="margin-bottom:0"><strong>No conformance level is claimed on this
+        page.</strong> No independent review of this site has been carried out.
+        Putting &ldquo;WCAG 2.2 AA&rdquo; here without one would be a claim you
+        have no way to check, and the person most likely to catch it would be the
+        one who needs it to be true.</p>
+      </div>
+    </div><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Built in</p>
+        <h2>What this site does</h2>
+
+        <p class="lead"><p>Each of these is a property of the pages as generated, not an
+    intention. The last two are enforced when the site is built.</p></p>
+      </div>
+      <ul class="prose-list">
+  <li><strong>A skip link is the first focusable element on every page.</strong> It moves off the canvas rather than being hidden with opacity, so it can never be an accidental click target for a mouse user and it still takes focus.</li>
+  <li><strong>The page structure is real landmarks</strong> &mdash; header, navigation, main and footer &mdash; so a screen reader can jump between regions, with exactly one top-level heading per page.</li>
+  <li><strong>The current page is marked in the markup, not only in colour</strong>, with <code>aria-current</code>, so it is announced rather than merely implied.</li>
+  <li><strong>Every focusable control has a visible focus ring,</strong> and the stylesheet never removes or zeroes an outline.</li>
+  <li><strong>The mobile menu uses the <code>hidden</code> attribute,</strong> so it leaves the tab order when it is closed instead of trapping a keyboard user inside something they cannot see. Its button reports its state with <code>aria-expanded</code>.</li>
+  <li><strong>Motion is optional.</strong> Every animation and transition on the site is switched off when the device asks for reduced motion, including the one whose starting state is invisible.</li>
+  <li><strong>Both a light and a dark theme,</strong> following the system setting, with the colour scheme declared so form controls, scrollbars and the browser's own interface follow the page rather than staying light behind it.</li>
+  <li><strong>Tap targets.</strong> Navigation items are at least 44&nbsp;pixels tall and buttons and inputs at least 48&nbsp;pixels, which is what stops a link being missed on a phone.</li>
+  <li><strong>Forms have real labels,</strong> hints wired up with <code>aria-describedby</code>, invalid fields marked for assistive technology, and errors announced in a live region rather than only shown in red. The anti-spam trap field is hidden from the accessibility tree, not just visually, so nobody is asked about a field that does not exist for them.</li>
+  <li><strong>Tables use real header cells</strong> and scroll inside their own container, so a wide table does not make the whole page scroll sideways on a phone.</li>
+  <li><strong>Text is real text.</strong> The only images on the site are the brand mark and the social card, and the mark is marked decorative wherever the wordmark beside it already carries the name.</li>
+  <li><strong>Two of these are enforced by the build.</strong> The site fails to generate if the stylesheet removes or hides the focus outline, and it fails if any component is emitted with no styling rule at all &mdash; which is the mechanism, rather than a promise, behind the first and the last items above.</li>
+</ul>
+    </div>
+  </section><section class="section section-alt reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Honestly</p>
+        <h2>What we have not done</h2>
+
+        <p class="lead"><p>These are gaps, not caveats, and they are the reason no
+    conformance level appears at the top of this page.</p></p>
+      </div>
+      <ul class="prose-list">
+  <li><strong>No independent accessibility audit has been carried out.</strong> Nothing here has been reviewed by a specialist, and no third party has tested the site with assistive technology.</li>
+  <li><strong>No full screen-reader pass across every page.</strong> The markup is written to be read correctly and the structure is enforced by the build, but that is not the same as having listened to all 40-odd pages with every major screen reader, and we are not going to describe the site as accessible without qualification until that has happened.</li>
+  <li><strong>The Android app is a different surface.</strong> Its accessibility depends on the platform's own features and on the app's own markup, and none of that is reviewed by this statement. Do not read this page as describing the app.</li>
+  <li><strong>Automated checks are not a substitute for a person.</strong> The build checks described above catch a missing style rule or a removed focus ring. They cannot tell whether the result is actually usable.</li>
+</ul>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">Tell us</p>
+        <h2>If something here does not work for you</h2>
+
+        <p class="lead"><p>A barrier you hit is a defect, whether or not it appears on a list
+    like the one above, and it is treated as one.</p></p>
+      </div>
+      <p>Write to us through the contact page and describe what you were trying
+      to do and what happened, including the page and the browser or assistive
+      technology if you know it. If a barrier stopped you doing something on this
+      site, say so in those words &mdash; it goes to a person, and it is not a
+      support ticket about your account.</p>
+      <p>If the response is not good enough, the complaints procedure sets out how
+      to ask for it to be reviewed and how to take it further if you are still not
+      satisfied.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="/contact/">Contact us</a>
+        <a class="btn btn-secondary" href="/legal/complaints/">Complaints procedure</a>
+        <a class="btn btn-secondary" href="/faq/">Questions &amp; answers</a>
+      </div>
+    </div>
+  </section>
+  </main>
+  <footer class="site-footer">
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-col"><a class="brand" href="/">
+            <img
+              class="brand-mark"
+              src="/assets/logo.png"
+              alt=""
+              width="34"
+              height="34"
+              decoding="async"
+            />
+            <span>Vaylo Sports</span>
+          </a>
+          <p style="margin-top: 1rem; font-size: 0.92rem">
+            A training log and analysis tool for athletes across many sports. Not a
+            doctor, not a coach, and not a substitute for either.
+          </p>
+          <p style="font-size: 0.92rem">
+            <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>
+          </p>
+        </div>
+      <div class="footer-col">
+        <h2>Legal</h2>
+        <ul>
+          <li><a href="/legal/">Legal Centre</a></li>
+          <li><a href="/legal/terms/">Terms of Service</a></li>
+          <li><a href="/legal/privacy/">Privacy Policy</a></li>
+          <li><a href="/legal/child-safety/">Child &amp; Young Athlete Safety</a></li>
+          <li><a href="/legal/child-safety/#young-notice">Children's Privacy Notice</a></li>
+          <li><a href="/legal/cookies/">Cookie Policy</a></li>
+          <li><a href="/legal/ai-disclaimer/">AI Disclaimer</a></li>
+          <li><a href="/legal/health-safety/">Training &amp; Medical Disclaimer</a></li>
+          <li><a href="/legal/health-safety/#safety-guidelines">Safety Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/">Community Guidelines</a></li>
+          <li><a href="/legal/community-guidelines/#acceptable-use">Acceptable Use Policy</a></li>
+          <li><a href="/legal/purchases/">Subscription &amp; Billing Terms</a></li>
+          <li><a href="/legal/refunds/">Refund &amp; Cancellation Policy</a></li>
+          <li><a href="/legal/purchases/#virtual-items">Credits &amp; Virtual Items Terms</a></li>
+          <li><a href="/legal/competition-terms/">Competition Terms</a></li>
+          <li><a href="/legal/contact/">Contact / Legal</a></li>
+          <li><a href="/legal/account-deletion/">Delete Account &amp; Data</a></li>
+          <li><a href="/legal/data-rights/">Privacy Rights Request</a></li>
+          <li><a href="/legal/report-safety-concern/">Report a Safety Concern</a></li>
+          <li><a href="/legal/report-content/">Report Content / User</a></li>
+          <li><a href="/legal/security-disclosure/">Security / Vulnerability Reporting</a></li>
+          <li><a href="/legal/complaints/">Complaints Procedure</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Safety &amp; AI</h2>
+        <ul>
+          <li><a href="/legal/ai-training-advice/">AI Training Advice Disclaimer</a></li>
+          <li><a href="/legal/video-analysis-disclaimer/">Video Analysis Disclaimer</a></li>
+          <li><a href="/legal/injury-guidance/">Injury &amp; Return-to-Training</a></li>
+          <li><a href="/legal/nutrition-disclaimer/">Nutrition Disclaimer</a></li>
+          <li><a href="/legal/mental-wellbeing/">Mental Wellbeing</a></li>
+          <li><a href="/legal/wearable-health-privacy/">Wearable &amp; Health Data</a></li>
+          <li><a href="/legal/ai-data-use/">AI Data Use &amp; Processing</a></li>
+          <li><a href="/legal/advertising/">Advertising &amp; Tracking</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h2>Product</h2>
+        <ul>
+          <li><a href="/features/">Features</a></li>
+          <li><a href="/faq/">Questions &amp; Answers</a></li>
+          <li><a href="/whats-new/">What has changed</a></li>
+          <li><a href="/safety/">Safety Centre</a></li>
+          <li><a href="/accessibility/" aria-current="page">Accessibility</a></li>
+          <li><a href="/about/">About Vaylo</a></li>
+          <li><a href="/contact/">Contact</a></li>
+          <li><a href="/support/">Support</a></li>
+          <li><a href="/sponsors/">Sponsor Vaylo Sports</a></li>
+          <li><a href="/privacy/">Privacy &amp; Data Centre</a></li>
+          <li><a href="/delete-account/">Delete your account</a></li>
+          <li><a href="/legal/intellectual-property/">Intellectual Property</a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="footer-base">
+        <p style="margin:0">
+          &copy; 2026 Vaylo Sports.
+        </p>
+        <p style="margin:0">
+          Android. <a href="/legal/">All legal documents</a> &middot;
+          <a href="/privacy/">Privacy &amp; data</a> &middot;
+          <a href="/safety/">Safety</a>
+        </p>
+      </div>
+
+      <div class="footer-base" style="margin-top: 1rem; border-top: 0; padding-top: 0">
+        <p style="margin:0; max-width: 70ch">
+          Vaylo Sports does not claim to prevent injury, guarantee performance, or
+          provide medical care. Nothing on this website is medical advice.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+<!-- ----------------------------------------------------------------
+     Cookie and storage notice.
+
+     Rendered on every page but left hidden in the markup, and revealed by
+     initCookieNotice() in site.js only when this device has not already
+     acknowledged it. That order matters: a reader whose browser blocks
+     scripts never sees a notice with an Accept button that cannot do
+     anything, and one whose browser blocks storage sees it every visit
+     rather than being told a preference was saved.
+
+     It reports a fact rather than asking permission, because there is
+     nothing here to consent to: the site sets no cookie at all, and the
+     preferences it keeps are on the reader's own device. The full list is in
+     the Cookie Policy, which is what the link is for.
+     ---------------------------------------------------------------- -->
+  <div
+    class="cookie-notice"
+    data-cookie-notice
+    role="region"
+    aria-label="Cookies and stored preferences"
+    hidden
+  >
+    <div class="shell cookie-notice-inner">
+      <p class="cookie-notice-text">
+        <strong>No tracking cookies.</strong> No advertising or analytics cookies, and
+        no third-party tracker &mdash; only preferences kept on this device.
+        <a href="/legal/cookies/">Cookie Policy</a>
+      </p>
+      <button
+        type="button"
+        class="btn btn-primary cookie-notice-accept"
+        data-cookie-accept
+      >Accept</button>
+    </div>
+  </div>
+
+<!-- config.js MUST come before site.js. Both are deferred, and deferred
+     scripts execute in document order before DOMContentLoaded — so with the
+     reverse order, site.js ran first, found no config, and disabled every form
+     on the site with "not available yet". -->
+<script src="/assets/config.js?v=e5e20b96" defer></script>
+<script src="/assets/site.js?v=f67590ac" defer></script>
+</body>
+</html>

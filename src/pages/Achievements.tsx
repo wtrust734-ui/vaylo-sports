@@ -76,9 +76,18 @@ const builtInAchievements = [
   { id: "5_rivals", title: "Known Enemies", desc: "Track 5 rivals", icon: "target", check: (d: AchievementStats) => d.rivals >= 5 },
   { id: "first_plan", title: "Planned Athlete", desc: "Create a training plan", icon: "dumbbell", check: (d: AchievementStats) => d.plans >= 1 },
   { id: "3_plans", title: "Plan Builder", desc: "Create 3 training plans", icon: "dumbbell", check: (d: AchievementStats) => d.plans >= 3 },
+  // Restored 2026-10-08 with the Friends screen (docs/FRIENDS.md). These four
+  // were retired in the morning, when /friends redirected home and nothing in
+  // the app could add a friend: an achievement nobody can unlock is a broken
+  // promise with a trophy on it. Friending works again, `d.friends` counts the
+  // athlete's own friendship rows, so every one of them is earnable.
   { id: "first_friend", title: "Social Athlete", desc: "Add your first friend", icon: "star", check: (d: AchievementStats) => d.friends >= 1 },
   { id: "5_friends", title: "Squad", desc: "Have 5 friends", icon: "star", check: (d: AchievementStats) => d.friends >= 5 },
   { id: "10_friends", title: "Popular", desc: "Have 10 friends", icon: "crown", check: (d: AchievementStats) => d.friends >= 10 },
+  { id: "25_friends", title: "Team Captain", desc: "25 friends", icon: "crown", check: (d: AchievementStats) => d.friends >= 25 },
+  // Still retired: the "Social Butterfly" and "Friend Network" challenges.
+  // They are seeded rows in the challenges table, so bringing them back is a
+  // seed migration and a copy review, not a code change.
   { id: "mental_owner", title: "Mental Gym Owner", desc: "Purchase Mental Gym", icon: "brain", check: (d: AchievementStats) => d.purchases.includes("mental_gym") },
   { id: "form_owner", title: "Form Analyst", desc: "Purchase Form Analysis", icon: "target", check: (d: AchievementStats) => d.purchases.includes("form_analysis") },
   // The four achievements below used to name products the app no longer sells
@@ -123,7 +132,6 @@ const builtInAchievements = [
   { id: "10_rivals", title: "Rival Tracker", desc: "Track 10 rivals", icon: "target", check: (d: AchievementStats) => d.rivals >= 10 },
   { id: "5_plans", title: "Plan Master", desc: "5 training plans", icon: "dumbbell", check: (d: AchievementStats) => d.plans >= 5 },
   { id: "10_plans", title: "Plan Legend", desc: "10 training plans", icon: "crown", check: (d: AchievementStats) => d.plans >= 10 },
-  { id: "25_friends", title: "Team Captain", desc: "25 friends", icon: "crown", check: (d: AchievementStats) => d.friends >= 25 },
   { id: "50_meals", title: "Meal Prep Pro", desc: "50 meals logged", icon: "flame", check: (d: AchievementStats) => d.meals >= 50 },
   { id: "200_meals", title: "Nutrition Legend", desc: "200 meals logged", icon: "trophy", check: (d: AchievementStats) => d.meals >= 200 },
   { id: "100_water", title: "Hydration Master", desc: "100 water logs", icon: "droplets", check: (d: AchievementStats) => d.water >= 100 },
@@ -171,7 +179,6 @@ const builtInChallenges = [
   { title: "5K Ready", desc: "Complete 20 cardio workouts", target: 20, unit: "workouts", type: "cardio" },
   { title: "Strength Builder", desc: "Complete 15 strength sessions", target: 15, unit: "sessions", type: "strength" },
   { title: "Flexibility Focus", desc: "Complete 10 stretching sessions", target: 10, unit: "sessions", type: "flexibility" },
-  { title: "Social Butterfly", desc: "Add 3 friends", target: 3, unit: "friends", type: "social" },
   { title: "Event Racer", desc: "Create and complete 3 events", target: 3, unit: "events", type: "events" },
   { title: "Rival Hunter", desc: "Add 5 rivals", target: 5, unit: "rivals", type: "rivals" },
   { title: "HRV Tracker", desc: "Log HRV for 7 consecutive days", target: 7, unit: "days", type: "hrv" },
@@ -202,7 +209,6 @@ const builtInChallenges = [
   { title: "Coach Legend", desc: "100 coach conversations", target: 100, unit: "chats", type: "coach" },
   { title: "Event Machine", desc: "10 events created", target: 10, unit: "events", type: "events" },
   { title: "Rivalry Master", desc: "Track 10 rivals", target: 10, unit: "rivals", type: "rivals" },
-  { title: "Friend Network", desc: "10 friends added", target: 10, unit: "friends", type: "social" },
   { title: "Meal Logger", desc: "50 meals logged", target: 50, unit: "meals", type: "meals" },
   { title: "Meal Legend", desc: "200 meals logged", target: 200, unit: "meals", type: "meals" },
   { title: "Water Streak", desc: "Log water 30 days straight", target: 30, unit: "days", type: "water" },
@@ -382,7 +388,7 @@ const Achievements = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Achievements</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Earn medals for consistency, milestones and mastery.</motion.p>
       </div>
@@ -394,17 +400,17 @@ const Achievements = () => {
           <div>
             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3, type: "spring" }}
               className="text-2xl font-display font-bold text-primary block">{earnedCount}</motion.span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Earned</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Earned</p>
           </div>
           <div className="border-x border-border">
             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4, type: "spring" }}
               className="text-2xl font-display font-bold text-energy block">{totalAch}</motion.span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Total</p>
           </div>
           <div>
             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5, type: "spring" }}
               className="text-2xl font-display font-bold text-electric-purple block">{Math.round((earnedCount / totalAch) * 100)}%</motion.span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Complete</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Complete</p>
           </div>
         </div>
       </motion.div>
@@ -428,7 +434,7 @@ const Achievements = () => {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1.5 ${earned ? "bg-primary/15" : "bg-muted/30"}`}>
                   <Icon size={18} className={earned ? "text-primary" : "text-muted-foreground/40"} />
                 </div>
-                <h4 className="text-[10px] font-bold">{ach.title}</h4>
+                <h4 className="text-[12px] font-bold">{ach.title}</h4>
                 <p className="text-[8px] text-muted-foreground mt-0.5">{ach.desc}</p>
                 {earned && <span className="text-[8px] text-primary font-bold">✓ Earned</span>}
               </motion.div>

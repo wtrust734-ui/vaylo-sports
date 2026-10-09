@@ -165,36 +165,77 @@ export interface CreditSpend {
   balance: number;
   error?: string;
   shortfall?: number;
+  duplicate?: boolean;
 }
 
 /**
- * Charges the signed-in user through the single shared deduction path
- * (credits_spend RPC). Cost is resolved server-side from economy_config —
- * the client never gets to name a price. Honours Unlimited subscriptions.
+ * Charges the signed-in user through the shared server deduction path. Cost is
+ * resolved server-side from economy_config — the client never names a price.
+ * Ordinary features honor Unlimited; selected provider-costly features may opt
+ * into server-only metering via credits_spend_metered even for those plans.
  */
 export async function spendForUser(
+  req: Request,
   userId: string,
   feature: string,
   reason: string,
-  opts: { quantity?: number; source?: string } = {},
+  opts: { quantity?: number; source?: string; idempotencyKey?: string; billUnlimited?: boolean } = {},
 ): Promise<CreditSpend> {
-  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: spend, error } = await admin.rpc("credits_spend", {
-    p_feature: feature,
-    p_reason: reason,
-    p_quantity: Math.max(1, opts.quantity ?? 1),
-    p_source: opts.source ?? "edge",
-    p_idempotency_key: null,
-    p_metadata: {},
-  });
+  let data: Record<string, unknown> | null = null;
+  let error: { message: string } | null = null;
+
+  if (opts.billUnlimited) {
+    // For metered high-cost features, an Unlimited subscription does not exempt
+    // the request. The service role is restricted to this internal Edge path;
+    // never accept a client-controlled idempotency key for a credit debit.
+    const authorization = (req.headers.get("Authorization") ?? "").trim();
+    if (!authorization) {
+      return { success: false, unlimited: false, cost: 0, balance: 0, error: "Not authenticated" };
+    }
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const metered = await admin.rpc("credits_spend_metered", {
+      p_user_id: userId,
+      p_feature: feature,
+      p_reason: reason,
+      p_source: opts.source ?? "edge",
+      p_idempotency_key: opts.idempotencyKey ?? crypto.randomUUID(),
+      p_metadata: {},
+    });
+    data = metered.data as Record<string, unknown> | null;
+    error = metered.error;
+  } else {
+    // credits_spend() uses auth.uid() to scope the locked profile row. A
+    // service-role JWT has no athlete sub, so use the verified caller's JWT
+    // through the anon client for the ordinary (subscription-aware) path.
+    const authorization = (req.headers.get("Authorization") ?? "").trim();
+    if (!authorization) {
+      return { success: false, unlimited: false, cost: 0, balance: 0, error: "Not authenticated" };
+    }
+    const client = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: authorization } },
+    });
+    const spend = await client.rpc("credits_spend", {
+      p_feature: feature,
+      p_reason: reason,
+      p_quantity: Math.max(1, opts.quantity ?? 1),
+      p_source: opts.source ?? "edge",
+      // Retry-safe: pass a per-request idempotency key so a retry cannot double-charge.
+      p_idempotency_key: opts.idempotencyKey ?? null,
+      p_metadata: {},
+    });
+    data = spend.data as Record<string, unknown> | null;
+    error = spend.error;
+  }
   if (error) return { success: false, unlimited: false, cost: 0, balance: 0, error: error.message };
   return {
-    success: !!spend?.success,
-    unlimited: !!spend?.unlimited,
-    cost: spend?.cost ?? 0,
-    balance: spend?.balance ?? 0,
-    error: spend?.error,
-    shortfall: spend?.shortfall,
+    success: !!data?.success,
+    unlimited: !!data?.unlimited,
+    cost: Number(data?.cost ?? 0),
+    balance: Number(data?.balance ?? 0),
+    error: typeof data?.error === "string" ? data.error : undefined,
+    shortfall: typeof data?.shortfall === "number" ? data.shortfall : undefined,
+    duplicate: data?.duplicate === true,
   };
 }
 

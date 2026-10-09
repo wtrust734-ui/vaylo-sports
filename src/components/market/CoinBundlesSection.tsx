@@ -62,7 +62,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
         </div>
         <div>
           <h3 className="font-display font-bold text-sm">Coins — avatar cosmetics</h3>
-          <p className="text-[11px] text-muted-foreground">Coins buy avatar cosmetics only. Buy bundles or convert credits.</p>
+          <p className="text-[12px] text-muted-foreground">Coins buy avatar cosmetics only. Buy bundles or convert credits.</p>
         </div>
       </div>
 
@@ -84,9 +84,9 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
         <div className="flex items-center gap-2 mb-2">
           <ArrowRightLeft size={14} className="text-energy" />
           <h4 className="font-display text-sm font-bold">Convert credits → Coins</h4>
-          <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-energy/15 text-energy font-bold">1 : {COINS_PER_CREDIT}</span>
+          <span className="ml-auto text-[12px] px-2 py-0.5 rounded-full bg-energy/15 text-energy font-bold">1 : {COINS_PER_CREDIT}</span>
         </div>
-        <p className="text-[11px] text-muted-foreground mb-3">
+        <p className="text-[12px] text-muted-foreground mb-3">
           1 credit = {COINS_PER_CREDIT} Coins. Convert any amount instantly — or buy a Coin bundle above and get bonus Coins on top.
         </p>
         <div className="flex gap-2 items-center">
@@ -139,11 +139,11 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                 <Coins size={22} className="text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{FIRST_PURCHASE_BUNDLE.label}</p>
+                <p className="text-[12px] font-bold uppercase tracking-wider text-primary">{FIRST_PURCHASE_BUNDLE.label}</p>
                 <p className="font-display text-xl font-bold">
                   {FIRST_PURCHASE_BUNDLE.coins.toLocaleString()} Coins
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Best Coin rate in the app — available once per account.
                 </p>
               </div>
@@ -168,7 +168,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
 
       {/* Coin bundles (real-money purchase) */}
       <div className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Coin bundles — real money</p>
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">Coin bundles — real money</p>
         {COIN_BUNDLES.map((b, i) => {
           const total = b.coins + (b.bonus || 0);
           const perCoin = b.price_cents / Math.max(1, total);
@@ -182,7 +182,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
               className={`relative overflow-hidden rounded-3xl ${highlight ? "p-[1.5px] bg-gradient-to-br from-energy via-primary to-electric-purple" : "p-[1px] bg-border"}`}
             >
               {highlight && (
-                <span className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[9px] font-bold text-background ${b.popular ? "bg-energy" : "bg-gradient-to-r from-energy to-primary text-background"}`}>
+                <span className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold text-background ${b.popular ? "bg-energy" : "bg-gradient-to-r from-energy to-primary text-background"}`}>
                   {b.popular ? <><Star size={9} className="mr-1 inline" /> MOST POPULAR</> : <><Flame size={9} className="mr-1 inline" /> BEST VALUE</>}
                 </span>
               )}
@@ -199,14 +199,14 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                     {b.bonus > 0 && (
                       <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-energy/30 bg-energy/15 px-2 py-0.5">
                         <Sparkles size={10} className="text-energy" />
-                        <span className="text-[11px] font-bold text-energy">+{b.bonus} bonus</span>
+                        <span className="text-[12px] font-bold text-energy">+{b.bonus} bonus</span>
                       </span>
                     )}
-                    {b.label && <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{b.label} · {total.toLocaleString()} total</p>}
+                    {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {total.toLocaleString()} total</p>}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-display text-2xl font-bold text-gradient-electric">{formatLocalPrice(b.price_cents, currency)}</p>
-                    <p className="text-[10px] text-muted-foreground">{formatLocalPrice(Math.round(perCoin * 100) / 100, currency)} / Coin</p>
+                    <p className="text-[12px] text-muted-foreground">{formatLocalPrice(Math.round(perCoin * 100) / 100, currency)} / Coin</p>
                   </div>
                 </div>
                 <ProductFacts
@@ -234,7 +234,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
           );
         })}
       </div>
-      <p className="text-[10px] text-muted-foreground text-center">
+      <p className="text-[12px] text-muted-foreground text-center">
         Coin bundles are a separate product from credit packs. Coins only buy avatar cosmetics. Credits unlock features.
       </p>
     </div>

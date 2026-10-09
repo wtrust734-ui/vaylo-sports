@@ -180,7 +180,7 @@ export default function LearningArticle() {
 
   if (!lesson) {
     return (
-      <main className="min-h-screen pb-28 pt-20">
+      <main className="min-h-screen pb-28 pt-[var(--vaylo-screen-top)]">
         <div className="mx-auto max-w-md px-4 py-20 text-center">
           <p className="font-display text-2xl font-bold">Lesson not found</p>
           <p className="mt-2 text-sm text-muted-foreground">It may have been renamed or removed.</p>
@@ -202,10 +202,10 @@ export default function LearningArticle() {
   const paragraphs = lesson.body.split("\n\n");
 
   return (
-    <main className="min-h-screen pb-28 pt-20">
-      <article className="mx-auto max-w-2xl px-4 sm:px-6">
+    <main className="min-h-screen pb-28 pt-[var(--vaylo-screen-top)]">
+      <article className="mx-auto max-w-2xl px-5">
         {/* Sticky reader bar */}
-        <div className="sticky top-20 z-20 -mx-4 mb-8 flex items-center justify-between gap-3 border-b border-border bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="sticky top-[var(--vaylo-inset-top)] z-20 -mx-5 mb-8 flex items-center justify-between gap-3 border-b border-border bg-background/90 px-5 py-3 backdrop-blur">
           <button
             onClick={() => navigate("/learning")}
             className="icon-tap flex items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
@@ -229,11 +229,11 @@ export default function LearningArticle() {
         {/* Header */}
         <motion.header initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-electric-purple/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-electric-purple">
+            <span className="rounded-full bg-electric-purple/15 px-2.5 py-1 text-[12px] font-bold tracking-wider text-electric-purple">
               {(lesson.sports?.[0] || "All Sports").toUpperCase()} · {categoryFor(lesson).toUpperCase()}
             </span>
             {completed && (
-              <span className="flex items-center gap-1 rounded-full bg-electric-purple/10 px-2.5 py-1 text-[10px] font-bold text-electric-purple">
+              <span className="flex items-center gap-1 rounded-full bg-electric-purple/10 px-2.5 py-1 text-[12px] font-bold text-electric-purple">
                 <CheckCircle2 size={12} /> Completed
               </span>
             )}

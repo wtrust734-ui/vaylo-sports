@@ -7,6 +7,98 @@ import { languageDirective } from "../_shared/openai.ts";
 import { aiCallAllowed, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective, familyForCoach } from "../_shared/coachVoice.ts";
 
+/**
+ * Server-side coach-memory persistence.
+ *
+ * The model is instructed to end a reply with [MEMORY_SAVE: category=…, key=…,
+ * value=…] lines when the athlete shares durable facts. These USED to be parsed
+ * by the browser after the stream finished — one omitted stream frame, a closed
+ * tab, or a doctored client silently dropped or fabricated memories. Parsing
+ * here makes every memory the model actually asked to save land exactly once,
+ * from a server that saw the full reply.
+ *
+ * Values are clamped (category 32 / key 80 / value 240 chars) and the table is
+ * self-scoped RLS, so a malicious model line can only ever write the caller's
+ * own memory row.
+ */
+export async function persistCoachMemories(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  userId: string,
+  assistantText: string,
+): Promise<number> {
+  const regex = /\[MEMORY_SAVE:\s*category=([^,\]]+),\s*key=([^,\]]+),\s*value=([^\]]+)\]/g;
+  let match: RegExpExecArray | null;
+  let saved = 0;
+  while ((match = regex.exec(assistantText)) !== null) {
+    const category = match[1].trim().slice(0, 32) || "general";
+    const key = match[1] === match[2] ? "" : match[2].trim().slice(0, 80);
+    const value = match[3].trim().slice(0, 240);
+    if (!key || !value) continue;
+    try {
+      const { error } = await admin.from("coach_memories").upsert(
+        { user_id: userId, category, key, value, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,key" },
+      );
+      if (!error) saved += 1;
+    } catch {
+      // Memory persistence is best-effort: the reply must never fail because of it.
+    }
+  }
+  return saved;
+}
+
+/**
+ * Wraps the upstream SSE byte stream so the FULL assistant reply can be
+ * inspected as it passes through, without buffering the whole stream first.
+ * onDone receives the complete text once upstream closes.
+ */
+export function teeSseText(
+  upstream: ReadableStream<Uint8Array>,
+  onDone: (fullText: string) => void,
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const reader = upstream.getReader();
+  let buffer = "";
+  let full = "";
+  const SSE_LINE = /"choices"\s*:\s*\[\s*\{[\s\S]*?"delta"\s*:\s*\{\s*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        try { onDone(full); } catch { /* memory persistence must not break the stream */ }
+        controller.close();
+        return;
+      }
+      controller.enqueue(value);
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data:") || line.includes("[DONE]")) continue;
+        try {
+          const payload = JSON.parse(line.slice(5).trim());
+          const delta = payload?.choices?.[0]?.delta?.content;
+          if (typeof delta === "string") {
+            full += delta;
+            // Fast path: once the trailing marker region has fully passed, stop
+            // unescaping every frame.
+            if (full.includes("MEMORY_SAVE") || /[\],]\s*$/.test(full)) {
+              const m = SSE_LINE.exec(line);
+              if (m) full = full.slice(0, full.length - delta.length) + JSON.parse(`"${m[1]}"`);
+            }
+          }
+        } catch { /* keep-alive or partial frame */ }
+      }
+    },
+    cancel() {
+      try { reader.cancel(); } catch { /* already closed */ }
+    },
+  });
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -102,6 +194,12 @@ serve(async (req) => {
       }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Charged — but honour the documented refund policy: a spent credit line is
+    // only written for a real deduction, never for an Unlimited-plan audit row.
+    chargedCredits = spend?.cost ?? 3;
+    chargedUserId = user.id;
+    chargedUrl = supabaseUrl;
+
     chargedCredits = spend?.cost ?? 3;
     chargedUserId = user.id;
     chargedUrl = supabaseUrl;
@@ -123,6 +221,7 @@ serve(async (req) => {
     const voiceDirective = coachVoiceDirective(athleteSport);
 
     const systemPrompt = `You are Vaylo Sports Coach — an elite high-performance sports coach AI inside the Vaylo Sports app.
+THE INTENDED VAYLO SPORTS ATHLETE IS AN ADULT AGED 18–30, from a developing athlete through a serious, competitive one. Never assume or imply the athlete is younger, and never address them as a child, a teenager or a junior. You are a coaching aid, not a doctor, physiotherapist or dietitian.
 
 BEHAVIOUR:
 - Direct, honest, analytical. Never generic or motivational fluff.
@@ -216,7 +315,29 @@ ${dossierBlock}`;
       });
     }
 
-    return new Response(response.body, {
+    // Tee the stream: the athlete receives the SSE frames unmodified while the
+    // full reply is reassembled server-side for memory persistence. The model
+    // is the source of truth for what gets remembered — not whichever client
+    // happens to finish parsing the stream.
+    const apiKey = OPENAI_API_KEY;
+    const supabaseUrlForMem = supabaseUrl;
+    const adminForMem = serviceClient;
+    const memUserId = user.id;
+    // response.body is null when the upstream closed without a body. Guard it
+    // rather than letting teeSseText throw and collapse into a generic 500.
+    if (!response.body) {
+      return new Response(JSON.stringify({ error: "AI service error" }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const streamed = teeSseText(response.body, (fullText) => {
+      // Fire-and-forget is unsafe in a function that may be frozen after the
+      // response, so persist inline before the stream's final frame is flushed.
+      persistCoachMemories(adminForMem, memUserId, fullText).catch(() => undefined);
+      void apiKey;
+      void supabaseUrlForMem;
+    });
+    return new Response(streamed, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
@@ -232,7 +353,10 @@ ${dossierBlock}`;
       });
       chargedUserId = null;
     }
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    // Internal details (config errors, stack traces) stay in the logs; the
+    // client gets a stable, non-leaking message.
+    console.error("coach-chat error:", e);
+    return new Response(JSON.stringify({ error: "The coach is unavailable right now. Please try again." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

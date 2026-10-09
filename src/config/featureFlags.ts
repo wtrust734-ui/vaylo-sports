@@ -17,14 +17,22 @@
 //   marketplace reads as "nobody uses this". Flip on when the coach roster is
 //   seeded and you're ready to sell it.
 //
-//   wearableSync — /health-sync and every entry point to it. OFF because the
-//   vendor OAuth apps do not exist yet: Garmin, Strava and the rest each need a
-//   developer agreement signed by a human before a client id can be issued.
-//   The callback is wired but has never exchanged a code for a token, so this
-//   is an unfinished integration rather than a misconfiguration, and no amount
-//   of configuration will turn it into a working one. A Play reviewer who taps
-//   "Wearables" and lands on a screen of dead providers is a worse first
-//   impression than a product with one fewer headline feature.
+//   wearableSync — /health-sync and every entry point to it. ON, because the
+//   Health Connect path is complete and shipping: the native plugin, the six
+//   read permissions and the incremental pull. Cloud providers do NOT appear on
+//   the screen: the section was trimmed to the on-device watch path (see
+//   src/pages/HealthSync.tsx, CLOUD_SECTION), so the screen never shows a
+//   "coming soon" card again. The OAuth/import plumbing is all still there and
+//   inert until a vendor is reconnected; re-enabling the cloud section is a one
+//   line change in src/pages/HealthSync.tsx.
+//
+//   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
+//   default. The Android manifest declares no location permission, so
+//   `navigator.geolocation` never resolves and the button is inert. Declaring
+//   ACCESS_FINE_LOCATION would also mean declaring location in the Data safety
+//   form and handling it in the privacy policy, which is a larger commitment
+//   than the feature deserves during closed testing. On the web this works, so
+//   set VITE_ENABLE_gpsTracking=true for a self-hosted web build.
 //
 //   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
 //   default. The Android manifest declares no location permission, so
@@ -43,6 +51,33 @@
 //   variable on the server: `supabase secrets set OPENAI_API_KEY=…`. If you are
 //   choosing between adding that key and adding a flag, add the key.
 // ============================================================================
+
+//   iphone — everything that presents Apple as a platform: the HealthKit card
+//   and its iPhone copy on the Wearables screen, "Continue with Apple" on the
+//   sign-in screen, the Apple mention in the Recover hub copy, and the Apple
+//   mentions on the website's privacy page. OFF until Vaylo Sports ships an
+//   iPhone build. Hiding it is not a branding preference — a screen telling an
+//   Android user to "install Vaylo Sports on iPhone" promises a product that
+//   does not exist, and the place a promise like that costs money is a store
+//   listing.
+//
+//   UNHIDING: flipping this flag is the whole switch for the app, because every
+//   Apple surface under src/ is behind `isFlagOn("iphone")`. The legal
+//   documents and the website copy are edited to be accurate rather than
+//   toggled, so they are not flag-gated: docs/IPHONE-RELEASE.md lists the exact
+//   restore commands so nobody has to reconstruct which sentence was removed.
+//
+//   Deliberately still present while off: `-apple-system` font stacks and the
+//   `apple-touch-icon` link (web plumbing no user can see, and the icon is what
+//   Android falls back to for a home-screen shortcut), `isIOS()` and the
+//   Capacitor `ios:` block (both inert with no ios/ project), the platform
+//   column on push_tokens, and the re-authenticate-with-Apple path in
+//   DeleteAccount, which lets an Apple-signed-in account still delete itself
+//   and is unreachable while no such account can be created. Also still present
+//   as data: the `healthkit` entry in WEARABLE_PROVIDERS and the "Apple Health"
+//   row in importHistory's SOURCE_LABELS — both are looked up by an id that is
+//   only rendered when the flag is on, and no client can write that id while
+//   there is no iPhone build.
 
 type FlagKey = string
 
@@ -63,8 +98,9 @@ const envOverride = (key: FlagKey, fallback: boolean): boolean => {
 
 export const FEATURE_FLAGS = {
   coachMarketplace: envOverride("coachMarketplace", false),
-  wearableSync: envOverride("wearableSync", false),
+  wearableSync: envOverride("wearableSync", true),
   gpsTracking: envOverride("gpsTracking", false),
+  iphone: envOverride("iphone", false),
 } as const satisfies Record<FlagKey, boolean>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;

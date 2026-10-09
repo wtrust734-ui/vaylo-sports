@@ -5,6 +5,8 @@ import { Trophy, Activity, Target, ArrowLeft, Users, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarCharacter";
 import { fetchDisplayName } from "@/lib/publicIdentity";
+import { useAuth } from "@/contexts/AuthContext";
+import ReportMenu from "@/components/safety/ReportMenu";
 
 // ============================================================================
 // VAYLO SPORTS — public athlete profile
@@ -59,6 +61,7 @@ const RANK_MAX_PAGES = 10;
 const PublicProfile = () => {
   const { username } = useParams();
   const navigate = useNavigate();
+  const { user: viewer } = useAuth();
   const [state, setState] = useState<ProfileState | null>(null);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ const PublicProfile = () => {
     (async () => {
       const [avatarRes, privRes, partsRes, cosRes] = await Promise.all([
         supabase.from("avatars").select("*").eq("user_id", username).maybeSingle(),
-        supabase.from("privacy_settings").select("show_avatar_publicly").eq("user_id", username).maybeSingle(),
+        supabase.rpc("peer_privacy", { p_user: username }),
         supabase.from("challenge_participants").select("challenge_id,status").eq("user_id", username).limit(50),
         supabase.from("user_profile_cosmetics").select("title_id,name_color_id").eq("user_id", username).maybeSingle(),
       ]);
@@ -149,7 +152,8 @@ const PublicProfile = () => {
         titleLabel,
         nameColor,
         loadout: avatar ? { ...((avatar.extras as Record<string, string>) || {}), ...avatar, display_name: avatar.display_name } : null,
-        avatarPublic: privRes?.data?.show_avatar_publicly !== false,
+        avatarPublic:
+          (Array.isArray(privRes?.data) ? privRes.data[0] : null)?.show_avatar_publicly !== false,
         points,
         rank,
         competitors,
@@ -192,11 +196,11 @@ const PublicProfile = () => {
             {state.titleLabel && <p className="text-sm text-electric-purple font-semibold truncate">{state.titleLabel}</p>}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {state.rank && (
-                <span className="text-[10px] uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-md font-bold">
+                <span className="text-[12px] uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-md font-bold">
                   Rank #{state.rank}
                 </span>
               )}
-              <span className="text-[10px] uppercase tracking-wider bg-energy/15 text-energy px-2 py-0.5 rounded-md font-bold">
+              <span className="text-[12px] uppercase tracking-wider bg-energy/15 text-energy px-2 py-0.5 rounded-md font-bold">
                 {state.points.toLocaleString()} pts
               </span>
             </div>
@@ -212,7 +216,7 @@ const PublicProfile = () => {
       </div>
 
       {state.rank && state.competitors > 0 && (
-        <p className="px-5 mt-2 text-[11px] text-muted-foreground">
+        <p className="px-5 mt-2 text-[12px] text-muted-foreground">
           Ranked #{state.rank} of {state.competitors.toLocaleString()} athletes by total points.
         </p>
       )}
@@ -229,7 +233,7 @@ const PublicProfile = () => {
               <div className="text-2xl">{c.icon || "🏆"}</div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{c.title}</p>
-                <p className="text-[11px] text-muted-foreground capitalize">{c.status}</p>
+                <p className="text-[12px] text-muted-foreground capitalize">{c.status}</p>
               </div>
             </motion.div>
           ))}
@@ -241,16 +245,32 @@ const PublicProfile = () => {
       <div className="px-5 mt-6">
         <div className="bg-card border border-border rounded-xl p-3 flex items-start gap-3">
           <Lock size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             Workouts, metrics, streaks and achievements are private. This athlete's training history isn't public.
           </p>
         </div>
       </div>
 
       {state.lastActive && (
-        <p className="px-5 mt-4 text-[10px] text-muted-foreground text-center">
+        <p className="px-5 mt-4 text-[12px] text-muted-foreground text-center">
           Profile last updated {new Date(state.lastActive).toLocaleDateString()}
         </p>
+      )}
+
+      {/* Report and block. Google Play requires both for an app with
+          user-generated content, and there was previously no way to reach the
+          `user_blocks` table from the interface at all. Hidden on your own
+          profile — you cannot report yourself. */}
+      {username && viewer && viewer.id !== username && (
+        <div className="px-5 mt-4 flex justify-center">
+          <ReportMenu
+            targetType="profile"
+            targetId={username}
+            targetLabel={`Profile: ${state.name}`}
+            authorId={username}
+            allowBlock
+          />
+        </div>
       )}
     </div>
   );
@@ -260,7 +280,7 @@ const Stat = ({ icon: Icon, label, value }: { icon: typeof Activity; label: stri
   <div className="bg-card border border-border rounded-xl p-3 text-center">
     <Icon size={14} className="mx-auto text-primary" />
     <p className="text-lg font-display font-bold mt-1">{value}</p>
-    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</p>
   </div>
 );
 

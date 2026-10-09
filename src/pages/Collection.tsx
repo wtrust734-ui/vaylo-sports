@@ -167,7 +167,7 @@ export default function Collection() {
                     {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Check className="mr-1 h-3.5 w-3.5" />Equip</>}
                   </Button>
                 ) : owned ? (
-                  <p className="text-center text-[11px] font-semibold text-muted-foreground">Owned</p>
+                  <p className="text-center text-[12px] font-semibold text-muted-foreground">Owned</p>
                 ) : sellable && price ? (
                   <Button
                     size="sm"
@@ -182,7 +182,7 @@ export default function Collection() {
                     )}
                   </Button>
                 ) : (
-                  <p className="text-center text-[11px] text-muted-foreground">
+                  <p className="text-center text-[12px] text-muted-foreground">
                     {sellable ? "Not for sale" : "Earn from chests"}
                   </p>
                 )}

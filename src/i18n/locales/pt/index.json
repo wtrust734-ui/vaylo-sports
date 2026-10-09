@@ -44,8 +44,6 @@
     "primaryNav": "Principal"
   },
   "quickActions": {
-    "logWorkout": "Registrar treino",
-    "logWorkoutDesc": "Comece ou termine uma sessão",
     "logResult": "Registrar um resultado",
     "logResultDesc": "Anote um resultado de competição",
     "recoveryCheckIn": "Check-in de recuperação",
@@ -58,13 +56,14 @@
     "train": {
       "title": "Treinar",
       "subtitle": "Sessões, planos e técnica.",
-      "primaryCta": "Iniciar treino",
       "groupDaily": "Treino diário",
       "groupProgress": "Progresso",
       "workouts": "Treinos",
       "workoutsDesc": "Registre e revise sessões",
       "trainingPlans": "Planos de treino",
       "trainingPlansDesc": "Seu plano ativo e semanas",
+      "availability": "Disponibilidade",
+      "availabilityDesc": "Férias, exames e pausas",
       "routines": "Rotinas",
       "routinesDesc": "Aquecimentos e drills repetíveis",
       "crossTraining": "Treino cruzado",
@@ -86,6 +85,8 @@
       "vprDesc": "Sua classificação geral e fatores",
       "metricsHub": "Central de métricas",
       "metricsHubDesc": "Cargas, tendências e registros",
+      "insights": "Análises",
+      "insightsDesc": "O que o seu treino diz hoje",
       "skills": "Habilidades",
       "skillsDesc": "Análise de habilidades esportivas",
       "development": "Desenvolvimento",
@@ -112,7 +113,7 @@
       "nutrition": "Nutrição",
       "nutritionDesc": "Refeições, água e metas",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "Competir",
@@ -149,7 +150,6 @@
     "readinessDown": "{{value}} vs ontem",
     "coachInsight": "Insight do treinador",
     "viewInsight": "Ver insight",
-    "startSession": "Iniciar sessão",
     "noVprYet": "Registre algumas sessões para desbloquear seu VPR.",
     "noSessionToday": "Nenhuma sessão planejada — confira seu plano.",
     "welcomeBack": "Bem-vindo de volta",
@@ -275,6 +275,7 @@
     "activityFeed": "Feed de atividades",
     "groupTrain": "Treinar",
     "trainingPlans": "Planos de treino",
+    "availability": "Disponibilidade",
     "workouts": "Treinos",
     "routines": "Rotinas",
     "crossTraining": "Treino cruzado",
@@ -317,6 +318,9 @@
     "profile": "Perfil",
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "Acesso do responsável",
+    "startingAnalysis": "Análise inicial",
+    "insights": "Análises"
   }
 }

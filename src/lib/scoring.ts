@@ -60,12 +60,16 @@ export async function fetchLeaderboard(opts: {
   /** Exclusive window end (used to fetch the previous period). */
   to?: Date;
 }): Promise<LeaderboardRow[]> {
-  let q = supabase.from("points_events").select("user_id,points,sport,occurred_at");
+  // Reads the `leaderboard_points` RPC rather than the table. Since the
+  // 2026-10-06 audit migration, points_events is row-scoped to its owner: the
+  // cross-user windowed totals come from this security-definer function, and
+  // other athletes' raw events are no longer readable (nor needed here).
   const start = opts.from ?? periodStart(opts.period);
-  if (start) q = q.gte("occurred_at", start.toISOString());
-  if (opts.to) q = q.lt("occurred_at", opts.to.toISOString());
-  if (opts.sport && opts.sport !== "all") q = q.eq("sport", opts.sport);
-  const { data, error } = await q.limit(5000);
+  const { data, error } = await supabase.rpc("leaderboard_points", {
+    p_from: start ? start.toISOString() : null,
+    p_to: opts.to ? opts.to.toISOString() : null,
+    p_sport: opts.sport && opts.sport !== "all" ? opts.sport : null,
+  });
   if (error) throw error;
   const totals: Record<string, { pts: number; sport?: string | null }> = {};
   (data || []).forEach((r) => {

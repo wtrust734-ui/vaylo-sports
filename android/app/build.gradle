@@ -32,7 +32,7 @@ android {
         applicationId "com.vaylosports.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Overridable from CI (`./gradlew bundleRelease -PversionCode=4`), so a
+        // Overridable from CI (`./gradlew bundleRelease -PversionCode=5`), so a
         // tester-only fix does not need a commit just to bump a number. Play
         // rejects any upload whose versionCode it has already seen, so every
         // closed-testing upload needs a new one.
@@ -40,8 +40,156 @@ android {
         // 3 is the mobile-layout rebuild: same app, same upload key, same
         // applicationId, corrected phone rendering. It has to be higher than 2
         // or Play refuses the upload and a phone treats it as the same build.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 3
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.1.0"
+        //
+        // 5 / 1.2.1 is the native routing, external-link hardening and AI quota
+        // release.
+        //
+        // 6 / 1.2.2 is the layout and interaction release: the header and its
+        // hamburger are gone, the four tab roots are kept alive instead of
+        // remounted on every tap, navigation is a 160ms compositor fade with no
+        // full-screen loader, and the surfaces/tokens were unified. No native
+        // manifest, permission or plugin change — the WebView bundle is the
+        // whole difference, so the only reason this needs a new upload is Play's
+        // rule that a versionCode cannot be reused.
+        //
+        // 9 / 1.2.5 is the account, motion and pricing release: the full legal
+        // library is reachable from Profile, the Profile screen is one grouped
+        // card instead of nine, the AI-backed features are priced against their
+        // real API cost, the tab switch is a two-phase crossfade with the tab
+        // chunks prewarmed, and the gradient/glow tokens are toned down. Still
+        // no manifest, permission or plugin change — the WebView bundle is the
+        // whole difference.
+        // 11 / 1.2.7 is the published-legal-site release: the app now links to
+        // the Netlify-hosted documents at .../legal/<slug>/, which are served as
+        // text/html. The Supabase edge function and Storage both serve text as
+        // text/plain, which was a Play Console blocker and unreadable to a
+        // crawler. 10 / 1.2.6 was withdrawn rather than corrected: its base URL
+        // omitted /legal, so 23 of the 26 documents 404-ed. Website-only change.
+        //
+        // 12 / 1.2.8 is the closed-testing economy release: new accounts start
+        // with 50 credits instead of 20, credits are granted free during the
+        // closed test (basket and balance behave as they will once billing is
+        // live, only the money step is skipped), the AI-backed features that
+        // were priced below their real API cost were repriced, signup and plan
+        // creation ask what equipment the athlete can actually get to so plans
+        // can prescribe real cross-training, diet plans are refused to anyone
+        // who has not proved they are 18, and every screen below a tab root now
+        // has a back control. No manifest, permission or plugin change — the
+        // WebView bundle is the whole difference.
+        //
+        // 13 / 1.2.9 is the in-app legal + motion release. All 26 published
+        // legal documents now render inside the app (bundled, script-free
+        // HTML in an iframe viewer at /legal/:slug) instead of opening the
+        // marketing site in a browser; detail-screen navigation fades in from
+        // 0.4 opacity so the swap no longer blinks to bare background; the
+        // shared back control got a larger target, press feedback and a
+        // directional chevron; metered credit prices were re-derived against
+        // the worst ACTIVE regional pricing tier (tier D, $0.0153/credit)
+        // so every AI feature clears its 8x floor in every market; and photo
+        // form analysis moved to the Google Gemini API while every other AI
+        // feature stays on OpenAI. No manifest, permission or plugin change —
+        // the WebView bundle is the whole difference.
+        //
+        // 14 / 1.2.10 is the native shell release, and unlike 6, 9, 11, 12 and
+        // 13 it is NOT WebView-only. Three real native changes ride along:
+        //   camera  — CameraCapturePlugin.kt drives ACTION_IMAGE_CAPTURE and
+        //              ACTION_PICK_IMAGES with a FileProvider URI, downscales and
+        //              applies EXIF rotation. `@capacitor/camera` was tried first
+        //              and does not compile against the Kotlin 1.9.24 pinned at
+        //              top level, so the plugin is hand-written. No CAMERA
+        //              permission: the photo is written into our own cache.
+        //   push    — VayloMessagingService posts notifications natively so they
+        //              arrive with the app closed. That is the first new
+        //              permission in the manifest: POST_NOTIFICATIONS.
+        //   scrolling/navigation feel, and an offline write queue for workouts
+        //              that previously threw the set away.
+        // Firebase is inert until a project is configured (see push/FIREBASE.md),
+        // so this build ships with push wired and switched off, which is the
+        // same failure mode as every previous bump.
+        //
+        // 15 / 1.2.11 and 16 / 1.2.12 are the UI-polish releases: the
+        // new-athlete dashboard no longer opens on a wall of "—" placeholders,
+        // the hub and quick-action tiles share one tinted treatment instead of
+        // the old gradient/glow, and two truncating/wrapping labels were
+        // corrected. WebView-only — no manifest, permission or plugin change.
+        //
+        // 17 / 1.2.13 is the wearables release, and it IS a native change: the
+        // six Health Connect read permissions are declared for the first time
+        // and the `wearableSync` flag is on, so /health-sync is reachable and
+        // the plugin can request consent. A Play upload also needs the Health
+        // Connect declaration (Play Console → App content) before review.
+        //
+        // 18 / 1.2.14 is the notifications and reachability release, and it IS a
+        // native change: @capacitor/local-notifications is added, so the app's
+        // own triggers (a streak about to break, a session left unlogged, a
+        // challenge closing) are posted to the device's notification shade and
+        // survive the app being closed. That path needs no Firebase project and
+        // no server. Server-sent push is deliberately unchanged and still
+        // unconfigured — the vaylo_fcm.xml values remain empty, and nothing
+        // arrives while the app has not run at all.
+        //
+        // Also in this build: the sign-in methods (Google, Discord, passkey,
+        // magic link) retry a failed settings fetch instead of staying hidden
+        // for the whole session; the onboarding action bar is sticky and clears
+        // the system navigation inset, which is what made Continue unfriendly
+        // to tap on a phone; height and weight are asked for on their own
+        // optional step; and synced wearable sessions are listed on the
+        // Workouts screen instead of only on the Health Sync screen.
+        //
+        // 19 / 1.2.15 is the credit-economy and wearable-auth release. The whole
+        // price book was re-derived from Play's 30% cut and a measured
+        // worst-case API cost per credit: a new account now starts on 260
+        // credits (enough for an 8-week training plan plus extras), and the
+        // AI-backed features were repriced so every one clears its margin floor
+        // on the worst ACTIVE regional tier rather than only the cheapest one.
+        // The wearable OAuth path was reworked server-side at the same time:
+        // the auth state and the exchanged tokens moved from an in-memory map
+        // into the database, so a callback that lands on a different function
+        // instance no longer fails, and Strava/Fitbit/Oura now import for real
+        // instead of returning not_configured. WebView-only — no manifest,
+        // permission or plugin change.
+        //
+        // 20 / 1.2.16 is the friends release. The friend graph has been in the
+        // schema from the beginning and had no way in: /friends was a redirect
+        // to the home screen and no client code called accept_friend_request,
+        // so the tables, the codes and the two RPCs were unreachable. This build
+        // puts the surface back on it — add by friend code, answer a request,
+        // message a friend, send them a session you have shared, and end any of
+        // it with report, block or unfriend.
+        //
+        // None of that is a client-side rule. The database refuses a message to
+        // anyone who is not a friend, a message across a block in either
+        // direction, an attachment that is not the sender's own share, and a
+        // message rewritten after it was sent; a hand-written friendship row is
+        // refused by the pair trigger that always existed, and unfriend() and
+        // blocking both take the accepted friend_request with them so neither
+        // athlete can put the friendship back by hand. Blocking an athlete now
+        // also ends the friendship, which it did not before.
+        //
+        // Also in this build, from the 2026-10-08 release audit: a new password
+        // must be 8 characters (sign-up had no check at all), the Goals
+        // "Accountability Partners" card is gone (it promised a partner could
+        // see goal progress and its button went to a route that no longer
+        // exists), and the layout faults the audit found — the VPR hero badge
+        // running into the sentence after it, the featured learning cards
+        // rendering 109px wide in their scroller, and the terms banner drawn
+        // over the stored-preferences notice — are fixed. No manifest,
+        // permission or plugin change: the plugin set is unchanged (8 plugins,
+        // same as 1.2.14), so the WebView bundle is the whole difference.
+        //
+        // 21 / 1.2.17 is the plans, nutrition and market release. Training
+        // weeks are generated and edited server-side against a periodisation
+        // schema (generate-plan / edit-plan), the nutrition plan is AI-written
+        // per week and priced against its measured cost, every advertised
+        // unlock is buyable from the Market, and the price book and the
+        // credit-economy model were re-derived together. Also in this build:
+        // the published 13+ rule for holding an account is enforced at
+        // onboarding instead of living only in the legal pages. WebView-only —
+        // no manifest, permission or plugin change.
+        //
+        // Always increase the code for a Play upload.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 21
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.17"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -67,10 +215,23 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 + resource shrinking: Capacitor's stock config ships these
+            // disabled, which packaged every androidx/webkit/coroutines class
+            // and every drawable the app never uses. The keeps in
+            // proguard-rules.pro protect what the bridge reaches by name.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
+            } else {
+                // Local verification build: signed with the debug key so it
+                // installs on a device/emulator and the R8 output can be
+                // smoke-tested before a real upload. The guard below still
+                // refuses to produce the Play artifact (bundleRelease) without
+                // the upload key, and the log says loudly which case this is.
+                signingConfig signingConfigs.debug
+                println("WARN: assembleRelease is using the DEBUG key — local R8 verification only, not an uploadable artifact.")
             }
         }
     }
@@ -78,7 +239,9 @@ android {
 
 // Fail with an explanation instead of producing an artifact Play will reject.
 // Gradle's own message for a missing signing config is a bare "not signed".
-tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
+// bundleRelease is the artifact that goes to Play, so it stays a hard error;
+// assembleRelease falls back to the debug key above for local R8 checks only.
+tasks.matching { it.name == "bundleRelease" }.configureEach {
     doFirst {
         if (!hasReleaseSigning) {
             throw new GradleException(
@@ -106,6 +269,20 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.health.connect:connect-client:1.1.0-alpha07"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    // EXIF orientation for CameraCapturePlugin: a portrait photo is stored
+    // landscape plus a rotation tag, and without this the AI analyses an
+    // athlete lying on their side.
+    implementation "androidx.exifinterface:exifinterface:1.3.7"
+    // Firebase Cloud Messaging, for real push delivery (push/PushPlugin.kt).
+    // Pulled in WITHOUT the google-services Gradle plugin: that plugin
+    // hard-fails the build when google-services.json is missing, and this
+    // project has to keep building for anyone who has not been handed the
+    // Firebase project yet. The plugin initialises FirebaseApp from options
+    // read at runtime and reports `configured: false` when they are absent,
+    // so an unconfigured build simply never produces a token. See
+    // push/FIREBASE.md for the one-time setup.
+    implementation platform("com.google.firebase:firebase-bom:33.7.0")
+    implementation "com.google.firebase:firebase-messaging"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

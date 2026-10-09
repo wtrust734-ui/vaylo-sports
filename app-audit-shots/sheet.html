@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>APK contact sheet</title>
+<style>
+  html, body { margin: 0; background: #0d0e11; color: #dfe6f0;
+               font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #row { display: flex; align-items: flex-start; gap: 10px; padding: 8px; }
+  figure { margin: 0; position: relative; }
+  figcaption { padding: 2px 0 4px; color: #8fd; }
+  .crop { position: relative; overflow: hidden; }
+  .crop img { position: absolute; left: 0; display: block; }
+  img { border: 1px solid #3a3d44; }
+</style>
+</head>
+<body>
+  <div id="row"></div>
+<script>
+  // ?w=<displayed width in css px>
+  // &sy=<source top, in device px of the 1080x2400 capture>  (default 0)
+  // &sh=<source height, in device px>                        (default: whole image)
+  // &f=name1,name2,...
+  //
+  // Cropping is expressed in SOURCE pixels rather than css pixels on purpose: the
+  // capture is 1080x2400 at 420dpi, so one css pixel of the app is exactly 2.625
+  // source pixels, and the band I care about (the bottom of the viewport) is
+  // easier to name once in source units than to re-derive per zoom level.
+  const q = new URLSearchParams(location.search);
+  const w = parseFloat(q.get("w") || "300");
+  const sy = parseFloat(q.get("sy") || "0");
+  const sh = q.get("sh") ? parseFloat(q.get("sh")) : null;
+  const files = (q.get("f") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const row = document.getElementById("row");
+
+  for (const f of files) {
+    const fig = document.createElement("figure");
+    const cap = document.createElement("figcaption");
+    cap.textContent = f.replace(/\.png$/, "") + (sh ? `  sy=${sy}+${sh}` : "");
+    const crop = document.createElement("div");
+    crop.className = "crop";
+    crop.style.width = w + "px";
+    const img = document.createElement("img");
+    img.src = f;
+    img.style.width = w + "px";
+    const k = w / 1080;                       // source px -> css px on screen
+    crop.style.height = sh ? sh * k + "px" : "auto";
+    img.style.top = -(sy * k) + "px";
+    // Once the height is known, anchor the image at the crop's top.
+    crop.append(img);
+    fig.append(cap, crop);
+    row.append(fig);
+  }
+</script>
+</body>
+</html>

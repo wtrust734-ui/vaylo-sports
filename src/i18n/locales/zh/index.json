@@ -44,8 +44,6 @@
     "primaryNav": "主导航"
   },
   "quickActions": {
-    "logWorkout": "记录训练",
-    "logWorkoutDesc": "开始或完成一次训练",
     "logResult": "记录成绩",
     "logResultDesc": "记录比赛结果",
     "recoveryCheckIn": "恢复签到",
@@ -58,13 +56,14 @@
     "train": {
       "title": "训练",
       "subtitle": "课程、计划和技术。",
-      "primaryCta": "开始训练",
       "groupDaily": "每日训练",
       "groupProgress": "进步",
       "workouts": "训练",
       "workoutsDesc": "记录并回顾课程",
       "trainingPlans": "训练计划",
       "trainingPlansDesc": "你的当前计划与周期",
+      "availability": "可用时间",
+      "availabilityDesc": "假期、考试与休息",
       "routines": "常规练习",
       "routinesDesc": "可重复的热身与练习",
       "crossTraining": "交叉训练",
@@ -86,6 +85,8 @@
       "vprDesc": "你的总体评分与因素",
       "metricsHub": "指标中心",
       "metricsHubDesc": "负荷、趋势与记录",
+      "insights": "洞察",
+      "insightsDesc": "你的训练今天说明了什么",
       "skills": "技能",
       "skillsDesc": "运动技能分析",
       "development": "发展",
@@ -112,7 +113,7 @@
       "nutrition": "营养",
       "nutritionDesc": "饮食、饮水与目标",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "竞赛",
@@ -149,7 +150,6 @@
     "readinessDown": "比昨天 {{value}}",
     "coachInsight": "教练洞察",
     "viewInsight": "查看洞察",
-    "startSession": "开始训练",
     "noVprYet": "记录几次训练后即可解锁你的 VPR。",
     "noSessionToday": "今天没有安排课程——查看你的计划。",
     "welcomeBack": "欢迎回来",
@@ -275,6 +275,7 @@
     "activityFeed": "动态",
     "groupTrain": "训练",
     "trainingPlans": "训练计划",
+    "availability": "可用时间",
     "workouts": "训练",
     "routines": "常规练习",
     "crossTraining": "交叉训练",
@@ -317,6 +318,9 @@
     "profile": "个人资料",
     "openMenu": "打开菜单",
     "closeMenu": "关闭菜单",
-    "wearables": "Wearables"
+    "wearables": "Wearables",
+    "guardian": "监护人访问",
+    "startingAnalysis": "起始分析",
+    "insights": "洞察"
   }
 }

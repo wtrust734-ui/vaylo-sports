@@ -76,7 +76,7 @@ function SponsoredCardView({ item, onOpen }: { item: SponsoredCard; onOpen: () =
 
         <div className="min-w-0 flex-1">
           {/* Required disclosure — the brand name is part of it, not decoration. */}
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          <p className="text-[12px] font-semibold uppercase tracking-widest text-muted-foreground">
             {label} · {item.brand_name}
           </p>
           <p className="mt-1 text-sm font-semibold leading-snug">{item.headline}</p>

@@ -4,7 +4,7 @@ import type { LearningStats } from "@/lib/learningEngine";
 
 const StatTile = ({ label, value, suffix }: { label: string; value: number; suffix: string }) => (
   <div className="rounded-2xl border border-border bg-card p-4">
-    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+    <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
     <p className="mt-1.5 font-display text-3xl font-bold text-gradient-electric">{value}</p>
     <p className="text-xs text-muted-foreground">{suffix}</p>
   </div>

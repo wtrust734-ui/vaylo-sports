@@ -32,3 +32,17 @@ export async function pushNotification(userId: string, type: string, title: stri
   const { error } = await supabase.from("notifications").insert({ user_id: userId, type, title, body, link });
   if (error) console.error("createNotification failed:", error.message);
 }
+
+/**
+ * Only in-app routes may be navigated to from a notification. Links come from
+ * many writers (triggers, future jobs), so a malformed or hostile value must
+ * never reach the router: `javascript:` URLs, protocol-relative `//host`, and
+ * absolute `https://` links are refused, as are the `vaylo:*` dedup keys the
+ * daily triggers store in the same column (they are not routes).
+ */
+export function safeNotificationLink(link: string | null | undefined): string | null {
+  if (!link) return null;
+  const l = link.trim();
+  if (!l.startsWith("/") || l.startsWith("//") || l.startsWith("/\\")) return null;
+  return l;
+}

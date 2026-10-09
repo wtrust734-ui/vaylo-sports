@@ -52,7 +52,7 @@ const Insights = () => {
   }, [user]);
 
   if (sys.loading || !loaded) {
-    return <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> {t("loading.dashboard")}</div>;
+    return <div className="flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[var(--vaylo-elev-card)] px-3 py-3 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> {t("loading.dashboard")}</div>;
   }
 
   const insights: { icon: typeof Sparkles; text: string; cta: string; path: string }[] = [];
@@ -104,7 +104,7 @@ const Insights = () => {
 
   if (insights.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[var(--vaylo-elev-card)] p-4">
         <p className="text-xs leading-relaxed text-muted-foreground">{t("dashboard.unlockInsights")}</p>
       </div>
     );
@@ -120,14 +120,14 @@ const Insights = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.08 }}
           onClick={() => navigate(ins.path)}
-          className="flex w-full items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-3.5 py-3.5 text-start transition-all hover:bg-white/[0.07] hover:border-white/[0.10]"
+          className="press flex w-full items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-3.5 py-3.5 text-start transition-all hover:bg-white/[0.07] hover:border-white/[0.10]"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-glow border border-white/10 mt-0.5">
             <ins.icon size={16} className="text-primary-foreground" aria-hidden />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-[13.5px] font-medium leading-snug">{ins.text}</span>
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">{ins.cta} →</span>
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 text-[12px] font-bold text-primary">{ins.cta} →</span>
           </span>
         </motion.button>
       ))}
@@ -146,44 +146,46 @@ const Index = () => {
 
   return (
     <div className="min-h-screen pb-28">
-      <header className="px-4 sm:px-5 pt-10 sm:pt-12 pb-5 sm:pb-6">
+      {/* 12px below the status bar, 24px below the title block before the first
+          card — the same two values every primary view uses (--vaylo-screen-top,
+          --vaylo-title-gap). */}
+      <header className="px-5 pt-[var(--vaylo-screen-top)] pb-[var(--vaylo-title-gap)]">
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_hsla(142_76%_36%_/_0.8)]" />
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{greeting}</p>
+            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{greeting}</p>
           </div>
           <h1 className="mt-3 text-[28px] sm:text-[32px] font-display font-bold tracking-tight leading-none">
             <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">{name}</span>
             <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">.</span>
           </h1>
-          <p className="mt-1.5 text-[13px] sm:text-sm text-muted-foreground leading-relaxed">Your performance, your plan, your progress — one screen.</p>
         </motion.div>
       </header>
 
       <StarterOfferCard />
 
-      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Your performance">
+      <section className="px-5 pb-5 sm:pb-6" aria-label="Your performance">
         <VprHero />
       </section>
 
       <section className="pb-5 sm:pb-6" aria-label="Today">
-        <div className="px-4 sm:px-5">
+        <div className="px-5">
           <SectionHeader title={t("dashboard.today")} onAction={() => navigate("/training")} actionLabel={t("dashboard.plan")} />
         </div>
         <DailyTrainingCard />
       </section>
 
-      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Readiness">
+      <section className="px-5 pb-5 sm:pb-6" aria-label="Readiness">
         <SectionHeader title={t("dashboard.readiness")} icon={HeartPulse} onAction={() => navigate("/recovery")} actionLabel={t("dashboard.checkIn")} />
         <ReadinessStrip />
       </section>
 
-      <section className="px-4 sm:px-5 pb-5 sm:pb-6" aria-label="Insights">
+      <section className="px-5 pb-5 sm:pb-6" aria-label="Insights">
         <SectionHeader title={t("dashboard.coachInsight")} icon={Sparkles} />
         <Insights />
       </section>
 
-      <div className="px-4 sm:px-5">
+      <div className="px-5">
         <button
           type="button"
           onClick={() => setShowExtras(!showExtras)}
@@ -195,7 +197,7 @@ const Index = () => {
         </button>
       </div>
       {showExtras && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="mt-4 space-y-3 px-4 sm:px-5">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="mt-4 space-y-3 px-5">
           <DailyExtras />
         </motion.div>
       )}
@@ -209,16 +211,20 @@ const ReadinessStrip = () => {
   const navigate = useNavigate();
   const sys = useVprSystem(profile?.sport?.split(",")[0]?.trim() ?? null, user?.id);
 
-  if (sys.loading) return <div className="h-[86px] animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]" aria-label="Loading readiness" />;
+  if (sys.loading) return <div className="h-[86px] animate-pulse rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[var(--vaylo-elev-card)]" aria-label="Loading readiness" />;
 
   if (sys.readiness == null) {
     return (
-      <button type="button" onClick={() => navigate("/recovery")} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-start hover:bg-white/[0.06] transition-colors">
+      <button type="button" onClick={() => navigate("/recovery")} className="press flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4 text-start hover:bg-white/[0.06] transition-colors">
         <div>
           <p className="text-sm font-bold">{t("dashboard.noCheckInToday")}</p>
           <p className="text-xs leading-relaxed text-muted-foreground">{t("dashboard.noCheckInTodayDesc")}</p>
         </div>
-        <span className="rounded-xl bg-gradient-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-glow border border-white/10">{t("dashboard.checkIn")}</span>
+        {/* `whitespace-nowrap` + `shrink-0`: the label is two words and the tile
+            beside it is content-sized, so at 390px "Check in" was breaking
+            across two lines inside its own button — a two-line pill for a
+            two-word label. A control label should never wrap. */}
+        <span className="shrink-0 whitespace-nowrap rounded-xl bg-gradient-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-glow border border-white/10">{t("dashboard.checkIn")}</span>
       </button>
     );
   }
@@ -230,7 +236,7 @@ const ReadinessStrip = () => {
       : t("dashboard.prioritiseRecovery");
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4">
+    <div className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4">
       <Metric
         label={statement}
         value={sys.readiness}
@@ -246,9 +252,14 @@ const ReadinessStrip = () => {
 const DailyExtras = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // Nutrition and the Arcade are here for reachability: both sit inside a hub
+  // (/recover, /compete) and the sidebar that links those hubs is desktop-only,
+  // so on a phone they had no entry point at all. The dashboard is the one
+  // screen everybody opens.
   const rows = [
+    { label: t("hub.recover.nutrition"), desc: t("hub.recover.nutritionDesc"), path: "/nutrition", feature: "recover.nutrition" as const },
+    { label: t("hub.compete.arcade"), desc: t("hub.compete.arcadeDesc"), path: "/arcade", feature: "compete.arcade" as const },
     { label: t("hub.perform.goals"), desc: t("dashboard.goalsDesc"), path: "/goals", feature: "perform.goals" as const },
-    { label: t("dashboard.feedTitle"), desc: t("dashboard.feedDesc"), path: "/feed", feature: "compete.communities" as const },
     { label: t("hub.compete.challenges"), desc: t("dashboard.challengesDesc"), path: "/challenges", feature: "compete.challenges" as const },
   ];
   const personalization = usePersonalization();
@@ -256,7 +267,7 @@ const DailyExtras = () => {
   return (
     <div className="space-y-2.5">
       {visibleRows.map((r) => (
-        <button key={r.path} type="button" onClick={() => navigate(r.path)} className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
+        <button key={r.path} type="button" onClick={() => navigate(r.path)} className="press flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
           <span>
             <span className="block text-sm font-semibold">{r.label}</span>
             <span className="block text-xs leading-relaxed text-muted-foreground">{r.desc}</span>
@@ -264,7 +275,7 @@ const DailyExtras = () => {
           <ChevronRight size={16} className="text-muted-foreground rtl-flip shrink-0" />
         </button>
       ))}
-      <p className="px-1 pt-1 text-center text-[11px] leading-relaxed text-muted-foreground">{t("dashboard.extrasNote")}</p>
+      <p className="px-1 pt-1 text-center text-[12px] leading-relaxed text-muted-foreground">{t("dashboard.extrasNote")}</p>
     </div>
   );
 };

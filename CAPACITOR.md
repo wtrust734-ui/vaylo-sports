@@ -14,8 +14,8 @@ that shell, plus what is wired and what is still open.
 |---|---|---|
 | Android project | `android/` (tracked; Gradle wrapper included) | Working — CI builds `app-debug.apk` |
 | App shell identity | `capacitor.config.ts` (`appId` `com.vaylosports.app`, `appName` `VAYLO Sports`, `webDir` `dist`) | Done — typechecked by `tsconfig.node.json` |
-| Native bundle | `npm run build:native` → Vite `--mode native`, base `./` | Done |
-| Relative asset base | `vite.config.ts` → `VITE_BASE` | Done |
+| Native bundle | `npm run build:native` → Vite `--mode native`, root-absolute base `/` | Done |
+| Asset base | `vite.config.ts` → root base; nested native routes use `HashRouter` | Done |
 | Platform detection | `src/lib/platform.ts` (`isNative`, `isNativeShell`, `getPlatform`, `openExternal`) | Done — degrades to web behaviour outside the shell |
 | Plugin registry | `src/lib/platform.ts` (`loadPlugin`) | Done — see "Loading a plugin" below |
 | Installed plugins | `@capacitor/{app,browser,haptics,keyboard,share,splash-screen,status-bar}` | 7, all registered natively by `npx cap sync android` |
@@ -33,8 +33,9 @@ that shell, plus what is wired and what is still open.
 | Account deletion (store requirement) | `supabase/functions/delete-account` | Done |
 | Session durability | WebView storage, `persistSession: true` | Done — and excluded from backup/D2D transfer |
 
-Deliberately **not** done: no push notifications, no iOS project (the `ios`
-block in `capacitor.config.ts` is intent, not a build), no release signing.
+Deliberately **not** done: no push notifications and no iOS project (the `ios`
+block in `capacitor.config.ts` is intent, not a build). A release upload key is
+configured locally; production sharing still waits for an owned domain.
 
 ### Loading a plugin
 
@@ -68,7 +69,7 @@ npm run cap:apk        # build:native → cap sync → gradlew assembleDebug
 Or step by step:
 
 ```bash
-npm run build:native      # relative-base bundle in dist/
+npm run build:native      # root-based bundle in dist/
 npx cap sync android      # copies dist/ into android/app/src/main/assets/public
 cd android && ./gradlew assembleDebug
 ```
@@ -90,7 +91,7 @@ Notes that have cost time before:
 - **Bump `versionCode` and `versionName`** in `android/app/build.gradle` before
   any build you intend to distribute; Play rejects a reused `versionCode`.
 - **The `.aab` produced by the debug config is debug-signed** and is not
-  Play-uploadable. A release keystore has not been created.
+  Play-uploadable. Release bundles must use the configured upload keystore.
 
 ### Working on a device or emulator
 
@@ -213,10 +214,10 @@ single constant in `src/config/eventPacks.ts`. Both are pinned by
      `supabase config push`). Any other redirect is rejected.
   3. The `@capacitor/app` plugin has to resolve — the `appUrlOpen` listener lives
      on it (see "Loading a plugin").
-- **Password reset and shared links point at the live site**, not the WebView
-  origin: `authRedirectUrl()` prefers `VITE_PUBLIC_APP_URL`, which the native
-  build reads from `.env.native`. **This is still unset, so those links currently
-  point at `localhost`** — set it before launch.
+- Native social/referral sharing remains linkless until an owned public domain
+  is configured. Native password-reset and OAuth flows return through the app's
+  registered custom scheme; public web email links remain dependent on a hosted
+  origin and correctly fail closed on preview hosts.
 - Supabase's anon key is public by design; no secrets belong in the client.
 
 ---
@@ -233,7 +234,7 @@ single constant in `src/config/eventPacks.ts`. Both are pinned by
 - [ ] No external payment links for digital goods
 - [ ] Test on a real device: notch layout, keyboard covering inputs, back button,
       deep-link sign-in, purchase → grant → balance refresh, offline behaviour
-- [ ] Release keystore created and the `.aab` signed with it
+- [ ] Confirm the `.aab` is signed with the configured upload keystore
 
 ---
 
@@ -282,5 +283,6 @@ unaffected):
   the durable fix.
 - **Route transitions** are per-page rather than native-feeling; the shared
   motion tokens in `src/lib/motion.ts` make that a later polish pass.
-- **`VITE_PUBLIC_APP_URL` is unset**, so shared links and auth emails still point
-  at `localhost`.
+- **No owned canonical public domain is configured.** Native sharing is therefore
+  linkless, preview-host links fail closed, and production web auth-email redirects
+  must wait until the owned domain and Supabase SMTP/site URL are configured.

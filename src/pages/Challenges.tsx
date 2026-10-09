@@ -32,13 +32,22 @@ const Challenges = () => {
   const [items, setItems] = useState<Challenge[]>([]);
   const [mine, setMine] = useState<Record<string, Participant>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** Per-challenge guard so a double tap can't join AND leave. */
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [prefill, setPrefill] = useState<Suggestion | null>(null);
 
 
   const load = async () => {
     setLoading(true);
-    const { data: ch } = await supabase.from("challenges").select("*").order("start_date", { ascending: false }).limit(200);
+    setLoadError(null);
+    const { data: ch, error } = await supabase.from("challenges").select("*").order("start_date", { ascending: false }).limit(200);
+    if (error) {
+      setLoadError(error.message);
+      setLoading(false);
+      return;
+    }
     setItems(ch || []);
     if (user) {
       const { data: parts } = await supabase.from("challenge_participants").select("*").eq("user_id", user.id);
@@ -61,13 +70,19 @@ const Challenges = () => {
   });
 
   const handleJoin = async (id: string) => {
+    if (busy[id]) return;
+    setBusy(b => ({ ...b, [id]: true }));
     const { error } = await joinChallenge(id);
+    setBusy(b => ({ ...b, [id]: false }));
     if (error) return toast.error(error.message);
     toast.success("Joined challenge");
     load();
   };
   const handleLeave = async (id: string) => {
+    if (busy[id]) return;
+    setBusy(b => ({ ...b, [id]: true }));
     const { error } = await leaveChallenge(id);
+    setBusy(b => ({ ...b, [id]: false }));
     if (error) return toast.error(error.message);
     toast.success("Left challenge");
     load();
@@ -85,14 +100,14 @@ const Challenges = () => {
       <div className="relative overflow-hidden">
         <div className="absolute -top-24 -right-16 w-72 h-72 bg-electric-purple/20 blur-[110px] rounded-full pointer-events-none" />
         <div className="absolute -top-32 left-0 w-72 h-72 bg-primary/20 blur-[110px] rounded-full pointer-events-none" />
-        <div className="relative px-5 pt-14 pb-5">
-          <p className="text-[11px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5">
+        <div className="relative px-5 pt-[var(--vaylo-screen-top)] pb-5">
+          <p className="text-[12px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5">
             <Trophy size={12} /> Compete
           </p>
           <h1 className="text-3xl font-display font-bold mt-1 tracking-tight">Challenges</h1>
           <p className="text-sm text-muted-foreground mt-1">Take on challenges, unlock trophies & badges for your Trophy Room.</p>
           <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-            <p className="text-[11px] leading-relaxed text-amber-200/90">
+            <p className="text-[12px] leading-relaxed text-amber-200/90">
               <span className="font-bold text-amber-200">Disclaimer:</span> Challenges are community goals for motivation and bragging rights — they are <span className="font-semibold">not personalised training prescriptions</span>. Train responsibly, respect any injury or recovery guidance from your coach or clinician, and skip anything that doesn’t fit your programme or health status. Brand challenges are paid partnerships and are always labelled; the brand’s products are not part of your training plan, and nothing in a brand challenge is medical or professional advice.
             </p>
           </div>
@@ -105,7 +120,7 @@ const Challenges = () => {
             ].map(s => (
               <div key={s.label} className="bg-card/60 backdrop-blur border border-border rounded-xl px-3 py-2 text-center">
                 <p className={`text-xl font-display font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{s.label}</p>
+                <p className="text-[12px] uppercase tracking-widest text-muted-foreground">{s.label}</p>
               </div>
             ))}
           </div>
@@ -119,7 +134,7 @@ const Challenges = () => {
       {/* Personalised suggestions */}
       {suggestions.length > 0 && (
         <div className="px-5 mb-4">
-          <p className="text-[11px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5 mb-2">
+          <p className="text-[12px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5 mb-2">
             <Sparkles size={11} /> Suggested for you
           </p>
           {/* `grid-cols-1` is `minmax(0, 1fr)`, not a bare `grid`. A bare
@@ -137,10 +152,10 @@ const Challenges = () => {
                     <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center text-lg shrink-0">{s.icon}</div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{s.title}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{s.reason}</p>
+                      <p className="text-[12px] text-muted-foreground truncate">{s.reason}</p>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 text-[10px] text-energy font-semibold shrink-0 bg-energy/10 border border-energy/30 rounded-full px-2 py-0.5">
+                  <span className="flex items-center gap-1 text-[12px] text-energy font-semibold shrink-0 bg-energy/10 border border-energy/30 rounded-full px-2 py-0.5">
                     <Medal size={10}/> Trophy
                   </span>
                 </div>
@@ -187,7 +202,14 @@ const Challenges = () => {
         </div>
       </div>
 
-      {loading ? <p className="px-5 text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (
+      {loading ? <p className="px-5 text-sm text-muted-foreground">Loading…</p> : loadError ? (
+        <div className="px-5">
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 text-center">
+            <p className="text-sm text-destructive mb-2">Couldn't load challenges.</p>
+            <button onClick={load} className="text-xs font-semibold text-primary underline">Try again</button>
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="px-5 py-16 text-center">
           <Target className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No challenges here yet.</p>
@@ -216,7 +238,7 @@ const Challenges = () => {
                         {done && <CheckCircle2 size={14} className="text-primary shrink-0" />}
                       </div>
                       {c.sponsor_name && (
-                        <span className="mt-1 inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        <span className="mt-1 inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-widest text-muted-foreground">
                           {c.sponsor_disclosure?.trim() || "Sponsored"} · {c.sponsor_name}
                         </span>
                       )}
@@ -224,12 +246,12 @@ const Challenges = () => {
                     </div>
                   </button>
                   <div className="text-right shrink-0">
-                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Reward</p>
+                    <p className="text-[12px] uppercase tracking-widest text-muted-foreground">Reward</p>
                     <p className="text-xs font-bold text-energy flex items-center gap-1 mt-0.5"><Medal size={11}/> Trophy</p>
                   </div>
                 </div>
 
-                <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] text-muted-foreground">
+                <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[12px] text-muted-foreground">
                   <span className="uppercase tracking-wide font-semibold text-foreground/70">{c.scope}</span>
                   {c.sport && <span>· {c.sport}</span>}
                   <span className="flex items-center gap-1"><Clock size={10} /> {daysLeft}d left</span>
@@ -237,7 +259,7 @@ const Challenges = () => {
                 </div>
 
                 <div className="relative mt-3">
-                  <div className="flex items-center justify-between text-[11px] mb-1">
+                  <div className="flex items-center justify-between text-[12px] mb-1">
                     <span className="text-muted-foreground">Progress · {pct}%</span>
                     <span className="font-semibold">{(p?.progress || 0).toFixed(1)} / {c.target_value} {c.target_unit}</span>
                   </div>
@@ -254,13 +276,12 @@ const Challenges = () => {
                         className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold shadow-glow">
                         {done ? "View trophy" : "Log progress"}
                       </button>
-                      {!done && <button onClick={() => handleLeave(c.id)} className="px-3 py-2 rounded-lg border border-border text-xs hover:border-destructive/40 hover:text-destructive transition-colors">Leave</button>}
+                      {!done && <button onClick={() => handleLeave(c.id)} disabled={busy[c.id]} className="px-3 py-2 rounded-lg border border-border text-xs hover:border-destructive/40 hover:text-destructive transition-colors disabled:opacity-40">Leave</button>}
                     </>
-                  ) : (
-                    <button onClick={() => handleJoin(c.id)}
-                      className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold shadow-glow">
-                      Join challenge
-                    </button>
+                  ) : (                      <button onClick={() => handleJoin(c.id)} disabled={busy[c.id]}
+                        className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold shadow-glow disabled:opacity-40">
+                        Join challenge
+                      </button>
                   )}
                 </div>
               </motion.div>
@@ -356,16 +377,27 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
   const [sport, setSport] = useState(prefill?.sport ?? "");
   const [target, setTarget] = useState(prefill?.target_value ? String(prefill.target_value) : "25");
   const [unit, setUnit] = useState(prefill?.target_unit ?? "km");
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    if (!title) return toast.error("Title required");
+    if (saving) return;
+    if (!title.trim()) return toast.error("Title required");
+    // Server enforces target_value > 0 and end_date >= start_date; the clamps
+    // here give the same answers without a round trip.
+    const n = Number(target);
+    if (!Number.isFinite(n) || n <= 0) return toast.error("Target must be a positive number");
+    const targetValue = Math.min(1_000_000, n);
+    const cleanTitle = title.trim().slice(0, 120);
+    const cleanUnit = (unit.trim() || "reps").slice(0, 20);
     const days = scope === "weekly" ? 7 : scope === "monthly" ? 30 : 14;
     const end = new Date(); end.setDate(end.getDate() + days);
+    setSaving(true);
     const { error } = await supabase.from("challenges").insert({
-      creator_id: userId, title, description: `${type} challenge`, type, sport: sport || null, scope,
-      target_value: Number(target), target_unit: unit, start_date: localDateKey(),
+      creator_id: userId, title: cleanTitle, description: `${type} challenge`, type, sport: sport.trim().slice(0, 60) || null, scope,
+      target_value: targetValue, target_unit: cleanUnit, start_date: localDateKey(),
       end_date: localDateKey(end), reward_points: 0, reward_credits: 0, icon: prefill?.icon ?? "🏁",
     });
+    setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("Challenge created");
     onCreated();
@@ -373,7 +405,9 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
 
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+    // z-[59] clears the floating tab bar (see the ladder in BottomNav) and
+    // the bottom padding keeps the Cancel/Create row above the home indicator.
+    <div className="fixed inset-0 bg-black/60 z-[59] flex items-end sm:items-center justify-center p-4 pb-[max(1rem,var(--vaylo-inset-bottom))]" onClick={onClose}>
       <div className="bg-card w-full max-w-md rounded-2xl border border-border p-5" onClick={e => e.stopPropagation()}>
         <h3 className="font-display font-bold mb-3">New challenge</h3>
         <div className="space-y-2 text-sm">
@@ -397,7 +431,9 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
         </div>
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm">Cancel</button>
-          <button onClick={save} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Create</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40">
+            {saving ? "Creating…" : "Create"}
+          </button>
         </div>
       </div>
     </div>

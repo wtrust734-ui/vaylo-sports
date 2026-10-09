@@ -27,8 +27,14 @@ export const formatWeight = (kg: number | null | undefined, u: UnitSystem, digit
 // ── Height ──
 export const cmToFtIn = (cm: number) => {
   const totalIn = cm / 2.54;
-  const ft = Math.floor(totalIn / 12);
-  const inch = Math.round(totalIn - ft * 12);
+  let ft = Math.floor(totalIn / 12);
+  let inch = Math.round(totalIn - ft * 12);
+  if (inch === 12) {
+    // Rounding can push a remainder to a full foot — normalise so 152 cm
+    // displays 5'0", never the degenerate 4'12".
+    ft += 1;
+    inch = 0;
+  }
   return { ft, in: inch };
 };
 export const ftInToCm = (ft: number, inch: number) => (ft * 12 + inch) * 2.54;

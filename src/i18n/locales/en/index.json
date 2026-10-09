@@ -44,8 +44,6 @@
     "primaryNav": "Primary"
   },
   "quickActions": {
-    "logWorkout": "Log workout",
-    "logWorkoutDesc": "Start or finish a session",
     "logResult": "Log a result",
     "logResultDesc": "Record a competition outcome",
     "recoveryCheckIn": "Recovery check-in",
@@ -58,13 +56,14 @@
     "train": {
       "title": "Train",
       "subtitle": "Sessions, plans and technique.",
-      "primaryCta": "Start workout",
       "groupDaily": "Daily training",
       "groupProgress": "Progress",
       "workouts": "Workouts",
       "workoutsDesc": "Log and review sessions",
       "trainingPlans": "Training plans",
       "trainingPlansDesc": "Your active plan and weeks",
+      "availability": "Availability",
+      "availabilityDesc": "Holidays, exams and breaks",
       "routines": "Routines",
       "routinesDesc": "Repeatable warm-ups and drills",
       "crossTraining": "Cross-training",
@@ -86,6 +85,8 @@
       "vprDesc": "Your overall rating and factors",
       "metricsHub": "Metrics hub",
       "metricsHubDesc": "Loads, trends and logging",
+      "insights": "Insights",
+      "insightsDesc": "What your training says today",
       "skills": "Skills",
       "skillsDesc": "Sport-skill analytics",
       "development": "Development",
@@ -112,7 +113,7 @@
       "nutrition": "Nutrition",
       "nutritionDesc": "Meals, water and targets",
       "wearables": "Wearables",
-      "wearablesDesc": "Connect watches — Health Connect, Garmin, Apple & more"
+      "wearablesDesc": "Connect watches — Health Connect, Garmin & more"
     },
     "compete": {
       "title": "Compete",
@@ -149,7 +150,6 @@
     "readinessDown": "{{value}} vs yesterday",
     "coachInsight": "Coach insight",
     "viewInsight": "View insight",
-    "startSession": "Start session",
     "noVprYet": "Log a few sessions to unlock your VPR.",
     "noSessionToday": "No session planned — check your plan.",
     "welcomeBack": "Welcome back",
@@ -275,6 +275,7 @@
     "activityFeed": "Activity Feed",
     "groupTrain": "Train",
     "trainingPlans": "Training Plans",
+    "availability": "Availability",
     "workouts": "Workouts",
     "routines": "Routines",
     "crossTraining": "Cross-Training",
@@ -317,6 +318,9 @@
     "notifications": "Notifications",
     "profile": "Profile",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "guardian": "Guardian access",
+    "startingAnalysis": "Starting analysis",
+    "insights": "Insights"
   }
 }

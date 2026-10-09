@@ -27,7 +27,7 @@ const PersonalizationSetting = () => {
         </div>
         <div>
           <h4 className="text-sm font-semibold">Tailor my app</h4>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
             Show the surfaces that matter for {relevantCount}. Off = everything.
           </p>
         </div>

@@ -45,7 +45,9 @@ const SPORTS = [
 ];
 
 const ALLOWED = ["video/mp4", "video/quicktime", "video/webm"];
-const MAX_BYTES = 18 * 1024 * 1024;
+// The shared Edge Function JSON guard caps request bodies at 10 MiB. Base64
+// adds ~33%, so keep raw videos to 6 MiB for headroom below that ceiling.
+const MAX_BYTES = 6 * 1024 * 1024;
 
 const scoreColor = (s: number) =>
   s >= 80 ? "text-emerald-400" : s >= 60 ? "text-electric-blue" : s >= 40 ? "text-amber-400" : "text-destructive";
@@ -77,6 +79,7 @@ const VideoFormAnalysis = () => {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [tab, setTab] = useState<"analyse" | "history">("analyse");
   const [openHistory, setOpenHistory] = useState<string | null>(null);
+  const activeRequestId = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
@@ -95,6 +98,7 @@ const VideoFormAnalysis = () => {
   const reset = () => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoUrl(null); setFileName(null); setResult(null); setLastId(null); setProgress(0); setStage("idle");
+    activeRequestId.current = null;
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,11 +112,12 @@ const VideoFormAnalysis = () => {
       return;
     }
     if (file.size > MAX_BYTES) {
-      toast({ title: "Video too large", description: "Keep clips under 18MB (5–15 seconds works best).", variant: "destructive" });
+      toast({ title: "Video too large", description: "Keep clips under 6MB (5–15 seconds works best).", variant: "destructive" });
       return;
     }
 
     reset();
+    activeRequestId.current = crypto.randomUUID();
     setFileName(file.name);
     setVideoUrl(URL.createObjectURL(file));
     setStage("uploading");
@@ -131,7 +136,7 @@ const VideoFormAnalysis = () => {
       setStage("analysing");
 
       const { data, error } = await supabase.functions.invoke("video-form-analysis", {
-        body: { video_base64: base64, mime_type: file.type, sport_type: sport, video_name: file.name, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+        body: { request_id: activeRequestId.current, video_base64: base64, mime_type: file.type, sport_type: sport, video_name: file.name, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
       });
 
       if (error) {
@@ -140,7 +145,7 @@ const VideoFormAnalysis = () => {
         try { const ctx = err.context; if (ctx?.text) { const parsed = JSON.parse(await ctx.text()); msg = parsed.error || msg; } } catch { /* ignore */ }
         throw new Error(isNotReadyMessage(msg) ? AI_NOT_READY_MESSAGE : msg);
       }
-      const payload = (data ?? {}) as { error?: string; result?: AnalysisResult; model?: string; saved_id?: string | null };
+      const payload = (data ?? {}) as { error?: string; result?: AnalysisResult; model?: string; saved_id?: string | null; cost?: number };
       if (payload.error) throw new Error(isNotReadyMessage(payload.error) ? AI_NOT_READY_MESSAGE : payload.error);
 
       setProgress(100);
@@ -149,7 +154,10 @@ const VideoFormAnalysis = () => {
       setLastId(payload.saved_id ?? null);
       setStage("idle");
       loadHistory();
-      toast({ title: "Analysis ready 🎯" });
+      toast({
+        title: "Analysis ready 🎯",
+        description: (payload.cost ?? 0) > 0 ? `${payload.cost} credits used.` : undefined,
+      });
     } catch (err) {
       setStage("idle");
       setProgress(0);
@@ -157,9 +165,15 @@ const VideoFormAnalysis = () => {
     }
   };
 
+  // Discarding unsaves the row (saved=false), which also takes it out of the
+  // free-tier weekly window and puts it on the 30-day retention sweep. The
+  // video itself was never stored — only the structured result row.
   const discardAnalysis = async () => {
     if (lastId) {
-      const { error } = await supabase.from("video_form_analyses").update({ saved: false }).eq("id", lastId);
+      const { error } = await supabase
+        .from("video_form_analyses")
+        .update({ saved: false, deleted_at: new Date().toISOString() })
+        .eq("id", lastId);
       if (error) { toast({ title: "Couldn't discard the analysis", description: error.message, variant: "destructive" }); return; }
     }
     loadHistory();
@@ -178,7 +192,7 @@ const VideoFormAnalysis = () => {
   return (
     <div className="min-h-screen bg-background pb-10">
       {/* Header */}
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2">
           <Video size={20} className="text-electric-purple" />
           <h1 className="text-2xl font-display font-bold">AI Video Form Analysis</h1>
@@ -204,10 +218,12 @@ const VideoFormAnalysis = () => {
       {tab === "analyse" && (
         <div className="px-5 space-y-4">
           {/* Plan banner */}
-          <div className="flex items-center gap-2 text-[11px] rounded-xl border border-border bg-card px-3 py-2">
+          <div className="flex items-center gap-2 text-[12px] rounded-xl border border-border bg-card px-3 py-2">
             {isPremium ? <Crown size={14} className="text-amber-400" /> : <Sparkles size={14} className="text-electric-blue" />}
             <span className="text-muted-foreground">
-              {isPremium ? "Unlimited: analyses on our highest-accuracy model." : "Free plan: 1 analysis per week."}
+              {isPremium
+                ? "Up to 10 highest-accuracy analyses per month; further analyses cost 12 credits."
+                : "1 Flash analysis per week, then 12 credits per analysis."}
             </span>
             {!isPremium && (
               <button onClick={() => navigate("/market")} className="ml-auto font-semibold text-electric-purple">Upgrade</button>
@@ -256,7 +272,7 @@ const VideoFormAnalysis = () => {
               <>
                 <h3 className="font-display font-bold text-lg mb-1">Upload your clip</h3>
                 <p className="text-sm text-muted-foreground mb-3">
-                  MP4, MOV or WebM · under 18MB · 5–15 seconds, full body in frame, side-on view works best.
+                  MP4, MOV or WebM · under 6MB · 5–15 seconds, full body in frame, side-on view works best.
                 </p>
                 <div className="flex gap-2">
                   <motion.button whileTap={{ scale: 0.98 }} onClick={() => fileRef.current?.click()}
@@ -280,7 +296,7 @@ const VideoFormAnalysis = () => {
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 {/* Score */}
                 <div className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card text-center">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Overall form score</p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">Overall form score</p>
                   <motion.p initial={{ scale: 0.8 }} animate={{ scale: 1 }}
                     className={`text-5xl font-display font-bold mt-1 ${scoreColor(result.overall_score)}`}>
                     {result.overall_score}
@@ -290,14 +306,14 @@ const VideoFormAnalysis = () => {
                     <motion.div className="h-full bg-gradient-primary" initial={{ width: 0 }}
                       animate={{ width: `${result.overall_score}%` }} transition={{ duration: 0.8 }} />
                   </div>
-                  {modelUsed && <p className="text-[10px] text-muted-foreground mt-2">Analysed with Vaylo Sports AI vision</p>}
+                  {modelUsed && <p className="text-[12px] text-muted-foreground mt-2">Analysed with Vaylo Sports AI vision</p>}
                 </div>
 
                 {/* Coach summary */}
                 <div className="bg-card border border-border rounded-2xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles size={14} className="text-electric-purple" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-electric-purple">Coach summary</span>
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-electric-purple">Coach summary</span>
                   </div>
                   <p className="text-sm leading-relaxed">{result.coach_summary}</p>
                 </div>
@@ -330,14 +346,14 @@ const VideoFormAnalysis = () => {
                   {result.recommended_drills?.map((d, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
                       <div className="w-5 h-5 rounded-full bg-electric-purple/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[10px] font-bold text-electric-purple">{i + 1}</span>
+                        <span className="text-[12px] font-bold text-electric-purple">{i + 1}</span>
                       </div>
                       <span>{d}</span>
                     </div>
                   ))}
                 </Section>
 
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-xl p-3">
+                <div className="flex items-center gap-2 text-[12px] text-muted-foreground bg-muted/40 border border-border rounded-xl p-3">
                   <Save size={14} className="text-emerald-400 flex-shrink-0" />
                   Saved to your athlete profile. Your video is never stored — only the report.
                 </div>
@@ -362,7 +378,7 @@ const VideoFormAnalysis = () => {
                 <div className={`text-xl font-display font-bold ${scoreColor(row.overall_score || 0)}`}>{row.overall_score ?? "–"}</div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold capitalize">{row.sport_type} analysis</p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[12px] text-muted-foreground">
                     {new Date(row.created_at).toLocaleDateString()} {row.video_name ? `· ${row.video_name}` : ""}
                   </p>
                 </div>
@@ -375,18 +391,18 @@ const VideoFormAnalysis = () => {
                   <p className="text-sm border-t border-border pt-2 leading-relaxed">{row.result?.coach_summary}</p>
                   {!!row.result?.areas_to_improve?.length && (
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1">Improve</p>
+                      <p className="text-[12px] font-bold uppercase tracking-wider text-amber-400 mb-1">Improve</p>
                       {row.result.areas_to_improve.map((s, i) => <Bullet key={i} text={s} tone="amber" />)}
                     </div>
                   )}
                   {!!row.result?.recommended_drills?.length && (
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-electric-purple mb-1">Drills</p>
+                      <p className="text-[12px] font-bold uppercase tracking-wider text-electric-purple mb-1">Drills</p>
                       {row.result.recommended_drills.map((s, i) => <Bullet key={i} text={s} tone="purple" />)}
                     </div>
                   )}
                   <button onClick={() => deleteHistory(row.id)}
-                    className="flex items-center gap-1.5 text-[11px] text-destructive font-semibold pt-1">
+                    className="flex items-center gap-1.5 text-[12px] text-destructive font-semibold pt-1">
                     <Trash2 size={12} /> Delete analysis
                   </button>
                 </motion.div>
@@ -403,7 +419,7 @@ const Section = ({ title, icon, children }: { title: string; icon: React.ReactNo
   <div className="bg-card border border-border rounded-2xl p-4">
     <div className="flex items-center gap-2 mb-2">
       {icon}
-      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{title}</span>
+      <span className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">{title}</span>
     </div>
     <div className="space-y-1.5">{children}</div>
   </div>

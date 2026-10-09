@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Trophy, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { appHref } from "@/lib/routerBase";
 
 /**
  * Public referral leaderboard (/referral-leaderboard) — "Top recruiters this
@@ -31,7 +32,7 @@ const ReferralLeaderboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="px-5 pt-12 pb-8 max-w-lg mx-auto">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-energy">Vaylo Sports</p>
+        <p className="text-[12px] font-semibold uppercase tracking-widest text-energy">Vaylo Sports</p>
         <h1 className="mt-1 text-3xl font-display font-bold">Top recruiters</h1>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
           The athletes who brought the most friends to Vaylo Sports this month. The leader wins a
@@ -60,21 +61,21 @@ const ReferralLeaderboard = () => {
 
         {!session ? (
           <a
-            href="/auth"
+            href={appHref("/auth")}
             className="mt-6 block rounded-2xl bg-gradient-to-r from-electric-purple to-energy py-3.5 text-center text-base font-bold text-white"
           >
             Join Vaylo Sports free →
           </a>
         ) : (
           <a
-            href="/referrals"
+            href={appHref("/referrals")}
             className="mt-6 block rounded-2xl border border-energy/40 py-3.5 text-center text-sm font-semibold text-energy"
           >
             Get your invite code →
           </a>
         )}
 
-        <p className="mt-5 text-center text-[11px] text-muted-foreground">
+        <p className="mt-5 text-center text-[12px] text-muted-foreground">
           AI coaching, challenges and leaderboards for your sport. Free to start.
         </p>
       </div>

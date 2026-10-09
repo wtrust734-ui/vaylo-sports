@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Firebase Cloud Messaging configuration.
+
+    These four values are EMPTY on purpose. An empty value means PushPlugin
+    reports `configured: false`, the prefs screen says push is not available,
+    and nothing else in the app is affected.
+
+    Why not google-services.json? The google-services Gradle plugin FAILS THE
+    BUILD when the file is missing. That would mean this repository only builds
+    for whoever has been handed the Firebase project — every contributor, every
+    CI run and every fork would break on a file that contains no code. Reading
+    the values from resources keeps the build honest and lets push be switched
+    on by filling in four strings.
+
+    TO ENABLE PUSH:
+      1. Firebase console -> create an Android app with package
+         com.vaylosports.app (must match exactly, or FCM rejects the token).
+      2. Copy its web config values into the four strings below.
+      3. Upload the generated google-services.json to the server and store its
+         contents in the edge function's secrets (see push/FIREBASE.md) — the
+         app-side values below are public by design, the server-side service
+         account is not.
+      4. Rebuild. PushPlugin now resolves a real token and the device
+         registers itself on sign-in.
+
+    google_app_id / gcm_defaultSenderId / google_api_key are what the Firebase
+    SDK needs to talk to FCM at all. project_id routes to the right project.
+-->
+<resources>
+    <string name="vaylo_fcm_app_id" translatable="false"></string>
+    <string name="vaylo_fcm_api_key" translatable="false"></string>
+    <string name="vaylo_fcm_project_id" translatable="false"></string>
+    <string name="vaylo_fcm_sender_id" translatable="false"></string>
+</resources>

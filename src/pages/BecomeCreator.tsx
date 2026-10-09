@@ -33,7 +33,7 @@ export default function BecomeCreator() {
   };
 
   return (
-    <div className="px-5 pt-8 pb-24 max-w-xl mx-auto">
+    <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-electric-purple to-energy flex items-center justify-center mb-4">
           <Sparkles className="h-7 w-7 text-white" />
@@ -49,10 +49,14 @@ export default function BecomeCreator() {
         </div>
 
         <div className="p-4 rounded-2xl bg-card border border-border space-y-2 text-sm mb-6">
-          {["Reach thousands of athletes", "Set your own prices", "Monthly Stripe payouts", "Verified badge after 5 sales"].map((t) => (
+          {["Reach thousands of athletes", "Set your own prices", "Verified badge after 5 sales"].map((t) => (
             <div key={t} className="flex items-center gap-2"><Check className="h-4 w-4 text-energy" /> <span>{t}</span></div>
           ))}
         </div>
+        <p className="text-xs text-muted-foreground mb-6">
+          Note: creator payouts are not yet enabled. Your payout email is stored
+          but no funds move until the payout provider is connected.
+        </p>
 
         <Button onClick={submit} disabled={!data.display_name || busy} className="w-full h-12 bg-gradient-to-r from-electric-purple to-energy">
           {busy ? "Submitting…" : "Submit application"}

@@ -1,0 +1,5 @@
+
+================ ^Achievements  (37 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 32.0px×9  224.0px×9  18.7px×3  82.7px×1  40.0px×1
+  top: y34.7 "Go back" | y90.7 "Achievements" | y128.0 "Earn medals for consis" | y184.8 "0"

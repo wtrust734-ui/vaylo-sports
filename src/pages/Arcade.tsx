@@ -40,7 +40,7 @@ const ReactionGame = ({ onBack }: { onBack: (score?: number) => void }) => {
   const bgClass = phase === "go" ? "bg-green-500" : phase === "ready" ? "bg-destructive" : phase === "early" ? "bg-energy" : "bg-card";
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(best ?? undefined)} /><h1 className="text-xl font-display font-bold">Reaction Speed</h1></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(best ?? undefined)} /><h1 className="text-xl font-display font-bold">Reaction Speed</h1></div>
       <motion.div onClick={handleTap} whileTap={{ scale: 0.98 }} className={`mx-5 rounded-2xl p-8 min-h-[300px] flex flex-col items-center justify-center cursor-pointer transition-colors duration-200 border border-border ${bgClass}`}>
         {phase === "waiting" && <p className="text-lg font-semibold text-center">Tap to start</p>}
         {phase === "ready" && <p className="text-lg font-semibold text-center text-destructive-foreground">Wait for green...</p>}
@@ -82,7 +82,7 @@ const SequenceGame = ({ onBack }: { onBack: (score?: number) => void }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Memory Sequence</h1><span className="ml-auto text-sm font-bold text-primary">Score: {score}</span></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Memory Sequence</h1><span className="ml-auto text-sm font-bold text-primary">Score: {score}</span></div>
       <div className="px-5">
         <div className="grid grid-cols-3 gap-3 mb-5">{Array.from({ length: 9 }).map((_, i) => (
           <motion.button key={i} onClick={() => handleCellTap(i)} whileTap={{ scale: 0.9 }} className={`aspect-square rounded-xl border transition-all duration-200 ${activeCell === i ? "bg-primary border-primary shadow-glow" : "bg-card border-border"}`} />
@@ -131,7 +131,7 @@ const PeripheralGame = ({ onBack }: { onBack: (score?: number) => void }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Peripheral Vision</h1><span className="ml-auto text-sm font-bold text-primary">{score}/{round}</span></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Peripheral Vision</h1><span className="ml-auto text-sm font-bold text-primary">{score}/{round}</span></div>
       <div className="px-5">
         <div className="relative bg-card border border-border rounded-2xl overflow-hidden" style={{ height: 350 }}>
           <div className="absolute inset-0 flex items-center justify-center"><div className="w-3 h-3 rounded-full bg-muted-foreground/30" /></div>
@@ -192,7 +192,7 @@ const TimingGame = ({ onBack }: { onBack: (score?: number) => void }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Rhythm Timing</h1></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Rhythm Timing</h1></div>
       <div className="px-5">
         <motion.div onClick={handleTap} whileTap={{ scale: 0.95 }}
           className={`rounded-2xl p-8 min-h-[300px] flex flex-col items-center justify-center cursor-pointer border transition-colors duration-100 ${flash ? "bg-primary/20 border-primary" : "bg-card border-border"}`}>
@@ -238,7 +238,7 @@ const AccuracyGame = ({ onBack }: { onBack: (score?: number) => void }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Target Accuracy</h1><span className="ml-auto text-sm font-bold text-primary">{score}/{round}</span></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Target Accuracy</h1><span className="ml-auto text-sm font-bold text-primary">{score}/{round}</span></div>
       <div className="px-5">
         <div className="relative bg-card border border-border rounded-2xl overflow-hidden" style={{ height: 350 }}>
           {target && (
@@ -284,7 +284,7 @@ const CoordinationGame = ({ onBack }: { onBack: (score?: number) => void }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Hand-Eye Drill</h1><span className="ml-auto text-sm font-bold text-primary">{timeLeft}s</span></div>
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3"><BackButton onBack={() => onBack(score)} /><h1 className="text-xl font-display font-bold">Hand-Eye Drill</h1><span className="ml-auto text-sm font-bold text-primary">{timeLeft}s</span></div>
       <div className="px-5">
         <div className="relative bg-card border border-border rounded-2xl overflow-hidden" style={{ height: 350 }}>
           {phase === "playing" && (
@@ -374,7 +374,7 @@ const Arcade = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">
           <Gamepad2 size={24} className="inline mr-2 text-primary" />Vaylo Sports Arcade
         </motion.h1>
@@ -387,7 +387,7 @@ const Arcade = () => {
         <Trophy size={20} className="text-energy flex-shrink-0" />
         <div>
           <p className="text-xs font-semibold text-energy">Every record = {promoBonus("arcade_record")} credits</p>
-          <p className="text-[10px] text-muted-foreground">Beat the threshold and improve on it — a new personal best awards +{promoBonus("arcade_record")} credits each time.</p>
+          <p className="text-[12px] text-muted-foreground">Beat the threshold and improve on it — a new personal best awards +{promoBonus("arcade_record")} credits each time.</p>
         </div>
       </motion.div>
 
@@ -404,8 +404,8 @@ const Arcade = () => {
                 className="bg-card border border-border rounded-xl p-4 text-start hover:border-primary/20 transition-colors duration-300">
                 <div className={`p-2.5 rounded-xl ${game.bg} w-fit mb-3`}><game.icon size={22} className={game.color} /></div>
                 <h4 className="font-semibold text-sm mb-1">{game.title}</h4>
-                <p className="text-[11px] text-muted-foreground leading-tight">{game.desc}</p>
-                <div className="mt-2 flex items-center justify-between text-[10px]">
+                <p className="text-[12px] text-muted-foreground leading-tight">{game.desc}</p>
+                <div className="mt-2 flex items-center justify-between text-[12px]">
                   <span className="text-muted-foreground">WR: {wr?.label}</span>
                   {best !== undefined && <span className="text-energy font-semibold">Best: {best}</span>}
                 </div>

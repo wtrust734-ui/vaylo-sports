@@ -196,14 +196,12 @@ Nothing in the code needs changing for email/password — the rest are dashboard
 settings, and two of them are the difference between working sign-in and
 confusing failures.
 
-1. **Authentication → URL Configuration.** Set **Site URL** to the domain you
-   will actually deploy on, and add it to **Redirect URLs**. If this stays at
-   `localhost`, every password-reset and magic link points at a dead address —
-   the one auth bug that looks like a broken account rather than a setting.
-   It currently reads `http://localhost:8080`: change it in `supabase/config.toml`
-   and re-run `supabase config push` once the site has a real domain.
-   The app builds reset/OAuth redirects from `VITE_PUBLIC_APP_URL` when set,
-   otherwise the current origin (see `src/lib/share.ts`).
+1. **Authentication → URL Configuration.** No owned public domain is configured
+   yet. Keep local development origins and the native callback allowlist only;
+   set Site URL and redirect allowlist to the verified owned web origin only
+   after it is deployed. Do not add a Lovable preview hostname as canonical.
+   Native auth uses the app's registered callback scheme; web redirects are built
+   from `VITE_PUBLIC_APP_URL` when configured (see `src/lib/share.ts`).
 2. **Providers.** The app supports Google, Apple and email/password
    (`signInWithOAuth` in `src/pages/Auth.tsx`). Email works immediately. Google
    and Apple need client IDs/secrets entered in **Authentication → Providers** —
@@ -302,7 +300,7 @@ Nothing to change — `.env` already targets the new project. The build reads:
 |---|---|
 | `VITE_SUPABASE_URL` | Project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Public anon key (safe in the bundle; RLS is the security boundary) |
-| `VITE_PUBLIC_APP_URL` | Optional. Shared links, referral links and auth redirects. Required for the Capacitor build, unnecessary on the web (falls back to the current origin) |
+| `VITE_PUBLIC_APP_URL` | Optional owned public origin for web links/auth redirects. Native sharing stays linkless until an owned domain exists; preview origins fail closed. |
 
 ```bash
 npm run build      # output in dist/

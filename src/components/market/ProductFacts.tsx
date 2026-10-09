@@ -32,8 +32,8 @@ export default function ProductFacts({ receive, expires, renews, lifetime, desig
         return (
           <div key={r.label} className="flex items-start gap-2">
             <Icon size={11} className="mt-[3px] shrink-0 text-primary" />
-            <dt className="w-[76px] shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">{r.label}</dt>
-            <dd className="min-w-0 flex-1 text-[11px] leading-relaxed text-foreground/85">{r.value}</dd>
+            <dt className="w-[76px] shrink-0 text-[12px] uppercase tracking-wider text-muted-foreground">{r.label}</dt>
+            <dd className="min-w-0 flex-1 text-[12px] leading-relaxed text-foreground/85">{r.value}</dd>
           </div>
         );
       })}

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Swords, Flag, Calendar, Trophy, Users, Gamepad2 } from "lucide-react";
+import { Swords, Flag, Calendar, Gamepad2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
@@ -19,13 +19,11 @@ const Compete = () => {
       links: [
         { icon: Calendar, label: t("hub.compete.events"), description: t("hub.compete.eventsDesc"), path: "/events", feature: "compete.events" },
         { icon: Flag, label: t("hub.compete.challenges"), description: t("hub.compete.challengesDesc"), path: "/challenges", feature: "compete.challenges" },
-        { icon: Users, label: t("hub.compete.opponents"), description: t("hub.compete.opponentsDesc"), path: "/opponents", feature: "compete.opponents" },
       ],
     },
     {
       title: t("hub.compete.groupRankings"),
       links: [
-        { icon: Trophy, label: t("hub.compete.leaderboard"), description: t("hub.compete.leaderboardDesc"), path: "/leaderboard", feature: "compete.leaderboard" },
         { icon: Gamepad2, label: t("hub.compete.arcade"), description: t("hub.compete.arcadeDesc"), path: "/arcade", feature: "compete.arcade" },
       ],
     },

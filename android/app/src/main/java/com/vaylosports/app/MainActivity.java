@@ -3,8 +3,11 @@ package com.vaylosports.app;
 import android.content.Intent;
 import android.os.Bundle;
 import android.webkit.WebView;
+import androidx.appcompat.app.AppCompatDelegate;
 import com.getcapacitor.BridgeActivity;
+import com.vaylosports.app.camera.CameraCapturePlugin;
 import com.vaylosports.app.health.HealthConnectPlugin;
+import com.vaylosports.app.push.PushPlugin;
 
 public class MainActivity extends BridgeActivity {
 
@@ -26,10 +29,22 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // The whole UI is dark-only (src/index.css sets dark values on :root and
+        // never reads prefers-color-scheme), so declare that instead of following
+        // the device. This is also what makes the status bar come out right:
+        // @capacitor/status-bar falls back to the theme when it has no explicit
+        // style, and StatusBar.getStyleForTheme() returns "LIGHT" (= dark icons,
+        // which makes Android paint a light scrim behind them) for any uiMode
+        // that is not UI_MODE_NIGHT_YES. That light scrim was the white band
+        // sitting above the near-black app on every screen.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+
         // Register custom plugins BEFORE super.onCreate: BridgeActivity.onCreate
         // consumes initialPlugins when it calls load() at the end, so a
         // registration placed after super.onCreate() never reaches the bridge.
         registerPlugin(HealthConnectPlugin.class);
+        registerPlugin(CameraCapturePlugin.class);
+        registerPlugin(PushPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

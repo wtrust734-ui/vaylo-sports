@@ -1,0 +1,15 @@
+# Single-page-app fallback.
+#
+# The app is client-routed (React Router), so paths like /learning/run-001 or
+# /settings/delete-account exist only in the browser. A static host that doesn't
+# know that returns its own 404 on a refresh or a shared deep link — which is
+# exactly the class of bug that appears only in production.
+#
+# Honoured by Netlify and Cloudflare Pages, which serve a real file if one exists
+# and only fall through to this rule otherwise. Other hosts need the equivalent:
+#   Vercel          → "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+#   Firebase        → "rewrites": [{ "source": "**", "destination": "/index.html" }]
+#   GitHub Pages    → copy index.html to 404.html as part of the build
+#
+# See CUTOVER.md §6.
+/*    /index.html   200

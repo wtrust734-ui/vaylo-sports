@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, Plus, Trash2, Check, Clock, MapPin, X, Edit3 } from "lucide-react";
+import { Play, Pause, SkipForward, Plus, Trash2, Check, Clock, X, Edit3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lsGet, lsSet } from "@/lib/localStore";
-import { isFlagOn } from "@/config/featureFlags";
 
 interface Step { name: string; seconds: number; cue?: string }
-interface RoutineHistoryEntry { id: string; name: string; completed: string; distance_m?: number }
+interface RoutineHistoryEntry { id: string; name: string; completed: string }
 
 interface Routine {
   id: string;
@@ -15,7 +14,6 @@ interface Routine {
   sport: string;
   steps: Step[];
   custom?: boolean;
-  gps_enabled?: boolean;
 }
 
 const TEMPLATES: Record<string, Routine[]> = {
@@ -55,16 +53,6 @@ const TEMPLATES: Record<string, Routine[]> = {
 const KEY = "vaylo_routines_custom_v1";
 const HIST = "vaylo_routine_history_v1";
 
-// Haversine distance in meters
-function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000;
-  const toRad = (x: number) => (x * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
-}
-
 const Routines = () => {
   const { profile } = useAuth();
   const sport = (profile?.sport || "").toLowerCase();
@@ -82,12 +70,6 @@ const Routines = () => {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<Routine | null>(null);
 
-  // GPS state
-  const [gpsDistance, setGpsDistance] = useState(0);
-  const [gpsPoints, setGpsPoints] = useState(0);
-  const gpsWatchId = useRef<number | null>(null);
-  const lastPos = useRef<{ lat: number; lng: number } | null>(null);
-
   useEffect(() => {
     if (!running) return;
     timer.current = setInterval(() => setElapsed(e => e + 1), 1000);
@@ -101,42 +83,11 @@ const Routines = () => {
         const hist = lsGet<RoutineHistoryEntry[]>(HIST, []);
         lsSet(HIST, [{
           id: active.id, name: active.name, completed: new Date().toISOString(),
-          distance_m: active.gps_enabled ? Math.round(gpsDistance) : undefined,
         }, ...hist].slice(0, 60));
-        stopGps();
         setRunning(false); setActive(null); setStepIdx(0); setElapsed(0);
-        setGpsDistance(0); setGpsPoints(0);
       } else { setStepIdx(i => i + 1); setElapsed(0); }
     }
-  }, [elapsed, active, stepIdx, gpsDistance]);
-
-  const startGps = () => {
-    if (!("geolocation" in navigator)) return;
-    lastPos.current = null;
-    setGpsDistance(0); setGpsPoints(0);
-    gpsWatchId.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (lastPos.current) {
-          const d = haversine(lastPos.current, p);
-          if (d < 100 && d > 1) setGpsDistance((x) => x + d);
-        }
-        lastPos.current = p;
-        setGpsPoints((n) => n + 1);
-      },
-      undefined,
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 },
-    );
-  };
-
-  const stopGps = () => {
-    if (gpsWatchId.current !== null && "geolocation" in navigator) {
-      navigator.geolocation.clearWatch(gpsWatchId.current);
-      gpsWatchId.current = null;
-    }
-  };
-
-  useEffect(() => () => stopGps(), []);
+  }, [elapsed, active, stepIdx]);
 
   const openBuilder = (existing?: Routine) => {
     setEditing(existing ?? {
@@ -146,7 +97,6 @@ const Routines = () => {
       sport: profile?.sport || "any",
       custom: true,
       steps: [{ name: "Step 1", seconds: 60, cue: "" }],
-      gps_enabled: false,
     });
     setBuilderOpen(true);
   };
@@ -167,17 +117,16 @@ const Routines = () => {
 
   const start = (r: Routine) => {
     setActive(r); setStepIdx(0); setElapsed(0); setRunning(true);
-    if (r.gps_enabled) startGps();
   };
 
   const history = lsGet<RoutineHistoryEntry[]>(HIST, []);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <div className="px-5 pt-14 pb-4">
-        <p className="text-[11px] uppercase tracking-widest text-primary font-semibold">Training</p>
+    <div className="min-h-screen bg-background pb-28">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
+        <p className="text-[12px] uppercase tracking-widest text-primary font-semibold">Training</p>
         <h1 className="text-2xl font-display font-bold mt-1">Routines</h1>
-        <p className="text-sm text-muted-foreground mt-1">Guided warmups, cooldowns & custom routines — with optional GPS.</p>
+        <p className="text-sm text-muted-foreground mt-1">Guided warmups, cooldowns & custom routines.</p>
       </div>
 
       <div className="px-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -186,11 +135,10 @@ const Routines = () => {
             className="bg-card border border-border rounded-2xl p-4">
             <div className="flex items-center justify-between">
               <div>
-                <span className={`text-[10px] uppercase tracking-wider font-bold ${r.type === "warmup" ? "text-energy" : r.type === "cooldown" ? "text-success" : "text-primary"}`}>{r.type}</span>
+                <span className={`text-[12px] uppercase tracking-wider font-bold ${r.type === "warmup" ? "text-energy" : r.type === "cooldown" ? "text-success" : "text-primary"}`}>{r.type}</span>
                 <h3 className="font-display font-bold">{r.name}</h3>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   {r.sport} · {r.steps.length} steps · {Math.round(r.steps.reduce((s, x) => s + x.seconds, 0) / 60)} min
-                  {r.gps_enabled && <span className="inline-flex items-center gap-1 ml-2 text-primary"><MapPin size={10} /> GPS</span>}
                 </p>
               </div>
               {r.custom && (
@@ -200,7 +148,7 @@ const Routines = () => {
                 </div>
               )}
             </div>
-            <button onClick={() => start(r)} className="mt-3 w-full bg-gradient-primary text-primary-foreground font-semibold py-2 rounded-lg text-sm flex items-center justify-center gap-2">
+            <button onClick={() => start(r)} className="press mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground">
               <Play size={14} /> Start
             </button>
           </motion.div>
@@ -217,7 +165,6 @@ const Routines = () => {
             <div key={i} className="bg-card border border-border rounded-lg px-3 py-2 text-xs flex justify-between">
               <span className="flex items-center gap-1.5">
                 <Check size={12} className="text-success" /> {h.name}
-                {h.distance_m ? <span className="text-primary ml-1">· {(h.distance_m / 1000).toFixed(2)}km</span> : null}
               </span>
               <span className="text-muted-foreground">{new Date(h.completed).toLocaleString()}</span>
             </div>
@@ -239,14 +186,14 @@ const Routines = () => {
 
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Name</label>
+                  <label className="text-[12px] uppercase tracking-wider text-muted-foreground">Name</label>
                   <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                     className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mt-1" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Type</label>
+                    <label className="text-[12px] uppercase tracking-wider text-muted-foreground">Type</label>
                     <select value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as Routine["type"] })}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mt-1">
                       <option value="warmup">Warmup</option>
@@ -255,29 +202,15 @@ const Routines = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Sport</label>
+                    <label className="text-[12px] uppercase tracking-wider text-muted-foreground">Sport</label>
                     <input value={editing.sport} onChange={(e) => setEditing({ ...editing, sport: e.target.value })}
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mt-1" />
                   </div>
                 </div>
 
-                {/* GPS is launch-gated (featureFlags.ts) — see the note in
-                    Workouts.tsx. The copy here said "distance only", which was
-                    an attempt to be honest about a control that on Android does
-                    nothing at all. Hiding it is honest in a way the wording was
-                    not. */}
-                {isFlagOn("gpsTracking") && (
-                  <label className="flex items-center gap-2 text-sm bg-background/60 border border-border rounded-lg p-3 cursor-pointer">
-                    <input type="checkbox" checked={!!editing.gps_enabled}
-                      onChange={(e) => setEditing({ ...editing, gps_enabled: e.target.checked })} />
-                    <MapPin size={14} className="text-primary" />
-                    <span>Enable GPS tracking (distance only)</span>
-                  </label>
-                )}
-
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Steps</label>
+                    <label className="text-[12px] uppercase tracking-wider text-muted-foreground">Steps</label>
                     <button onClick={() => setEditing({ ...editing, steps: [...editing.steps, { name: `Step ${editing.steps.length + 1}`, seconds: 60, cue: "" }] })}
                       className="text-xs text-primary font-semibold flex items-center gap-1"><Plus size={12} /> Add step</button>
                   </div>
@@ -298,7 +231,7 @@ const Routines = () => {
                               setEditing({ ...editing, steps });
                             }}
                             className="w-16 bg-card border border-border rounded px-2 py-1.5 text-sm" />
-                          <span className="text-[10px] text-muted-foreground">s</span>
+                          <span className="text-[12px] text-muted-foreground">s</span>
                           <button onClick={() => setEditing({ ...editing, steps: editing.steps.filter((_, j) => j !== i) })}
                             className="p-1 text-destructive"><Trash2 size={13} /></button>
                         </div>
@@ -334,18 +267,12 @@ const Routines = () => {
             className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-xl flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}
               className="w-full max-w-md bg-card border border-primary/40 rounded-3xl p-6 text-center shadow-glow">
-              <p className="text-[11px] uppercase tracking-widest text-primary font-semibold">{active.name}</p>
+              <p className="text-[12px] uppercase tracking-widest text-primary font-semibold">{active.name}</p>
               <h2 className="text-3xl font-display font-bold mt-1">{active.steps[stepIdx].name}</h2>
               {active.steps[stepIdx].cue && <p className="text-sm text-muted-foreground mt-1">{active.steps[stepIdx].cue}</p>}
               <div className="text-6xl font-display font-bold text-primary my-6 flex items-center justify-center gap-2">
                 <Clock size={28} /> {active.steps[stepIdx].seconds - elapsed}s
               </div>
-              {active.gps_enabled && (
-                <div className="mb-4 bg-background/60 border border-primary/30 rounded-xl p-3 flex items-center justify-around text-sm">
-                  <div><div className="text-[10px] text-muted-foreground uppercase">Distance</div><div className="font-display font-bold text-primary">{(gpsDistance / 1000).toFixed(2)} km</div></div>
-                  <div><div className="text-[10px] text-muted-foreground uppercase">GPS pts</div><div className="font-display font-bold">{gpsPoints}</div></div>
-                </div>
-              )}
               <div className="flex justify-between text-xs text-muted-foreground mb-4">
                 <span>Step {stepIdx + 1} / {active.steps.length}</span>
               </div>
@@ -355,7 +282,7 @@ const Routines = () => {
                 </button>
                 <button onClick={() => { setStepIdx(i => Math.min(i + 1, active.steps.length - 1)); setElapsed(0); }}
                   className="px-4 rounded-xl border border-border"><SkipForward size={16} /></button>
-                <button onClick={() => { stopGps(); setActive(null); setRunning(false); setGpsDistance(0); setGpsPoints(0); }}
+                <button onClick={() => { setActive(null); setRunning(false); }}
                   className="px-4 rounded-xl border border-border text-destructive">End</button>
               </div>
             </motion.div>

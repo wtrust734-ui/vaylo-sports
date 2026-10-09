@@ -3,9 +3,11 @@ import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Play, Clock, Zap, Dumbbell, Sun, Moon, Flame, StretchHorizontal, ChevronDown, ChevronUp, Edit3, Droplets, Apple, Calendar, Heart } from "lucide-react";
+import { Play, Clock, Zap, Dumbbell, Sun, Moon, Flame, StretchHorizontal, ChevronDown, ChevronUp, ChevronRight, Edit3, Droplets, Apple, Calendar, Heart } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useActiveBreak } from "@/hooks/useActiveBreak";
+import ActiveBreakBanner from "@/components/ActiveBreakBanner";
 
 interface DaySession {
   day: number;
@@ -47,12 +49,42 @@ const getZoneDot = (score: number) => {
   return { color: "bg-destructive", label: "RED" };
 };
 
+/**
+ * Human name for a plan session's `type`, so the card says what the work is
+ * rather than "sport_specific". Unknown types are de-slugged rather than
+ * dropped, because a new generator type must still render as something.
+ */
+const SESSION_TYPE_LABELS: Record<string, string> = {
+  strength: "Strength",
+  speed: "Speed",
+  intervals: "Intervals",
+  endurance: "Endurance",
+  sport_specific: "Sport-specific",
+  cross_training: "Cross-training",
+  conditioning: "Conditioning",
+  power: "Power",
+  upper: "Upper body",
+  upper_push: "Upper body push",
+  upper_pull: "Upper body pull",
+  lower: "Lower body",
+  full_body: "Full body",
+  accessory: "Accessory & core",
+  mobility: "Mobility",
+  recovery: "Recovery",
+  rest: "Rest",
+};
+
+const sessionTypeLabel = (type: string | undefined): string => {
+  const key = (type ?? "").trim().toLowerCase();
+  if (!key) return "Training";
+  return SESSION_TYPE_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 const DailyTrainingCard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activePlan, setActivePlan] = useState<PlanRow | null>(null);
   const [todaySessions, setTodaySessions] = useState<DaySession[]>([]);
-  const [expanded, setExpanded] = useState(false);
   const [showWarmup, setShowWarmup] = useState(false);
   const [showCooldown, setShowCooldown] = useState(false);
   const [waterMl, setWaterMl] = useState(0);
@@ -66,6 +98,10 @@ const DailyTrainingCard = () => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-30px" });
   const today = localDateKey();
+  // An active availability window shows above everything else in the card,
+  // plan or no plan — before 2026-10-06 an athlete on a holiday was told "No
+  // training plan yet" with no mention of it (audit finding B1).
+  const activeBreak = useActiveBreak();
 
   useEffect(() => {
     if (!user) return;
@@ -120,6 +156,44 @@ const DailyTrainingCard = () => {
   const noSession = !session && activePlan && !isHolidayWeek;
   const totalDayMinutes = isTrainingDay ? (session.duration_minutes + 20) : 0;
   const zoneDot = readiness !== null ? getZoneDot(readiness) : null;
+  // Whether the day-summary grid has anything real to show. A brand-new athlete
+  // otherwise saw four tiles that were all placeholders stacked under an empty
+  // state that already said there was no plan — see the note at the grid.
+  // The day-summary tiles, built one at a time so a tile only exists when it
+  // has a real number in it.
+  //
+  // This was one flag for the whole grid keyed on "is there anything at all",
+  // and a training day always answered yes — so Water, Meals and Readiness each
+  // printed an em dash beside one real number. Three dashes read as a screen
+  // that failed to load, not one waiting for input, and this is the last thing
+  // on the home screen so it is what the athlete remembers.
+  type DayTile = {
+    key: string;
+    icon: typeof Droplets;
+    tone: string;
+    label: string;
+    value: string;
+    onPress?: () => void;
+  };
+  const tile = (ok: boolean, t: DayTile): DayTile | null => (ok ? t : null);
+  const dayTiles = [
+    tile(waterMl > 0, {
+      key: "water", icon: Droplets, tone: "text-primary", label: "Water",
+      value: `${(waterMl / 1000).toFixed(1)}L`,
+    }),
+    tile(mealCount > 0, {
+      key: "meals", icon: Apple, tone: "text-emerald-400", label: "Meals",
+      value: `${mealCount} · ${totalCalories}`,
+    }),
+    tile(readiness !== null, {
+      key: "readiness", icon: Heart, tone: "text-destructive", label: "Readiness",
+      value: `${readiness}`, onPress: () => navigate("/recovery"),
+    }),
+    tile(totalDayMinutes > 0, {
+      key: "total", icon: Clock, tone: "text-primary", label: "Total",
+      value: `${totalDayMinutes}m`,
+    }),
+  ].filter((t): t is DayTile => t !== null);
 
   return (
     <motion.div
@@ -127,7 +201,7 @@ const DailyTrainingCard = () => {
       initial={{ opacity: 0, y: 12 }}
       animate={isInView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="mx-4 sm:mx-5 rounded-[22px] border border-white/[0.07] bg-card/70 sm:bg-card/60 sm:backdrop-blur-xl overflow-hidden shadow-card relative"
+      className="mx-5 rounded-[22px] border border-white/[0.07] bg-card/70 sm:bg-card/60 sm:backdrop-blur-xl overflow-hidden shadow-card relative"
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
       <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl opacity-20 sm:opacity-25 hidden sm:block" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.35), transparent 68%)" }} />
@@ -135,16 +209,22 @@ const DailyTrainingCard = () => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-primary shadow-glow animate-pulse-glow" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Today's Schedule</span>
+            <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-primary">Today's Schedule</span>
             {zoneDot && (
               <span className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
                 <span className={`h-2 w-2 rounded-full ${zoneDot.color}`} />
-                <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{readiness}/100</span>
+                <span className="text-[12px] font-bold tabular-nums text-muted-foreground">{readiness}/100</span>
               </span>
             )}
           </div>
-          {activePlan && <span className="text-[10px] font-medium tabular-nums text-muted-foreground">Week {activePlan.week_current}/{activePlan.duration_weeks}</span>}
+          {activePlan && <span className="text-[12px] font-medium tabular-nums text-muted-foreground">Week {activePlan.week_current}/{activePlan.duration_weeks}</span>}
         </div>
+
+        {activeBreak && (
+          <div className="mb-3">
+            <ActiveBreakBanner event={activeBreak} />
+          </div>
+        )}
 
         {!hasCheckedIn && activePlan && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -155,18 +235,18 @@ const DailyTrainingCard = () => {
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] font-semibold leading-none">Morning Check-In</p>
-              <p className="text-[11px] text-muted-foreground leading-snug">Log your HRV & recovery to optimise today's training</p>
+              <p className="text-[12px] text-muted-foreground leading-snug">Log your HRV & recovery to optimise today's training</p>
             </div>
-            <span className="text-[11px] font-bold text-primary shrink-0">Go →</span>
+            <span className="text-[12px] font-bold text-primary shrink-0">Go →</span>
           </motion.div>
         )}
 
         {session?._zone && (
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1">
             <Zap size={10} className="text-primary" />
-            <span className="text-[10px] font-bold tracking-wide text-primary">Auto-adjusted</span>
+            <span className="text-[12px] font-bold tracking-wide text-primary">Auto-adjusted</span>
             {session._originalTitle && (
-              <span className="text-[10px] text-muted-foreground line-through ml-1">{session._originalTitle}</span>
+              <span className="text-[12px] text-muted-foreground line-through ml-1">{session._originalTitle}</span>
             )}
           </div>
         )}
@@ -192,11 +272,11 @@ const DailyTrainingCard = () => {
             <h3 className="font-display font-bold text-lg">Holiday Week</h3>
             <p className="text-xs text-muted-foreground mb-3">This week is marked as a holiday. Sessions have been redistributed.</p>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-3 mb-3 space-y-1">
-              <p className="text-[11px] font-semibold">Recommended today:</p>
-              <p className="text-[11px] text-muted-foreground">• Light walk or swim (15-20 min)</p>
-              <p className="text-[11px] text-muted-foreground">• Stretching & foam rolling</p>
-              <p className="text-[11px] text-muted-foreground">• Hydrate well — {(waterGoal/1000).toFixed(1)}L+</p>
-              <p className="text-[11px] text-muted-foreground">• Sleep 8-9 hours</p>
+              <p className="text-[12px] font-semibold">Recommended today:</p>
+              <p className="text-[12px] text-muted-foreground">• Light walk or swim (15-20 min)</p>
+              <p className="text-[12px] text-muted-foreground">• Stretching & foam rolling</p>
+              <p className="text-[12px] text-muted-foreground">• Hydrate well — {(waterGoal/1000).toFixed(1)}L+</p>
+              <p className="text-[12px] text-muted-foreground">• Sleep 8-9 hours</p>
             </div>
             <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] text-foreground font-semibold py-3 text-sm backdrop-blur">
@@ -210,15 +290,15 @@ const DailyTrainingCard = () => {
             <h3 className="font-display font-bold text-lg">Rest & Recovery Day</h3>
             <p className="text-xs text-muted-foreground mb-3">No training scheduled. Focus on recovery.</p>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
-              <p className="text-[11px] font-semibold">What to do today:</p>
+              <p className="text-[12px] font-semibold">What to do today:</p>
               {session?.exercises ? session.exercises.map((ex, i) => (
-                <p key={i} className="text-[11px] text-muted-foreground">• {ex.name} — {ex.sets}</p>
+                <p key={i} className="text-[12px] text-muted-foreground">• {ex.name} — {ex.sets}</p>
               )) : (
                 <>
-                  <p className="text-[11px] text-muted-foreground">• Light stretching or yoga (15-20 min)</p>
-                  <p className="text-[11px] text-muted-foreground">• Foam rolling major muscle groups</p>
-                  <p className="text-[11px] text-muted-foreground">• 7-9 hours sleep tonight</p>
-                  <p className="text-[11px] text-muted-foreground">• Stay hydrated — target {(waterGoal/1000).toFixed(1)}L+</p>
+                  <p className="text-[12px] text-muted-foreground">• Light stretching or yoga (15-20 min)</p>
+                  <p className="text-[12px] text-muted-foreground">• Foam rolling major muscle groups</p>
+                  <p className="text-[12px] text-muted-foreground">• 7-9 hours sleep tonight</p>
+                  <p className="text-[12px] text-muted-foreground">• Stay hydrated — target {(waterGoal/1000).toFixed(1)}L+</p>
                 </>
               )}
             </div>
@@ -234,10 +314,11 @@ const DailyTrainingCard = () => {
             <h3 className="font-display font-bold text-lg mb-0.5">Active Recovery</h3>
             <p className="text-xs text-muted-foreground mb-3">{session.description}</p>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
-              <p className="text-[11px] font-semibold">Today's recovery session ({session.duration_minutes} min):</p>
+              <p className="text-[12px] font-semibold">Today's recovery session ({session.duration_minutes} min):</p>
               {session.exercises?.map((ex, i) => (
-                <div key={i} className="flex justify-between text-[11px] text-muted-foreground py-0.5">
-                  <span>• {ex.name}</span><span>{ex.sets}</span>
+                <div key={i} className="py-0.5 text-[12px] text-muted-foreground">
+                  <span className="block font-medium">• {ex.name}</span>
+                  <span className="block pl-3 leading-snug">{ex.sets}</span>
                 </div>
               ))}
             </div>
@@ -250,8 +331,57 @@ const DailyTrainingCard = () => {
 
         {isTrainingDay && (
           <>
-            <h3 className="font-display font-bold text-[17px] leading-tight">{session.dayName ? `${session.dayName}: ` : ""}{session.title}</h3>
-            <p className="text-xs leading-relaxed text-muted-foreground mt-1 mb-3">{session.description}</p>
+            {/* Today's session IS the button.
+
+                Two complaints met here. The card named the session but hid the
+                work behind a "View Exercises" toggle, so the dashboard answered
+                "what am I doing today?" with a count; and it could not open the
+                day it was describing. Every exercise and its prescription is now
+                always on screen, and the whole block opens the plan at this exact
+                day — `/training?week=&day=` is the contract Training.tsx reads.
+                Rows are stacked (name, then prescription) because the old
+                side-by-side pair wrapped to four ragged lines on a 390px phone. */}
+            <button
+              type="button"
+              onClick={() => navigate(`/training?week=${activePlan?.week_current ?? 1}&day=${session.day}`)}
+              className="press w-full rounded-2xl border border-primary/15 bg-primary/[0.08] backdrop-blur px-3 py-3 mb-2 text-start transition-colors hover:bg-primary/[0.12]"
+            >
+              <span className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
+                  <Flame size={14} className="text-primary-foreground" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12px] font-bold uppercase tracking-[0.14em] text-primary">
+                    Today's session · {sessionTypeLabel(session.type)}
+                  </span>
+                  <span className="block font-display text-[16px] font-bold leading-snug">
+                    {session.dayName ? `${session.dayName}: ` : ""}{session.title}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-white/[0.06] bg-white/[0.04] px-2 py-0.5 text-[12px] tabular-nums text-muted-foreground">
+                  {session.duration_minutes} min
+                </span>
+              </span>
+
+              {session.description && (
+                <span className="mt-1.5 block text-[12px] leading-relaxed text-muted-foreground">{session.description}</span>
+              )}
+
+              {session.exercises && session.exercises.length > 0 && (
+                <span className="mt-2.5 block space-y-1">
+                  {session.exercises.map((ex, i) => (
+                    <span key={i} className="block rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-2">
+                      <span className="block text-[13px] font-semibold leading-tight">{ex.name}</span>
+                      <span className="block text-[12px] leading-snug text-primary/85">{ex.sets}</span>
+                    </span>
+                  ))}
+                </span>
+              )}
+
+              <span className="mt-2.5 flex items-center gap-1 text-[12px] font-bold text-primary">
+                View today's session <ChevronRight size={13} className="rtl-flip" aria-hidden />
+              </span>
+            </button>
 
             {session.warmup && session.warmup.length > 0 && (
               <div className="mb-2">
@@ -261,54 +391,22 @@ const DailyTrainingCard = () => {
                     <Sun size={12} className="text-foreground" />
                   </span>
                   <span className="text-[12px] font-semibold flex-1 text-start">Warm-up ({session.warmup.length})</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground mr-1">10 min</span>
                   {showWarmup ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                 </button>
                 {showWarmup && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
+                    {/* Stacked, like the main session rows above: the same
+                        side-by-side pair wrapped the prescription onto three
+                        ragged lines on a phone. */}
                     {session.warmup.map((ex, i) => (
-                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[11px] text-muted-foreground">
-                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
+                      <div key={i} className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                        <span className="block text-[12px] font-medium text-foreground">{ex.name}</span>
+                        <span className="block text-[12px] leading-snug text-muted-foreground">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
                 )}
               </div>
-            )}
-
-            <div className="rounded-2xl border border-primary/15 bg-primary/[0.08] backdrop-blur px-3 py-3 mb-2">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
-                  <Flame size={13} className="text-primary-foreground" />
-                </span>
-                <span className="text-[12px] font-bold text-primary flex-1">{session.title}</span>
-                <span className="text-[11px] tabular-nums text-muted-foreground border border-white/[0.06] bg-white/[0.04] rounded-full px-2 py-0.5">{session.duration_minutes} min</span>
-              </div>
-              {session.description && (
-                <p className="text-[11px] leading-relaxed text-muted-foreground">{session.description}</p>
-              )}
-              {session.exercises && session.exercises.length > 0 && !expanded && (
-                <p className="text-[11px] text-primary/75 mt-2 font-medium">{session.exercises.length} exercises · Tap below for details</p>
-              )}
-            </div>
-
-            {session.exercises && session.exercises.length > 0 && (
-              <>
-                <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs font-bold text-primary mb-2 ml-1">
-                  {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  {expanded ? "Hide" : "View"} Exercises ({session.exercises.length})
-                </button>
-                {expanded && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-1.5 mb-3">
-                    {session.exercises.map((ex, i) => (
-                      <div key={i} className="rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3 py-2.5">
-                        <span className="text-[12px] font-semibold block leading-tight">{ex.name}</span>
-                        <span className="text-[11px] text-primary font-medium">{ex.sets}</span>
-                      </div>
-                    ))}
-                  </motion.div>
-                )}
-              </>
             )}
 
             {session.cooldown && session.cooldown.length > 0 && (
@@ -319,14 +417,14 @@ const DailyTrainingCard = () => {
                     <StretchHorizontal size={12} className="text-foreground" />
                   </span>
                   <span className="text-[12px] font-semibold flex-1 text-start">Cool-down ({session.cooldown.length})</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground mr-1">10 min</span>
                   {showCooldown ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                 </button>
                 {showCooldown && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
                     {session.cooldown.map((ex, i) => (
-                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[11px] text-muted-foreground">
-                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
+                      <div key={i} className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                        <span className="block text-[12px] font-medium text-foreground">{ex.name}</span>
+                        <span className="block text-[12px] leading-snug text-muted-foreground">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
@@ -335,7 +433,7 @@ const DailyTrainingCard = () => {
             )}
 
             <div className="flex gap-2">
-              <motion.button onClick={() => navigate("/workouts")} whileTap={{ scale: 0.98 }}
+              <motion.button onClick={() => navigate("/train")} whileTap={{ scale: 0.98 }}
                 className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-bold py-3 rounded-xl shadow-glow border border-white/10 text-sm">
                 <Play size={16} className="fill-primary-foreground" /> Start Training
               </motion.button>
@@ -347,31 +445,34 @@ const DailyTrainingCard = () => {
           </>
         )}
 
-        {/* 2-up on phones: four columns inside a 320px viewport leaves ~65px per
+        {/* Only rendered when there is something to show.
+
+            With no plan and no logs this grid was four placeholder tiles —
+            Water "—", Meals "—", Readiness "—", Total "Rest" — sitting under an
+            empty state that had just said there is no plan. A wall of em dashes
+            reads as a screen that failed to load, not one waiting for input, and
+            it is the last thing on the home screen so it is what the athlete
+            remembers. Four meaningless tiles are worse than none; the empty
+            state above already carries the one action that matters.
+
+            2-up on phones: four columns inside a 320px viewport leaves ~65px per
             cell, which squeezes the icon, the value and the label into each
             other. Two columns keeps the same information readable. */}
+        {dayTiles.length > 0 && (
         <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
-            <Droplets size={13} className="mx-auto text-primary mb-1" />
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Water</p>
-            <p className="text-[11px] font-bold tabular-nums">{waterMl > 0 ? `${(waterMl/1000).toFixed(1)}L` : "—"}</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
-            <Apple size={13} className="mx-auto text-emerald-400 mb-1" />
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Meals</p>
-            <p className="text-[11px] font-bold tabular-nums">{mealCount > 0 ? `${mealCount} · ${totalCalories}` : "—"}</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center cursor-pointer hover:bg-white/[0.06] transition-colors" onClick={() => navigate("/recovery")}>
-            <Heart size={13} className="mx-auto text-destructive mb-1" />
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Readiness</p>
-            <p className="text-[11px] font-bold tabular-nums">{readiness !== null ? `${readiness}` : "—"}</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center">
-            <Clock size={13} className="mx-auto text-primary mb-1" />
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Total</p>
-            <p className="text-[11px] font-bold tabular-nums">{totalDayMinutes > 0 ? `${totalDayMinutes}m` : "Rest"}</p>
-          </div>
+          {dayTiles.map((tile) => (
+            <div
+              key={tile.key}
+              onClick={tile.onPress}
+              className={`rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-2.5 text-center ${tile.onPress ? "cursor-pointer hover:bg-white/[0.06] transition-colors" : ""}`}
+            >
+              <tile.icon size={13} className={`mx-auto mb-1 ${tile.tone}`} />
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{tile.label}</p>
+              <p className="text-[12px] font-bold tabular-nums">{tile.value}</p>
+            </div>
+          ))}
         </div>
+        )}
 
         {upcomingEvent && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
@@ -382,7 +483,7 @@ const DailyTrainingCard = () => {
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] font-semibold leading-tight truncate">{upcomingEvent.title}</p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 {(() => {
                   const diff = new Date(upcomingEvent.event_date).getTime() - Date.now();
                   const days = Math.floor(diff / 86400000);
@@ -390,7 +491,7 @@ const DailyTrainingCard = () => {
                 })()}
               </p>
             </div>
-            <span className="text-[11px] font-bold text-primary shrink-0">View →</span>
+            <span className="text-[12px] font-bold text-primary shrink-0">View →</span>
           </motion.div>
         )}
       </div>

@@ -65,14 +65,23 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
   const pbs = getLocalPBs();
 
   // Fire all Supabase reads in parallel; tolerate failures
-  const [profileRes, metricsRes, injuryRes, recoveryRes, goalsRes, loadsRes, positionRes] = await Promise.all([
+  const [profileRes, metricsRes, injuryRes, recoveryRes, goalsRes, loadsRes, positionRes, sessionLoadRes] = await Promise.all([
     supabase.from("profiles").select("sport, experience_level, date_of_birth, weight_kg, height_cm, goals, full_name").eq("user_id", user.id).maybeSingle(),
     supabase.from("performance_metrics").select("metric_type, value, unit, log_date, fatigue_level, sport").eq("user_id", user.id).order("log_date", { ascending: false }).limit(40),
     supabase.from("injury_logs").select("body_part, severity, status, log_date, notes").eq("user_id", user.id).order("log_date", { ascending: false }).limit(10),
-    supabase.from("recovery_logs").select("readiness_score, log_date").eq("user_id", user.id).order("log_date", { ascending: false }).limit(7),
+    // Phase 3: the subjective sliders, not just the composite readiness score.
+    // A model told "readiness 42" can speculate about why; a model told
+    // "readiness 42, sleep 3/10, fatigue 9/10, 5 hours" can only describe what
+    // the athlete actually reported — which is the difference between a
+    // grounded suggestion and a confident guess.
+    supabase.from("recovery_logs").select("readiness_score, log_date, sleep_quality, fatigue, soreness, mood, stress, energy, rest_hours").eq("user_id", user.id).order("log_date", { ascending: false }).limit(7),
     supabase.from("outcome_goals").select("title, category, target_value, current_value, metric_unit, deadline, status").eq("user_id", user.id).limit(10),
     supabase.from("training_loads").select("log_date, sprint_load, endurance_load, strength_load, skill_load, total_rpe").eq("user_id", user.id).order("log_date", { ascending: false }).limit(14),
     supabase.from("athlete_position").select("position, primary_sport").eq("user_id", user.id).maybeSingle(),
+    // Phase 3: the cross-sport load the coach must be able to see. Without it a
+    // football match the athlete forgot to mention looks like a week of missed
+    // running, and the model will confidently explain the wrong thing.
+    supabase.from("performance_logs").select("log_date, sport, title, session_load").eq("user_id", user.id).not("session_load", "is", null).order("log_date", { ascending: false }).limit(14),
   ]);
 
   const profile = (profileRes.data ?? {}) as {
@@ -121,6 +130,11 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
     recovery: recoveryRes.data || [],
     outcomeGoals: goalsRes.data || [],
     recentLoads: loadsRes.data || [],
+    // Cross-sport session load, newest first. `session_load` units are the
+    // model's own and are documented in `src/lib/sessionLoad.ts`; the field
+    // name is carried through rather than paraphrased so the model can be told
+    // what it is looking at instead of guessing.
+    sessionLoads: sessionLoadRes.data || [],
   };
 
   return dossier;

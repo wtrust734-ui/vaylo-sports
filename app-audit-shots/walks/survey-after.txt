@@ -1,0 +1,24 @@
+################ Perform > ^Metrics hub
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y91.8 "HOLISTIC METRICS" | y114.7 "Performance Dashboard" | y235.8 "Readiness (7d avg)"
+################ Perform > ^Skills
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y91.8 "SKILL ANALYTICS" | y114.7 "Skill Engine" | y200.0 "Strengths"
+################ Perform > ^Compare
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y91.8 "ATHLETE COMPARISON" | y114.7 "Stack Up vs Elite" | y160.0 "Illustrative benchmark"
+################ Train > ^Cross-training
+  gutters: left 18.7  right -0.0   (body x 18.7..411.4)
+  top: y34.7 "Go back" | y91.8 "CROSS-TRAINING LIBRARY" | y114.7 "Smart Cross-Training" | y160.0 "Sport-specific transfe"
+################ Train > ^Routines
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y90.7 "TRAINING" | y112.8 "Routines" | y149.0 "Guided warmups, cooldo"
+################ Profile > ^Legal
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y90.7 "Legal & Safety" | y128.0 "Every document, every " | y208.0 "Your age isn't set"
+################ Profile > ^Notifications
+  gutters: left 18.7  right 68.5   (body x 18.7..342.9)
+  top: y34.7 "Go back" | y90.7 "Notifications" | y128.0 "All your activity in o" | y272.0 "No notifications yet"
+################ Profile > ^Achievements
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  top: y34.7 "Go back" | y90.7 "Achievements" | y128.0 "Earn medals for consis" | y184.8 "0"

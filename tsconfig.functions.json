@@ -15,6 +15,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": false,
+    // Kept true deliberately even though strict is off: without it TS cannot
+    // narrow a boolean discriminant (`if (!r.ok) r.status` fails to typecheck),
+    // which silently hid real errors behind 5 spurious ones.
+    "strictNullChecks": true,
     "target": "ES2022",
     "types": [],
     "paths": {

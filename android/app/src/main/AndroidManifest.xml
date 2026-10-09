@@ -1,14 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Health Connect: read-only access to exactly the data Vaylo uses.
-         Required by Android 14+ to be declared in the manifest. -->
+    <!-- Health Connect read permissions. These serve /health-sync, which is on
+         (`wearableSync: true` in src/config/featureFlags.ts). Health Connect is
+         a runtime-consent model: nothing is read until the athlete grants each
+         one in the Health Connect permission sheet, which the plugin opens.
+
+         Read-only by design — the app never WRITES into the phone's health
+         store. scripts/build-apk.sh fails the release build on any WRITE
+         permission, so this set is the complete health surface.
+
+         Google Play requires every HEALTH permission to be actively used and
+         declared in the Health Connect declaration (Play Console → App content).
+         Keep this list in step with HealthPermissions.READ_PERMISSIONS
+         (android/app/src/main/java/com/vaylosports/app/health/HealthPermissions.kt)
+         and src/lib/health/permissions.ts; the three are asserted together. -->
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
     <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
+
+    <!-- The app's only non-health permission: every network call (Supabase,
+         edge functions, OAuth browser). Declared before <application> in the
+         logical order Android lint expects. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 13 (API 33) made POST_NOTIFICATIONS a runtime permission, and
+         posting a notification without it throws SecurityException. It is
+         requested by PushPlugin.register(), only once the athlete has
+         actually turned a category on in NotificationPrefs. An app that
+         asks on first launch, before it has told the athlete what any of
+         this is for, is the behaviour Google Play policy calls out.
+
+         This is a real, used permission: VayloMessagingService posts every
+         push through it. Below API 33 it is a no-op and is never requested. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Health Connect is a separate app on Android 13 (API 33) and below, and from
          API 30 Android hides packages an app has not declared. Without this,
@@ -20,6 +48,24 @@
          Must stay a direct child of <manifest>, not of <application>. -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+
+        <!-- Camera capture (CameraCapturePlugin). From API 30 Android hides
+             packages an app has not declared, so without this
+             PackageManager.resolveActivity(ACTION_IMAGE_CAPTURE) returns null on
+             a device that does have a camera app, and capture silently falls
+             back to the picker on every phone. The intent target is declared,
+             not granted: the photograph is written into our own cache via the
+             FileProvider below, so the app needs no CAMERA or storage
+             permission to take a photo.
+
+             Must stay a direct child of <manifest>, not of <application>. -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT" />
+            <data android:mimeType="image/*" />
+        </intent>
     </queries>
 
     <!-- Backup is off: the WebView persists the Supabase session (refresh token)
@@ -94,9 +140,22 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Push delivery. FirebaseMessagingService is bound by the
+             MESSAGING_EVENT action; the service posts the notification
+             itself rather than handing it to the WebView, because a push
+             that only renders in JavaScript does not arrive when the app is
+             closed or has been swiped away, which is most of the time.
+
+             NOT exported: this entry exists for Firebase to bind, not for
+             other apps to start. -->
+        <service
+            android:name="com.vaylosports.app.push.VayloMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
-
-    <!-- Permissions -->
-
-    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

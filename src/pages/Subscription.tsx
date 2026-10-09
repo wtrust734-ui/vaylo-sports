@@ -39,7 +39,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold">{plan.name}</h2>
             {isCurrent && (
-              <span className="text-[10px] font-semibold uppercase tracking-wide bg-energy/15 text-energy px-2 py-0.5 rounded-full">
+              <span className="text-[12px] font-semibold uppercase tracking-wide bg-energy/15 text-energy px-2 py-0.5 rounded-full">
                 Current
               </span>
             )}
@@ -76,7 +76,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
             <span className="flex items-center gap-2">
               <span className="text-sm font-semibold">{PERIOD_LABEL[o.period]}</span>
               {o.best_value && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide bg-energy text-primary-foreground px-2 py-0.5 rounded-full">
+                <span className="text-[12px] font-semibold uppercase tracking-wide bg-energy text-primary-foreground px-2 py-0.5 rounded-full">
                   Best value
                 </span>
               )}
@@ -88,7 +88,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
               <span className="text-base font-bold block leading-tight">
                 {formatPence(o.price_pence)}
               </span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[12px] text-muted-foreground">
                 {PERIOD_SUFFIX[o.period]}
               </span>
             </span>
@@ -97,13 +97,13 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
       </div>
 
       {plan.fair_usage_daily_ai_calls !== null && (
-        <p className="mt-3 text-[11px] text-muted-foreground flex gap-1.5">
+        <p className="mt-3 text-[12px] text-muted-foreground flex gap-1.5">
           <ShieldAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           Fair usage applies: up to {plan.fair_usage_daily_ai_calls} AI requests per day.
         </p>
       )}
       {plan.entitlements.monthly_credit_allowance > 0 && (
-        <p className="mt-3 text-[11px] text-muted-foreground">
+        <p className="mt-3 text-[12px] text-muted-foreground">
           Unused credits roll over, up to {plan.credit_rollover_limit}.
         </p>
       )}
@@ -116,7 +116,7 @@ export default function Subscription() {
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      <header className="px-5 pt-12 pb-6">
+      <header className="px-5 pt-[var(--vaylo-screen-top)] pb-6">
         <button
           onClick={() => navigate(-1)}
           className="mb-4 h-9 w-9 rounded-full border border-border flex items-center justify-center"
@@ -144,7 +144,7 @@ export default function Subscription() {
         <Button variant="outline" onClick={() => navigate("/market")} className="w-full h-11">
           Or buy one-off credits
         </Button>
-        <p className="text-center text-[11px] text-muted-foreground mt-4">
+        <p className="text-center text-[12px] text-muted-foreground mt-4">
           {FAIR_USAGE_POLICY.message}
         </p>
       </div>

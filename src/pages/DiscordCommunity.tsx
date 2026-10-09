@@ -1,5 +1,6 @@
 import { MessageCircle, Users, Trophy, Zap, ArrowRight, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { appHref } from "@/lib/routerBase";
 import { openExternal } from "@/lib/platform";
 import { discordInviteUrl, DISCORD_PAGE_PATH } from "@/config/community";
 
@@ -25,7 +26,7 @@ const DiscordCommunity = () => {
         <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-electric-purple to-energy">
           <MessageCircle className="h-8 w-8 text-white" />
         </div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-energy">Vaylo Sports</p>
+        <p className="text-[12px] font-semibold uppercase tracking-widest text-energy">Vaylo Sports</p>
         <h1 className="mt-1 text-3xl font-display font-bold">The locker room</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Train with the community on Discord — race day threads, PB celebrations, form-check
@@ -65,14 +66,14 @@ const DiscordCommunity = () => {
 
         {!session && (
           <a
-            href="/auth"
+            href={appHref("/auth")}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl border border-energy/40 py-3 text-sm font-semibold text-energy"
           >
             Create your free Vaylo Sports account <ArrowRight size={14} />
           </a>
         )}
 
-        <p className="mt-6 text-[11px] text-muted-foreground">
+        <p className="mt-6 text-[12px] text-muted-foreground">
           Share this page: {DISCORD_PAGE_PATH} — free to join, no Vaylo Sports account needed for Discord.
         </p>
       </div>

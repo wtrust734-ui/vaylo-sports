@@ -17,10 +17,21 @@ const sliders = [
   { key: "fatigue", label: "Fatigue", emoji: "😴" },
 ];
 
-function calcReadiness(vals: Record<string, number>): { score: number; message: string } {
-  const pos = vals.confidence + vals.focus + vals.motivation;
-  const neg = vals.stress + vals.fatigue;
-  const raw = ((pos * 2 - neg) / 40) * 100;
+/**
+ * Mental readiness — a PRODUCT-DEFINED mood index (not a validated
+ * psychometric instrument). Sliders are 1–10; the formula normalises the
+ * positive trio (confidence/focus/motivation, sum 3–30) and the negative
+ * pair (stress/fatigue, mean 1–10) onto 0–100 and blends them 50/50:
+ *   score = clamp( 100 · ( ½·(pos−3)/27 + ½·(10−negAvg)/9 ), 0, 100 )
+ * Anchors: all-neutral sliders → 50 ("no signal" reads neutral, not bad),
+ * best case → 100, worst case → 0. Inputs are clamped, never extrapolated.
+ */
+export function calcMentalReadiness(vals: Record<string, number>): { score: number; message: string } {
+  const clamp = (v: number, lo = 1, hi = 10) => Math.max(lo, Math.min(hi, Math.round(v || lo)));
+  const pos = clamp(vals.confidence) + clamp(vals.focus) + clamp(vals.motivation);
+  const neg = clamp(vals.stress) + clamp(vals.fatigue);
+  const negAvg = neg / 2; // two negative sliders vs three positive ones
+  const raw = 100 * (0.5 * ((pos - 3) / 27) + 0.5 * ((10 - negAvg) / 9));
   const score = Math.max(0, Math.min(100, Math.round(raw)));
   let message = "You're ready. Execute.";
   if (score < 40) message = "High stress. Focus on basics.";
@@ -37,17 +48,22 @@ const MentalCheckIn = ({ onComplete }: Props) => {
   const [result, setResult] = useState<{ score: number; message: string } | null>(null);
 
   const handleSubmit = async () => {
-    const r = calcReadiness(vals);
+    if (submitted) return; // one check-in per tap
+    const r = calcMentalReadiness(vals);
     setResult(r);
     setSubmitted(true);
     if (user) {
+      // Scores are clamped server-side too (mental_checkins_score_range).
       const { error } = await supabase.from("mental_checkins").insert({
         user_id: user.id,
         ...vals,
         readiness_score: r.score,
         message: r.message,
       });
-      if (error) toast.error(`Check-in not saved: ${error.message}`);
+      if (error) {
+        setSubmitted(false); // allow retry — the save failed
+        toast.error(`Check-in not saved: ${error.message}`);
+      }
     }
   };
 
@@ -93,9 +109,9 @@ const MentalCheckIn = ({ onComplete }: Props) => {
           </motion.div>
         ))}
       </div>
-      <motion.button whileTap={{ scale: 0.97 }} onClick={handleSubmit}
-        className="w-full mt-6 bg-primary text-primary-foreground font-semibold py-3.5 rounded-xl text-sm">
-        Get Readiness Score
+      <motion.button whileTap={{ scale: 0.97 }} onClick={handleSubmit} disabled={submitted}
+        className="w-full mt-6 bg-primary text-primary-foreground font-semibold py-3.5 rounded-xl text-sm disabled:opacity-60">
+        {submitted ? "Saved ✓" : "Get Readiness Score"}
       </motion.button>
     </div>
   );

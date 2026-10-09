@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale } from "lucide-react";
+import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
@@ -18,6 +18,7 @@ const Perform = () => {
       links: [
         { icon: Gauge, label: t("hub.perform.vpr"), description: t("hub.perform.vprDesc"), path: "/vpr", feature: "perform.vpr" },
         { icon: Activity, label: t("hub.perform.metricsHub"), description: t("hub.perform.metricsHubDesc"), path: "/metrics", feature: "perform.metrics" },
+        { icon: Lightbulb, label: t("hub.perform.insights"), description: t("hub.perform.insightsDesc"), path: "/insights", feature: "perform.insights" },
         { icon: Target, label: t("hub.perform.skills"), description: t("hub.perform.skillsDesc"), path: "/skills", feature: "perform.skills" },
         { icon: TrendingUp, label: t("hub.perform.development"), description: t("hub.perform.developmentDesc"), path: "/development", feature: "perform.development" },
       ],

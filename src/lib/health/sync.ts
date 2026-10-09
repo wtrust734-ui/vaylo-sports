@@ -80,6 +80,39 @@ export async function saveConnectionToServer(userId: string, connected: boolean)
   }
 }
 
+/**
+ * Full disconnect: flips consent off locally AND on the server so a second
+ * device stops treating the athlete as connected, and clears the stored sync
+ * state so "last sync" doesn't describe a connection that no longer exists.
+ *
+ * Already-imported workout/sample rows are deliberately kept — deleting data
+ * is a separate, explicit control on the HealthSync page. If the server write
+ * fails, the local consent is still cleared, so this device stops syncing
+ * either way; the server row is refreshed by the next connect.
+ */
+export async function disconnectHealthConnect(userId: string): Promise<void> {
+  writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION);
+  try {
+    localStorage.removeItem(STATE_KEY(userId));
+  } catch {
+    /* private mode */
+  }
+  try {
+    await supabase
+      .from("health_sync_state")
+      .upsert({
+        user_id: userId,
+        connected: false,
+        last_sync_at: null,
+        last_incremental_cursor: null,
+        synced_workout_count: 0,
+        updated_at: new Date().toISOString(),
+      });
+  } catch {
+    // Local state is already cleared, which is the side that gates syncing.
+  }
+}
+
 /** Server row backfills the last-sync label on new devices. */
 export async function fetchServerSyncState(userId: string): Promise<StoredHealthState> {
   try {

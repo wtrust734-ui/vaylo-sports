@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
+import { recordHealthConsent } from "@/lib/consent";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -158,7 +159,7 @@ const SliderRow = ({ label, icon: Icon, value, onChange, color, lowLabel = "Poor
     <input type="range" min={1} max={max} value={value}
       onChange={e => onChange(parseInt(e.target.value))}
       className="w-full accent-primary h-1.5" disabled={disabled} />
-    <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5"><span>{lowLabel}</span><span>{highLabel}</span></div>
+    <div className="flex justify-between text-[12px] text-muted-foreground mt-0.5"><span>{lowLabel}</span><span>{highLabel}</span></div>
   </motion.div>
 );
 
@@ -175,6 +176,10 @@ const Recovery = () => {
   const [hrv, setHrv] = useState("");
   const [rhr, setRhr] = useState("");
   const [sleep, setSleep] = useState(7);
+  // Sleep DURATION (rest hours) was silently aliased to sleep QUALITY — the
+  // athlete never entered hours and the DB column recorded the 1–10 slider.
+  // Separate state; the slider stays quality, this is optional hours 0–24.
+  const [restHours, setRestHours] = useState("");
   const [fatigue, setFatigue] = useState(5);
   const [soreness, setSoreness] = useState(5);
   const [mood, setMood] = useState(7);
@@ -279,8 +284,12 @@ const Recovery = () => {
     if (!user) return;
     setLoading(true);
     const today = localDateKey();
-    const hrvVal = hrv ? parseInt(hrv) : null;
-    const rhrVal = rhr ? parseInt(rhr) : null;
+    // HRV/RHR clamped to the physiological windows the DB CHECKs enforce
+    // (hrv 10–300ms, rhr 20–250bpm); garbage input is discarded, not stored.
+    const parseHrv = hrv ? parseInt(hrv, 10) : null;
+    const hrvVal = parseHrv != null && Number.isFinite(parseHrv) && parseHrv >= 10 && parseHrv <= 300 ? parseHrv : null;
+    const parseRhr = rhr ? parseInt(rhr, 10) : null;
+    const rhrVal = parseRhr != null && Number.isFinite(parseRhr) && parseRhr >= 20 && parseRhr <= 250 ? parseRhr : null;
 
     const recentHrv = hrvHistory.filter(h => h.hrv !== null).slice(0, 7).map(h => h.hrv as number);
     let baseline = currentBaseline;
@@ -297,7 +306,15 @@ const Recovery = () => {
       setAdjustedSession(adjusted);
     }
 
-    const notesFull = [notes, hrvVal ? `HRV: ${hrvVal}ms` : "", rhrVal ? `RHR: ${rhrVal}bpm` : ""].filter(Boolean).join(" | ");
+    const notesFull = [notes, hrvVal ? `HRV: ${hrvVal}ms` : "", rhrVal ? `RHR: ${rhrVal}bpm` : ""]
+      .filter(Boolean)
+      .join(" | ")
+      // Notes go to the AI dossier — keep them a note, not an essay, and strip
+      // control characters so the value stays a clean single-line string.
+      .replace(/\p{C}/gu, " ")
+      .slice(0, 500);
+
+    const restHoursVal = restHours.trim() === "" ? null : parseFloat(restHours);
 
     const { error } = await supabase.from("recovery_logs").upsert({
       user_id: user.id,
@@ -310,7 +327,9 @@ const Recovery = () => {
       energy,
       hrv: hrvVal,
       rhr: rhrVal,
-      rest_hours: parseFloat(String(sleep)) || null,
+      rest_hours: restHoursVal != null && Number.isFinite(restHoursVal) && restHoursVal >= 0
+        ? Math.min(24, restHoursVal)
+        : null,
       readiness_score: score,
       adjusted_session: adjusted,
       notes: notesFull,
@@ -321,6 +340,11 @@ const Recovery = () => {
       setLoading(false);
       return;
     }
+
+    // Logging sleep, soreness, mood or heart-rate data is the first point at
+    // which this athlete has necessarily decided to give us health data. Stamp
+    // that consent once, without blocking the save if it fails.
+    void recordHealthConsent();
 
     if (hrvVal) {
       const allHrv = [hrvVal, ...recentHrv].slice(0, 7);
@@ -393,7 +417,7 @@ const Recovery = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <div className="px-5 pt-14 pb-3">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-3">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Recovery</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="text-sm text-muted-foreground mt-0.5">
           {logged ? "Today's readiness overview" : "Morning check-in — how are you feeling?"}
@@ -407,7 +431,7 @@ const Recovery = () => {
 
             {/* Readiness Ring */}
             <div className={`rounded-2xl border p-5 text-center ${zone.bgClass} shadow-card`}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: zone.color }}>Readiness Score</p>
+              <p className="text-[12px] font-bold uppercase tracking-widest mb-3" style={{ color: zone.color }}>Readiness Score</p>
               <div className="relative w-28 h-28 mx-auto mb-3">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="7" />
@@ -429,7 +453,7 @@ const Recovery = () => {
             {/* WHY explanation */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
               className="mt-3 bg-card border border-border rounded-xl p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Why this score?</p>
+              <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Why this score?</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 {hrv && <p>• HRV: {hrv}ms {currentBaseline ? `(baseline: ${currentBaseline}ms, ${parseInt(hrv) > currentBaseline ? "+" : ""}${Math.round(((parseInt(hrv) - currentBaseline) / currentBaseline) * 100)}%)` : ""}</p>}
                 <p>• Sleep quality: {sleep}/10</p>
@@ -446,27 +470,27 @@ const Recovery = () => {
                 className="mt-3 bg-card border border-border rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Zap size={14} className="text-primary" />
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Auto-Adjusted Session</p>
+                  <p className="text-[12px] font-bold uppercase tracking-wider text-primary">Auto-Adjusted Session</p>
                 </div>
                 {adjustedSession._originalTitle && (
-                  <p className="text-[10px] text-muted-foreground mb-1 line-through">Original: {adjustedSession._originalTitle}</p>
+                  <p className="text-[12px] text-muted-foreground mb-1 line-through">Original: {adjustedSession._originalTitle}</p>
                 )}
                 <p className="text-sm font-bold mb-1">{adjustedSession.title}</p>
                 <p className="text-xs text-muted-foreground mb-2">{adjustedSession.description}</p>
                 {adjustedSession._reason && (
-                  <p className="text-[10px] text-muted-foreground italic mb-2">💡 {adjustedSession._reason}</p>
+                  <p className="text-[12px] text-muted-foreground italic mb-2">💡 {adjustedSession._reason}</p>
                 )}
                 {adjustedSession.exercises && (
                   <div className="space-y-1">
                     {adjustedSession.exercises.map((ex, i) => (
                       <div key={i} className="bg-muted/30 rounded-lg px-3 py-1.5 flex justify-between">
-                        <span className="text-[11px] font-medium">{ex.name}</span>
-                        <span className="text-[10px] text-primary font-medium">{ex.sets}</span>
+                        <span className="text-[12px] font-medium">{ex.name}</span>
+                        <span className="text-[12px] text-primary font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </div>
                 )}
-                <motion.button onClick={() => navigate("/workouts")} whileTap={{ scale: 0.98 }}
+                <motion.button onClick={() => navigate("/train")} whileTap={{ scale: 0.98 }}
                   className="w-full mt-3 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow text-sm">
                   <Play size={16} /> Start Training
                 </motion.button>
@@ -478,7 +502,7 @@ const Recovery = () => {
                 className="mt-3 bg-card border border-border rounded-xl p-3 text-center">
                 <Lock size={16} className="mx-auto text-muted-foreground mb-1" />
                 <p className="text-xs font-semibold mb-0.5">Auto Training Adjustments</p>
-                <p className="text-[10px] text-muted-foreground">Upgrade to Pro to automatically adjust your training based on readiness.</p>
+                <p className="text-[12px] text-muted-foreground">Upgrade to Pro to automatically adjust your training based on readiness.</p>
               </motion.div>
             )}
           </motion.div>
@@ -499,7 +523,7 @@ const Recovery = () => {
                 {baselines[0]?.trend === "rising" && <TrendingUp size={12} className="text-green-500" />}
                 {baselines[0]?.trend === "falling" && <TrendingDown size={12} className="text-destructive" />}
                 {baselines[0]?.trend === "stable" && <Minus size={12} className="text-muted-foreground" />}
-                <span className="text-[10px] text-muted-foreground capitalize">{baselines[0]?.trend || "stable"}</span>
+                <span className="text-[12px] text-muted-foreground capitalize">{baselines[0]?.trend || "stable"}</span>
               </div>
             )}
           </div>
@@ -530,17 +554,17 @@ const Recovery = () => {
           <div className="bg-card border border-border rounded-xl p-3 text-center">
             <Flame size={14} className="mx-auto text-primary mb-1" />
             <p className="text-lg font-display font-bold">{streak}</p>
-            <p className="text-[9px] text-muted-foreground">Day streak (70+)</p>
+            <p className="text-[12px] text-muted-foreground">Day streak (70+)</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-3 text-center">
             <Crown size={14} className="mx-auto text-yellow-500 mb-1" />
             <p className="text-lg font-display font-bold">{peakDays}</p>
-            <p className="text-[9px] text-muted-foreground">Peak days</p>
+            <p className="text-[12px] text-muted-foreground">Peak days</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-3 text-center">
             <Shield size={14} className="mx-auto text-green-500 mb-1" />
             <p className="text-lg font-display font-bold">{weeklyAvg ?? "—"}</p>
-            <p className="text-[9px] text-muted-foreground">Weekly avg</p>
+            <p className="text-[12px] text-muted-foreground">Weekly avg</p>
           </div>
         </motion.div>
       )}
@@ -549,7 +573,7 @@ const Recovery = () => {
       {logged && insights.length > 0 && isPremium && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
           className="mx-5 mb-4 bg-card border border-border rounded-xl p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2">Performance Insights</p>
+          <p className="text-[12px] font-bold uppercase tracking-wider text-primary mb-2">Performance Insights</p>
           <div className="space-y-1.5">
             {insights.map((ins, i) => (
               <p key={i} className="text-xs text-muted-foreground">💡 {ins}</p>
@@ -570,35 +594,40 @@ const Recovery = () => {
                   <Heart size={16} className="text-destructive" />
                   <span className="text-sm font-bold">HRV & Heart Rate</span>
                 </div>
-                <button onClick={() => setShowHrvGuide(!showHrvGuide)} className="text-[10px] text-primary font-semibold flex items-center gap-1">
+                <button onClick={() => setShowHrvGuide(!showHrvGuide)} className="text-[12px] text-primary font-semibold flex items-center gap-1">
                   <Info size={10} /> {showHrvGuide ? "Hide" : "Guide"}
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">HRV (ms)</label>
+                  <label className="text-[12px] text-muted-foreground block mb-1">HRV (ms)</label>
                   <input type="number" placeholder="e.g. 65" value={hrv} onChange={e => setHrv(e.target.value)}
                     className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">RHR (bpm)</label>
+                  <label className="text-[12px] text-muted-foreground block mb-1">RHR (bpm)</label>
                   <input type="number" placeholder="e.g. 55" value={rhr} onChange={e => setRhr(e.target.value)}
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                </div>
+                <div>
+                  <label className="text-[12px] text-muted-foreground block mb-1">Sleep duration (h)</label>
+                  <input type="number" min={0} max={24} step="0.5" placeholder="e.g. 7.5" value={restHours} onChange={e => setRestHours(e.target.value)}
                     className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
               </div>
               {currentBaseline && hrv && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Baseline: {currentBaseline}ms · Today: {parseInt(hrv) > currentBaseline ? "+" : ""}{Math.round(((parseInt(hrv) - currentBaseline) / currentBaseline) * 100)}% from baseline
                 </p>
               )}
 
               {showHrvGuide && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-3 space-y-1.5">
-                  <p className="text-[9px] text-muted-foreground mb-1">HRV = variation between heartbeats. Higher = better recovered.</p>
+                  <p className="text-[12px] text-muted-foreground mb-1">HRV = variation between heartbeats. Higher = better recovered.</p>
                   {hrvGuide.map((g, i) => (
                     <div key={i} className="bg-muted/30 rounded-lg p-2">
-                      <span className={`text-[10px] font-bold ${g.color}`}>{g.range}</span>
-                      <span className="text-[9px] text-muted-foreground ml-1">— {g.advice}</span>
+                      <span className={`text-[12px] font-bold ${g.color}`}>{g.range}</span>
+                      <span className="text-[12px] text-muted-foreground ml-1">— {g.advice}</span>
                     </div>
                   ))}
                 </motion.div>
@@ -620,7 +649,7 @@ const Recovery = () => {
           <div className="px-5 mb-4">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
               className="bg-card border border-border rounded-xl p-3">
-              <label className="text-[10px] text-muted-foreground block mb-1">Notes (optional)</label>
+              <label className="text-[12px] text-muted-foreground block mb-1">Notes (optional)</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                 placeholder="How do you feel today..."
                 className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />

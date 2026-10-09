@@ -97,10 +97,30 @@ export const RULES = [
   {
     id: "supabase-legacy-key",
     // The `sb_publishable_` prefix is designed to ship in a client and is
-    // deliberately NOT matched. The legacy JWT form of the anon key is, because
-    // it is indistinguishable from a service-role key by shape alone.
-    re: /\bsupabase[_-]?(?:anon|service_role)[_-]?key["'\s]*[:=]\s*["'][^"']{20,}/i,
-    why: "A literal Supabase key assignment.",
+    // deliberately NOT matched: only the retired JWT form is, because that is
+    // the one that is indistinguishable from a service-role key by shape
+    // alone. An earlier version accepted any quoted value of 20+ characters,
+    // which fired on signups-admin/app.js's publishable key — a scanner that
+    // cries wolf on the one credential this repo is *supposed* to ship gets
+    // switched off, and then the real one gets through.
+    re: /\bsupabase[_-]?(?:anon|service_role)[_-]?key["'\s]*[:=]\s*["']eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_.-]{16,}/i,
+    why: "A literal legacy JWT-shaped Supabase key assignment.",
+  },
+  {
+    id: "supabase-legacy-jwt-env",
+    // Reject the retired anon-key shape in environment assignments too. A Vite
+    // key with an innocent-looking publishable variable name would still be
+    // copied into every build, so env names are not a safe exemption.
+    re: /\b(?:VITE_)?(?:SUPABASE_PUBLISHABLE_KEY|SUPABASE_ANON_KEY)\s*=\s*["']?eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
+    why: "A legacy JWT-shaped Supabase anon key; rotate to the sb_publishable_ key.",
+  },
+  {
+    id: "preview-host-app-url",
+    // No app artifact may depend on the Lovable preview subdomain for shares or
+    // OAuth redirects. The historical URL appears in tests/docs, so only match
+    // an assignment to the canonical build-time variable.
+    re: /\bVITE_PUBLIC_APP_URL\s*=\s*["']?https?:\/\/(?:[A-Za-z0-9-]+\.)*lovable\.app\b/i,
+    why: "The canonical app URL points at an unowned Lovable preview host.",
   },
   {
     id: "env-fallback-literal",
@@ -162,6 +182,15 @@ export const RULES = [
       /^(?:changeme|change_me|placeholder|example|redacted|dummy|your[-_].*|xxx+)$/i,
       /^eyJ/,                           // the JWT rule owns this one
       /^sb_publishable_/,               // designed to ship in a client, not a secret
+      // Command substitution: the value is GENERATED at runtime (openssl rand,
+      // node -e, cat /run/secrets/…) and never exists in this file. The one
+      // real hit was scripts/set-waitlist-cron-secret.sh doing exactly that.
+      /^\$\(/,
+      // A code fragment captured across a string boundary rather than a
+      // credential: `req.url.split("token=")[1] ?? ""` puts `token=` inside a
+      // string literal, so the "value" starts with `)` — closing punctuation
+      // no credential begins with.
+      /^[)\]}]/,
     ],
   },
 ]
@@ -216,8 +245,8 @@ export function scanText(text) {
  * Files allowed to contain credential-shaped text. Keep this list short.
  *
  * An entry here is a hole in the scanner, so each one is a decision somebody
- * has to be able to audit later. All three are files that contain a credential
- * *shape* on purpose, not a live credential.
+ * has to be able to audit later. Every one of them is a file that contains a
+ * credential *shape* on purpose, not a live credential.
  */
 const ALLOW = new Set([
   ".env.example",                     // the tracked template
@@ -233,6 +262,16 @@ const ALLOW = new Set([
   // see the comment at the top of the test — and are each provider's published
   // documentation example. Nothing here is a live credential.
   "src/lib/secretScan.test.ts",
+  // Verifies the Stripe webhook signature check, which is the only thing
+  // authenticating a request that can make somebody a coach. The secret here is
+  // a fake signing secret with the real prefix, because the test asserts the HMAC
+  // construction against digests computed OUTSIDE this repository — and a test
+  // that computed them with the code under test would pass even if the
+  // construction were wrong, which is the failure that would silently reject every
+  // real webhook. The values are published in the test's own header, alongside the
+  // command that regenerates them. Nothing here is a live credential, and no
+  // Stripe secret is stored anywhere in the repository.
+  "supabase/functions/_shared/stripeSignature.test.ts",
 ])
 
 function isAllowed(file) {

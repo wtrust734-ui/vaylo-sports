@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Vaylo Sports — Waiting list</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05070f;
+        --panel: #0d1120;
+        --line: #1d2438;
+        --text: #e8ecf6;
+        --muted: #8b97b3;
+        --brand: #ff5fa2;
+        --brand2: #4f8cff;
+        --danger: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 18px 64px; }
+      .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+      .dot {
+        width: 26px; height: 26px; border-radius: 8px;
+        background: linear-gradient(135deg, var(--brand), var(--brand2));
+      }
+      .brand b { font-size: 16px; letter-spacing: .2px; }
+      .card {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 14px; padding: 20px;
+      }
+      .center { max-width: 400px; margin: 8vh auto 0; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 17px; margin: 0 0 6px; }
+      p.sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+      label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px; }
+      input[type="email"], input[type="password"], input[type="search"] {
+        width: 100%; padding: 10px 12px; border-radius: 9px;
+        border: 1px solid var(--line); background: #080b16; color: var(--text);
+        font-size: 14px;
+      }
+      input:focus { outline: 2px solid var(--brand2); outline-offset: 1px; }
+      button {
+        cursor: pointer; border: 1px solid var(--line); background: #131a2c;
+        color: var(--text); border-radius: 9px; padding: 9px 14px; font-size: 13px;
+        font-weight: 600;
+      }
+      button:hover { border-color: #2c3550; }
+      button.primary {
+        border: 0; background: linear-gradient(135deg, var(--brand), var(--brand2));
+        color: #07070d; width: 100%; margin-top: 16px; padding: 11px;
+      }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .spread { justify-content: space-between; }
+      .grow { flex: 1 1 220px; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .err { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 10px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+      th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+      th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+      td.email { font-weight: 600; }
+      .tag { font-size: 11px; color: var(--muted); }
+      .pill {
+        display: inline-block; padding: 1px 8px; border-radius: 999px;
+        border: 1px solid var(--line); font-size: 11px; color: var(--muted);
+      }
+      .pill.off { color: var(--danger); border-color: #4a2130; }
+      .hidden { display: none !important; }
+      .toast {
+        position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+        background: #131a2c; border: 1px solid var(--line); border-radius: 10px;
+        padding: 10px 16px; font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand"><span class="dot"></span><b>Vaylo Sports</b></div>
+
+      <!-- loading -->
+      <div id="view-loading" class="card center"><p class="muted">Checking your session…</p></div>
+
+      <!-- login -->
+      <div id="view-login" class="card center hidden">
+        <h1>Waiting list</h1>
+        <p class="sub">Sign in with your Vaylo Sports administrator account.</p>
+        <form id="login-form" autocomplete="on">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button class="primary" type="submit" id="login-btn">Sign in</button>
+          <div class="err" id="login-err" role="alert"></div>
+        </form>
+      </div>
+
+      <!-- denied -->
+      <div id="view-denied" class="card center hidden">
+        <h2>No access</h2>
+        <p class="sub">This area is restricted to Vaylo Sports administrators.</p>
+        <button id="signout-btn">Sign out</button>
+      </div>
+
+      <!-- dashboard -->
+      <div id="view-dash" class="hidden">
+        <div class="row spread" style="margin-bottom: 14px">
+          <div>
+            <h1 style="margin: 0">Waiting list</h1>
+            <p class="sub" id="count" style="margin: 2px 0 0"></p>
+          </div>
+          <div class="row">
+            <button id="copy-btn">Copy all</button>
+            <button id="csv-btn">Download CSV</button>
+            <button id="removed-btn" aria-pressed="false">Show removed</button>
+            <button id="signout-btn2">Sign out</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <input id="search" class="grow" type="search" placeholder="Search address, name or source" />
+          </div>
+          <table>
+            <thead>
+              <tr><th>Email</th><th>Name</th><th>Source</th><th>Joined</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <p class="muted hidden" id="empty" style="margin-top: 16px">Nothing here yet.</p>
+        </div>
+      </div>
+    </div>
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

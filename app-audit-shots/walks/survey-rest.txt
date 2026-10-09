@@ -1,0 +1,86 @@
+################ Perform > ^VPR
+--> tap /^VPR/ at 539,769  ("VPR — Your overall rating and factors")
+================ ^VPR  (34 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 48.0px×6  352.8px×6  24.0px×2  307.8px×2  18.7px×1
+  top: y34.7 "Go back" | y160.0 "VAYLO SPORTS PERFORMAN" | y184.0 "VPR 0" | y226.7 "Archetype: not set yet"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Metrics hub
+--> tap /^Metrics hub/ at 539,983  ("Metrics hub — Loads, trends and logging")
+================ ^Metrics hub  (25 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 40.0px×6  227.8px×6  43.8px×3  18.7px×1  45.0px×1
+  top: y34.7 "Go back" | y160.0 "HOLISTIC METRICS" | y184.0 "Performance Dashboard" | y304.0 "Readiness (7d avg)"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Insights
+--> tap /^Insights/ at 539,1197  ("Insights — What your training says today")
+================ ^Insights  (19 labelled nodes)
+  gutters: left 16.0  right 15.6   (body x 16.0..395.8)
+  left edges: 16.0px×5  32.0px×2  18.7px×1  302.9px×1  181.7px×1
+  top: y34.7 "Go back" | y104.0 "Your training insights" | y104.0 "Refresh" | y138.7 "0 sessions in the last"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Skills
+--> tap /^Skills/ at 539,1411  ("Skills — Sport-skill analytics")
+================ ^Skills  (16 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 43.8px×6  18.7px×1  45.0px×1  24.0px×1  88.0px×1
+  top: y34.7 "Go back" | y160.0 "SKILL ANALYTICS" | y184.0 "Skill Engine" | y267.8 "Strengths"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Development
+--> tap /^Development/ at 539,1625  ("Development — Progression over time")
+================ ^Development  (23 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×2  40.0px×2  165.0px×2  290.7px×2  43.8px×2
+  top: y34.7 "Go back" | y160.0 "ATHLETE DEVELOPMENT MA" | y184.0 "Development Trajectory" | y272.0 "Projections use a line"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Identity
+--> tap /^Identity/ at 539,1954  ("Identity — Your performance fingerprint")
+================ ^Identity  (22 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 56.0px×4  43.8px×4  18.7px×1  45.0px×1  24.0px×1
+  top: y34.7 "Go back" | y160.0 "PERFORMANCE IDENTITY" | y184.0 "Your Archetype" | y280.0 "NOT ENOUGH DATA YET"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Goals
+--> tap /^Goals/ at 539,2170  ("Goals — What you're working towards")
+================ ^Goals  (23 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 18.7px×12  32.8px×3  49.9px×1
+  top: y41.9 "VAYLO SPORTS" | y74.7 "Perform" | y112.8 "How good are you, and " | y160.0 "View your VPR"
+written to app-audit-shots/walks/drill.txt
+################ Perform > ^Compare
+--> tap /^Compare/ at 539,2342  ("Compare — You vs elite profiles")
+================ ^Compare  (33 labelled nodes)
+  gutters: left 18.7  right 23.6   (body x 18.7..387.8)
+  left edges: 24.0px×3  48.0px×2  317.0px×2  18.7px×1  45.0px×1
+  top: y34.7 "Go back" | y160.0 "ATHLETE COMPARISON" | y184.0 "Stack Up vs Elite" | y226.7 "Illustrative benchmark"
+written to app-audit-shots/walks/drill.txt
+################ Profile > ^Achievements
+--> tap /^Achievements/ at 539,1830  ("Achievements Badges, milestones & challe")
+================ ^Achievements  (38 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 32.0px×9  224.0px×9  18.7px×3  82.7px×1  40.0px×1
+  top: y34.7 "Go back" | y90.7 "Achievements" | y128.0 "Earn medals for consis" | y181.7 "98"
+written to app-audit-shots/walks/drill.txt
+################ Profile > ^Notifications
+--> tap /^Notifications/ at 539,1669  ("Notifications Your alerts and what may b")
+================ ^Notifications  (11 labelled nodes)
+  gutters: left 18.7  right 68.5   (body x 18.7..342.9)
+  left edges: 18.7px×3  67.8px×2
+  top: y34.7 "Go back" | y112.0 "Notifications" | y146.7 "All your activity in o" | y291.8 "No notifications yet"
+written to app-audit-shots/walks/drill.txt
+################ Profile > ^Market
+--> tap /^Market/ at 539,1990  ("Market Credits, subscriptions & features")
+================ ^Market  (46 labelled nodes)
+  gutters: left 0.0  right -0.0   (body x 0.0..411.4)
+  small tap targets (<44px): 1
+    ! 370.7..411.4 x 45h  Lifetime
+  left edges: 18.7px×5  72.0px×5  155.8px×5  120.0px×2  293.0px×2
+  top: y34.7 "Go back" | y90.7 "Market" | y130.7 "Credits, plans and coi" | y178.7 "46"
+written to app-audit-shots/walks/drill.txt
+################ Profile > ^Settings
+--> tap /^Settings/ at 539,2307  ("Settings Language, passkeys, country, cu")
+================ ^Settings  (26 labelled nodes)
+  gutters: left 18.7  right 19.4   (body x 18.7..392.0)
+  left edges: 19.8px×5  40.0px×3  32.8px×3  120.0px×2  51.8px×2
+  top: y34.7 "Profile" | y112.0 "Athlete" | y139.8 "Multi-Sport · Intermed" | y168.0 "Free"
+written to app-audit-shots/walks/drill.txt

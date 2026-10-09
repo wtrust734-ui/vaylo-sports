@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ad 3 — THE SCORE, EXPLAINED (12.0s · 4:5 carousel)</title>
+<link rel="stylesheet" href="core.css" />
+<style>
+  .stage { width: 1080px; height: 1350px; }
+
+  .frame { position: absolute; inset: 0; z-index: 2; display: grid; align-content: center; gap: 40px; padding: 90px 96px; }
+  .frame .step {
+    display: flex; align-items: center; gap: 16px;
+    font-size: 24px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .frame .step i { width: 46px; height: 4px; border-radius: 999px; background: hsl(var(--muted-foreground) / .35); }
+  .frame .step i.on { background: var(--gradient-electric); }
+
+  .h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 104px; line-height: .94; letter-spacing: -.03em; }
+  .h1 .neg { color: hsl(var(--muted-foreground)); }
+  .lede { font-size: 38px; line-height: 1.32; color: hsl(var(--foreground) / .62); max-width: 22ch; }
+
+  /* frame 1 — the logged-metrics wall */
+  .wall { display: grid; gap: 12px; }
+  .wall .row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .12);
+    border-radius: 16px; padding: 20px 26px; font-size: 30px; font-weight: 600;
+  }
+  .wall .row b { color: hsl(var(--electric-glow)); font-variant-numeric: tabular-nums; }
+  .wall .row.ghost { background: transparent; border-style: dashed; color: hsl(var(--muted-foreground) / .8); }
+  .wall .row.ghost b { color: hsl(var(--muted-foreground) / .5); }
+
+  /* frame 2 — six domains */
+  .dom { display: grid; gap: 18px; }
+  .dom .d { display: grid; grid-template-columns: 210px 1fr 62px; gap: 20px; align-items: center; font-size: 28px; font-weight: 600; }
+  .dom .d span:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .dom .bar-track { height: 22px; }
+
+  /* frame 3 — sport weighting */
+  .sports { display: flex; flex-wrap: wrap; gap: 14px; }
+  .sports .sp {
+    font-size: 30px; font-weight: 700; padding: 16px 28px; border-radius: 999px;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--muted-foreground) / .18);
+  }
+  .sports .sp.on { background: var(--gradient-electric); color: #fff; border-color: transparent; }
+  .weights { display: grid; gap: 16px; }
+  .weights .w { display: grid; grid-template-columns: 190px 1fr; gap: 18px; align-items: center; font-size: 26px; font-weight: 600; }
+  .weights .bar-track { height: 18px; }
+
+  /* frame 4 — the score */
+  .scorewrap { display: flex; align-items: center; gap: 40px; }
+  .scorewrap .n { font-size: 300px; line-height: .82; }
+  .scorewrap .meta { display: grid; gap: 6px; }
+  .scorewrap .meta .k { font-size: 22px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+  .scorewrap .meta .v { font-size: 42px; font-weight: 700; }
+
+  .pager { position: absolute; bottom: 74px; left: 96px; right: 96px; display: flex; gap: 12px; }
+  .pager i { flex: 1; height: 6px; border-radius: 999px; background: hsl(var(--muted-foreground) / .2); overflow: hidden; }
+  .pager i b { display: block; height: 100%; width: 0%; background: var(--gradient-electric); border-radius: 999px; }
+</style>
+</head>
+<body data-guides="0">
+
+<div class="deck">
+  <div class="stage-wrap"><div class="stage" id="stage">
+
+    <div class="guides">
+      <div class="reels-top"></div><div class="reels-right"></div><div class="reels-bottom"></div>
+    </div>
+
+    <!-- ============ FRAME 1 — everyone logs ============ -->
+    <div class="frame" id="f1">
+      <div class="step"><i class="on"></i>01 / 04</div>
+      <div class="h1">EVERYONE<br />LOGS IT.</div>
+      <div class="lede">Every session, every test, every number you have ever entered. Somewhere, right now.</div>
+      <div class="wall">
+        <div class="row"><span>5×30m sprint</span><b>4.11s</b></div>
+        <div class="row"><span>Vertical jump</span><b>58cm</b></div>
+        <div class="row"><span>Ball throw</span><b>34m</b></div>
+        <div class="row"><span>Reaction</span><b>218ms</b></div>
+        <div class="row ghost"><span>Your score</span><b>— none —</b></div>
+      </div>
+    </div>
+
+    <!-- ============ FRAME 2 — the six domains ============ -->
+    <div class="frame" id="f2">
+      <div class="step"><i class="on"></i>02 / 04</div>
+      <div class="h1">NOBODY<br /><span class="neg">SCORES IT.</span></div>
+      <div class="lede">Vaylo turns your logs into one rating, across six domains.</div>
+      <div class="dom" id="f2-dom">
+        <div class="d"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="71"></span></span><span>71</span></div>
+        <div class="d"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="84"></span></span><span>84</span></div>
+        <div class="d"><span>Endurance</span><span class="bar-track"><span class="bar-fill" data-w="58"></span></span><span>58</span></div>
+        <div class="d"><span>Repeat</span><span class="bar-track"><span class="bar-fill" data-w="66"></span></span><span>66</span></div>
+        <div class="d"><span>Skill</span><span class="bar-track"><span class="bar-fill energy" data-w="49"></span></span><span>49</span></div>
+        <div class="d"><span>Reaction</span><span class="bar-track"><span class="bar-fill" data-w="61"></span></span><span>61</span></div>
+      </div>
+    </div>
+
+    <!-- ============ FRAME 3 — sport weighting ============ -->
+    <div class="frame" id="f3">
+      <div class="step"><i class="on"></i>03 / 04</div>
+      <div class="h1">WEIGHTED<br />FOR <span class="grad-text">YOUR SPORT.</span></div>
+      <div class="lede">A sprinter's rating is not a rower's rating. The sport profile decides what counts.</div>
+      <div class="sports">
+        <span class="sp on">Football</span>
+        <span class="sp">Running</span>
+        <span class="sp">Basketball</span>
+        <span class="sp">Cycling</span>
+        <span class="sp">Swimming</span>
+        <span class="sp">Tennis</span>
+        <span class="sp">Rugby</span>
+        <span class="sp">Golf</span>
+      </div>
+      <div class="weights">
+        <div class="w"><span>Power</span><span class="bar-track"><span class="bar-fill" data-w="82"></span></span></div>
+        <div class="w"><span>Speed</span><span class="bar-track"><span class="bar-fill" data-w="74"></span></span></div>
+        <div class="w"><span>Skill</span><span class="bar-track"><span class="bar-fill" data-w="69"></span></span></div>
+      </div>
+    </div>
+
+    <!-- ============ FRAME 4 — the score ============ -->
+    <div class="frame" id="f4">
+      <div class="step"><i class="on"></i>04 / 04</div>
+      <div class="scorewrap">
+        <div class="t-num n grad-text" id="f4-n">0</div>
+        <div class="meta">
+          <div class="k">Your performance rating</div>
+          <div class="v">VPR</div>
+          <div class="k" style="color:hsl(var(--energy))">Calculated on your device</div>
+        </div>
+      </div>
+      <div class="h1" style="font-size:92px">YOUR SPORT.<br /><span class="grad-text">YOUR SCORE.</span></div>
+      <div class="cta-btn" style="height:76px;font-size:26px">VAYLO SPORTS</div>
+      <div class="compliance" style="max-width:none;padding:0 20px">VPR is calculated from metrics you log. Vaylo Sports is not a medical device and is not professional advice.</div>
+    </div>
+
+    <div class="pager">
+      <i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i>
+    </div>
+
+  </div></div>
+</div>
+
+<div class="hud">
+  <div class="hud-top">
+    <span class="hud-title">Ad 3 — THE SCORE, EXPLAINED</span>
+    <span class="hud-meta">12.0s · 4:5 1080×1350 · 4 × 3.0s frames · feed-native carousel</span>
+    <span class="hud-note">Cheapest test in the set. Whichever line wins here goes into ad 1's hook.</span>
+  </div>
+  <div class="transport">
+    <button class="tb" id="play">▶  Play</button>
+    <button class="tb" id="restart">↺</button>
+    <button class="tb" id="loop" aria-pressed="true">Loop</button>
+    <button class="tb" id="guides" aria-pressed="false">Guides</button>
+    <button class="tb" id="clean">Clean</button>
+    <div class="scrub"><input type="range" id="scrub" value="0" /><div class="beats"></div></div>
+    <span class="tc" id="tc">00:00.00 / 00:12.00</span>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const stage = $('#stage');
+const ad = new VayloAd({ stage, duration: 12, title: 'Ad 3 — THE SCORE, EXPLAINED' });
+window.ad = ad;
+
+[[0, 'F1 LOGS'], [3, 'F2 DOMAINS'], [6, 'F3 SPORT'], [9, 'F4 SCORE']].forEach(([t, l]) => ad.beat(t, l));
+
+const F = 3.0;
+['#f1', '#f2', '#f3', '#f4'].forEach((sel, i) => {
+  ad.scene($(sel), i * F, (i + 1) * F);
+  // every frame wipes in from the left edge — reads as a card being dealt
+  ad.add($(sel), [
+    { offset: 0, opacity: 0, clipPath: 'inset(0 100% 0 0)', transform: 'translate3d(-40px,0,0)' },
+    { offset: 1, opacity: 1, clipPath: 'inset(0 0 0 0)', transform: 'translate3d(0,0,0)' }
+  ], { from: i * F, to: i * F + 0.42, easing: 'cubic-bezier(.7,0,.2,1)' });
+  // no hold cue needed: 'forwards' keeps the wipe's end state for the rest of
+  // the film, and a competing cue on the same element would fight it
+  ad.add($(sel), [
+    { offset: 0, opacity: 1 }, { offset: 1, opacity: 0 }
+  ], { from: (i + 1) * F - 0.22, to: (i + 1) * F });
+});
+
+/* pager fills across each frame */
+document.querySelectorAll('.pager b').forEach((b, i) => {
+  ad.drive(i * F, (i + 1) * F, (p) => { b.style.width = `${p * 100}%`; });
+});
+
+/* ---- frame 1: log rows land one at a time ---- */
+document.querySelectorAll('#f1 .wall .row').forEach((row, i) => {
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-30px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: 0.25 + i * 0.17, to: 0.25 + i * 0.17 + 0.42, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+
+/* ---- frame 2: six bars ---- */
+document.querySelectorAll('#f2-dom .d').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 3.5 + i * 0.2;
+  ad.add(row, [
+    { offset: 0, opacity: 0, transform: 'translateX(-24px)' },
+    { offset: 1, opacity: 1, transform: 'translateX(0)' }
+  ], { from: t0, to: t0 + 0.32 });
+  ad.drive(t0 + 0.08, t0 + 0.78, (p) => { fill.style.width = `${w * p}%`; });
+});
+
+/* ---- frame 3: sport chips then weights ---- */
+document.querySelectorAll('#f3 .sp').forEach((chip, i) => {
+  ad.add(chip, [
+    { offset: 0, opacity: 0, transform: 'scale(.82)' },
+    { offset: 1, opacity: 1, transform: 'scale(1)' }
+  ], { from: 6.35 + i * 0.07, to: 6.35 + i * 0.07 + 0.34, easing: 'cubic-bezier(.16,1,.3,1)' });
+});
+document.querySelectorAll('#f3 .weights .w').forEach((row, i) => {
+  const fill = row.querySelector('.bar-fill');
+  const w = parseFloat(fill.dataset.w);
+  const t0 = 7.6 + i * 0.22;
+  ad.add(row, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: t0, to: t0 + 0.3 });
+  ad.drive(t0 + 0.1, t0 + 0.95, (p) => { fill.style.width = `${w * p}%`; });
+});
+
+/* ---- frame 4: the number lands ---- */
+ad.count($('#f4-n'), 9.45, 10.5, 0, 62);
+ad.add($('#f4-n'), [
+  { offset: 0, transform: 'scale(1)' },
+  { offset: .6, transform: 'scale(1.1)' },
+  { offset: .85, transform: 'scale(.97)' },
+  { offset: 1, transform: 'scale(1)' }
+], { from: 10.5, to: 11.0, easing: 'linear' });
+$('#f4 .h1').querySelectorAll('.grad-text').forEach(() => {});
+ad.add($('#f4 .h1'), [
+  { offset: 0, opacity: 0, transform: 'translate3d(0,26px,0)' },
+  { offset: 1, opacity: 1, transform: 'translate3d(0,0,0)' }
+], { from: 10.7, to: 11.2, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#f4 .cta-btn'), [
+  { offset: 0, opacity: 0, transform: 'scale(.9)' },
+  { offset: 1, opacity: 1, transform: 'scale(1)' }
+], { from: 11.0, to: 11.4, easing: 'cubic-bezier(.16,1,.3,1)' });
+ad.add($('#f4 .compliance'), [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 1 }], { from: 11.3, to: 11.7 });
+
+mountPlayer(ad);
+</script>
+</body>
+</html>

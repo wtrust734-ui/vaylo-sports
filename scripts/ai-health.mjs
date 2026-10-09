@@ -22,9 +22,13 @@ import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const URL_BASE = process.env.SUPABASE_URL ?? "";
-const KEY = process.env.SUPABASE_KEY ?? "";
+const KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? "";
+if (KEY && !KEY.startsWith("sb_publishable_")) {
+  console.error("Refusing a legacy JWT-shaped SUPABASE_PUBLISHABLE_KEY; use the rotatable sb_publishable_ key.");
+  process.exit(2);
+}
 if (!URL_BASE || !KEY) {
-  console.error("Set SUPABASE_URL and SUPABASE_KEY (both are in .env) before running this.");
+  console.error("Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (both are in .env) before running this.");
   process.exit(2);
 }
 

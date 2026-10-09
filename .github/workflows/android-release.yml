@@ -22,7 +22,7 @@ on:
         required: true
         type: string
       version_name:
-        description: "versionName shown to testers (e.g. 1.2.0)"
+        description: "versionName shown to testers (e.g. 1.2.1)"
         required: true
         type: string
   push:

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
-import { User, Medal, Settings, ChevronRight, Zap, Users, Globe, LogOut, Ruler, Weight, Target, Heart, Calendar, Trash2, MapPin, MessageCircle } from "lucide-react";
+import { User, Medal, Settings, ChevronRight, Zap, Globe, LogOut, Ruler, Weight, Target, Calendar, Trash2, MapPin, MessageCircle } from "lucide-react";
 import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -18,10 +18,8 @@ import CountrySelect from "@/components/geo/CountrySelect";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
-import { FileText, ShieldCheck } from "lucide-react";
-import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from "@/lib/legalUrls";
-import { openExternal } from "@/lib/platform";
-
+import { Bell, FileText, Scale, ShieldCheck } from "lucide-react";
+import { legalPath } from "@/lib/legalUrls";
 
 const currencies = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD"];
 const goalOptions = [
@@ -33,6 +31,67 @@ const goalOptions = [
 ];
 const experienceLevels = ["beginner", "intermediate", "advanced", "elite"];
 const sportOptions = ["Running", "Gym/Weightlifting", "Football", "Basketball", "Swimming", "Cycling", "Tennis", "Rugby", "Boxing", "MMA", "Cricket", "Athletics", "Triathlon", "CrossFit", "General"];
+
+/* ── Row chrome ────────────────────────────────────────────────────────────
+   Every destination and every setting on this screen is one of two shapes, and
+   they used to be a third shape each: a full `card-surface card-pad` block with
+   its own border, its own icon tile and its own chevron. Nine of those stacked
+   up is what made Profile read as cluttered — the eye cannot tell a
+   destination from a section break when both are a bordered card.
+
+   Now they are rows inside one card, separated by hairlines. Same targets, same
+   labels, one border, one radius, and a 44px-tall row that is the size a thumb
+   expects. `divide-y` on the parent does the separating, so a row cannot
+   accidentally carry its own border again. */
+const ROW =
+  "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06]";
+
+const Row = ({
+  icon: Icon,
+  label,
+  desc,
+  onClick,
+  expanded,
+  rotate = true,
+}: {
+  icon: typeof Medal;
+  label: string;
+  desc: string;
+  onClick: () => void;
+  expanded?: boolean;
+  /** Set false for rows that navigate rather than expand. */
+  rotate?: boolean;
+}) => (
+  <button type="button" onClick={onClick} aria-expanded={expanded} className={`${ROW} press`}>
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+      <Icon size={16} className="text-foreground" aria-hidden />
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-sm font-semibold">{label}</span>
+      <span className="block truncate text-xs text-muted-foreground">{desc}</span>
+    </span>
+    <motion.span
+      animate={{ rotate: expanded ? 90 : 0 }}
+      transition={{ duration: 0.15 }}
+      className="shrink-0"
+      aria-hidden
+    >
+      <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+    </motion.span>
+  </button>
+);
+
+/** The panel an expanded row reveals. Sits inside the card, under its row. */
+const Panel = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, height: 0 }}
+    animate={{ opacity: 1, height: "auto" }}
+    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+    className="overflow-hidden"
+  >
+    <div className="space-y-4 px-4 pb-4 pt-1">{children}</div>
+  </motion.div>
+);
 
 const Profile = () => {
   const { profile, user, signOut, refreshProfile } = useAuth();
@@ -137,7 +196,7 @@ const Profile = () => {
     if (updateError) { toast({ title: "Couldn't update your profile", description: updateError.message, variant: "destructive" }); return; }
     await refreshProfile();
     setShowEditProfile(false);
-    toast({ title: "Profile updated! ✅" });
+    toast({ title: "Profile updated" });
   };
 
   const toggleGoal = (g: string) => {
@@ -151,32 +210,76 @@ const Profile = () => {
 
   const handleDeleteAccount = () => navigate("/settings/delete-account");
 
-
-  const menuItems = [
+  // The Profile tab is the app's account hub. The drawer's own entries used to
+  // live here because the top-left hamburger is gone: these are the
+  // destinations an athlete looked for in the drawer but which were only ever
+  // reachable from it on mobile (notifications) or buried one level down.
+  //
+  // Three things changed here on 2026-10-02, all of them because the screen had
+  // become a directory:
+  //
+  //   The full-catalogue row is gone. It was called "All sections", then "Every
+  //   section" — one row whose only job was to open the navigation drawer, on a
+  //   screen that had already become an index of destinations.
+  //
+  //   It was also the only thing that opened the drawer on a phone. openAppNav()
+  //   existed solely to serve it and nothing else dispatches OPEN_NAV_EVENT, so
+  //   with the row gone the drawer has no way in on mobile.
+  //
+  //   That was checked before removing it rather than assumed. Every path the
+  //   drawer lists is also linked from somewhere else — the Train, Perform,
+  //   Recover and Compete hubs, this screen's own rows, or another page — so
+  //   nothing becomes unreachable; it becomes one level deeper to get to. The
+  //   drawer markup is left in place because that shortcut is still worth
+  //   having, and it needs a control that works rather than this row back.
+  //
+  //   "Legal & Safety" is the first row. Every published document has to be
+  //   reachable from inside the app — Google Play rejects a listing whose
+  //   privacy policy is only on the web, and the athlete should not have to go
+  //   hunting for their own rights. It used to live only inside a collapsed
+  //   accordion, which is easy to miss, and showed 3 of the 26 documents.
+  //
+  //   These rows are rows now: one card, hairline-separated, rather than nine
+  //   separate bordered cards stacked on top of each other.
+  const menuItems: {
+    icon: typeof Medal;
+    label: string;
+    desc: string;
+    path?: string;
+    onClick?: () => void;
+  }[] = [
+    // Written as an explicit handler rather than `path` so this one row is
+    // greppable as the app's legal entry point — safetyCompliance.test.ts
+    // asserts this exact call is present in this file, which is the cheapest
+    // possible guard against the row being quietly dropped in a refactor.
+    { icon: Scale, label: "Legal & Safety", desc: "All 26 policies, your rights, and reporting", onClick: () => navigate("/legal") },
+    { icon: Bell, label: "Notifications", desc: "Your alerts and what may be sent", path: "/notifications" },
     { icon: Medal, label: "Achievements", desc: "Badges, milestones & challenges", path: "/achievements" },
-    { icon: Users, label: "Friends", desc: "Connect with athletes", path: "/friends" },
     { icon: Zap, label: "Market", desc: "Credits, subscriptions & features", path: "/market" },
   ];
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-5 pt-14 pb-4">
+      {/* pt uses the shared top-gutter token: with the header row gone there is
+          nothing above this title but the status bar inset, and the token is
+          what keeps that true on every screen rather than per-page guesswork. */}
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-[var(--vaylo-title-gap)]">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Profile</motion.h1>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5 }}
-        className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-5 shadow-card">
+        className="mx-5 mb-5 border border-border rounded-2xl p-5 card-surface">
         <div className="flex items-center gap-4">
           {/* The equipped border ring wraps the avatar. */}
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring" }}
-            className={`w-16 h-16 rounded-full bg-electric-purple/20 flex items-center justify-center ${equippedDefs.border_id ? "border-2" : ""}`}
+            className={`w-16 h-16 rounded-full bg-secondary flex items-center justify-center ${equippedDefs.border_id ? "border-2" : ""}`}
             style={equippedDefs.border_id ? {
               borderColor: cosmeticColor(equippedDefs.border_id) ?? "hsl(var(--primary))",
               boxShadow: isAnimated(equippedDefs.border_id)
                 ? "0 0 18px hsl(var(--primary) / 0.65)"
                 : undefined,
             } : undefined}>
-            <User size={28} className="text-electric-purple" />
+            <User size={28} className="text-muted-foreground" />
           </motion.div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -194,10 +297,10 @@ const Profile = () => {
             </div>
             <p className="text-sm text-muted-foreground">{formatSports(profile?.sport)} · {profile?.experience_level || "Intermediate"}</p>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">{entitlements.plan_label}</span>
-              <span className="text-[11px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">{hasUnlimitedCredits ? "Unlimited credits" : `${profile?.credits ?? 0} credits`}</span>
+              <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">{entitlements.plan_label}</span>
+              <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">{hasUnlimitedCredits ? "Unlimited credits" : `${profile?.credits ?? 0} credits`}</span>
               {equippedDefs.title_id && (
-                <span className="text-[11px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">
+                <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">
                   {cosmeticLabel(equippedDefs.title_id)}
                 </span>
               )}
@@ -208,7 +311,7 @@ const Profile = () => {
         <button
           type="button"
           onClick={() => setShowCosmetics(true)}
-          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
           <Sparkles size={12} /> Cosmetics ({Object.keys(equippedDefs).length} equipped)
         </button>
@@ -218,181 +321,184 @@ const Profile = () => {
         <AccountSubscriptionCard />
       </div>
 
+      {/* One card for every destination and every setting. `divide-y` supplies
+          the separators, so a row can never drift back to being its own card,
+          and the expanded panels sit inside the card rather than hanging off it
+          as a second box. */}
+      <div ref={menuRef} className="px-5 mb-5">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={menuInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.35 }}
+          className="card-surface divide-y divide-white/[0.06] overflow-hidden"
+        >
+          {menuItems.map((item) => (
+            <Row
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              desc={item.desc}
+              onClick={() => (item.onClick ? item.onClick() : navigate(item.path as string))}
+              expanded={false}
+              rotate={false}
+            />
+          ))}
+
+          {discordInviteUrl() && (
+            <Row
+              icon={MessageCircle}
+              label="Community"
+              desc="Train together on Discord"
+              onClick={() => navigate("/discord")}
+              expanded={false}
+              rotate={false}
+            />
+          )}
+
+          <Row
+            icon={User}
+            label="Edit profile"
+            desc="Weight, height, goals, sport, date of birth"
+            onClick={() => setShowEditProfile((v) => !v)}
+            expanded={showEditProfile}
+          />
+          {showEditProfile && (
+            <Panel>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Weight size={12} /> Weight (kg)</label>
+                  <input type="number" step="0.1" value={editWeight} onChange={e => setEditWeight(e.target.value)}
+                    className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" placeholder="70" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Ruler size={12} /> Height (cm)</label>
+                  <input type="number" value={editHeight} onChange={e => setEditHeight(e.target.value)}
+                    className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" placeholder="175" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Calendar size={12} /> Date of Birth</label>
+                <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Experience Level</label>
+                <div className="flex gap-1.5">
+                  {experienceLevels.map(l => (
+                    <button key={l} onClick={() => setEditExperience(l)}
+                      className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium capitalize border transition-all ${editExperience === l ? "bg-primary/15 border-primary text-primary" : "bg-card border-border text-foreground"}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Sport</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {sportOptions.map(s => (
+                    <button key={s} onClick={() => setEditSport(s)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${editSport === s ? "bg-primary/15 border-primary text-primary" : "bg-card border-border text-foreground"}`}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Target size={12} /> Goals</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {goalOptions.map(g => (
+                    <button key={g} onClick={() => toggleGoal(g)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${editGoals.includes(g) ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>{g}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Flat primary, not a gradient with a halo. Nine gradient CTAs on
+                  one screen is what made this look generated; a solid one is
+                  also the easier target to hit. */}
+              <motion.button whileTap={{ scale: 0.98 }} onClick={saveProfileEdits}
+                className="w-full bg-primary text-primary-foreground font-semibold py-3 rounded-xl">Save changes</motion.button>
+            </Panel>
+          )}
+
+          <Row
+            icon={Settings}
+            label="Settings"
+            desc="Language, passkeys, country, currency, water goal"
+            onClick={() => setShowSettings((v) => !v)}
+            expanded={showSettings}
+          />
+          {showSettings && (
+            <Panel>
+              <div>
+                <LanguageSetting />
+              </div>
+              <PasskeysSetting />
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><MapPin size={12} /> Country</label>
+                <CountrySelect value={country} onChange={saveCountry} />
+                <p className="text-[12px] text-muted-foreground mt-2">
+                  {country
+                    ? `${countryName(country)} · ${continentFor(country)}. Shown next to your name on leaderboards.`
+                    : "Set this to appear on your country and continental leaderboards."}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><Globe size={12} /> Currency</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {currencies.map(c => (
+                    <button key={c} onClick={() => saveCurrency(c)}
+                      className={`press px-3 py-2 rounded-lg text-xs font-medium border transition-all ${currency === c ? "bg-primary/15 border-primary text-primary" : "bg-white/[0.03] border-white/[0.08] text-foreground"}`}>{c}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><Ruler size={12} /> Daily Water Goal (ml)</label>
+                <div className="flex gap-2">
+                  <input type="number" step="10" value={waterGoal} onChange={e => setWaterGoal(e.target.value)}
+                    className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none" />
+                  <motion.button whileTap={{ scale: 0.98 }} onClick={saveWaterGoal} className="bg-primary text-primary-foreground px-4 rounded-xl text-sm font-semibold">Save</motion.button>
+                </div>
+              </div>
+
+              {/* The two URLs Google Play names explicitly, kept as direct
+                  shortcuts inside Settings as well as reachable from the Legal
+                  & Safety row above. Play's data-safety form points at the
+                  privacy policy and the account-deletion page, and an athlete
+                  looking for either should not have to find the document index
+                  first. Both open in the app's own document viewer, so they never lose the
+                  athlete's place in the app.
+
+                  There is deliberately no "Delete account" row here. The same
+                  irreversible action already exists once, as a full-width
+                  button under a plain-language warning at the foot of this
+                  screen, and having it in two places on one screen is a mistake
+                  waiting to happen. */}
+              <div className="space-y-1 border-t border-border pt-3">
+                <button type="button" onClick={() => navigate(legalPath("privacy"))}
+                  className="w-full flex items-center justify-between gap-2 py-1.5 text-foreground hover:text-primary transition-colors">
+                  <span className="flex items-center gap-2 text-sm font-medium"><ShieldCheck size={16} /> Privacy Policy</span>
+                  <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+                </button>
+                <button type="button" onClick={() => navigate(legalPath("terms"))}
+                  className="w-full flex items-center justify-between gap-2 py-1.5 text-foreground hover:text-primary transition-colors">
+                  <span className="flex items-center gap-2 text-sm font-medium"><FileText size={16} /> Terms of Service</span>
+                  <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+                </button>
+              </div>
+
+              {/* The live AI self-test is a support tool, not an account
+                  surface. It was a full-width card between Settings and the
+                  row list, which pushed the destinations an athlete actually
+                  came for below the fold; it is a diagnostic, so it lives at
+                  the bottom of Settings where it is two taps away and out of
+                  the way otherwise. */}
+              <div className="border-t border-border pt-3">
+                <AIConnectionTest />
+              </div>
+            </Panel>
+          )}
+        </motion.div>
+      </div>
+
       {/* Personalisation — one toggle: tailored app vs. everything */}
       <div className="px-5 mb-5">
         <PersonalizationSetting />
-      </div>
-
-      {/* Community — hidden until VITE_DISCORD_INVITE_URL is configured. */}
-      {discordInviteUrl() && (
-        <div className="px-5 mb-5">
-          <button
-            onClick={() => navigate("/discord")}
-            className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-electric-purple/20 transition-colors duration-300"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[#5865F2]/10"><MessageCircle size={18} className="text-[#5865F2]" /></div>
-              <div className="text-left"><h4 className="font-semibold text-sm">Community</h4><p className="text-xs text-muted-foreground">Train together on Discord</p></div>
-            </div>
-            <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-          </button>
-        </div>
-      )}
-
-      {/* Edit Profile */}
-      <div className="px-5 mb-5">
-        <motion.button onClick={() => setShowEditProfile(!showEditProfile)} whileTap={{ scale: 0.98 }}
-          className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-electric-purple/20 transition-colors duration-300">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-electric-purple/10"><User size={18} className="text-electric-purple" /></div>
-            <div><h4 className="font-semibold text-sm">Edit Profile</h4><p className="text-xs text-muted-foreground">Weight, height, goals, sport, DOB</p></div>
-          </div>
-          <motion.div animate={{ rotate: showEditProfile ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground rtl-flip" /></motion.div>
-        </motion.button>
-        {showEditProfile && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-            className="bg-card border border-border rounded-xl p-4 mt-2 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Weight size={12} /> Weight (kg)</label>
-                <input type="number" step="0.1" value={editWeight} onChange={e => setEditWeight(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" placeholder="70" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Ruler size={12} /> Height (cm)</label>
-                <input type="number" value={editHeight} onChange={e => setEditHeight(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" placeholder="175" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Calendar size={12} /> Date of Birth</label>
-              <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)}
-                className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Experience Level</label>
-              <div className="flex gap-1.5">
-                {experienceLevels.map(l => (
-                  <button key={l} onClick={() => setEditExperience(l)}
-                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium capitalize border transition-all ${editExperience === l ? "bg-primary/15 border-primary text-primary" : "bg-card border-border text-foreground"}`}>{l}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Sport</label>
-              <div className="flex flex-wrap gap-1.5">
-                {sportOptions.map(s => (
-                  <button key={s} onClick={() => setEditSport(s)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${editSport === s ? "bg-primary/15 border-primary text-primary" : "bg-card border-border text-foreground"}`}>{s}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1"><Target size={12} /> Goals</label>
-              <div className="flex flex-wrap gap-1.5">
-                {goalOptions.map(g => (
-                  <button key={g} onClick={() => toggleGoal(g)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${editGoals.includes(g) ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>{g}</button>
-                ))}
-              </div>
-            </div>
-            <motion.button whileTap={{ scale: 0.95 }} onClick={saveProfileEdits}
-              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">Save Changes</motion.button>
-          </motion.div>
-        )}
-      </div>
-
-      {/* Settings */}
-      <div className="px-5 mb-5">
-        <motion.button onClick={() => setShowSettings(!showSettings)} whileTap={{ scale: 0.98 }}
-          className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-primary/20 transition-colors duration-300">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-secondary"><Settings size={18} className="text-foreground" /></div>
-            <div><h4 className="font-semibold text-sm">Settings</h4><p className="text-xs text-muted-foreground">Country, currency, water goal</p></div>
-          </div>
-          <motion.div animate={{ rotate: showSettings ? 90 : 0 }}><ChevronRight size={16} className="text-muted-foreground rtl-flip" /></motion.div>
-        </motion.button>
-        {showSettings && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-            className="bg-card border border-border rounded-xl p-4 mt-2 space-y-4">
-            <div>
-              <LanguageSetting />
-            </div>
-            <PasskeysSetting />
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><MapPin size={12} /> Country</label>
-              <CountrySelect value={country} onChange={saveCountry} />
-              <p className="text-[11px] text-muted-foreground mt-2">
-                {country
-                  ? `${countryName(country)} · ${continentFor(country)}. Shown next to your name on leaderboards.`
-                  : "Set this to appear on your country and continental leaderboards."}
-              </p>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><Globe size={12} /> Currency</label>
-              <div className="flex flex-wrap gap-1.5">
-                {currencies.map(c => (
-                  <button key={c} onClick={() => saveCurrency(c)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${currency === c ? "bg-primary/15 border-primary text-primary" : "bg-card border-border text-foreground"}`}>{c}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1"><Ruler size={12} /> Daily Water Goal (ml)</label>
-              <div className="flex gap-2">
-                <input type="number" step="10" value={waterGoal} onChange={e => setWaterGoal(e.target.value)}
-                  className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none" />
-                <motion.button whileTap={{ scale: 0.95 }} onClick={saveWaterGoal} className="bg-primary text-primary-foreground px-4 rounded-xl text-sm font-semibold">Save</motion.button>
-              </div>
-            </div>
-            {/* Legal. Google Play requires the privacy policy to be reachable
-                from inside the app, not only from the store listing, and the
-                account-deletion page is the one Play points at for its data
-                deletion requirement. Both open in the in-app browser so the
-                athlete never loses their place in the app. */}
-            <div className="pt-3 border-t border-border space-y-1">
-              <button type="button" onClick={() => void openExternal(PRIVACY_POLICY_URL)}
-                className="w-full flex items-center justify-between gap-2 text-foreground hover:text-primary transition-colors">
-                <span className="flex items-center gap-2 text-sm font-medium"><ShieldCheck size={16} /> Privacy Policy</span>
-                <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-              </button>
-              <button type="button" onClick={() => void openExternal(TERMS_OF_SERVICE_URL)}
-                className="w-full flex items-center justify-between gap-2 text-foreground hover:text-primary transition-colors">
-                <span className="flex items-center gap-2 text-sm font-medium"><FileText size={16} /> Terms of Service</span>
-                <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-              </button>
-            </div>
-            <div className="pt-3 border-t border-border">
-              <motion.button whileTap={{ scale: 0.98 }} onClick={handleDeleteAccount}
-                className="w-full flex items-center justify-between gap-2 text-destructive">
-                <span className="flex items-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Delete Account</span>
-                <ChevronRight size={16} />
-              </motion.button>
-              <p className="text-[11px] text-muted-foreground mt-1">Permanently erase your account and all personal data.</p>
-            </div>
-          </motion.div>
-        )}
-      </div>
-
-      <div className="px-5 mb-5">
-        <AIConnectionTest />
-      </div>
-
-      <div ref={menuRef} className="px-5 space-y-3 mb-5">
-
-        {menuItems.map((item, i) => (
-          <motion.div key={item.label} initial={{ opacity: 0, x: -15 }} animate={menuInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ delay: i * 0.08, duration: 0.4 }}
-            whileHover={{ x: 4 }}
-            onClick={() => navigate(item.path)}
-            className="bg-card border border-border rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/20 transition-colors duration-300">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-secondary"><item.icon size={18} className="text-foreground" /></div>
-              <div><h4 className="font-semibold text-sm">{item.label}</h4><p className="text-xs text-muted-foreground">{item.desc}</p></div>
-            </div>
-            <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-          </motion.div>
-        ))}
       </div>
 
       {/* Sign Out */}
@@ -409,7 +515,7 @@ const Profile = () => {
           className="w-full flex items-center justify-center gap-2 border border-destructive/40 text-destructive font-semibold py-3 rounded-xl hover:bg-destructive/10 transition-colors text-sm">
           <Trash2 size={16} /> Delete account permanently
         </motion.button>
-        <p className="text-[11px] text-muted-foreground text-center mt-2">Wipes all training data, goals, purchases and credits. Cannot be undone.</p>
+        <p className="text-[12px] text-muted-foreground text-center mt-2">Wipes all training data, goals, purchases and credits. Cannot be undone.</p>
       </div>
 
       <CosmeticShop open={showCosmetics} onClose={() => setShowCosmetics(false)} />

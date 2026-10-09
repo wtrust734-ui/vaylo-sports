@@ -76,6 +76,9 @@ const officialPlugins: Record<string, () => Promise<Record<string, unknown>>> = 
   browser: () => import("@capacitor/browser"),
   haptics: () => import("@capacitor/haptics"),
   keyboard: () => import("@capacitor/keyboard"),
+  // OS-level local notifications: the app's own triggers shown on the device
+  // shade with no server involved. Distinct from push.ts, which needs Firebase.
+  "local-notifications": () => import("@capacitor/local-notifications"),
   "splash-screen": () => import("@capacitor/splash-screen"),
   share: () => import("@capacitor/share"),
   "status-bar": () => import("@capacitor/status-bar"),
@@ -92,11 +95,20 @@ const officialPlugins: Record<string, () => Promise<Record<string, unknown>>> = 
  * called, and every caller checks `isNative()`/`isAndroid()` first.
  */
 let healthConnectProxy: unknown;
+let cameraProxy: unknown;
+let pushProxy: unknown;
 const customPlugins: Record<string, () => unknown> = {
   // Registered once and shared: the proxy is stateless, and `registerPlugin`
   // warns if the same name is registered twice.
   VayloHealthConnect: () =>
     (healthConnectProxy ??= registerPlugin<Record<string, unknown>>("VayloHealthConnect")),
+  // VayloCamera is CameraCapturePlugin.kt in the Android project — see the
+  // note there for why `@capacitor/camera` is not used.
+  VayloCamera: () => (cameraProxy ??= registerPlugin<Record<string, unknown>>("VayloCamera")),
+  // VayloPush is push/PushPlugin.kt: notification permission, channels and
+  // the FCM token. Reports `configured: false` until a Firebase project is
+  // filled in — see src/lib/push.ts.
+  VayloPush: () => (pushProxy ??= registerPlugin<Record<string, unknown>>("VayloPush")),
 };
 
 /**
