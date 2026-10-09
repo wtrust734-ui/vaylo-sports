@@ -20,6 +20,8 @@ const COACH_CHAT = "/supabase/functions/coach-chat/index.ts";
 const VIDEO = "/supabase/functions/video-form-analysis/index.ts";
 const WEEKLY = "/supabase/functions/weekly-review/index.ts";
 const PLAN = "/supabase/functions/generate-plan/index.ts";
+const EDIT_PLAN = "/supabase/functions/edit-plan/index.ts";
+const NUTRITION_PLAN = "/supabase/functions/generate-nutrition-plan/index.ts";
 const LEARNING = "/supabase/functions/learning-recommend/index.ts";
 const DELETE = "/supabase/functions/delete-account/index.ts";
 const GUARD = "/supabase/functions/_shared/guard.ts";
@@ -163,6 +165,55 @@ describe("charging discipline across AI functions", () => {
 
   it("guard.spendForUser supports idempotency keys for retry safety", () => {
     expect(read(GUARD)).toMatch(/idempotencyKey\?/);
+  });
+
+  it.each([
+    ["edit-plan", EDIT_PLAN],
+    ["generate-nutrition-plan", NUTRITION_PLAN],
+    ["video-form-analysis", VIDEO],
+  ])("%s handles a replayed idempotency key instead of refunding it", (_name, file) => {
+    // `spendForUser` can answer a replay with `duplicate: true` and the ORIGINAL
+    // cost, having taken nothing — so a function that records that cost as
+    // charged, and then refunds it when the call fails, pays the athlete twice
+    // for one attempt. A function that claims a retry-safe key has to branch on
+    // the duplicate answer before it treats the spend as its own.
+    const src = read(file);
+    expect(src).toMatch(/idempotencyKey/);
+    expect(src).toMatch(/spend\.duplicate/);
+  });
+
+  it.each([
+    ["edit-plan", EDIT_PLAN],
+    ["generate-nutrition-plan", NUTRITION_PLAN],
+  ])("%s refuses a replayed key BEFORE it records a charge to refund", (_name, file) => {
+    // Order is the fix, so order is what is asserted. Checking for the replay
+    // after `charged = spend.cost` is the same bug as not checking at all, and a
+    // test that only looked for the string would pass either way.
+    const src = read(file);
+    const duplicateAt = src.indexOf("spend.duplicate");
+    const recordAt = src.indexOf("charged = spend.cost");
+
+    expect(duplicateAt, `${_name} never checks spend.duplicate`).toBeGreaterThan(-1);
+    expect(recordAt, `${_name} never records what it charged`).toBeGreaterThan(-1);
+    expect(
+      duplicateAt,
+      `${_name} records the charge before it checks whether this is a replay`,
+    ).toBeLessThan(recordAt);
+    // And the replay path has to be a refusal that RETURNS, inside that window:
+    // a branch that only sets a flag and carries on would still reach the model
+    // call, which is the free-work half of the bug.
+    expect(
+      src.slice(duplicateAt, recordAt),
+      `${_name}'s replay path does not return before it reaches the model`,
+    ).toMatch(/return json\(/);
+  });
+
+  it("fingerprints the whole request into an idempotency key, not just its prose", () => {
+    // The other half of the same bug: a key built from the instruction (or the
+    // goal) alone answers "already charged" to a request that asks for
+    // something else, and the second athlete-visible change rides for free.
+    expect(read(EDIT_PLAN)).toMatch(/fingerprint\(\s*\n?\s*`\$\{scope\}/);
+    expect(read(NUTRITION_PLAN)).toMatch(/targetsKey/);
   });
 
   it("binds ordinary credits_spend to the verified athlete JWT (auth.uid)", () => {
