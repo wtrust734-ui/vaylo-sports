@@ -87,7 +87,7 @@ export function syncStatusCopy(state: SyncState, facts: SyncFacts): SyncCopy {
         detail:
           facts.pending > 0
             ? `${plural(facts.pending, "change", "changes")} saved on this device — ${facts.pending === 1 ? "it" : "they"} will sync when you reconnect.`
-            : "You can keep logging. Everything you record is saved on this device.",
+            : "Check each save confirmation before closing the app.",
         tone: "warning",
         action: null,
       };

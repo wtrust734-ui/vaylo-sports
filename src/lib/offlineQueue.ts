@@ -1,27 +1,4 @@
-// ============================================================================
-// OFFLINE WRITE QUEUE
-// ----------------------------------------------------------------------------
-// A training app is used in gyms, on courts and on trails — precisely where
-// there is no signal. Before this, a set logged with no connection produced a
-// red toast and was gone: the athlete had done the work and the app threw it
-// away.
-//
-// Writes are still attempted normally. Only a *network* failure queues the
-// write; a rejected write (a bad value, a failed constraint, a 402) is a real
-// error the athlete must see, because retrying it forever would silently
-// discard data that can never succeed.
-//
-// The queue lives in localStorage, deliberately:
-//   - it survives the WebView being killed, which is the normal case when an
-//     Android app is backgrounded during a set and then swiped away;
-//   - a queued write is a handful of columns, not a cache of pages.
-//
-// Each queued write carries a client-generated `id`. Supabase inserts take an
-// explicit primary key, so replaying a queued write twice collides on the key
-// rather than creating a duplicate workout — which means a crash mid-replay
-// cannot double-log a session.
-// ============================================================================
-
+/** Durable offline writes. Failed replay stays queued until saved or resolved. */
 import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_KEY = "vaylo.offlineQueue.v1";
@@ -59,6 +36,8 @@ export interface QueuedWrite {
   base?: Record<string, unknown>;
   /** Set once a replay found the server had moved; cleared by resolveConflict. */
   conflict?: ConflictInfo | null;
+  /** Last server rejection; retained for retry and shown by the sync surface. */
+  lastError?: string;
 }
 
 /**
@@ -110,13 +89,12 @@ function read(): QueuedWrite[] {
 }
 
 function write(queue: QueuedWrite[]) {
-  cache = queue;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
   } catch {
-    // Private mode / quota exhausted. The in-memory copy still serves this
-    // session; the write is simply not durable.
+    throw new Error("Couldn't save on this device. Free some storage and try again before closing the app.");
   }
+  cache = queue;
   listeners.forEach((fn) => {
     try {
       fn([...queue]);
@@ -257,17 +235,14 @@ export async function insertOrQueue(
   }
 
   const queue = read();
-  // A queued id already present means this exact write is waiting; do not
-  // stack duplicates.
-  if (!queue.some((w) => w.id === id)) {
-    queue.push({ id, table, values: payload, queuedAt: Date.now() });
-    // Drop the oldest rather than refuse a new write: a training session
-    // happening now matters more than one from a month ago.
-    while (queue.length > MAX_QUEUED) queue.shift();
-    write(queue);
+  if (queue.some((w) => w.id === id && w.table === table)) return { ok: true, queued: true, id };
+  if (queue.length >= MAX_QUEUED) return { ok: false, queued: false, id, error: new Error("Offline storage is full. Sync your pending changes before saving more.") };
+  try {
+    write([...queue, { id, table, values: payload, queuedAt: Date.now() }]);
+    return { ok: true, queued: true, id };
+  } catch (error) {
+    return { ok: false, queued: false, id, error };
   }
-
-  return { ok: true, queued: true, id };
 }
 
 /**
@@ -287,29 +262,21 @@ export async function updateOrQueue(
   values: Record<string, unknown>,
   options?: { base?: Record<string, unknown> },
 ): Promise<{ ok: boolean; queued: boolean; error?: unknown }> {
-  const { error } = await updateRow(table, id, values);
-  if (!error) return { ok: true, queued: false };
-
-  if (!isNetworkError(error)) {
+  try {
+    // A pending insert may not exist on the server yet. Fold edits before
+    // attempting an UPDATE that could report success while matching no row.
+    if (updateQueued(id, values, options?.base, table)) return { ok: true, queued: true };
+    const { error } = await updateRow(table, id, values);
+    if (!error) return { ok: true, queued: false };
+    if (!isNetworkError(error)) return { ok: false, queued: false, error };
+    if (updateQueued(id, values, options?.base, table)) return { ok: true, queued: true };
+    const queue = read();
+    if (queue.length >= MAX_QUEUED) return { ok: false, queued: false, error: new Error("Offline storage is full. Sync your pending changes before saving more.") };
+    write([...queue, { id, table, values, base: options?.base, queuedAt: Date.now(), op: "update" }]);
+    return { ok: true, queued: true };
+  } catch (error) {
     return { ok: false, queued: false, error };
   }
-
-  // The baseline rides along with the values so a later replay can tell this
-  // edit apart from a concurrent one instead of overwriting it.
-  if (updateQueued(id, values, options?.base)) return { ok: true, queued: true };
-
-  const queue = read();
-  queue.push({
-    id,
-    table,
-    values,
-    base: options?.base,
-    queuedAt: Date.now(),
-    op: "update",
-  });
-  while (queue.length > MAX_QUEUED) queue.shift();
-  write(queue);
-  return { ok: true, queued: true };
 }
 
 /**
@@ -327,16 +294,19 @@ export function updateQueued(
   id: string,
   values: Record<string, unknown>,
   base?: Record<string, unknown>,
+  table?: string,
 ): boolean {
   const queue = read();
-  const item = queue.find((w) => w.id === id);
+  const item = queue.find((w) => w.id === id && (!table || w.table === table));
   if (!item) return false;
-  item.values = { ...item.values, ...values };
-  // Merged, not replaced: a second offline edit to the same row widens the set
-  // of fields that need a baseline, and the earliest reading of each field is
-  // the one the athlete actually saw.
-  if (base) item.base = { ...(item.base ?? {}), ...base };
-  write([...queue]);
+  const updated = {
+    ...item,
+    values: { ...item.values, ...values },
+    // Existing fields retain the first server value the athlete saw.
+    base: base ? { ...base, ...(item.base ?? {}) } : item.base,
+    lastError: undefined,
+  };
+  write(queue.map((w) => w === item ? updated : w));
   return true;
 }
 
@@ -453,7 +423,9 @@ async function replayUpdate(item: QueuedWrite): Promise<UpdateReplay> {
 
   const { data: server, error: readError } = await selectRow(item.table, item.id);
   if (readError) {
-    if (isNetworkError(readError)) return { error: readError, conflict: null };
+    if (isNetworkError(readError) || readError.code === "PGRST301" || readError.code === "PGRST302") {
+      return { error: readError, conflict: null };
+    }
     // The row could not be read for a reason that is not connectivity. Sending
     // anyway is the silent overwrite this check exists to prevent, so the edit
     // stays queued and asks the athlete instead of guessing.
@@ -487,74 +459,34 @@ async function replayUpdate(item: QueuedWrite): Promise<UpdateReplay> {
 /** Replaying right now — more than one caller at once is possible. */
 let flushing = false;
 
-/**
- * Replays every queued write, oldest first.
- *
- * A write that fails for a *network* reason stops the run and stays queued.
- * A write the server rejects is dropped: it can never succeed, and leaving it
- * in place would block every write behind it forever.
- *
- * @returns how many writes were successfully sent.
- */
+/** Replay a snapshot, reconciling each result against the latest queue. */
 export async function flushQueue(): Promise<number> {
   if (flushing) return 0;
   flushing = true;
   try {
-    const queue = pendingWrites();
-    if (!queue.length) return 0;
-
     let sent = 0;
-    let keep: QueuedWrite[] = [];
-
-    for (const item of queue) {
-      // A conflict already found is not retried: the athlete has to choose, and
-      // re-running the same comparison would only find it again. It stays in
-      // the queue so the choice still exists after a relaunch.
-      if (item.conflict) {
-        keep.push(item);
-        continue;
-      }
-
-      const outcome: UpdateReplay =
-        item.op === "update"
-          ? await replayUpdate(item)
-          : { ...(await replay(item)), conflict: null };
-
-      if (outcome.conflict) {
-        keep.push({ ...item, conflict: outcome.conflict });
-        continue;
-      }
-      // Resolved elsewhere; there is nothing left to send.
-      if (outcome.noop) continue;
-
-      const error = outcome.error;
-      if (!error) {
-        sent++;
-        continue;
-      }
-      if (isNetworkError(error)) {
-        // Still offline. Everything after this is very likely to fail too, but
-        // ordering matters more than saving a round trip — stop here.
-        keep = [item, ...queue.slice(queue.indexOf(item) + 1)];
-        break;
-      }
-      // 23505 = duplicate key: a previous replay got through before the app
-      // died. The write landed, so drop it.
-      if ((error as { code?: string }).code === "23505") {
-        sent++;
-        continue;
-      }
-      // An UPDATE that matched no row means the row was deleted (or never
-      // landed) since it was queued. It can never succeed, so it goes rather
-      // than blocking every write behind it — the same treatment as a refusal.
-      // PostgREST reports a missing match for a single-row update as PGRST116.
-      if ((error as { code?: string }).code === "PGRST116") {
-        continue;
-      }
-      // Genuinely rejected — unrecoverable, so it goes rather than blocks.
+    for (const item of pendingWrites()) {
+      if (!read().includes(item) || item.conflict) continue;
+      const outcome: UpdateReplay = item.op === "update"
+        ? await replayUpdate(item)
+        : { ...(await replay(item)), conflict: null };
+      if (isNetworkError(outcome.error)) break;
+      const duplicateInsert = item.op !== "update" && outcome.error?.code === "23505";
+      const delivered = !outcome.error && !outcome.conflict || duplicateInsert;
+      if (delivered && !outcome.noop) sent++;
+      const next = read().flatMap((current) => {
+        if (current.id !== item.id || current.table !== item.table) return [current];
+        if (current !== item) {
+          if (!delivered) return [current];
+          // An edit made during the request must still be delivered. An INSERT
+          // that just landed becomes an UPDATE against that exact sent value.
+          return [{ ...current, op: "update" as const, base: { ...item.base, ...item.values }, conflict: null, lastError: undefined }];
+        }
+        if (delivered) return [];
+        return [{ ...current, conflict: outcome.conflict, lastError: outcome.error?.message }];
+      });
+      write(next);
     }
-
-    write(keep);
     return sent;
   } finally {
     flushing = false;
@@ -598,7 +530,7 @@ export async function resolveConflict(
   const item = read().find((w) => w.id === id);
   if (!item) return { ok: true };
 
-  const drop = () => write(read().filter((w) => w.id !== id));
+  const drop = () => write(read().filter((w) => w !== item));
 
   if (choice === "theirs") {
     drop();
@@ -630,7 +562,7 @@ export async function resolveConflict(
  */
 export function installOfflineQueue(): () => void {
   const flush = () => {
-    void flushQueue();
+    void flushQueue().catch((error) => console.error("Offline sync failed", error));
   };
   window.addEventListener("online", flush);
   // A short delay, so a launch-time fetch failure has settled before we retry.

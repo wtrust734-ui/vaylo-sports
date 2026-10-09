@@ -23,6 +23,7 @@ export default defineConfig({
     // depend on nothing outside the repository. Nothing here talks to Supabase —
     // a test that needs the network has to say so.
     env: {
+      VITE_LEGAL_BASE_URL: "https://vaylo-sports.netlify.app/legal",
       VITE_SUPABASE_URL: "https://placeholder.supabase.co",
       VITE_SUPABASE_PUBLISHABLE_KEY: "placeholder-publishable-key",
     },

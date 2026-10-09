@@ -65,7 +65,7 @@ const Opponents = () => {
       </div>
 
       {editing && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur p-4 overflow-y-auto" onClick={() => setEditing(null)}>
+        <div className="fixed inset-0 z-[60] bg-background/90 backdrop-blur p-4 overflow-y-auto" onClick={() => setEditing(null)}>
           <motion.div initial={{ y: 20 }} animate={{ y: 0 }} onClick={e => e.stopPropagation()}
             className="max-w-lg mx-auto bg-card border border-border rounded-2xl p-5 space-y-3">
             <div className="flex justify-between items-center">

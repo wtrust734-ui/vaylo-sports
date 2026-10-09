@@ -449,6 +449,8 @@ const Market = () => {
         </motion.div>
       )}
 
+      {freeCreditsActive() && <p className="mx-5 mb-4 rounded-xl border border-primary/30 bg-primary/10 p-3 text-sm">{CLOSED_TESTING.label}. No payment is taken.</p>}
+
       {/* Section nav */}
       <MarketSectionNav active={section} onChange={setSection} />
       <p className="px-5 pb-4 pt-2 text-xs text-muted-foreground">{activeSection.blurb}</p>
@@ -488,7 +490,7 @@ const Market = () => {
                   )}
                 </div>
                 <span className="font-display text-xl font-bold text-gradient-electric">
-                  {formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}
+                  {freeCreditsActive() ? "Free" : formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}
                 </span>
               </div>
             </div>

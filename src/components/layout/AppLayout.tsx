@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import AppSidebar from "./AppSidebar";
@@ -21,6 +22,7 @@ import {
 const AppLayout = () => {
   const { session, profile, loading, profileError, guestError, signOut } = useAuth();
   const location = useLocation();
+  const { error: accessError, refresh: refreshAccess, loading: accessLoading } = useSubscription();
 
   // Once-per-day in-app notification check while the app is open. These are
   // inbox + realtime notifications, not lock-screen push — no push
@@ -163,6 +165,12 @@ const AppLayout = () => {
           element from the Back button above it. Neither carries a bottom pad,
           so the two cannot collapse into one. */}
       <main className="relative pb-28 lg:pl-60">
+        {accessError && (
+          <div role="alert" className="mx-4 rounded-lg border border-destructive p-3 text-sm">
+            Couldn't refresh your access. Please retry before unlocking features.
+            <button type="button" disabled={accessLoading} onClick={() => void refreshAccess()} className="ml-2 underline">Retry</button>
+          </div>
+        )}
         {/* `min-w-0` on the flex/grid child is what actually stops a wide
             descendant (a long username, an AI response, a stat grid) from
             pushing the page wider than the viewport. Without it the child is

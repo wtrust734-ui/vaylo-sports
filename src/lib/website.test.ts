@@ -114,6 +114,9 @@ const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "
  * against a different project, the matched-environment comparison follows
  * automatically instead of failing on a value nobody updated.
  */
+const COMMITTED_SITE_URL = /<link rel="canonical" href="([^"]+)"/.exec(read("index.html"))?.[1]?.replace(/\/$/, "") ?? "";
+const SITE_ENV = { ...process.env, SITE_URL: COMMITTED_SITE_URL };
+
 const COMMITTED_SUPABASE_URL =
   /supportEndpoint: "([^"]+)"/.exec(read("assets/config.js"))?.[1]?.replace(
     /\/functions\/v1\/support-request$/,
@@ -136,12 +139,12 @@ const envDependent = new Set<string>();
   execFileSync(process.execPath, [GENERATOR, a], {
     cwd: root,
     stdio: "pipe",
-    env: { ...process.env, VITE_SUPABASE_URL: "https://env-a.supabase.co" },
+    env: { ...SITE_ENV, VITE_SUPABASE_URL: "https://env-a.supabase.co" },
   });
   execFileSync(process.execPath, [GENERATOR, b], {
     cwd: root,
     stdio: "pipe",
-    env: { ...process.env, VITE_SUPABASE_URL: "https://env-b.supabase.co" },
+    env: { ...SITE_ENV, VITE_SUPABASE_URL: "https://env-b.supabase.co" },
   });
   for (const file of walk(a)) {
     if (readFileSync(join(a, file), "utf8") !== readFileSync(join(b, file), "utf8")) {
@@ -169,7 +172,7 @@ const ALWAYS_ENV_DEPENDENT = ["assets/config.js"];
 const SITE_URL_ENV_DEPENDENT = ["robots.txt", "sitemap.xml"];
 const EXPECTED_ENV_DEPENDENT = [
   ...ALWAYS_ENV_DEPENDENT,
-  ...(process.env.SITE_URL?.trim() ? SITE_URL_ENV_DEPENDENT : []),
+
 ];
 
 // ---------------------------------------------------------------------------
@@ -185,7 +188,7 @@ describe("generated website", () => {
   // broken", which is the opposite of what a slow test means.
   it("is exactly what the generator produces today", { timeout: 60_000 }, () => {
     const out = join(workdir, "website");
-    execFileSync(process.execPath, [GENERATOR, out], { cwd: root, stdio: "pipe" });
+    execFileSync(process.execPath, [GENERATOR, out], { cwd: root, stdio: "pipe", env: SITE_ENV });
 
     // The app bundle is compared separately and only when it is present, so
     // neither side of this comparison includes it: the generator never emits
@@ -216,7 +219,7 @@ describe("generated website", () => {
     execFileSync(process.execPath, [GENERATOR, out], {
       cwd: root,
       stdio: "pipe",
-      env: { ...process.env, VITE_SUPABASE_URL: COMMITTED_SUPABASE_URL },
+      env: { ...SITE_ENV, VITE_SUPABASE_URL: COMMITTED_SUPABASE_URL },
     });
 
     for (const file of envDependent) {

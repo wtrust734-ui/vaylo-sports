@@ -60,9 +60,9 @@ describe("syncStatusCopy", () => {
     expect(copy.tone).toBe("warning");
   });
 
-  it("reassures when offline with nothing pending", () => {
+  it("asks the athlete to check save confirmations when nothing is queued", () => {
     const copy = syncStatusCopy("offline", facts({ online: false }));
-    expect(copy.detail).toContain("saved on this device");
+    expect(copy.detail).toContain("Check each save confirmation");
     expect(copy.action).toBeNull();
   });
 

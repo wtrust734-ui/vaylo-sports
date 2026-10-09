@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
  */
 type LooseClient = Omit<SupabaseClient, "rpc"> & {
   rpc: (
-    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment" | "grant_infinite_credits",
+    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment" | "grant_infinite_credits" | "deliver_purchase",
     args?: Record<string, unknown>,
   ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 };
@@ -17,7 +17,6 @@ import {
   CREDIT_GRANTS,
   DEPRECATED_PRODUCT_IDS,
   FEATURE_PRODUCTS,
-  FIRST_PURCHASE_BUNDLE,
   ONE_TIME_PRODUCTS,
   PRODUCT_PRICES,
   UNLIMITED_PACKS,
@@ -51,16 +50,6 @@ const corsHeaders = {
 // wrong on. Failing shut is the better default: nobody is charged, and the
 // reason is in the log.
 const PAYMENT_MODE = Deno.env.get("PAYMENT_MODE") ?? "disabled";
-
-/**
- * Products that may never be granted by the free path.
- *
- * Unlimited credits are not a credit pack — one free `infinite_lifetime` is
- * every AI feature in the app, forever, for nothing, and unlike a free pack it
- * cannot be sized. Closed testing is meant to exercise the credit flow, so the
- * free path stops at the credit ladder.
- */
-const FREE_GRANT_BLOCKED = new Set(UNLIMITED_PACKS.map((p) => p.id));
 
 type Verification =
   | { verified: true; reference: string }
@@ -136,6 +125,11 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
     };
   }
 
+  // A Play token proves one product. Never let it authorize a whole basket.
+  if (items.length !== 1) {
+    return { verified: false, error: "Store purchases are one product at a time.", status: 400 };
+  }
+
   if (!reference || !body.verification?.receipt) {
     return { verified: false, error: "Missing store purchase verification", status: 402 };
   }
@@ -178,11 +172,10 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
   }
 
   // Cross-check: the Play-verified product must be one the athlete actually
-  // asked for (prevents buying pack_25 and replaying it as pack_500), and the
-  // verified purchase time must not predate the request by more than 48h.
+  // asked for (prevents buying pack_25 and replaying it as pack_500).
   const verifiedProductId = result.purchase.productId;
   const basketIds = (items as { product_id?: unknown }[]).map((i) => String(i?.product_id ?? ""));
-  if (!basketIds.includes(verifiedProductId)) {
+  if (basketIds[0] !== verifiedProductId) {
     return {
       verified: false,
       error: "Verified purchase does not match the requested product.",
@@ -204,12 +197,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     ));
-    // User-scoped client for RPCs that rely on auth.uid() (spend_credits).
-    const userClient = asLoose(createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    ));
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
 
@@ -221,7 +208,7 @@ Deno.serve(async (req) => {
     // with nothing granted, which taught the client to show a success toast for
     // a request that bought nothing — the one signal an athlete relies on when a
     // purchase genuinely fails.
-    if (items.length === 0) {
+    if (items.length === 0 || items.length > 50) {
       return new Response(
         JSON.stringify({ error: "Your basket is empty." }),
         { status: 400, headers: corsHeaders }
@@ -238,6 +225,7 @@ Deno.serve(async (req) => {
     // (the authority) and the client's own flag (so the UI and the server are
     // describing the same deal to the athlete).
     const freeGrant = PAYMENT_MODE === "free" && body.closed_testing === true;
+    let verifiedReference: string | null = null;
 
     // Payment verification is only meaningful for a basket that contains a
     // product priced in money. A feature unlock or an Event Pack is paid for in
@@ -253,24 +241,6 @@ Deno.serve(async (req) => {
       return PRODUCT_PRICES[id] != null || id.startsWith("offer_");
     });
 
-    if (freeGrant) {
-      // Nothing is charged and nothing is verified, but an unlimited pack is
-      // still refused — it is not a size-limited product (see FREE_GRANT_BLOCKED).
-      const blockedUnlimited = (items as BasketItem[]).find((i) =>
-        FREE_GRANT_BLOCKED.has(String(i?.product_id || ""))
-      );
-      if (blockedUnlimited) {
-        return new Response(
-          JSON.stringify({
-            error: "Unlimited is not free during closed testing. Credit packs are.",
-            code: "free_grant_excluded",
-            product_id: String(blockedUnlimited.product_id),
-          }),
-          { status: 402, headers: corsHeaders }
-        );
-      }
-    }
-
     if (basketHasMoney && !freeGrant) {
       const verification = await verifyStorePurchase(items, body);
       // Explicit comparison rather than `!verification.verified`: the negation
@@ -282,25 +252,7 @@ Deno.serve(async (req) => {
           { status: verification.status ?? 402, headers: corsHeaders }
         );
       }
-    }
-
-    // Store servers retry, and a client can retry a timeout it never saw fail.
-    // One grant per store transaction: if this reference was already used by
-    // this athlete, refuse instead of granting twice.
-    if (body.verification?.reference) {
-      const { data: priorGrant } = await supabase
-        .from("user_purchases")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("provider_reference", body.verification.reference)
-        .limit(1)
-        .maybeSingle();
-      if (priorGrant) {
-        return new Response(
-          JSON.stringify({ error: "This purchase has already been applied.", duplicate: true }),
-          { status: 409, headers: corsHeaders }
-        );
-      }
+      verifiedReference = verification.reference;
     }
 
     // Fetch live offers for double-credit promo.
@@ -312,7 +264,6 @@ Deno.serve(async (req) => {
     // expired `offer_<slug>` product would still be purchasable.
     const { data: offerRows } = await supabase.from("special_offers").select("*").eq("active", true);
     const liveOffers = ((offerRows ?? []) as SpecialOfferRow[]).filter((o) => isOfferLive(o));
-    const doubleOffer = liveOffers.find((o) => o.offer_type === "double_credits");
 
     // PHASE 1: legacy tier subscriptions can no longer be purchased.
     const blocked = (items as BasketItem[]).find((i) =>
@@ -339,10 +290,10 @@ Deno.serve(async (req) => {
     // anyway on the next page load.
     const { data: balanceRow } = await supabase
       .from("profiles")
-      .select("credits, infinite_credits")
+      .select("credits, infinite_credits, infinite_credits_until")
       .eq("user_id", user.id)
       .maybeSingle();
-    let availableCredits = balanceRow?.infinite_credits
+    let availableCredits = balanceRow?.infinite_credits && (!balanceRow.infinite_credits_until || new Date(balanceRow.infinite_credits_until).getTime() > Date.now())
       ? Number.MAX_SAFE_INTEGER
       : Number(balanceRow?.credits ?? 0);
 
@@ -399,29 +350,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Offers and the first-purchase bundle are one redemption per account.
-      const oneTime = ONE_TIME_PRODUCTS.includes(productId) || productId.startsWith("offer_");
-      if (oneTime) {
-        const { data: prior } = await supabase
-          .from("user_purchases")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("product_id", productId)
-          .limit(1)
-          .maybeSingle();
-        if (prior) {
-          return new Response(
-            JSON.stringify({
-              error: productId === FIRST_PURCHASE_BUNDLE.id
-                ? "The one-time first-purchase offer has already been used."
-                : "This offer has already been claimed.",
-              product_id: productId,
-            }),
-            { status: 409, headers: corsHeaders }
-          );
-        }
-      }
-
       // Spendable with credits: make sure this basket can actually pay for it.
       const featureKeyForCheck = FEATURE_PRODUCTS[productId];
       if (featureKeyForCheck) {
@@ -453,180 +381,41 @@ Deno.serve(async (req) => {
         availableCredits -= cost;
       }
 
-      resolved.push({ productId, productType, priceCents });
+      resolved.push({ productId, productType, priceCents: freeGrant ? 0 : priceCents });
     }
 
-    let creditsToAdd = 0;
-    let bonusToAdd = 0;
-    let coinsToAdd = 0;
-    let infiniteGrant: { period: string } | null = null;
-
-    for (const { productId, productType, priceCents } of resolved) {
-      const { data: purchaseRow, error: purchaseErr } = await supabase
-        .from("user_purchases")
-        .insert({
-          user_id: user.id,
-          product_id: productId,
-          product_type: productType,
-          price_cents: priceCents,
-          // Store provenance: a unique index on provider_reference is what makes
-          // the idempotency check above race-proof.
-          provider_reference: body.verification?.reference ?? null,
-          platform: body.platform ?? null,
-        })
-        .select("id")
-        .maybeSingle();
-      const purchaseId: string | undefined = purchaseRow?.id;
-      // 23505 = the unique index rejected a replayed store transaction. Bail
-      // before granting, so two concurrent retries can never double-credit.
-      if (purchaseErr?.code === "23505") {
-        return new Response(
-          JSON.stringify({ error: "This purchase has already been applied.", duplicate: true }),
-          { status: 409, headers: corsHeaders }
-        );
-      }
-      // An entitlement row must never outlive a payment that did not happen.
-      const rollBackPurchase = async () => {
-        if (!purchaseId) return;
-        const { error } = await supabase.from("user_purchases").delete().eq("id", purchaseId);
-        if (error) console.error("purchase rollback failed:", error.message);
+    const grants = resolved.map(({ productId, productType, priceCents }) => {
+      const offer = liveOffers.find((o) => `offer_${o.slug}` === productId);
+      return {
+        product_id: productId,
+        product_type: productType,
+        price_cents: priceCents,
+        credits: CREDIT_GRANTS[productId] ?? (offer?.pack_id ? CREDIT_GRANTS[offer.pack_id] ?? 0 : 0),
+        bonus: Number(offer?.bonus_flat ?? 0),
+        coins: COIN_GRANTS[productId] ?? 0,
+        feature_key: FEATURE_PRODUCTS[productId] ?? null,
+        unlimited_period: UNLIMITED_PACKS.find((p) => p.id === productId)?.period ?? null,
+        one_time: ONE_TIME_PRODUCTS.includes(productId) || productId.startsWith("offer_") || !!FEATURE_PRODUCTS[productId],
       };
-
-      // Unlimited credits packs
-      const unlimited = UNLIMITED_PACKS.find((p) => p.id === productId);
-      if (unlimited) {
-        infiniteGrant = { period: unlimited.period };
-        continue;
-      }
-
-      // Coin bundles + the first-purchase bundle — coins are granted through
-      // the service-role-only grant_coins (add_coins is no longer callable by
-      // end users, otherwise any logged-in user could mint coins).
-      const coinsGrant = COIN_GRANTS[productId];
-      if (coinsGrant) {
-        const { error: coinsErr } = await supabase.rpc("grant_coins", {
-          p_user_id: user.id,
-          p_amount: coinsGrant,
-          p_reason: `Coin bundle: ${productId}`,
-        });
-        if (coinsErr) {
-          await rollBackPurchase();
-          return new Response(JSON.stringify({ error: `Coin grant failed: ${coinsErr.message}` }), { status: 500, headers: corsHeaders });
-        }
-        coinsToAdd += coinsGrant;
-        continue;
-      }
-
-      // Credit packs
-      const creditGrant = CREDIT_GRANTS[productId];
-      if (creditGrant) {
-        creditsToAdd += creditGrant;
-        continue;
-      }
-
-      // Feature unlocks — price comes from the database so the client, the DB
-      // and this function can never disagree.
-      const featureKey = FEATURE_PRODUCTS[productId];
-      if (featureKey) {
-        const { data: costRow, error: costErr } = await supabase.rpc("credit_cost", { p_feature: featureKey });
-        if (costErr || costRow == null) {
-          await rollBackPurchase();
-          return new Response(
-            JSON.stringify({ error: `Could not read the credit price for ${featureKey}` }),
-            { status: 500, headers: corsHeaders }
-          );
-        }
-        const cost = Number(costRow);
-
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("credits, infinite_credits")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (!prof?.infinite_credits) {
-          // The up-front check in the validation pass should already have caught
-          // this; it can still race, so roll the entitlement back if it does.
-          if ((prof?.credits ?? 0) < cost) {
-            await rollBackPurchase();
-            return new Response(
-              JSON.stringify({ error: `Not enough credits for ${productId} (need ${cost}).` }),
-              { status: 402, headers: corsHeaders }
-            );
-          }
-          const { error: spendErr } = await userClient.rpc("spend_credits", {
-            p_amount: cost,
-            p_reason: `Unlock: ${productId}`,
-          });
-          if (spendErr) {
-            await rollBackPurchase();
-            return new Response(JSON.stringify({ error: `Purchase failed: ${spendErr.message}` }), { status: 500, headers: corsHeaders });
-          }
-        }
-        continue;
-      }
-
-      // Offers (starter / winback) — the linked pack's credits plus flat bonus.
-      if (productId.startsWith("offer_")) {
-        const slug = productId.replace("offer_", "");
-        const offer = liveOffers.find((o) => o.slug === slug);
-        if (offer) {
-          const linkedCredits = offer.pack_id ? CREDIT_GRANTS[offer.pack_id] ?? 0 : 0;
-          creditsToAdd += linkedCredits;
-          bonusToAdd += Number(offer.bonus_flat ?? 0);
-        }
-        continue;
-      }
-
-      // Unknown ids are already rejected during validation above, so there is
-      // no freeform/legacy credit path left here.
+    });
+    // Receipt, grants, credit deductions and entitlements commit together.
+    // A verified store token identifies the delivery across transport retries.
+    const { data: delivery, error: deliveryError } = await supabase.rpc("deliver_purchase", {
+      p_user: user.id,
+      p_key: verifiedReference ? `store:${verifiedReference}` : `free:${user.id}:${crypto.randomUUID()}`,
+      p_items: grants,
+      p_reference: verifiedReference,
+      p_platform: body.platform ?? null,
+    });
+    if (deliveryError) {
+      console.error("Purchase delivery failed", deliveryError.message);
+      return new Response(JSON.stringify({ error: "Could not deliver this purchase. Please retry." }), { status: 409, headers: corsHeaders });
     }
-
-    const totalGranted = creditsToAdd + bonusToAdd;
-    // Prefer the store reference as the idempotency key, so a replayed receipt
-    // can never double-credit even if it slips past the check above.
-    const purchaseKey = body.verification?.reference
-      ? `store:${body.verification.reference}`
-      : `purchase:${user.id}:${Date.now()}`;
-    if (totalGranted > 0) {
-      // Single shared grant path: balance update + transaction record + idempotency
-      const { error: grantErr } = await supabase.rpc("credits_grant", {
-        p_user: user.id,
-        p_amount: totalGranted,
-        p_reason: bonusToAdd > 0 ? `Pack purchase: ${creditsToAdd} + ${bonusToAdd} bonus` : `Pack purchase: ${creditsToAdd}`,
-        p_source: "purchase",
-        p_idempotency_key: purchaseKey,
-        p_metadata: { credits: creditsToAdd, bonus: bonusToAdd },
-      });
-      if (grantErr) {
-        return new Response(JSON.stringify({ error: `Credit grant failed: ${grantErr.message}` }), { status: 500, headers: corsHeaders });
-      }
+    if (!delivery || typeof delivery !== "object" || !(delivery as Record<string, unknown>).success) {
+      return new Response(JSON.stringify({ error: "Purchase delivery was not confirmed. Please retry." }), { status: 503, headers: corsHeaders });
     }
-
-    if (infiniteGrant) {
-      const until = infiniteGrant.period === "lifetime"
-        ? null
-        : infiniteGrant.period === "year"
-        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      // Through the RPC, not a direct update: `profiles.infinite_credits` is
-      // read back as the spendable balance for every credit-priced product, so
-      // the guard trigger covers it and the service role does not bypass
-      // triggers. A direct update here fails the purchase at the last step,
-      // after the credits were already granted.
-      const { error: infiniteErr } = await supabase.rpc("grant_infinite_credits", {
-        p_user: user.id,
-        p_until: until,
-      });
-      if (infiniteErr) {
-        return new Response(
-          JSON.stringify({ error: `Unlimited grant failed: ${infiniteErr.message}` }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
-    }
-
-    await supabase.from("basket_items").delete().eq("user_id", user.id);
+    const { error: clearError } = await supabase.from("basket_items").delete().eq("user_id", user.id);
+    if (clearError) console.error("Basket cleanup failed", clearError.message);
 
     // Recompute the spending segment after any purchase. Best-effort by design:
     // the purchase is already granted and recorded by this point, so a failure
@@ -642,13 +431,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      success: true,
-      credits_added: creditsToAdd,
-      bonus_added: bonusToAdd,
-      coins_added: coinsToAdd,
-      infinite: !!infiniteGrant,
-      // Told plainly to the client so the receipt can say "free during closed
-      // testing" rather than implying money changed hands.
+      ...delivery,
       free: freeGrant,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {

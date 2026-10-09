@@ -1,3 +1,4 @@
+import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { motion } from "framer-motion";
 import { Zap, Sparkles, Star, Flame } from "lucide-react";
 import ProductFacts from "./ProductFacts";
@@ -82,10 +83,10 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="font-display text-2xl font-bold text-gradient-electric">
-                    {formatLocalPrice(pack.price_cents, currency)}
+                    {(freeCreditsActive() ? "Free" : formatLocalPrice(pack.price_cents, currency))}
                   </p>
                   <p className="text-[12px] text-muted-foreground">
-                    {formatLocalPrice(Math.round(perCredit * 100) / 100, currency)} / credit
+                    {freeCreditsActive() ? CLOSED_TESTING.label : `${formatLocalPrice(Math.round(perCredit * 100) / 100, currency)} / credit`}
                   </p>
                 </div>
               </div>
@@ -104,7 +105,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                 disabled={!canBuy}
                 className="mt-3 w-full rounded-2xl bg-gradient-primary py-3 font-bold text-primary-foreground shadow-glow disabled:opacity-50 disabled:shadow-none"
               >
-                {canBuy ? `Add to basket · ${formatLocalPrice(pack.price_cents, currency)}` : "Purchases are 18+ only"}
+                {canBuy ? `Add to basket · ${(freeCreditsActive() ? "Free" : formatLocalPrice(pack.price_cents, currency))}` : "Purchases are 18+ only"}
               </motion.button>
             </div>
           </motion.div>

@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
   // Charged up-front — remembered so a failed AI call can be refunded.
   let charged = 0;
   let chargedUserId: string | null = null;
+  let debitKey: string = crypto.randomUUID();
 
   try {
     const userId = await authenticate(req);
@@ -97,6 +98,7 @@ Deno.serve(async (req) => {
       }
       if (!spend.unlimited && spend.cost > 0) {
         charged = spend.cost;
+        debitKey = spend.debitKey!;
         chargedUserId = userId;
       }
     }
@@ -210,6 +212,7 @@ ${dossierText}`;
             supabaseUrl: Deno.env.get("SUPABASE_URL")!,
             serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
             userId: chargedUserId,
+          debitKey,
             amount: charged,
             reason: "AI form_analysis failed — auto refund",
           });
@@ -248,6 +251,7 @@ ${dossierText}`;
           supabaseUrl: Deno.env.get("SUPABASE_URL")!,
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
+          debitKey,
           amount: charged,
           reason: `AI ${type} failed — auto refund`,
         });
@@ -274,6 +278,7 @@ ${dossierText}`;
         supabaseUrl: Deno.env.get("SUPABASE_URL")!,
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
+          debitKey,
         amount: charged,
         reason: "AI analysis failed — server error (auto refund)",
       }).catch(() => undefined);

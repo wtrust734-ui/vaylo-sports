@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import {
@@ -40,6 +40,8 @@ export interface Entitlements {
   next_refill_at: string | null;
 }
 
+const NO_PURCHASES: string[] = [];
+
 const FREE: Entitlements = {
   plan_key: "free",
   plan_label: PLAN_LABEL.free,
@@ -60,6 +62,7 @@ const FREE: Entitlements = {
 interface SubscriptionContextType {
   entitlements: Entitlements;
   loading: boolean;
+  error: string | null;
   /** True while the plan is usable (active, trialing, or lifetime). */
   isActive: boolean;
   hasUnlimitedCredits: boolean;
@@ -77,6 +80,7 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType>({
   entitlements: FREE,
   loading: true,
+  error: null,
   isActive: false,
   hasUnlimitedCredits: false,
   monthlyCreditAllowance: 0,
@@ -92,12 +96,24 @@ export const useSubscription = () => useContext(SubscriptionContext);
 
 export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [entitlements, setEntitlements] = useState<Entitlements>(FREE);
-  const [purchases, setPurchases] = useState<string[]>([]);
+  const [storedEntitlements, setEntitlements] = useState<Entitlements>(FREE);
+  const [storedPurchases, setPurchases] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const currentUser = useRef(user?.id);
+  currentUser.current = user?.id;
+  const requestVersion = useRef(0);
+  const entitlements = ownerId === user?.id ? storedEntitlements : FREE;
+  const purchases = ownerId === user?.id ? storedPurchases : NO_PURCHASES;
+
   const refresh = useCallback(async () => {
+    const request = ++requestVersion.current;
+    const userId = user?.id;
+    const isCurrent = () => request === requestVersion.current && currentUser.current === userId;
     if (!user) {
+      setError(null);
       setEntitlements(FREE);
       setPurchases([]);
       setLoading(false);
@@ -109,15 +125,23 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       // localStorage; credits stay at zero, which is the clone's documented
       // "credits are non-functional" behaviour.
       setEntitlements(FREE);
+      setOwnerId(userId!);
       setPurchases(demoPurchases());
       setLoading(false);
       return;
     }
+    setLoading(true);
     try {
       const [entRes, purchRes] = await Promise.all([
         supabase.rpc("get_my_entitlements"),
         supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
       ]);
+      if (!isCurrent()) return;
+      if (entRes.error) throw new Error(entRes.error.message);
+      if (purchRes.error) throw new Error(purchRes.error.message);
+      if (!entRes.data || !purchRes.data) throw new Error("Access information is unavailable. Please retry.");
+      setOwnerId(userId!);
+      setError(null);
       const e = (entRes?.data || {}) as Partial<Entitlements>;
       const planKey = (e.plan_key || "free") as PlanKey;
       const plan = getPlan(planKey);
@@ -134,14 +158,17 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         is_lifetime: !!e.is_lifetime,
       });
       setPurchases(((purchRes.data ?? []) as { product_id: string }[]).map((p) => p.product_id));
-    } catch {
-      /* keep previous state */
+    } catch (error) {
+      if (isCurrent()) setError(error instanceof Error ? error.message : "Couldn't refresh your access. Please retry.");
+    } finally {
+      if (isCurrent()) setLoading(false);
     }
-    setLoading(false);
   }, [user]);
 
   useEffect(() => {
-    refresh();
+    const requests = requestVersion;
+    void refresh();
+    return () => { requests.current++; };
   }, [refresh]);
 
   // The active/refill answers come from the shared, tested derivation
@@ -159,8 +186,9 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     if (!due) return;
     (async () => {
       try {
-        await supabase.rpc("apply_credit_refill", { p_user: user.id });
-        refresh();
+        const { error } = await supabase.rpc("apply_credit_refill", { p_user: user.id });
+        if (error) throw error;
+        if (currentUser.current === user.id) void refresh();
       } catch {
         /* ignore */
       }
@@ -206,6 +234,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       value={{
         entitlements,
         loading,
+        error: ownerId === user?.id || !loading ? error : null,
         isActive,
         hasUnlimitedCredits: entitlements.unlimited_credits && isActive,
         monthlyCreditAllowance: isActive ? entitlements.monthly_credit_allowance : 0,

@@ -1,8 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/* Preserve the v3 utility scale used throughout the existing screens. */
+@theme {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --drop-shadow-sm: 0 1px 1px rgb(0 0 0 / 0.05);
+  --drop-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+  --blur-sm: 4px;
+  --blur: 8px;
+  --radius-sm: 0.125rem;
+  --radius: 0.25rem;
+}
+@utility shadow { box-shadow: var(--shadow); }
+@utility rounded { border-radius: 0.25rem; }
+@utility blur { --tw-blur: blur(8px); filter: var(--tw-blur) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,); }
+@utility backdrop-blur { backdrop-filter: blur(8px); }
+@utility backdrop-blur-sm { backdrop-filter: blur(4px); }
+@utility ring { --tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, var(--color-blue-500)); box-shadow: var(--tw-ring-shadow); }
+@utility container { margin-inline: auto; padding-inline: 1rem; }
 
 @layer base {
   :root {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { scanText } from "../../scripts/secret-scan.mjs"
+import { createHash } from "node:crypto"
+import { scanText, isKnownFalsePositive } from "../../scripts/secret-scan.mjs"
 
 /**
  * These tests exist because the first version of the scanner did not work.
@@ -196,3 +197,19 @@ describe("secret-scan calibration for the 2026-10-06 audit false positives", () 
     expect(ids(line)).not.toContain("hardcoded-password")
   })
 })
+
+
+describe("reviewed false-positive baseline", () => {
+  const source = 'const labels = { password: "Password label" };';
+  const finding = scanText(source)[0];
+  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+  const baseline = [{ file: "labels.js", rule: finding.id, fileSha256: hash(source), sampleSha256: hash(finding.sample) }];
+  it("matches only the reviewed file, rule and exact content", () => {
+    expect(isKnownFalsePositive("labels.js", source, finding, baseline)).toBe(true);
+    expect(isKnownFalsePositive("other.js", source, finding, baseline)).toBe(false);
+    expect(isKnownFalsePositive("labels.js", source, { ...finding, id: "jwt" }, baseline)).toBe(false);
+  });
+  it("invalidates a suppression when anything is added to the file", () => {
+    expect(isKnownFalsePositive("labels.js", source + "\nconst changed = true;", finding, baseline)).toBe(false);
+  });
+});

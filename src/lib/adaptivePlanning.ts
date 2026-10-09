@@ -488,7 +488,7 @@ export async function rebuildPlanForBreak(input: {
   const result = await updateOrQueue("training_plans", input.plan.id, {
     plan_data: outcome.weeks,
     plan_adjustments,
-  });
+  }, { base: { plan_data: input.plan.plan_data, plan_adjustments: input.plan.plan_adjustments } });
   // Queued counts as success: the rebuild is computed, stored on the device and
   // will land. Recomputing it later would risk applying a different one.
   if (!result.ok) return { ok: false, outcome: null, error: explain(result.error) };
@@ -524,7 +524,7 @@ export async function undoPlanRebuild(input: {
   const result = await updateOrQueue("training_plans", input.plan.id, {
     plan_data: weeks,
     plan_adjustments,
-  });
+  }, { base: { plan_data: input.plan.plan_data, plan_adjustments: input.plan.plan_adjustments } });
   if (!result.ok) return { ok: false, error: explain(result.error) };
 
   return { ok: true, plan_data: weeks, plan_adjustments };

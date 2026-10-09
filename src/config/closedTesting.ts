@@ -30,7 +30,11 @@
 // said "buy" — so the flag is checked here too and `freeCreditsActive()` is the
 // single question both sides answer.
 //
-// To go live: set `freeCredits: false` here, redeploy the web build, and set
+// Credit packs, coin bundles and Unlimited packs all skip the money step.
+// Features and Event Packs still exercise the credit economy using free credits.
+//
+// To go live: set `freeCredits: false` here, enable the completed native adapter
+// in src/config/billing.ts, redeploy the app build, and set
 // `PAYMENT_MODE=store` with the Play service-account secrets (see CAPACITOR.md
 // §3). Do not ship with both on.
 // ============================================================================
@@ -48,8 +52,8 @@ export const CLOSED_TESTING: ClosedTestingConfig = {
   freeCredits: true,
   label: "Free during closed testing",
   explanation:
-    "You are in a closed test, so credits are free right now. Nothing is charged and no card is taken. " +
-    "Paid credits arrive with Google Play billing after closed testing ends.",
+    "You are in a closed test, so purchases are free right now. Nothing is charged and no card is taken. " +
+    "Google Play billing will be added after closed testing ends.",
 };
 
 /** True when the client should present purchases as free rather than paid. */

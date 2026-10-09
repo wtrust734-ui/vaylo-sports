@@ -10,6 +10,8 @@ import { useTranslation } from "react-i18next";
 import { isCurrentLanguageRtl } from "@/i18n";
 import ReactMarkdown from "react-markdown";
 
+import { assistantReply, coachContext, saveAssistantReply } from "@/lib/coachConversation";
+
 type Msg = { role: "user" | "assistant"; content: string };
 type Conv = { id: string; title: string; updated_at: string };
 type Memory = { id: string; category: string; key: string; value: string };
@@ -31,6 +33,7 @@ const Coach = () => {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [unsavedReply, setUnsavedReply] = useState<ReturnType<typeof assistantReply> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -115,7 +118,7 @@ const Coach = () => {
   }, [user]);
 
   const send = async (text: string) => {
-    if (!text.trim() || loading || !user) return;
+    if (!text.trim() || loading || !user || unsavedReply) return;
 
     let convId = activeConv;
     if (!convId) {
@@ -155,7 +158,7 @@ const Coach = () => {
           Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({ messages: [...messages, userMsg], conversationId: convId, pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) }),
+        body: JSON.stringify({ messages: coachContext(messages, userMsg), conversationId: convId, pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) }),
       });
 
       if (!resp.ok) {
@@ -201,7 +204,12 @@ const Coach = () => {
       }
 
       if (assistantSoFar) {
-        await supabase.from("coach_messages").insert({ conversation_id: convId, user_id: user.id, role: "assistant", content: assistantSoFar });
+        const reply = assistantReply(user.id, convId, assistantSoFar);
+        const saved = await saveAssistantReply(reply);
+        if (!saved.ok) {
+          setUnsavedReply(reply);
+          toast({ title: "Reply not saved", description: "Keep this chat open and retry saving your reply.", variant: "destructive" });
+        }
         await parseMemorySaves(assistantSoFar);
       }
       await refreshProfile();
@@ -210,6 +218,16 @@ const Coach = () => {
       toast({ title: "Error", description: "Failed to connect to Vaylo Sports Coach", variant: "destructive" });
     }
     setLoading(false);
+  };
+
+  const retryReplySave = async () => {
+    if (!unsavedReply || loading) return;
+    setLoading(true);
+    try {
+      const result = await saveAssistantReply(unsavedReply);
+      if (result.ok) setUnsavedReply(null);
+      else toast({ title: "Reply not saved", description: "Please free some device storage or reconnect, then retry.", variant: "destructive" });
+    } finally { setLoading(false); }
   };
 
   const cleanContent = (text: string) => text.replace(/\[MEMORY_SAVE:[^\]]+\]/g, "").trim();
@@ -318,6 +336,12 @@ const Coach = () => {
             <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3">
               <Loader2 size={16} className="animate-spin text-primary" />
             </div>
+          </div>
+        )}
+        {unsavedReply && (
+          <div role="alert" className="rounded-lg border border-destructive p-3 text-sm">
+            Your last reply hasn't been saved. Keep this page open.
+            <button type="button" disabled={loading} onClick={() => void retryReplySave()} className="ml-2 underline">Retry saving</button>
           </div>
         )}
         <div ref={messagesEndRef} />

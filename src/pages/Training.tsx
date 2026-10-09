@@ -1,3 +1,5 @@
+import { useAiIntent } from "@/hooks/useAiIntent";
+import { saveAiPlanEdit } from "@/lib/aiPlanSave";
 import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -41,6 +43,7 @@ import {
   validateEditInstruction,
   weeksForEdit,
   type PlanEditOutcome,
+  type PlanEditRequest,
 } from "@/lib/planEdit";
 import { requestCreditTopUp } from "@/lib/topUpStore";
 
@@ -400,6 +403,8 @@ const Training = () => {
   const [aiEditWeek, setAiEditWeek] = useState<number>(1);
   const [aiEditInstruction, setAiEditInstruction] = useState("");
   const [aiEditBusy, setAiEditBusy] = useState(false);
+  const editIntent = useAiIntent<PlanEditRequest, PlanEditOutcome, { baseline: Json; planId: string }>(user?.id, `edit-plan:${selectedPlan?.id ?? ""}`);
+  const editRunning = useRef(false);
   const [planQuizStep, setPlanQuizStep] = useState<number>(0); // 0 = basics, 1 = availability, 2 = preferences
 
 
@@ -1278,87 +1283,60 @@ const Training = () => {
    * count in the app agrees.
    */
   const runPlanEdit = async () => {
-    if (!selectedPlan || !user || aiEditBusy) return;
-
-    const check = validateEditInstruction(aiEditInstruction);
-    if (!check.ok) { toast({ title: check.error ?? "Tell the coach what to change", variant: "destructive" }); return; }
-
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const targets = weeksForEdit(planData, aiEditScope, aiEditWeek);
-    if (targets.length === 0) {
-      toast({ title: "That week isn't in this plan", variant: "destructive" });
-      return;
-    }
-
-    const cost = editCost(aiEditScope);
-    const request = {
-      scope: aiEditScope,
-      week: aiEditWeek,
-      instruction: check.instruction ?? aiEditInstruction.trim(),
-      weeks: targets,
-      sport: selectedPlan.sport,
-      level: selectedPlan.level,
-      durationWeeks: selectedPlan.duration_weeks,
-      targetEvent: planTargetEvent,
-      requestId: newEditRequestId(),
-      userLocale: getAiLocale(),
-    };
-
+    if (!selectedPlan || !user || editRunning.current) return;
+    editRunning.current = true;
     setAiEditBusy(true);
-    let result: PlanEditOutcome = await requestPlanEdit(request);
-
-    // Not enough credits is the one failure the athlete can do something about,
-    // so it opens the top-up sheet and then retries the SAME request. Reusing
-    // the request id is safe: a refused spend never wrote a ledger row, so the
-    // retry cannot be billed twice.
-    if (!result.ok && result.quotaExceeded) {
-      const outcome = await requestCreditTopUp({
-        shortfall: result.shortfall ?? Math.max(0, (result.cost ?? cost) - (result.balance ?? 0)),
-        reasonLabel: featureLabel(editCostKey(aiEditScope)),
-        balance: result.balance ?? 0,
+    try {
+      await editIntent.run(async () => {
+        const intent = editIntent.begin(() => {
+          const check = validateEditInstruction(aiEditInstruction);
+          if (!check.ok) throw new Error(check.error);
+          const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
+          const targets = weeksForEdit(planData, aiEditScope, aiEditWeek);
+          if (!targets.length) throw new Error("That week isn't in this plan");
+          const id = newEditRequestId();
+          return {
+            id,
+            request: { scope: aiEditScope, week: aiEditWeek, instruction: check.instruction!, weeks: targets,
+              sport: selectedPlan.sport, level: selectedPlan.level, durationWeeks: selectedPlan.duration_weeks,
+              targetEvent: planTargetEvent, requestId: id, userLocale: getAiLocale() },
+            context: { baseline: selectedPlan.plan_data, planId: selectedPlan.id },
+          };
+        });
+        let result = intent.result ?? await requestPlanEdit(intent.request);
+        if (!editIntent.isCurrent()) return;
+        if (!result.ok && result.quotaExceeded) {
+          const outcome = await requestCreditTopUp({ shortfall: result.shortfall ?? 0,
+            reasonLabel: featureLabel(editCostKey(intent.request.scope)), balance: result.balance ?? 0 });
+          if (!editIntent.isCurrent()) return;
+          if (outcome.purchased) result = await requestPlanEdit(intent.request);
+        }
+        if (!editIntent.isCurrent()) return;
+        if (!result.ok) {
+          if (result.attemptComplete) editIntent.complete(intent.id);
+          throw new Error(result.error ?? "Retry to check the original request.");
+        }
+        // Save the result before attempting the database write. A retry only saves it.
+        editIntent.save({ ...intent, result });
+        const baseline = intent.context.baseline as PlanData;
+        const { plan: nextPlan, replaced, orphans } = spliceEditedWeeks(baseline, result.weeks ?? [], intent.request.scope, intent.request.week);
+        if (replaced.length !== intent.request.weeks.length || orphans.length) {
+          throw new Error("That edit did not match the requested weeks. The original result is retained for recovery.");
+        }
+        await saveAiPlanEdit(user.id, intent.context.planId, intent.context.baseline, nextPlan as unknown as Json);
+        if (!editIntent.isCurrent()) return;
+        editIntent.complete(intent.id);
+        setSelectedPlan({ ...selectedPlan, plan_data: nextPlan as unknown as Json });
+        setAiEditInstruction("");
+        await refreshProfile();
+        if (editIntent.isCurrent()) toast({ title: "Plan updated", description: `${replaced.length} week(s) updated.` });
       });
-      if (!outcome.purchased) {
-        setAiEditBusy(false);
-        toast({ title: "Not enough credits", description: result.error ?? "Top up to apply this edit.", variant: "destructive" });
-        return;
-      }
-      result = await requestPlanEdit(request);
+    } catch (error) {
+      if (editIntent.isCurrent()) toast({ title: "Edit not saved", description: error instanceof Error ? error.message : "Could not save the edit. Resume the saved request to try again.", variant: "destructive" });
+    } finally {
+      editRunning.current = false;
+      setAiEditBusy(false);
     }
-
-    setAiEditBusy(false);
-    if (!result.ok) {
-      toast({ title: "Edit not applied", description: result.error ?? "The edit could not be applied.", variant: "destructive" });
-      return;
-    }
-
-    const { plan: nextPlan, replaced, orphans } = spliceEditedWeeks(planData, result.weeks ?? [], aiEditScope, aiEditWeek);
-    if (replaced.length === 0 || orphans.length > 0) {
-      // The server validated the count, so this means the model returned weeks
-      // this plan does not contain. Nothing is written: a plan edited into the
-      // wrong place renders beautifully and is wrong.
-      toast({ title: "That edit didn't line up with your plan", description: "Nothing was changed. Please try again.", variant: "destructive" });
-      return;
-    }
-
-    const { error } = await supabase
-      .from("training_plans")
-      .update({ plan_data: nextPlan as unknown as Json })
-      .eq("id", selectedPlan.id)
-      .eq("user_id", user.id);
-    if (error) {
-      toast({ title: "Couldn't save the edit", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    setSelectedPlan({ ...selectedPlan, plan_data: nextPlan as unknown as Json });
-    setAiEditInstruction("");
-    await refreshProfile();
-    toast({
-      title: "Plan updated ✨",
-      description: replaced.length === 1
-        ? `Week ${replaced[0]} rewritten · ${result.cost ?? cost} credits (${result.balance} left)`
-        : `${replaced.length} weeks rewritten · ${result.cost ?? cost} credits (${result.balance} left)`,
-    });
   };
 
   /**
@@ -1744,6 +1722,14 @@ const Training = () => {
             </span>
           </button>
 
+          {(editIntent.pending || editIntent.error) && (
+            <div role="status" className="mt-2 rounded-xl border border-border p-3 text-sm">
+              <p>{editIntent.error ?? "An unfinished edit is saved on this device. Resume it before starting another."}</p>
+              <button type="button" onClick={runPlanEdit} disabled={aiEditBusy || !!editIntent.error} className="mt-2 text-primary font-semibold">
+                {editIntent.pending?.result ? "Retry saving edit" : "Resume saved edit"}
+              </button>
+            </div>
+          )}
           {aiEditOpen && (
             <div className="mt-2 space-y-3 rounded-2xl border border-border bg-gradient-card p-4">
               <div className="flex gap-1.5">
@@ -1802,19 +1788,18 @@ const Training = () => {
               <motion.button
                 type="button"
                 onClick={runPlanEdit}
-                disabled={aiEditBusy || aiEditInstruction.trim().length < MIN_EDIT_INSTRUCTION}
+                disabled={aiEditBusy || !!editIntent.error || (!editIntent.pending && aiEditInstruction.trim().length < MIN_EDIT_INSTRUCTION)}
                 whileTap={{ scale: 0.98 }}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
               >
                 {aiEditBusy
                   ? <><Loader2 size={16} className="animate-spin" /> Asking the coach…</>
-                  : <><Wand2 size={16} /> Apply edit ({editCost(aiEditScope)} credits)</>}
+                  : <><Wand2 size={16} /> {editIntent.pending ? "Resume saved edit" : `Apply edit (${editCost(aiEditScope)} credits)`}</>}
               </motion.button>
 
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Holidays, session titles, durations and skipping a session are free and stay free — use those
-                for anything you can do with a tap. An AI edit that fails is refunded automatically, and nothing
-                is written to your plan unless the edit comes back complete.
+                for anything you can do with a tap. Failed AI edits report their refund status. Resume an unfinished edit to recover its result or check its refund.
               </p>
             </div>
           )}

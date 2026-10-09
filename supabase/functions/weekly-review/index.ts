@@ -17,6 +17,7 @@ serve(async (req) => {
   // Charge happens up-front — remember it so a failed review can be refunded.
   let chargedCredits = 0;
   let chargedUserId: string | null = null;
+  const debitKey: string = crypto.randomUUID();
   let chargedUrl = "";
 
   try {
@@ -52,6 +53,7 @@ serve(async (req) => {
       p_feature: "weekly_coach_review",
       p_reason: "Weekly Coach Review",
       p_source: "weekly-review",
+      p_idempotency_key: debitKey,
     });
     if (spendErr) {
       return new Response(JSON.stringify({ error: spendErr.message }), {
@@ -121,6 +123,7 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
           supabaseUrl: chargedUrl,
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
+          debitKey,
           amount: chargedCredits,
           reason: "Weekly Coach Review failed — AI error (auto refund)",
         });
@@ -142,6 +145,7 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
         supabaseUrl: chargedUrl,
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
+          debitKey,
         amount: chargedCredits,
         reason: "Weekly Coach Review failed — server error (auto refund)",
       });

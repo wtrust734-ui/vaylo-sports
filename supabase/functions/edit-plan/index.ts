@@ -1,42 +1,12 @@
+import { idempotentAiHandler } from "../_shared/idempotentAiHandler.ts";
 import { MODELS, OUTPUT_SAFETY_CONTRACT, SAFETY_PREAMBLE } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
-import { refundCredits } from "../_shared/refund.ts";
-import { cleanPlanWeeks, PLAN_SESSION_TYPES } from "../_shared/planSchema.ts";
+import { cleanPlanWeeks, validEditedWeeks, PLAN_SESSION_TYPES } from "../_shared/planSchema.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
-// ============================================================================
-// EDIT-PLAN — change a plan the athlete already owns
-// ----------------------------------------------------------------------------
-// Until this existed, a plan was write-once. The only edits were manual: change
-// a session's title or duration, mark a week as a holiday, skip a session. All
-// three are still free and still local (Training.tsx) — but none of them can do
-// what an athlete actually asks for, which is "my knee is sore, change the next
-// three weeks" or "swap Thursday's run for a swim".
-//
-// So this function rewrites weeks of an existing plan from a plain-English
-// instruction, charged at two prices (see the migration
-// 20261009120000_plan_edit_ai_cost.sql):
-//
-//   plan_edit      10 credits — one week, or one session inside it
-//   plan_edit_full 20 credits — the whole plan, every week rewritten at once
-//
-// Three rules it holds to, because a paid edit that goes wrong is worse than no
-// edit at all:
-//
-//   1. NOTHING the athlete already has is lost on failure. The plan lives in
-//      the client's `training_plans` row and is only ever written by the client
-//      after this returns successfully; the charge is refunded on every failure
-//      path. A failed edit is a no-op that costs nothing.
-//   2. THE EDIT IS SCOPED. The model is given the weeks being replaced and told
-//      to return exactly those, so an edit to week 3 cannot silently rewrite
-//      week 7 — the response is validated to the same week count it was asked
-//      for, and the client splices only what it asked for.
-//   3. ONE CHARGE PER INTENT. The credit debit carries an idempotency key built
-//      from the caller's request id AND the edit's own content, so a retry after
-//      a dropped connection is free, while a different instruction with a reused
-//      request id is charged (it is a different edit).
-// ============================================================================
+// Edits preserve the requested week/day identities. The wrapper owns request
+// replay and durable refund recovery; the client saves the validated result.
 
 const MAX_INSTRUCTION = 400;
 const MIN_INSTRUCTION = 4;
@@ -52,12 +22,6 @@ const whole = (value: unknown, max: number, fallback = 0): number => {
   return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : fallback;
 };
 
-/** djb2, base36. Not a security boundary — a content fingerprint for the key. */
-const fingerprint = (input: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  return (hash >>> 0).toString(36);
-};
 
 /** Read the weeks the client sent, keeping only what the shared validator accepts. */
 const readWeeks = (raw: unknown): Record<string, unknown>[] => {
@@ -65,7 +29,7 @@ const readWeeks = (raw: unknown): Record<string, unknown>[] => {
   return cleanPlanWeeks(list);
 };
 
-Deno.serve(async (req) => {
+Deno.serve(idempotentAiHandler("edit-plan", async (req, debitKey, attempt) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -78,7 +42,6 @@ Deno.serve(async (req) => {
 
   // Charged up-front — remembered so a failed edit can be refunded.
   let charged = 0;
-  let chargedUserId: string | null = null;
 
   try {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -104,7 +67,6 @@ Deno.serve(async (req) => {
     const week = whole(body.week, MAX_WEEKS, 0);
     const duration = whole(body.duration_weeks, MAX_WEEKS, 0);
     const userLocale = typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined;
-    const requestId = text(body.request_id, 80);
     const targetEvent = text(body.target_event, 100);
 
     if (instruction.length < MIN_INSTRUCTION) {
@@ -124,13 +86,19 @@ Deno.serve(async (req) => {
       targets = [match];
     }
 
+    if (!validEditedWeeks(targets, targets)) return json({ error: "The plan has invalid week or day numbers." }, 400);
+
     const feature = scope === "plan" ? "plan_edit_full" : "plan_edit";
+    attempt.start();
     const spend = await spendForUser(req, userId, feature, `Plan edit: ${instruction.slice(0, 80)}`, {
       quantity: 1,
       source: "edit-plan",
-      idempotencyKey: `edit-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(`${scope}|${week}|${instruction}`)}`,
-    });
+      idempotencyKey: debitKey,
+    }).catch(() => null);
+    if (!spend) return attempt.uncertain();
     if (!spend.success) {
+      if (spend.error !== "insufficient_credits" || !((spend.shortfall ?? 0) > 0)) return attempt.uncertain();
+      attempt.uncharged();
       return json({
         error: spend.error || `Not enough credits. You need ${spend.cost} credits — you are ${spend.shortfall ?? 0} short.`,
         shortfall: spend.shortfall ?? null,
@@ -138,9 +106,9 @@ Deno.serve(async (req) => {
         balance: spend.balance,
       }, 402);
     }
+    if (spend.duplicate) return attempt.uncertain();
     if (!spend.unlimited && spend.cost > 0) {
       charged = spend.cost;
-      chargedUserId = userId;
     }
 
     const voice = coachVoiceDirective(sport);
@@ -209,10 +177,8 @@ Level: ${level}. These are the week${targets.length === 1 ? "" : "s"} to return$
         catch { return { ok: false, status: 502 }; }
 
         const returned = readWeeks(parsed?.weeks);
-        // An edit that changes the number of weeks it was asked to change is an
-        // edit to the wrong thing. The client would splice weeks it never
-        // requested, so this is a failed call, not a partial success.
-        if (returned.length !== chunk.length) return { ok: false, status: 502 };
+        // Reject invented/duplicate week and day identities before accepting the edit.
+        if (!validEditedWeeks(returned, chunk)) return { ok: false, status: 502 };
         return { ok: true, weeks: returned };
       } catch (e) {
         console.error("edit-plan chunk error:", e instanceof Error ? e.name : e);
@@ -234,39 +200,15 @@ Level: ${level}. These are the week${targets.length === 1 ? "" : "s"} to return$
 
     const failure = results.find((r) => !r.ok);
     if (failure && !failure.ok) {
-      // Charged, and nothing usable came back — refund before reporting it.
-      await refundAndReset("Plan edit failed — AI error (auto refund)");
-      if (failure.status === 429) return json({ error: "Rate limited. Try again shortly." }, 429);
-      if (failure.status === 402) return json({ error: "AI credits exhausted." }, 402);
-      if (failure.status === 502) return json({ error: "The AI returned an edit we could not read. Your credits were refunded." }, 502);
-      return json({ error: "The edit could not be applied. Your credits were refunded." }, 500);
+      return attempt.fail("The edit could not be applied.", failure.status === 429 ? 429 : 502, charged);
     }
-
-    // The edited weeks, in the order they were asked for, with their week
-    // numbers preserved so the client can splice by number rather than position.
     const edited = results.flatMap((r) => (r.ok ? r.weeks : []));
     if (edited.length !== targets.length) {
-      await refundAndReset("Plan edit failed — incomplete result (auto refund)");
-      return json({ error: "The edit came back incomplete. Your credits were refunded." }, 502);
+      return attempt.fail("The edit came back incomplete.", 502, charged);
     }
-
     return json({ weeks: edited, cost: spend.cost, balance: spend.balance });
   } catch (e) {
     console.error("edit-plan error:", e instanceof Error ? e.name : e);
-    await refundAndReset("Plan edit failed — server error (auto refund)");
-    return json({ error: "The edit could not be applied. Please try again." }, 500);
+    return attempt.fail("The edit could not be applied.", 500, charged);
   }
-
-  async function refundAndReset(reason: string) {
-    if (chargedUserId) {
-      await refundCredits({
-        supabaseUrl: Deno.env.get("SUPABASE_URL")!,
-        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        userId: chargedUserId,
-        amount: charged,
-        reason,
-      });
-      chargedUserId = null;
-    }
-  }
-});
+}));

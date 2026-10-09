@@ -30,6 +30,8 @@
 // stating out loud rather than letting a green run imply more than it proved.
 // Rotation is the only thing that actually removes an exposed secret.
 
+import { createHash } from "node:crypto"
+import BASELINE from "./secret-scan-baseline.json" with { type: "json" }
 import { execFileSync } from "node:child_process"
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { extname, basename as pathBasename } from "node:path"
@@ -241,6 +243,14 @@ export function scanText(text) {
   return out
 }
 
+/** Only reviewed findings in byte-for-byte identical files may be suppressed. */
+const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+
+export function isKnownFalsePositive(file, text, finding, baseline = BASELINE) {
+  return baseline.some((entry) => entry.file === file && entry.rule === finding.id &&
+    entry.fileSha256 === sha256(text) && entry.sampleSha256 === sha256(finding.sample))
+}
+
 /**
  * Files allowed to contain credential-shaped text. Keep this list short.
  *
@@ -365,6 +375,7 @@ function report(findings, mode, fileCount) {
 
   console.log(`secret-scan: PASS (mode=${mode}, ${fileCount} files, ${RULES.length} rules, 0 findings)`)
   console.log("secret-scan: scope is the current tree only. History and git config are not scanned.")
+  console.log("secret-scan: reviewed baseline findings are suppressed only while their full file content is unchanged.")
 }
 
 // Only scan when run directly. The test imports `scanText` to pin the
@@ -395,6 +406,7 @@ function main() {
 
     const lines = text.split("\n")
     for (const hit of scanText(text)) {
+      if (isKnownFalsePositive(file, text, hit)) continue;
       // Re-locate the line for reporting. scanText deliberately does not carry
       // line numbers so it stays trivially testable.
       const idx = lines.findIndex((l) => l.includes(hit.sample.slice(0, 40)))

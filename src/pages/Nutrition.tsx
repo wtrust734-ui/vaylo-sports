@@ -1,3 +1,5 @@
+import { useAiIntent } from "@/hooks/useAiIntent";
+import { saveAiNutritionPlan } from "@/lib/aiPlanSave";
 import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { localDateKey } from "@/lib/dates";
@@ -16,7 +18,6 @@ import { creditCost } from "@/lib/credits";
 // check and the defensive read of the answer.
 import {
   DAY_NAMES,
-  newNutritionPlanRequestId,
   parseGeneratedPlan,
   planHeader,
   dayTotals,
@@ -96,11 +97,18 @@ const Nutrition = () => {
   const [planNotes, setPlanNotes] = useState("");
   const [planWeeks, setPlanWeeks] = useState("4");
   const [generating, setGenerating] = useState(false);
+  const nutritionIntent = useAiIntent<Record<string, unknown>, GeneratedPlan, { title: string; goal: string }>(user?.id, "nutrition-plan");
+  const nutritionRunning = useRef(false);
   const [planError, setPlanError] = useState<{ message: string; topUp?: boolean } | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null);
   const [expandedPlanWeek, setExpandedPlanWeek] = useState<number | null>(null);
   /** Which stored plan is expanded. One state for fresh and stored plans alike. */
   const [expandedStoredPlan, setExpandedStoredPlan] = useState<string | null>(null);
+  useEffect(() => {
+    setGeneratedPlan(null);
+    setPlanError(null);
+    setExpandedPlanWeek(null);
+  }, [user?.id]);
 
   const [showScan, setShowScan] = useState(false);
   const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string } | null>(null);
@@ -335,135 +343,69 @@ const Nutrition = () => {
   const planWeeksNum = Math.max(1, Math.min(12, parseInt(planWeeks, 10) || 4));
   const planCost = hasNutritionPack ? 0 : creditCost("nutrition_plan_week", planWeeksNum);
 
-  /**
-   * Ask the server to write the plan.
-   *
-   * The charge happens there, before the model call, and is refunded on every
-   * failure path — so this function never spends a credit itself and never has
-   * to roll one back. What it owns is the honest reporting of the three ways
-   * this can end: a plan, a refusal the athlete can act on, or a save failure
-   * that must not be silently swallowed.
-   */
+  /** Resume the original generation or save its retained result. */
   const generateNutritionPlan = async () => {
-    if (!user || !profile || generating) return;
-
-    // One check, shared with every other entry point (see dietPlanRefusalReason).
-    //
-    // This used to allow an UNKNOWN date of birth through: `age !== null &&
-    // age < 18` was false when there was no DOB, so the very accounts that had
-    // not proved their age were the ones that got a calorie-target plan. The
-    // safe default for a restriction on minors is to refuse when the age is
-    // unknown, which is also what public.viewer_is_adult() does server-side.
-    const refusal = dietPlanRefusalReason(profile.date_of_birth);
-    if (refusal) {
-      toast({ title: "Nutrition plans are 18+", description: refusal, variant: "destructive" });
-      return;
-    }
-
-    const check = validatePlanRequest({ goal: planGoal, weeks: planWeeksNum });
-    if (!check.ok) {
-      toast({ title: "Check the plan settings", description: check.error, variant: "destructive" });
-      return;
-    }
-
+    if (!user || !profile || nutritionRunning.current) return;
+    nutritionRunning.current = true;
     setGenerating(true);
     setPlanError(null);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", {
-        body: {
-          goal: check.goal,
-          weeks: check.weeks,
-          sport: profile.sport ?? "",
-          level: profile.experience_level ?? "",
-          calories_target: optTarget(planCalories),
-          protein_target: optTarget(planProtein),
-          carbs_target: optTarget(planCarbs),
-          fat_target: optTarget(planFat),
-          notes: planNotes.trim().slice(0, 300),
-          userLocale: getAiLocale(),
-          request_id: newNutritionPlanRequestId(),
-        },
-      });
-
-      if (error) {
-        const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
-        const message = await edgeErrorMessage(error);
-        // A 402 carries the exact gap, which the athlete can act on; anything
-        // else is reported as it is.
-        let shortfall: number | null = null;
-        let chargedCost: number | null = null;
-        try {
-          const payload = await (error as { context: Response }).context.json();
-          if (typeof payload?.shortfall === "number") shortfall = payload.shortfall;
-          if (typeof payload?.cost === "number") chargedCost = payload.cost;
-        } catch {
-          /* body unreadable — the message is still usable */
-        }
-        if (status === 402) {
-          setPlanError({
-            message:
-              shortfall !== null
-                ? `You need ${chargedCost ?? planCost} credits for a ${check.weeks}-week plan — ${shortfall} short. Nothing was charged.`
-                : message,
-            topUp: true,
-          });
-          return;
-        }
-        setPlanError({ message });
-        return;
-      }
-
-      const parsed = parseGeneratedPlan((data as { plan?: unknown } | null)?.plan);
-      if (!parsed.plan) {
-        setPlanError({ message: parsed.error ?? "The plan came back unreadable." });
-        return;
-      }
-
-      const header = planHeader(parsed.plan);
-      const first = parsed.plan.weeks[0];
-      const { error: insertError } = await supabase.from("nutrition_plans").insert({
-        user_id: user.id,
-        title: planTitle.trim() || `${check.goal} Plan`,
-        goal: check.goal,
-        // The stored target columns mirror week 1, so an old plan list row and a
-        // new one read the same way.
-        calories_target: first?.calories || header.targets.calories || optTarget(planCalories) || null,
-        protein_target: first?.protein_g || header.targets.protein_g || optTarget(planProtein) || null,
-        carbs_target: first?.carbs_g || header.targets.carbs_g || optTarget(planCarbs) || null,
-        fat_target: first?.fat_g || header.targets.fat_g || optTarget(planFat) || null,
-        weeks: parsed.plan.weeks.length,
-        plan_data: parsed.plan.weeks as unknown as Json,
-      });
-
-      if (insertError) {
-        // The charge has already happened and the plan exists only in memory.
-        // Keeping it on screen is what stops it being lost; regenerating would
-        // charge a second time, and the client cannot refund a charge
-        // (credits_grant is service-role only) — the same contract Training.tsx
-        // holds when a plan the athlete paid for fails to save.
-        setGeneratedPlan(parsed.plan);
-        setExpandedPlanWeek(parsed.plan.weeks[0]?.week ?? null);
-        setPlanError({
-          message:
-            "Your plan was written, but it could not be saved to your account. Do not generate it again — that charges a second time. It is shown below so you keep it; contact support and it will be put right.",
+      await nutritionIntent.run(async () => {
+        const intent = nutritionIntent.begin(() => {
+          const refusal = dietPlanRefusalReason(profile.date_of_birth);
+          if (refusal) throw new Error(refusal);
+          const check = validatePlanRequest({ goal: planGoal, weeks: planWeeksNum });
+          if (!check.ok) throw new Error(check.error);
+          const id = crypto.randomUUID();
+          return { id, context: { title: planTitle.trim() || `${check.goal} Plan`, goal: check.goal! }, request: {
+            goal: check.goal, weeks: check.weeks, sport: profile.sport ?? "", level: profile.experience_level ?? "",
+            calories_target: optTarget(planCalories), protein_target: optTarget(planProtein),
+            carbs_target: optTarget(planCarbs), fat_target: optTarget(planFat),
+            notes: planNotes.trim().slice(0, 300), userLocale: getAiLocale(), request_id: id,
+          } };
         });
-        return;
-      }
-
-      setGeneratedPlan(parsed.plan);
-      setExpandedPlanWeek(parsed.plan.weeks[0]?.week ?? null);
-      setPlanTitle("");
-      await refreshProfile();
-      fetchPlans();
-      toast({
-        title: "Nutrition plan ready 🥗",
-        description: planCost ? `${planCost} credits used for ${parsed.plan.weeks.length} weeks.` : "Free with Nutrition Pack.",
+        let plan = intent.result;
+        if (!plan) {
+          const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", { body: intent.request });
+          if (!nutritionIntent.isCurrent()) return;
+          if (error) {
+            const message = await edgeErrorMessage(error);
+            let payload: { attempt_complete?: boolean; refund_pending?: boolean; retryable?: boolean; shortfall?: number } = {};
+            try { payload = await (error as { context: Response }).context.clone().json(); } catch { /* Keep uncertain work. */ }
+            if (payload.attempt_complete && !payload.refund_pending) nutritionIntent.complete(intent.id);
+            setPlanError({ message, topUp: payload.retryable && (payload.shortfall ?? 0) > 0 });
+            return;
+          }
+          const parsed = parseGeneratedPlan((data as { plan?: unknown } | null)?.plan);
+          if (!parsed.plan) throw new Error(parsed.error ?? "The plan came back unreadable. Resume to recover the original request.");
+          plan = parsed.plan;
+          nutritionIntent.save({ ...intent, result: plan });
+        }
+        if (!nutritionIntent.isCurrent()) return;
+        setGeneratedPlan(plan);
+        setExpandedPlanWeek(plan.weeks[0]?.week ?? null);
+        const header = planHeader(plan);
+        const first = plan.weeks[0];
+        await saveAiNutritionPlan({ id: intent.id, user_id: user.id,
+          title: intent.context.title, goal: intent.context.goal,
+          calories_target: first?.calories || header.targets.calories || null,
+          protein_target: first?.protein_g || header.targets.protein_g || null,
+          carbs_target: first?.carbs_g || header.targets.carbs_g || null,
+          fat_target: first?.fat_g || header.targets.fat_g || null,
+          weeks: plan.weeks.length, plan_data: plan.weeks as unknown as Json,
+        });
+        if (!nutritionIntent.isCurrent()) return;
+        nutritionIntent.complete(intent.id);
+        setPlanTitle("");
+        await refreshProfile();
+        if (!nutritionIntent.isCurrent()) return;
+        fetchPlans();
+        toast({ title: "Nutrition plan saved" });
       });
-    } catch (err) {
-      setPlanError({
-        message: `The plan could not be generated (${(err as Error)?.message ?? "unknown error"}). Check your connection and try again — a failed generation is refunded automatically.`,
-      });
+    } catch (error) {
+      if (nutritionIntent.isCurrent()) setPlanError({ message: error instanceof Error ? error.message : "Could not save the plan. Resume the saved request to try again." });
     } finally {
+      nutritionRunning.current = false;
       setGenerating(false);
     }
   };
@@ -666,6 +608,14 @@ const Nutrition = () => {
           </motion.div>
         )}
 
+        {(nutritionIntent.pending || nutritionIntent.error) && (
+          <div role="status" className="rounded-xl border border-border p-3 text-sm">
+            <p>{nutritionIntent.error ?? "An unfinished nutrition plan is saved on this device. Resume it before starting another."}</p>
+            <button type="button" onClick={() => { setShowCreatePlan(true); void generateNutritionPlan(); }} disabled={generating || !!nutritionIntent.error} className="mt-2 text-primary font-semibold">
+              {nutritionIntent.pending?.result ? "Retry saving plan" : "Resume saved plan"}
+            </button>
+          </div>
+        )}
         {/* Generate Nutrition Plan — written by the model, charged per week */}
         {showCreatePlan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-5">
@@ -701,7 +651,7 @@ const Nutrition = () => {
             {generating && (
               <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-electric-purple/20 bg-electric-purple/5 px-3 py-2.5">
                 <Loader2 size={16} className="animate-spin text-electric-purple" />
-                <span className="text-[12px] leading-relaxed">Writing your {planWeeksNum}-week plan, meal by meal… Credits are only kept if a plan arrives; a failure is refunded automatically.</span>
+                <span className="text-[12px] leading-relaxed">Writing your {planWeeksNum}-week plan, meal by meal… You can resume this request if the connection is interrupted.</span>
               </div>
             )}
 
@@ -720,17 +670,17 @@ const Nutrition = () => {
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {DISCLAIMERS.nutrition.full}
             </p>
-            <motion.button onClick={generateNutritionPlan} whileTap={{ scale: 0.98 }} disabled={generating}
+            <motion.button onClick={generateNutritionPlan} whileTap={{ scale: 0.98 }} disabled={generating || !!nutritionIntent.error}
               className="w-full bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2 disabled:opacity-60">
               {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
               {generating
                 ? "Writing your plan…"
-                : planCost === 0
+                : nutritionIntent.pending ? "Resume saved plan" : planCost === 0
                   ? "Generate plan — free with Nutrition Pack"
                   : `Generate plan (${planCost} credits · ${creditCost("nutrition_plan_week")}/wk)`}
             </motion.button>
             {planCost > 0 && (
-              <p className="text-center text-[12px] text-muted-foreground">{planWeeksNum} weeks × {creditCost("nutrition_plan_week")} credits. Charged only if the plan arrives.</p>
+              <p className="text-center text-[12px] text-muted-foreground">{planWeeksNum} weeks × {creditCost("nutrition_plan_week")} credits. Credits are reserved before generation. Failed requests report their refund status.</p>
             )}
 
             {/* A plan that was generated but not saved stays on screen: it is the

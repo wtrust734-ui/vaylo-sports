@@ -15,18 +15,19 @@
 //   store  → buy through the Play Billing plugin, then invoke process-purchase
 //            with the purchase token + receipt so the server can verify it
 //
-// Nothing here pretends the plugin is installed: with no plugin present
-// `storeProvider.available()` is false and the web path is used, exactly as
-// now. See CAPACITOR.md §3 for the full Play Billing runbook.
+// A future native plugin implements playBillingAdapter.ts. Closed testing
+// always uses the free server path. See CAPACITOR.md §3 for activation steps.
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { getPlatform, isNative, loadPlugin } from "@/lib/platform";
+import { getPlatform, isNative } from "@/lib/platform";
 import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { DEMO_MODE, demoGrant } from "@/lib/demoMode";
+import { UNLOCK_CATALOG } from "@/config/unlocks";
+import { getPlayBillingAdapter, type PlayPurchase } from "@/lib/playBillingAdapter";
+import { STORE_BILLING_ENABLED } from "@/config/billing";
 
-/** Flip to true only once the Play Billing plugin + server verifier are in place. */
-export const STORE_BILLING_ENABLED = false;
+export { STORE_BILLING_ENABLED } from "@/config/billing";
 
 export interface PurchaseItem {
   product_id: string;
@@ -146,7 +147,7 @@ async function invokePurchase(
       // a stale client nor a forgotten secret can silently start charging (or
       // silently stop). See src/config/closedTesting.ts.
       ...(freeCreditsActive() ? { closed_testing: true } : {}),
-      ...(verification ? { verification } : {}),
+      ...(!freeCreditsActive() && verification ? { verification } : {}),
     },
   });
 
@@ -167,35 +168,46 @@ const webProvider: BillingProvider = {
   purchase: (items, verification) => invokePurchase(items, verification),
 };
 
-interface StoreBillingPlugin {
-  purchase: (options: { productId: string }) => Promise<{
-    transactionId?: string;
-    receipt?: string;
-    cancelled?: boolean;
-  }>;
-  restore?: () => Promise<unknown>;
+async function applyStorePurchase(purchase: PlayPurchase): Promise<PurchaseResult> {
+  if (!purchase.productId?.trim() || !purchase.packageName?.trim() || !purchase.purchaseToken?.trim()) {
+    return { ok: false, error: "The store did not return a complete purchase." };
+  }
+  const result = await invokePurchase([{ product_id: purchase.productId }], {
+    reference: purchase.purchaseToken,
+    receipt: JSON.stringify({ packageName: purchase.packageName, productId: purchase.productId }),
+  });
+  // A duplicate row alone does not prove its grant completed. Leave failed
+  // replays unconfirmed until the server can return a delivery receipt.
+  return result;
 }
 
 const storeProvider: BillingProvider = {
   id: "store",
   label: "Google Play Billing",
-  available: () => STORE_BILLING_ENABLED && isNative(),
+  available: () => !freeCreditsActive() && STORE_BILLING_ENABLED && getPlatform() === "android",
   purchase: async (items) => {
     if (items.length !== 1) {
       return { ok: false, error: "Store purchases are one product at a time." };
     }
-    const plugin = await loadPlugin<StoreBillingPlugin>("in-app-purchases");
-    if (!plugin?.purchase) {
-      return { ok: false, error: "Store billing plugin is not installed in this build." };
+    const adapter = getPlayBillingAdapter();
+    if (!adapter) {
+      return { ok: false, error: "Google Play billing has not been configured in this build." };
     }
     try {
-      const result = await plugin.purchase({ productId: items[0].product_id });
-      if (result?.cancelled) return { ok: false, cancelled: true, error: "Purchase cancelled." };
-      if (!result?.transactionId) {
-        return { ok: false, error: "The store did not return a transaction id." };
+      const outcome = await adapter.purchase(items[0].product_id);
+      if (outcome.cancelled === true) return { ok: false, cancelled: true, error: "Purchase cancelled." };
+      if (outcome.purchase.productId !== items[0].product_id) {
+        return { ok: false, error: "The store returned a different product." };
       }
-      // The server verifies this purchase token with Google Play before granting anything.
-      return invokePurchase(items, { reference: result.transactionId, receipt: result.receipt });
+      const result = await applyStorePurchase(outcome.purchase);
+      if (!result.ok) return result;
+      try {
+        await adapter.finish(outcome.purchase);
+      } catch {
+        // Delivery succeeded. Restore can retry the store confirmation safely.
+        return { ...result, data: { ...result.data, store_confirmation_pending: true } };
+      }
+      return result;
     } catch (error) {
       return { ok: false, error: describeError(error) };
     }
@@ -224,6 +236,13 @@ export async function purchaseItems(
     demoGrant(items.map((i) => i.product_id));
     return { ok: true, data: { demo_free: true } };
   }
+  const creditProducts = new Set<string>(UNLOCK_CATALOG.map((entry) => entry.product));
+  if (items.every((item) => creditProducts.has(item.product_id))) {
+    return invokePurchase(items);
+  }
+  if (isStoreBilling() && items.some((item) => creditProducts.has(item.product_id))) {
+    return { ok: false, error: "Buy feature unlocks separately from store products." };
+  }
   return activeBilling().purchase(items, verification);
 }
 
@@ -236,23 +255,25 @@ export const isStoreBilling = () => storeProvider.available();
 /**
  * Asks Google Play to replay the athlete's previous transactions.
  *
- * Play requires a visible restore path for IAP builds. Play replays the
- * purchases and the **server** must re-verify each purchase token through
- * `verifyStorePurchase()` before granting anything — restoring is not a trust
- * shortcut, which is why this only reports whether the store call succeeded.
- * Currently unavailable on the web build, where the button is not shown.
+ * The adapter returns purchases; each token is verified by the server before
+ * its store confirmation is retried. Unavailable during closed testing.
  */
 export async function restorePurchases(): Promise<PurchaseResult> {
   if (!storeProvider.available()) {
     return { ok: false, error: "Restore is only available in the app build." };
   }
-  const plugin = await loadPlugin<StoreBillingPlugin>("in-app-purchases");
-  if (!plugin?.restore) {
-    return { ok: false, error: "Store billing plugin is not installed in this build." };
+  const adapter = getPlayBillingAdapter();
+  if (!adapter) {
+    return { ok: false, error: "Google Play billing has not been configured in this build." };
   }
   try {
-    await plugin.restore();
-    return { ok: true };
+    const purchases = await adapter.restore();
+    for (const purchase of purchases) {
+      const result = await applyStorePurchase(purchase);
+      if (!result.ok) return result;
+      await adapter.finish(purchase);
+    }
+    return { ok: true, data: { restored: purchases.length } };
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }
@@ -263,6 +284,6 @@ export const billingStatus = () => ({
   platform: getPlatform(),
   provider: activeBilling().id,
   storeEnabled: STORE_BILLING_ENABLED,
+  adapterInstalled: getPlayBillingAdapter() !== null,
   native: isNative(),
 });
-

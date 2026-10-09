@@ -78,6 +78,7 @@ export function useSyncStatus(userId?: string | null): SyncStatus {
     () =>
       subscribeToQueue((queue) => {
         setPending(queue.length);
+        if (queue.some((w) => w.lastError)) setLastErrorAt(Date.now());
         setConflicts(queue.filter((w) => !!w.conflict).length);
       }),
     [],
@@ -106,7 +107,7 @@ export function useSyncStatus(userId?: string | null): SyncStatus {
         setLastSyncedAt(now);
         writeLastSynced(now);
         setLastErrorAt(null);
-      } else if (after >= before) {
+      } else if (after >= before || pendingWrites().some((w) => w.lastError)) {
         // Nothing drained and something is still waiting: it did not work.
         setLastErrorAt(Date.now());
       }

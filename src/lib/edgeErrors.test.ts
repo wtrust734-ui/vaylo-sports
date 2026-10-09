@@ -52,3 +52,9 @@ describe("edgeErrorMessage", () => {
     );
   });
 });
+
+it("leaves the response readable for shortfall and recovery metadata", async () => {
+  const context = Response.json({ error: "Not enough credits", shortfall: 10, retryable: true });
+  expect(await edgeErrorMessage({ context })).toBe("Not enough credits");
+  expect(await context.json()).toEqual({ error: "Not enough credits", shortfall: 10, retryable: true });
+});

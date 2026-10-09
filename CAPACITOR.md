@@ -117,7 +117,8 @@ adb shell am start -a android.intent.action.VIEW \
 Google requires digital goods — credits, coins, unlocks — to be sold through Play
 Billing in the Android app. The server-side verifier is implemented
 (`supabase/functions/_shared/playBilling.ts`, wired into `process-purchase`); what
-remains is Play Console setup, a Capacitor billing plugin, and secrets.
+remains is Play Console setup, a native adapter, deployment of the delivery migrations, and secrets.
+Billing is deliberately disabled during closed testing.
 
 1. **Create the in-app products** in Play Console → Monetize → Products, using
    the exact product ids from `supabase/functions/_shared/moneyCatalog.ts`
@@ -141,35 +142,48 @@ remains is Play Console setup, a Capacitor billing plugin, and secrets.
    ```
    The private key keeps its literal `\n` sequences.
 
-4. **Install a Capacitor Play Billing plugin** — e.g.
-   `@capacitor-community/in-app-purchases` or RevenueCat — add it to the
-   `loadPlugin` registry under `in-app-purchases`, and make its purchase call
-   resolve to the shape `storeProvider` in `src/lib/billing.ts` already consumes:
-   `transactionId` = the Play **purchase token**, `receipt` = a JSON string
-   `{ "packageName": "com.vaylosports.app", "productId": "pack_120" }`.
+4. **Implement the native adapter** in `src/lib/playBillingAdapter.ts` using a
+   maintained Play Billing plugin. No billing package is installed today.
+   Register it with `registerPlayBillingAdapter()` during app startup. Its
+   contract is:
+   - `purchase(productId)` returns cancellation or `{ productId, packageName,
+     purchaseToken }`. The token must be Google's purchase token, not an order id.
+   - `restore()` returns pending deliveries or purchases needing confirmation.
+   - `finish(purchase)` consumes a consumable or acknowledges a non-consumable
+     after the server has verified and granted it. Never finish a rejected token.
 
-5. **Set `STORE_BILLING_ENABLED = true`** in `src/lib/billing.ts`.
+5. **Deploy the purchase integrity migrations before the function.** Apply
+   `20261010090000_ai_request_and_refund_integrity.sql` and
+   `20261010090001_atomic_purchase_delivery.sql`, and
+   `20261010090002_ai_retry_recovery.sql`, then deploy the changed edge
+   functions. `deliver_purchase` records the receipt, entitlement and grants in
+   one transaction; a verified token retry returns the saved successful result.
+   Legacy purchase rows without a delivery receipt require reconciliation before
+   retrying: a row alone cannot prove which grants completed. Keep billing off
+   until real Play license-tester purchase, restore and interrupted-delivery
+   checks pass. AI requests interrupted before response persistence remain
+   claimed and require operator investigation; do not delete claims or replay
+   provider calls without checking their debit and outcome.
 
-6. **Switch the server on and redeploy the function:**
-   ```bash
-   supabase secrets set PAYMENT_MODE=store
-   supabase functions deploy process-purchase
-   ```
-   In store mode nothing is granted until Google answers `purchaseState=0` for
-   the token, the productId exists in the money catalog, and it matches what was
-   in the basket. Pending and refunded purchases are refused with a clear
-   message. With the three `GOOGLE_*` secrets missing, `process-purchase` answers
-   503 rather than granting on trust — by design.
+6. **Activate after closed testing:** set `freeCredits: false` in
+   `src/config/closedTesting.ts`, set `STORE_BILLING_ENABLED = true` in
+   `src/config/billing.ts`, and configure `PAYMENT_MODE=store` on the server.
+   Deploy `process-purchase` and rebuild the Android app. Closed testing takes
+   precedence over the store switch, so a test build never opens Play checkout.
+   Store mode is Android-only. Feature unlocks use credits and bypass Play;
+   cash purchases require a single product per token.
 
-7. **Restore purchases is wired.** `AccountSubscriptionCard` shows a "Restore
-   purchases" button once store billing is active (hidden on web) and calls
-   `restorePurchases()` in `src/lib/billing.ts`. Play replays the purchase
-   tokens; the **server** re-verifies each one, so restoring is not a trust
-   shortcut.
+7. **Restore uses server verification.** The inactive routing structure sends
+   every restored token to `process-purchase` before calling `finish()`. It stops
+   on a failed grant or unresolved duplicate. The restore button stays hidden
+   during closed testing.
 
-8. **Replay safety** is handled: the Play purchase token is stored on
-   `user_purchases.provider_reference` with a unique index, so a retried delivery
-   returns `409 duplicate` instead of granting twice.
+8. **Test grants are free.** With `PAYMENT_MODE=free` and the client's
+   `closed_testing` flag, credit packs, coin bundles and Unlimited packs skip
+   payment. Their purchase records carry zero cash paid and no store token.
+   Features and Event Packs still spend credits that testers can obtain free.
+   Before public release, reconcile test balances, entitlements and one-time
+   offer claims, including any free lifetime Unlimited grants.
 
 9. **Test with Play license testers** before release. Their purchases flow
    through the same verification, so a license-tester purchase that grants
@@ -286,3 +300,24 @@ unaffected):
 - **No owned canonical public domain is configured.** Native sharing is therefore
   linkless, preview-host links fail closed, and production web auth-email redirects
   must wait until the owned domain and Supabase SMTP/site URL are configured.
+
+## Dependency validation
+
+Use Node 24 and `npm ci` with `package-lock.json`; the obsolete Bun lockfile was
+removed. The security update uses Vite 7, Vitest 5, React Router 7 and Tailwind 4.
+Scoped overrides update the typography selector parser and Xcode UUID dependency.
+Keep these overrides until their parent packages accept the fixed versions.
+
+### AI request recovery during closed testing
+
+Plan edits and nutrition generation retain a per-account request and result on
+that device until saving succeeds. Use **Resume saved edit/plan** after a lost
+connection; a retained result is saved without another model call. Keep browser
+storage available and avoid clearing it while work is pending.
+
+Only an authoritative uncharged refusal can restart the same request. Pending
+refunds are persisted server-side; resuming retries the ledger-bound refund only.
+Interrupted executions or uncertain debits remain claimed for reconciliation.
+An operator must check the debit, provider outcome and stored result before
+releasing a claim. Do not reset those rows on a timer. The durable AI rate limiter
+now refuses provider work when its database check fails, including free calls.

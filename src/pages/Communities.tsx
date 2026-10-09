@@ -310,7 +310,7 @@ const Communities = () => {
       <AnimatePresence>
         {addFriend && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4"
+            className="fixed inset-0 bg-background/80 backdrop-blur-md z-[60] flex items-end sm:items-center justify-center p-4"
             onClick={() => setAddFriend(false)}>
             <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
               onClick={e => e.stopPropagation()}
@@ -341,7 +341,7 @@ const Communities = () => {
       <AnimatePresence>
         {creating && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4"
+            className="fixed inset-0 bg-background/80 backdrop-blur-md z-[60] flex items-end sm:items-center justify-center p-4"
             onClick={() => setCreating(false)}>
             <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
               onClick={e => e.stopPropagation()}
@@ -485,7 +485,7 @@ const GroupDetail = ({ community, membership, onClose, onJoin, onLeave, onToggle
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-background/85 backdrop-blur-md z-50 flex items-end justify-center"
+      className="fixed inset-0 bg-background/85 backdrop-blur-md z-[60] flex items-end justify-center"
       onClick={onClose}>
       <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}

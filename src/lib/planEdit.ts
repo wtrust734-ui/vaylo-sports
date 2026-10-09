@@ -171,6 +171,8 @@ export type PlanEditResponse = {
   error?: string;
   /** Credits the athlete is short by — the top-up sheet's input. */
   shortfall?: number | null;
+  attemptComplete?: boolean;
+  retryable?: boolean;
 };
 
 /**
@@ -210,8 +212,12 @@ export async function requestPlanEdit(request: PlanEditRequest): Promise<PlanEdi
       const message = await edgeErrorMessage(error);
       let shortfall: number | null = null;
       let cost: number | undefined;
+      let attemptComplete = false;
+      let retryable = false;
       try {
         const payload = await (error as { context: Response }).context.json();
+        attemptComplete = payload?.attempt_complete === true && !payload?.refund_pending;
+        retryable = payload?.retryable === true;
         if (typeof payload?.shortfall === "number") shortfall = payload.shortfall;
         if (typeof payload?.cost === "number") cost = payload.cost;
       } catch {
@@ -222,13 +228,14 @@ export async function requestPlanEdit(request: PlanEditRequest): Promise<PlanEdi
         error: message,
         shortfall,
         cost,
-        quotaExceeded: status === 402 || /not enough credits/i.test(message),
+        quotaExceeded: status === 402 && retryable && (shortfall ?? 0) > 0,
+        attemptComplete, retryable,
       };
     }
 
     const weeks = Array.isArray(data?.weeks) ? (data.weeks as Record<string, unknown>[]) : [];
     if (weeks.length === 0) {
-      return { ok: false, error: "The edit came back empty. Your credits were refunded." };
+      return { ok: false, error: "The edit came back empty. Retry to recover the original request." };
     }
 
     return {

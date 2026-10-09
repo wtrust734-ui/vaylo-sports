@@ -24,7 +24,8 @@ export function isNotReadyMessage(message: string): boolean {
 export async function edgeErrorMessage(error: unknown): Promise<string> {
   if (error && typeof error === "object" && "context" in error) {
     try {
-      const payload = await (error as { context: Response }).context.json();
+      const context = (error as { context: Response }).context;
+      const payload = await (context instanceof Response ? context.clone() : context).json();
       if (payload && typeof payload.error === "string" && payload.error) {
         return isNotReadyMessage(payload.error) ? AI_NOT_READY_MESSAGE : payload.error;
       }

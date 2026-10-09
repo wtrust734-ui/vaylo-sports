@@ -156,16 +156,18 @@ describe("refund path (edge _shared/refund.ts)", () => {
   const refund = read("/supabase/functions/_shared/refund.ts");
 
   it("skips zero/negative amounts (no free credits via a crafted amount)", () => {
-    expect(refund).toMatch(/if \(!amount \|\| amount <= 0\) return false;/);
+    expect(refund).toContain("!amount || amount <= 0");
   });
 
   it("grants back only through the service-role-only RPC, never a client table", () => {
-    expect(refund).toMatch(/credits_grant/);
+    expect(refund).toMatch(/credits_refund/);
     expect(refund).not.toMatch(/from\("credit_transactions"\)/);
   });
 
-  it("each refund gets a fresh idempotency key (retry-safe, replay-proof)", () => {
-    expect(refund).toMatch(/p_idempotency_key: `refund:\$\{crypto\.randomUUID\(\)\}`/);
+  it("binds refunds to a debit and lets the database derive the amount", () => {
+    expect(refund).toContain("p_debit_key: debitKey");
+    expect(refund).not.toContain("p_amount:");
+    expect(refund).not.toContain("crypto.randomUUID");
   });
 
   it("never logs provider bodies or tokens", () => {

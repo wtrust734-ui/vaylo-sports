@@ -1,3 +1,4 @@
+import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Coins, Sparkles, Star, Flame, ArrowRightLeft, Loader2 } from "lucide-react";
@@ -148,7 +149,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                 </p>
               </div>
               <p className="shrink-0 font-display text-xl font-bold text-gradient-electric">
-                {formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency)}
+                {(freeCreditsActive() ? "Free" : formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency))}
               </p>
             </div>
             <motion.button
@@ -160,7 +161,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
               }
               className="mt-3 w-full rounded-2xl bg-gradient-electric py-3 font-bold text-white"
             >
-              Claim once · {formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency)}
+              Claim once · {(freeCreditsActive() ? "Free" : formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency))}
             </motion.button>
           </div>
         </motion.div>
@@ -205,8 +206,8 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                     {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {total.toLocaleString()} total</p>}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-display text-2xl font-bold text-gradient-electric">{formatLocalPrice(b.price_cents, currency)}</p>
-                    <p className="text-[12px] text-muted-foreground">{formatLocalPrice(Math.round(perCoin * 100) / 100, currency)} / Coin</p>
+                    <p className="font-display text-2xl font-bold text-gradient-electric">{(freeCreditsActive() ? "Free" : formatLocalPrice(b.price_cents, currency))}</p>
+                    <p className="text-[12px] text-muted-foreground">{freeCreditsActive() ? CLOSED_TESTING.label : `${formatLocalPrice(Math.round(perCoin * 100) / 100, currency)} / Coin`}</p>
                   </div>
                 </div>
                 <ProductFacts
@@ -227,7 +228,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                   }}
                   className="mt-3 w-full rounded-2xl bg-energy py-3 font-bold text-background"
                 >
-                  Add to basket · {formatLocalPrice(b.price_cents, currency)}
+                  Add to basket · {(freeCreditsActive() ? "Free" : formatLocalPrice(b.price_cents, currency))}
                 </motion.button>
               </div>
             </motion.div>

@@ -68,6 +68,17 @@ function netlifyCommand() {
   const npx = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npx-cli.js");
   if (fs.existsSync(npx)) return [process.execPath, npx, "--yes", "netlify"];
 
+  // Unix installations keep npm under ../lib; version managers may expose
+  // npx through a symlink elsewhere on PATH. Resolve the JS entry point.
+  const unixNpx = path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npx-cli.js");
+  if (fs.existsSync(unixNpx)) return [process.execPath, unixNpx, "--yes", "netlify"];
+  for (const directory of (process.env.PATH || "").split(path.delimiter)) {
+    const candidate = path.join(directory, "npx");
+    if (!fs.existsSync(candidate)) continue;
+    const resolved = fs.realpathSync(candidate);
+    if (resolved.endsWith("npx-cli.js")) return [process.execPath, resolved, "--yes", "netlify"];
+  }
+
   throw new Error(
     "cannot find the Netlify CLI — install netlify-cli locally, or install Node " +
       "with npm so node_modules/npm/bin/npx-cli.js exists",

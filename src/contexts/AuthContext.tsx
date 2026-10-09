@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -41,6 +41,8 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const profileRequest = useRef(0);
+  const activeUserId = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -60,7 +62,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .maybeSingle();
 
     if (error) throw error;
-    setProfile(data);
     return data;
   }, []);
   const ensureProfile = useCallback(async (currentUser: User) => {
@@ -101,11 +102,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     }
 
-    setProfile(data);
     return data;
   }, [fetchProfile]);
 
   const syncSession = useCallback(async (nextSession: Session | null) => {
+    const request = ++profileRequest.current;
+    const nextId = nextSession?.user.id ?? null;
+    if (activeUserId.current !== nextId) {
+      setProfile(null);
+      setProfileError(null);
+      queryClient.clear();
+    }
+    activeUserId.current = nextId;
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
 
@@ -125,9 +133,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      await ensureProfile(nextSession.user);
+      const nextProfile = await ensureProfile(nextSession.user);
+      if (request !== profileRequest.current) return;
+      setProfile(nextProfile);
       setProfileError(null);
     } catch (err) {
+      if (request !== profileRequest.current) return;
       // The session is real but the profile row is unreadable (network error,
       // RLS race, server outage). Expose it: screens keyed on `profile` would
       // otherwise render "signed in with no data" and every silent failure
@@ -138,12 +149,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [ensureProfile]);
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
+    if (!user) return;
+    const request = ++profileRequest.current;
+    const nextProfile = await fetchProfile(user.id);
+    if (request === profileRequest.current && activeUserId.current === user.id) {
+      setProfile(nextProfile);
+      setProfileError(null);
+    }
   };
 
   useEffect(() => {
     let active = true;
     let initialized = false;
+    const requests = profileRequest;
 
     const hydrateAuth = (nextSession: Session | null, isInitial: boolean) => {
       if (!active) return;
@@ -169,12 +187,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      hydrateAuth(session, !initialized);
-      initialized = true;
+      if (!initialized) {
+        hydrateAuth(session, true);
+        initialized = true;
+      }
     });
 
     return () => {
       active = false;
+      requests.current++;
       subscription.unsubscribe();
     };
   }, [syncSession]);
@@ -287,6 +308,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // the safe direction, and the redirect must never strand state.
       queryClient.clear();
       clearUserLocalState();
+      profileRequest.current++;
+      activeUserId.current = null;
       setSession(null);
       setUser(null);
       setProfile(null);

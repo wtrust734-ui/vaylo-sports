@@ -144,17 +144,18 @@ describe("queue durability", () => {
     clearQueue();
   });
 
-  it("evicts the oldest write past the bound instead of refusing the newest", async () => {
+  it("refuses capacity overflow while retaining every acknowledged write", async () => {
     insert.mockResolvedValue({ error: offlineError() });
 
     for (let i = 0; i < 105; i++) {
-      await insertOrQueue("workouts", { id: `w${i}`, title: `set ${i}`, n: i });
+      const result = await insertOrQueue("workouts", { id: `w${i}`, title: `set ${i}`, n: i });
+      expect(result.ok).toBe(i < 100);
     }
 
     const queue = pendingWrites();
     expect(queue).toHaveLength(100);
-    expect(queue[0].id).toBe("w5");
-    expect(queue[queue.length - 1].id).toBe("w104");
+    expect(queue[0].id).toBe("w0");
+    expect(queue[queue.length - 1].id).toBe("w99");
   });
 
   it("subscribers see the queue immediately and on every change", async () => {
@@ -261,7 +262,7 @@ describe("flushQueue", () => {
     expect(pendingWrites()).toHaveLength(0);
   });
 
-  it("drops an update whose row is gone instead of blocking the queue behind it", async () => {
+  it("retains a deleted-row edit while allowing later writes to sync", async () => {
     updateWhere.mockResolvedValue({ error: offlineError() });
     await updateOrQueue("life_events", "deleted-since", { note: "x" });
     insert.mockResolvedValue({ error: offlineError() });
@@ -277,7 +278,8 @@ describe("flushQueue", () => {
     const sent = await flushQueue();
 
     expect(sent).toBe(1);
-    expect(pendingWrites()).toHaveLength(0);
+    expect(pendingWrites().map(w => w.id)).toEqual(["deleted-since"]);
+    expect(pendingWrites()[0].lastError).toBeTruthy();
   });
 
   it("replays oldest-first and empties on success", async () => {
@@ -310,7 +312,7 @@ describe("flushQueue", () => {
     expect(pendingWrites().map((w) => w.id)).toEqual(["b", "c"]);
   });
 
-  it("drops a write the server can never accept instead of blocking the queue", async () => {
+  it("retains a rejected write while allowing later writes to sync", async () => {
     insert.mockResolvedValue({ error: offlineError() });
     await insertOrQueue("workouts", { id: "bad", n: 1 });
     await insertOrQueue("workouts", { id: "good", n: 2 });
@@ -322,7 +324,8 @@ describe("flushQueue", () => {
     const sent = await flushQueue();
 
     expect(sent).toBe(1);
-    expect(pendingWrites()).toHaveLength(0);
+    expect(pendingWrites().map(w => w.id)).toEqual(["bad"]);
+    expect(pendingWrites()[0].lastError).toBe("invalid input value");
   });
 
   it("counts a duplicate key as landed, so a crash mid-replay cannot double-log", async () => {
@@ -357,5 +360,52 @@ describe("flushQueue", () => {
   it("does nothing at all when the queue is empty", async () => {
     expect(await flushQueue()).toBe(0);
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("queue regression sequences", () => {
+  it("preserves an append made while a replay is waiting", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "first" });
+    let release!: (value: { error: null }) => void;
+    insert.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const flushing = flushQueue();
+    await insertOrQueue("workouts", { id: "second" });
+    release({ error: null });
+    await flushing;
+    expect(pendingWrites().map(w => w.id)).toEqual(["second"]);
+  });
+
+  it("retains an edit made during an insert and replays it as an update", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "first", completed: false });
+    let release!: (value: { error: null }) => void;
+    insert.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const flushing = flushQueue();
+    expect(await updateOrQueue("workouts", "first", { completed: true })).toMatchObject({ ok: true, queued: true });
+    expect(updateWhere).not.toHaveBeenCalled();
+    release({ error: null });
+    await flushing;
+    expect(pendingWrites()[0]).toMatchObject({ op: "update", values: { completed: true }, base: { completed: false } });
+  });
+
+  it("reports storage failure without accepting an undurable write", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    try {
+      expect(await insertOrQueue("workouts", { id: "lost" })).toMatchObject({ ok: false, queued: false });
+      expect(pendingWrites()).toEqual([]);
+    } finally { storage.mockRestore(); }
+  });
+
+  it("retains an expired-session rejection for retry", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "pending" });
+    insert.mockResolvedValueOnce({ error: { code: "PGRST301", status: 401, message: "JWT expired" } });
+    expect(await flushQueue()).toBe(0);
+    expect(pendingWrites()[0]).toMatchObject({ id: "pending", lastError: "JWT expired" });
+    insert.mockResolvedValueOnce({ error: null });
+    expect(await flushQueue()).toBe(1);
+    expect(pendingWrites()).toEqual([]);
   });
 });

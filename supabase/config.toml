@@ -45,7 +45,7 @@ additional_redirect_urls = [
   "https://vaylo-sports-app.netlify.app",
   # Netlify deploy-preview hostnames, so a branch deploy can finish a sign-in
   # instead of failing on an unrecognised redirect.
-  "https://*.netlify.app",
+  "https://deploy-preview-*--vaylo-sports-app.netlify.app",
 ]
 
 # site_url is where an auth email returns the user to when the request carries

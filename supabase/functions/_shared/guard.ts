@@ -57,9 +57,8 @@ export async function authenticate(req: Request): Promise<string | null> {
 // round trip; useless as a bound on what a script can spend.
 //
 // aiCallAllowed() counts in Postgres, where every instance sees the same rows.
-// It fails OPEN — if the database is unreachable the call proceeds, because an
-// outage in the limiter should not take the coach offline. Credits remain the
-// real bound; this is the thing that stops the spend rate, not the total.
+// It fails closed when the durable check is unavailable, including for free
+// and Unlimited calls. An instance-local counter is not a spending bound.
 
 export async function aiCallAllowed(
   req: Request,
@@ -83,13 +82,13 @@ export async function aiCallAllowed(
       p_window_seconds: windowSeconds,
     });
     if (error) {
-      console.warn(`ai_call_allowed failed for ${userId}, failing open:`, error.message);
-      return true;
+      console.warn(`ai_call_allowed failed for ${userId}, refusing AI call:`, error.message);
+      return false;
     }
     return data === true;
   } catch (e) {
-    console.warn("ai_call_allowed threw, failing open:", e);
-    return true;
+    console.warn("ai_call_allowed threw, refusing AI call:", e);
+    return false;
   }
 }
 
@@ -166,6 +165,7 @@ export interface CreditSpend {
   error?: string;
   shortfall?: number;
   duplicate?: boolean;
+  debitKey?: string;
 }
 
 /**
@@ -181,6 +181,7 @@ export async function spendForUser(
   reason: string,
   opts: { quantity?: number; source?: string; idempotencyKey?: string; billUnlimited?: boolean } = {},
 ): Promise<CreditSpend> {
+  const debitKey = opts.idempotencyKey ?? crypto.randomUUID();
   let data: Record<string, unknown> | null = null;
   let error: { message: string } | null = null;
 
@@ -198,7 +199,7 @@ export async function spendForUser(
       p_feature: feature,
       p_reason: reason,
       p_source: opts.source ?? "edge",
-      p_idempotency_key: opts.idempotencyKey ?? crypto.randomUUID(),
+      p_idempotency_key: debitKey,
       p_metadata: {},
     });
     data = metered.data as Record<string, unknown> | null;
@@ -221,7 +222,7 @@ export async function spendForUser(
       p_quantity: Math.max(1, opts.quantity ?? 1),
       p_source: opts.source ?? "edge",
       // Retry-safe: pass a per-request idempotency key so a retry cannot double-charge.
-      p_idempotency_key: opts.idempotencyKey ?? null,
+      p_idempotency_key: debitKey,
       p_metadata: {},
     });
     data = spend.data as Record<string, unknown> | null;
@@ -236,6 +237,7 @@ export async function spendForUser(
     error: typeof data?.error === "string" ? data.error : undefined,
     shortfall: typeof data?.shortfall === "number" ? data.shortfall : undefined,
     duplicate: data?.duplicate === true,
+    debitKey,
   };
 }
 

@@ -43,7 +43,7 @@ import {
   type PlannedSession,
   type SessionStatus,
 } from "@/lib/lifeEvents";
-import { insertOrQueue, pendingWrites, updateOrQueue } from "@/lib/offlineQueue";
+import { insertOrQueue, pendingWrites, snapshotOf, updateOrQueue } from "@/lib/offlineQueue";
 import { flattenPlan, type DatedSession, type TrainingPlanLike } from "@/lib/planSchedule";
 
 /** What the form collects. `user_id` is added by this hook. */
@@ -186,11 +186,11 @@ export function useLifeEvents(): UseLifeEvents {
           const note = typeof values.note === "string" ? values.note.trim() : "";
           values.note = note ? note : null;
         }
-        const result = await updateOrQueue("life_events", id, values);
+        const merged = events.find((e) => e.id === id);
+        const result = await updateOrQueue("life_events", id, values, { base: snapshotOf(merged ? { ...merged } : undefined, Object.keys(values)) });
         if (!result.ok) return { ok: false, error: explain(result.error) };
 
-        const merged = events.find((e) => e.id === id);
-        const next = merged ? { ...merged, ...patch, note: (values.note as string | null) ?? null } : null;
+        const next = merged ? { ...merged, ...patch, ...("note" in values ? { note: values.note as string | null } : {}) } : null;
         setEvents((prev) => (next ? prev.map((e) => (e.id === id ? next : e)) : prev));
         return { ok: true, event: (next ?? { id }) as LifeEvent, queued: result.queued };
       } finally {

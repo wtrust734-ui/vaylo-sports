@@ -75,3 +75,18 @@ export const PLAN_SESSION_TYPES = [
   "cross_training",
   "conditioning",
 ] as const;
+
+/** An edit must preserve unique week and day identities, even if the model reorders them. */
+export function validEditedWeeks(edited: Record<string, unknown>[], requested: Record<string, unknown>[]): boolean {
+  const weekIds = (weeks: Record<string, unknown>[]) => weeks.map(w => Number(w.week));
+  const expected = weekIds(requested);
+  const actual = weekIds(edited);
+  if (expected.length !== actual.length || new Set(expected).size !== expected.length || new Set(actual).size !== actual.length) return false;
+  if (actual.some(n => !Number.isInteger(n) || n < 1 || !expected.includes(n))) return false;
+  const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  return edited.every(w => {
+    const days = w.sessions as Record<string, unknown>[];
+    return Array.isArray(days) && days.length === 7 && new Set(days.map(d => d.day)).size === 7 &&
+      days.every(d => Number.isInteger(d.day) && Number(d.day) >= 1 && Number(d.day) <= 7 && d.dayName === names[Number(d.day) - 1]);
+  });
+}

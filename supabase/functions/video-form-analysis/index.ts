@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
 
   let chargedAmount = 0;
   let chargedUserId: string | null = null;
+  let debitKey: string = crypto.randomUUID();
   let premiumSlotId: number | null = null;
   let requestClaimUserId: string | null = null;
   let requestClaimId: string | null = null;
@@ -92,6 +93,7 @@ Deno.serve(async (req) => {
       supabaseUrl: Deno.env.get("SUPABASE_URL")!,
       serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       userId: chargedUserId,
+          debitKey,
       amount: chargedAmount,
       reason: "AI video form analysis failed — auto refund",
       source: "video-form-analysis-refund",
@@ -348,6 +350,7 @@ Deno.serve(async (req) => {
       analysisCost = spend.cost;
       if (!spend.unlimited && spend.cost > 0) {
         chargedAmount = spend.cost;
+        debitKey = spend.debitKey!;
         chargedUserId = userId;
       }
     }

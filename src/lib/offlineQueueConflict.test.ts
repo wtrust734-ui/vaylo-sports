@@ -189,14 +189,15 @@ describe("flushQueue — merging over a concurrent change", () => {
     expect(pendingWrites()).toHaveLength(0);
   });
 
-  it("drops the edit when the row is gone", async () => {
+  it("retains the edit with an error when the row is gone", async () => {
     updateWhere.mockResolvedValueOnce({ error: offlineError() });
     await updateOrQueue("life_events", "e1", { note: "edited offline" }, { base: BASE });
     maybeSingle.mockResolvedValue({ data: null, error: null });
 
     await flushQueue();
 
-    expect(pendingWrites()).toHaveLength(0);
+    expect(pendingWrites()).toHaveLength(1);
+    expect(pendingWrites()[0].lastError).toBe("no row matched");
   });
 
   it("refuses to write when the baseline could not be read", async () => {
@@ -300,4 +301,38 @@ describe("snapshotOf", () => {
   it("records an explicit undefined when there is no row to read", () => {
     expect(snapshotOf(null, ["note"])).toEqual({ note: undefined });
   });
+});
+
+
+it("preserves a conflict when the following write hits a network failure", async () => {
+  updateWhere.mockResolvedValue({ error: offlineError() });
+  await updateOrQueue("life_events", "one", { note: "mine" }, { base: { note: "original" } });
+  await updateOrQueue("life_events", "two", { note: "mine" }, { base: { note: "original" } });
+  maybeSingle.mockResolvedValueOnce({ data: { note: "other" }, error: null }).mockResolvedValueOnce({ data: null, error: offlineError() });
+  await flushQueue();
+  expect(pendingWrites().map(w => w.id)).toEqual(["one", "two"]);
+  expect(pendingConflicts().map(w => w.id)).toEqual(["one"]);
+});
+
+it("preserves the earliest baseline across repeated offline edits", async () => {
+  updateWhere.mockResolvedValueOnce({ error: offlineError() });
+  await updateOrQueue("life_events", "one", { note: "first" }, { base: { note: "original" } });
+  await updateOrQueue("life_events", "one", { note: "second" }, { base: { note: "first" } });
+  maybeSingle.mockResolvedValue({ data: { note: "original" }, error: null });
+  expect(await flushQueue()).toBe(1);
+  expect(updateWhere).toHaveBeenLastCalledWith({ note: "second" }, "id", "one");
+  expect(pendingConflicts()).toEqual([]);
+});
+
+
+it("retries a baseline read after the session is refreshed", async () => {
+  updateWhere.mockResolvedValueOnce({ error: offlineError() });
+  await updateOrQueue("life_events", "expired", { note: "mine" }, { base: { note: "original" } });
+  maybeSingle.mockResolvedValueOnce({ data: null, error: { code: "PGRST301", message: "JWT expired" } });
+  await flushQueue();
+  expect(pendingConflicts()).toEqual([]);
+  expect(pendingWrites()).toHaveLength(1);
+  maybeSingle.mockResolvedValueOnce({ data: { note: "original" }, error: null });
+  expect(await flushQueue()).toBe(1);
+  expect(pendingWrites()).toEqual([]);
 });

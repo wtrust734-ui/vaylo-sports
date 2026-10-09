@@ -1,36 +1,13 @@
+import { idempotentAiHandler } from "../_shared/idempotentAiHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS, OUTPUT_SAFETY_CONTRACT, SAFETY_PREAMBLE } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
-import { refundCredits } from "../_shared/refund.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled, userOwnsProduct } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
-// ============================================================================
-// GENERATE-NUTRITION-PLAN — a real meal plan, written by the model
-// ----------------------------------------------------------------------------
-// Until this existed, "create a nutrition plan" wrote down the four numbers the
-// athlete had already typed into the form (see Nutrition.tsx). That is a target
-// sheet, not a plan: no meals, no days, nothing an athlete can follow — and it
-// was the one priced surface in the app with no provider call behind it, which
-// is why it had no cost ceiling and no margin floor either.
-//
-// It now works like the training plan does, with the same three rules:
-//
-//   1. CHARGED PER WEEK, REFUNDED ON EVERY FAILURE. `nutrition_plan_week` costs
-//      the same kind of money to produce as a week of training plan (one call
-//      per chunk), so it is priced per week and charged up-front; every failure
-//      path below grants the charge back through the service role. The Nutrition
-//      Pack removes the charge entirely, verified server-side.
-//   2. ADULTS ONLY, BEFORE THE CHARGE. Calorie and macro targets for a minor are
-//      exactly what the published child-safety page promises is switched off, so
-//      an unknown date of birth is refused too — the same rule as
-//      public.viewer_is_adult(), not a client-side gate.
-//   3. THE APP OWNS THE SHAPE. The week/daily targets are computed here and the
-//      model fills in the meals, then the targets are stamped back onto the
-//      answer. A model that quietly returns 4 days for a 7-day week is a failed
-//      call, not a partial plan.
-// ============================================================================
+// Adult-only meal plans. The wrapper owns replay and pending refunds, including
+// free Nutrition Pack calls. Model output must match the requested plan shape.
 
 /** Longest plan this will write. Past this the weeks are a spreadsheet, not a plan. */
 const MAX_WEEKS = 12;
@@ -62,12 +39,6 @@ const clampNum = (value: unknown, min: number, max: number, fallback: number): n
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
 };
 
-/** djb2, base36. Not a security boundary — a content fingerprint for the key. */
-const fingerprint = (input: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  return (hash >>> 0).toString(36);
-};
 
 /**
  * The plan the model is asked to fill in: one week per entry, with the daily
@@ -187,7 +158,7 @@ function cleanChunk(
   return cleaned;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(idempotentAiHandler("generate-nutrition-plan", async (req, debitKey, attempt) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -200,7 +171,6 @@ Deno.serve(async (req) => {
 
   // Charged up-front — remembered so a failed generation can be refunded.
   let charged = 0;
-  let chargedUserId: string | null = null;
 
   try {
     // Provider check BEFORE the charge: an unconfigured key must never debit a
@@ -229,7 +199,6 @@ Deno.serve(async (req) => {
     const level = text(body.level, 40, "intermediate");
     const notes = text(body.notes, MAX_NOTES).trim();
     const userLocale = typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined;
-    const requestId = text(body.request_id, 80);
 
     // ---- Authoritative dossier (and the adult gate) ----
     let dossierText = "";
@@ -258,12 +227,16 @@ Deno.serve(async (req) => {
     let cost = 0;
     let balance: number | null = null;
     if (!ownsPack) {
+      attempt.start();
       const spend = await spendForUser(req, userId, "nutrition_plan_week", `Nutrition plan: ${goal} (${weeks}w)`, {
         quantity: weeks,
         source: "generate-nutrition-plan",
-        idempotencyKey: `nutrition-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(`${goal}|${weeks}|${notes}`)}`,
-      });
+        idempotencyKey: debitKey,
+      }).catch(() => null);
+      if (!spend) return attempt.uncertain();
       if (!spend.success) {
+        if (spend.error !== "insufficient_credits" || !((spend.shortfall ?? 0) > 0)) return attempt.uncertain();
+        attempt.uncharged();
         return json({
           error: spend.error || `Not enough credits. You need ${spend.cost} credits — you are ${spend.shortfall ?? 0} short.`,
           shortfall: spend.shortfall ?? null,
@@ -271,17 +244,19 @@ Deno.serve(async (req) => {
           balance: spend.balance,
         }, 402);
       }
+      if (spend.duplicate) return attempt.uncertain();
       cost = spend.cost;
       balance = spend.balance;
       if (!spend.unlimited && spend.cost > 0) {
         charged = spend.cost;
-        chargedUserId = userId;
       }
     } else {
       // Free with the pack, so a failure has nothing to refund — but the pack
       // holder still gets the same validation and the same 502 on a bad answer.
       cost = 0;
     }
+
+    attempt.start();
 
     // ---- The plan's skeleton: the app's targets, not the model's ----
     const targets = buildWeekTargets({
@@ -387,40 +362,16 @@ ${OUTPUT_SAFETY_CONTRACT}`;
 
     const failure = results.find((r) => !r.ok);
     if (failure && !failure.ok) {
-      // Charged, and nothing usable came back — refund before reporting it.
-      await refundAndReset("Nutrition plan failed — AI error (auto refund)");
-      if (failure.status === 429) return json({ error: "Rate limited. Try again shortly." }, 429);
-      if (failure.status === 402) return json({ error: "AI credits exhausted." }, 402);
-      if (failure.status === 502) {
-        return json({ error: "The AI returned a meal plan we could not read. Your credits were refunded." }, 502);
-      }
-      return json({ error: "The nutrition plan could not be written. Your credits were refunded." }, 500);
+      return attempt.fail("The nutrition plan could not be written.", failure.status === 429 ? 429 : 502, charged);
     }
-
     const plan = results.flatMap((r) => (r.ok ? r.weeks : []));
     if (plan.length !== targets.length) {
-      await refundAndReset("Nutrition plan failed — incomplete result (auto refund)");
-      return json({ error: "The plan came back incomplete. Your credits were refunded." }, 502);
+      return attempt.fail("The plan came back incomplete.", 502, charged);
     }
-
     const summary = `${plan.length}-week ${goal} plan · ${targets[0].calories} kcal/day · ${targets[0].protein_g}g protein, ${targets[0].carbs_g}g carbs, ${targets[0].fat_g}g fat`;
     return json({ plan: { summary, weeks: plan }, cost, balance });
   } catch (e) {
     console.error("generate-nutrition-plan error:", e instanceof Error ? e.name : e);
-    await refundAndReset("Nutrition plan failed — server error (auto refund)");
-    return json({ error: "The nutrition plan could not be written. Please try again." }, 500);
+    return attempt.fail("The nutrition plan could not be written.", 500, charged);
   }
-
-  async function refundAndReset(reason: string) {
-    if (chargedUserId) {
-      await refundCredits({
-        supabaseUrl: Deno.env.get("SUPABASE_URL")!,
-        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        userId: chargedUserId,
-        amount: charged,
-        reason,
-      });
-      chargedUserId = null;
-    }
-  }
-});
+}));

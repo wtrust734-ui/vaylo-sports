@@ -116,6 +116,7 @@ serve(async (req) => {
   // (or a crash after charging) can be refunded.
   let chargedCredits = 0;
   let chargedUserId: string | null = null;
+  const debitKey: string = crypto.randomUUID();
   let chargedUrl = "";
 
   try {
@@ -181,6 +182,7 @@ serve(async (req) => {
       p_feature: "vaylo_coach_message",
       p_reason: "Vaylo Sports Coach prompt",
       p_source: "coach-chat",
+      p_idempotency_key: debitKey,
     });
     if (spendErr) {
       return new Response(JSON.stringify({ error: spendErr.message }), {
@@ -196,10 +198,6 @@ serve(async (req) => {
 
     // Charged — but honour the documented refund policy: a spent credit line is
     // only written for a real deduction, never for an Unlimited-plan audit row.
-    chargedCredits = spend?.cost ?? 3;
-    chargedUserId = user.id;
-    chargedUrl = supabaseUrl;
-
     chargedCredits = spend?.cost ?? 3;
     chargedUserId = user.id;
     chargedUrl = supabaseUrl;
@@ -293,6 +291,7 @@ ${dossierBlock}`;
           supabaseUrl: chargedUrl,
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
+          debitKey,
           amount: chargedCredits,
           reason: "Coach reply failed — AI error (auto refund)",
         });
@@ -348,6 +347,7 @@ ${dossierBlock}`;
         supabaseUrl: chargedUrl,
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
+          debitKey,
         amount: chargedCredits,
         reason: "Coach reply failed — server error (auto refund)",
       });
