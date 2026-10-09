@@ -33,12 +33,20 @@ describe("a plan the athlete paid for is either saved or reported", () => {
     expect(attempts.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("tells the athlete not to re-create the plan, because that charges again", () => {
-    expect(training).toMatch(/do not create it again/i);
-    expect(training).toMatch(/second time/i);
+  it("tells the athlete not to re-create the plan, in the branch that gives up", () => {
+    // Scoped to the failing branch, not the whole file. A file-wide search is
+    // satisfied by a comment — and this file is mostly comments — so the three
+    // phrases are only evidence when they sit in the code that runs after the
+    // insert has failed and before the function returns.
+    const failureBranch = training.indexOf("Your plan was written but not saved");
+    expect(failureBranch, "the plan-not-saved branch is gone").toBeGreaterThan(-1);
+    const branch = training.slice(failureBranch, training.indexOf("return;", failureBranch));
+
+    expect(branch).toMatch(/do not create it again/i);
+    expect(branch).toMatch(/second time/i);
     // ...and where to go to get the credits back, since the client cannot
     // refund a charge itself (credits_grant is service-role only).
-    expect(training).toMatch(/contact support/i);
+    expect(branch).toMatch(/contact support/i);
   });
 
   it("never reaches the success toast when the save failed", () => {

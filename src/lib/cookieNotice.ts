@@ -33,10 +33,37 @@ export function cookieConsentPending(): boolean {
   }
 }
 
+/**
+ * Told when the answer changes, so the two notices can hand over to each other
+ * immediately.
+ *
+ * The terms banner is second in the queue, and it used to read this file's
+ * answer during render only — so an athlete who accepted the storage notice sat
+ * on a screen with neither card until something else happened to re-render the
+ * banner (a navigation, a profile refresh). Subscribing makes the handover part
+ * of the same interaction, which is what "one at a time" implies.
+ *
+ * Deliberately notification-only: no value is cached here, so every reader
+ * still asks device storage rather than a module-level copy that a second tab
+ * could contradict.
+ */
+const listeners = new Set<() => void>();
+
+export function subscribeCookieConsent(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Records the acknowledgement. False when the write did not land. */
 export function rememberCookieConsent(): boolean {
   try {
     window.localStorage.setItem(COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION);
+    // Only on a write that landed: telling the banner to come forward after a
+    // failed write would put two cards on screen at once, which is the exact
+    // thing the priority rule exists to prevent.
+    for (const listener of listeners) listener();
     return true;
   } catch {
     return false;

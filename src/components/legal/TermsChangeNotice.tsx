@@ -4,7 +4,7 @@ import { FileText, Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { legalPath } from "@/lib/legalUrls";
 import { TERMS_VERSION, recordTermsAcceptance } from "@/lib/consent";
-import { cookieConsentPending } from "@/lib/cookieNotice";
+import { cookieConsentPending, subscribeCookieConsent } from "@/lib/cookieNotice";
 
 // ============================================================================
 // TERMS RE-ACCEPTANCE NOTICE
@@ -99,7 +99,15 @@ const TermsChangeNotice = () => {
   // never touch device storage for its own state, because a locally remembered
   // "already accepted" flag is exactly how a reinstall skips a consent event
   // (termsReacceptance.test.ts asserts the absence of storage in this file).
-  const cookieNeedsAccept = cookieConsentPending();
+  //
+  // Read into state and SUBSCRIBED to, rather than read once per render: this
+  // banner is second in the queue, so the moment that matters is the one where
+  // the athlete answers the storage notice while this is already mounted. A
+  // plain read left the corner empty until something unrelated re-rendered the
+  // banner — a navigation, or a profile refresh — which on a quiet screen is a
+  // long wait to be told about a Terms change.
+  const [cookieNeedsAccept, setCookieNeedsAccept] = useState(cookieConsentPending);
+  useEffect(() => subscribeCookieConsent(() => setCookieNeedsAccept(cookieConsentPending())), []);
 
   // No profile yet (signed out, or the row is still loading) means nothing is
   // known about what this person accepted, and asking on a guess would be worse

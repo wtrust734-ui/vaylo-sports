@@ -42,6 +42,14 @@ import { FEATURE_PRODUCTS } from "../../supabase/functions/_shared/moneyCatalog"
 const root = resolve(__dirname, "..", "..");
 const appSource = readFileSync(join(root, "src", "App.tsx"), "utf8");
 
+/** `enables` is one key or a list of them; every assertion here wants the list. */
+const enablesOf = (entry: { enables?: unknown }): (keyof typeof API_COST_CEILING_USD)[] => {
+  if (entry.enables === undefined) return [];
+  return (Array.isArray(entry.enables) ? entry.enables : [entry.enables]) as (
+    keyof typeof API_COST_CEILING_USD
+  )[];
+};
+
 const revenueFor = (credits: number): number => credits * WORST_CASE_USD_PER_CREDIT;
 
 /**
@@ -108,7 +116,10 @@ describe("unlock catalogue — every entry is a real, reachable purchase", () =>
       expect(FEATURE_COSTS[entry.costKey], `${entry.costKey} has no price`).toBeGreaterThan(0);
       // A zero price would mean the server grants it for nothing and every
       // margin claim about it is meaningless.
-      expect(entry.enables === undefined || API_COST_CEILING_USD[entry.enables] > 0).toBe(true);
+      for (const key of enablesOf(entry)) {
+        expect(API_COST_CEILING_USD[key], `${entry.product} names ${key}, which has no ceiling`)
+          .toBeGreaterThan(0);
+      }
     }
   });
 
@@ -139,12 +150,16 @@ describe("unlock catalogue — every entry clears its cost", () => {
     // checked here, so the list having entries at all is asserted.
     expect(metered.length).toBeGreaterThan(0);
     for (const entry of metered) {
-      const ceiling = API_COST_CEILING_USD[entry.enables as keyof typeof API_COST_CEILING_USD];
+      // The DEAREST charge it removes, not the first one it happens to name.
+      // An unlock can cover several metered features, and the margin is only
+      // real if it clears the worst of them.
+      const enabled = enablesOf(entry);
+      const ceiling = Math.max(...enabled.map((k) => API_COST_CEILING_USD[k]));
       const price = FEATURE_COSTS[entry.costKey];
       const revenue = revenueFor(price);
       expect(
         revenue,
-        `${entry.product}: ${price} credits = $${revenue.toFixed(4)} net vs $${ceiling} ceiling`,
+        `${entry.product}: ${price} credits = $${revenue.toFixed(4)} net vs $${ceiling} ceiling (${enabled.join(", ")})`,
       ).toBeGreaterThanOrEqual(ceiling * MIN_MARGIN_MULTIPLE);
     }
   });

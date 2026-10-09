@@ -698,7 +698,6 @@ const Training = () => {
           ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
           : undefined,
       });
-      void insertedId;
       setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
     } catch (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
     finally { setLoading(false); }

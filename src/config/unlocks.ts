@@ -31,6 +31,9 @@
 
 import { API_COST_CEILING_USD, type FeatureCostKey } from "@/config/credits";
 
+/** A metered feature key: one with a declared provider-cost ceiling. */
+type MeteredKey = keyof typeof API_COST_CEILING_USD;
+
 export type UnlockProductId =
   | "form_analysis"
   | "nutrition_pack"
@@ -54,11 +57,15 @@ export type UnlockCatalogEntry = {
   route: string;
   routeLabel: string;
   /**
-   * The metered AI key this unlock makes free for the athlete. `form_analysis`
-   * is the flat-rate case: the unlock removes an unlimited number of calls, so
-   * its break-even is asserted separately in pricing.test.ts.
+   * The metered AI key (or keys) this unlock makes free for the athlete — and
+   * therefore the cost the unlock has to cover. A list, because an unlock can
+   * remove more than one charge: the Nutrition Pack makes the calorie scan free
+   * AND removes the weekly plan charge, and asserting only the cheaper of the
+   * two would certify a margin the pack never has to clear. `form_analysis` is
+   * the flat-rate case: the unlock removes an unlimited number of calls, so its
+   * break-even is asserted separately in pricing.test.ts.
    */
-  enables?: keyof typeof API_COST_CEILING_USD;
+  enables?: MeteredKey | MeteredKey[];
   /** Other unlocks the same athlete tends to want, shown as a nudge. */
   pairsWith?: UnlockProductId[];
 };
@@ -93,7 +100,10 @@ export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
     ],
     route: "/nutrition",
     routeLabel: "Open Nutrition",
-    enables: "calorie_scan",
+    // Both charges it removes, not the cheap one. The weekly plan charge has a
+    // ceiling four times the scan's ($0.006 against $0.0014) and is the one an
+    // athlete who buys this pack actually stops paying every week.
+    enables: ["calorie_scan", "nutrition_plan_week"],
     pairsWith: ["form_analysis"],
   },
   {

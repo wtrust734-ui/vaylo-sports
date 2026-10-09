@@ -24,12 +24,12 @@
 // ============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import TermsChangeNotice from "@/components/legal/TermsChangeNotice";
 import { TERMS_VERSION, recordTermsAcceptance } from "@/lib/consent";
-import { COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION } from "@/lib/cookieNotice";
+import { COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION, rememberCookieConsent } from "@/lib/cookieNotice";
 import { useAuth } from "@/contexts/AuthContext";
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -138,6 +138,26 @@ describe("when there is nothing to ask", () => {
     renderNotice({ terms_version: "1.0" });
 
     expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+  });
+
+  it("comes forward the moment the storage notice is answered", async () => {
+    // The other half of "one at a time", and the half that was missing. This
+    // banner is second in the queue, so the read that decides it has to react to
+    // the storage notice being answered — a plain read per render left the
+    // corner empty until something unrelated re-rendered the banner (a
+    // navigation, or a profile refresh), which is a long wait to be told the
+    // Terms changed.
+    localStorage.removeItem(COOKIE_NOTICE_KEY);
+
+    renderNotice({ terms_version: "1.0" });
+    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+
+    // Exactly what the storage notice's Accept button does.
+    await act(async () => {
+      rememberCookieConsent();
+    });
+
+    await waitFor(() => expect(screen.getByText(HEADING)).toBeInTheDocument());
   });
 });
 

@@ -534,6 +534,10 @@ const FormAnalysis = () => {
         <button
           type="button"
           onClick={() => { setAllOpen(!allOpen); setExpandedCategory(null); setExpandedDrill(null); }}
+          // The label already says Expand/Collapse, but that is a repaint: a
+          // screen reader hears the same name before and after. `aria-expanded`
+          // is the state, and the same goes for the two toggles below.
+          aria-expanded={allOpen}
           className="rounded-lg border border-border bg-card px-2.5 py-1 text-[12px] font-semibold text-foreground"
         >
           {allOpen ? "Collapse all" : "Expand all"}
@@ -545,6 +549,7 @@ const FormAnalysis = () => {
           <div key={cat.category}>
             <motion.button
               onClick={() => toggleCategory(cat.category)}
+              aria-expanded={catOpen(cat.category)}
               className="w-full flex items-center justify-between py-2"
               initial={{ opacity: 0 }} animate={drillsInView ? { opacity: 1 } : {}} transition={{ delay: ci * 0.05 }}
             >
@@ -563,7 +568,7 @@ const FormAnalysis = () => {
                     <motion.div key={key}
                       initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                       className="bg-card border border-border rounded-xl overflow-hidden hover:border-electric-purple/20 transition-colors duration-300">
-                      <motion.button onClick={() => toggleDrill(key)}
+                      <motion.button onClick={() => toggleDrill(key)} aria-expanded={open}
                         className="w-full p-3 flex items-center justify-between gap-3" whileTap={{ scale: 0.99 }}>
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="p-1.5 rounded-lg bg-electric-purple/10 shrink-0"><drill.icon size={16} className="text-electric-purple" /></div>

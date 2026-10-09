@@ -82,34 +82,56 @@ export type FeatureCostKey =
 // break-even is a business that goes backwards the moment a user is heavy.
 //
 // The maths, so it can be re-checked rather than taken on trust:
+////   Revenue per credit. The pack prices are CREDIT_PACKS below, and the credits
+//   a buyer actually receives are `credits` PLUS `bonus` — quoting the base
+//   count is how these figures went stale once already:
 //
-//   Revenue per credit. The pack prices are CREDIT_PACKS below. Effective
-//   credits include the bonus, so the biggest pack is the best deal and the
-//   worst case for us:
-//
-//     Starter  25 credits / 249c  = 9.96 c/credit
-//     Boost    60 / 499c          = 8.32
-//     Popular  145 / 999c         = 6.89
-//     Power   250 / 1499c         = 6.00
-//     Elite    650 / 2499c         = 3.84   <- tier A; see the tiers below
+//     Starter  30 credits / 249c  = 8.30 c/credit
+//     Boost    65 / 499c          = 7.68
+//     Popular  165 / 999c         = 6.06
+//     Power    290 / 1499c        = 5.17
+//     Elite    660 / 2499c        = 3.79   <- tier A; see the tiers below
 //
 //   That ladder is TIER A — and the pack ladder is regional (pricing_tiers,
 //   mirrored in REGIONAL_TIERS below). price_cents are USD cents in every
 //   tier: formatLocalPrice() converts to local currency for display, so tier
-//   D really does sell the 650-credit pack at $9.99, not $24.99. The four
-//   active tiers, best pack first:
+//   D really does sell the 660-credit pack at $9.99, not $24.99. The four
+//   active tiers, on the biggest pack, GROSS and then NET of the store's cut:
 //
-//     Tier A  Premium   650 / 2499c = 3.845 c/credit
-//     Tier B  Developed 650 / 1999c = 3.075
-//     Tier C  Emerging  650 / 1499c = 2.306
-//     Tier D  Growth    650 /  999c = 1.537  <- the number that matters
+//     Tier A  Premium   660 / 2499c = 3.79 c/credit  (2.65 net)
+//     Tier B  Developed 660 / 1999c = 3.03           (2.12)
+//     Tier C  Emerging  660 / 1499c = 2.27           (1.59)
+//     Tier D  Growth    660 /  999c = 1.51           (1.06)  <- the number that matters
 //
-//   So $0.0153 per credit is what we can count on: every metered price below
-//   clears MIN_MARGIN_MULTIPLE × its ceiling at THAT rate, in every market we
-//   sell in — not only at the flattering tier-A rate, which overstated
-//   revenue by 2.5× in eight countries and quietly put most AI features under
-//   their own floor there (found by the 2026-10-03 regional audit; the test
-//   suite re-derives all of this from REGIONAL_TIERS).
+//   So $0.0105 per credit NET is what we can count on: every metered price
+//   below clears MIN_MARGIN_MULTIPLE × its ceiling at THAT rate, in every
+//   market we sell in. Every clause of that sentence was wrong once, and each
+//   was found by re-deriving it rather than by trusting it:
+//
+//     * NET, not gross. The figure used to be $0.0153 — the same pack's GROSS
+//       rate — so every margin this file claimed was a third larger than the
+//       money that actually arrives, because Google Play keeps 30%.
+//     * The BIGGEST pack, not a middling one. Pricing off the flattering
+//       tier-A rate overstated revenue by 2.5× in eight countries and quietly
+//       put most AI features under their own floor there (the 2026-10-03
+//       regional audit).
+//     * The packs WITH their bonuses, not at the base credit count.
+//
+//   pricing.test.ts re-derives all of it from REGIONAL_TIERS and fails if the
+//   constant, the tier table or CREDIT_PACKS drift apart.
+//
+//   ONE KNOWN DEFECT, deliberately not fixed here because it is a monetisation
+//   decision rather than a code one: cost per credit falls at every step of the
+//   default ladder and of tiers A, B and C, but NOT inside tier D. Its Boost
+//   pack (65 credits for 99c = 1.52 c/credit gross) is a better deal than its
+//   Popular (165/299 = 1.81) and Power (290/499 = 1.72) packs, so a buyer in a
+//   growth market gets more by buying Boost twice than by buying the pack the UI
+//   marks "Popular". What still holds in every tier — and is all the margin
+//   floor depends on — is that the biggest pack is the cheapest per credit, and
+//   pricing.test.ts now asserts exactly that, tier by tier, so this cannot
+//   quietly get worse. Repairing the middle of tier D means either granting more
+//   credits (which lowers the worst-case rate every price below is derived from)
+//   or taking credits away from buyers, so it is a pricing call, not a patch.
 //
 //   Cost ceilings. API_COST_CEILING_USD is a deliberate over-estimate of a
 //   single call: we assume a larger, more expensive model than we would

@@ -120,6 +120,34 @@ describe("credit economy — worst-case revenue per credit", () => {
         .toBeLessThan(rates[i - 1]);
     }
   });
+
+  it("makes the biggest pack the best value in EVERY tier, not just the default one", () => {
+    // (Both of these hold for the same reason: the credit value the whole price
+    // book is derived from has to be a rate a real buyer can actually pay.)
+    // The per-step fall above is asserted only for the default ladder (tier A),
+    // because one tier does not have it: inside tier D, Boost is a better deal
+    // per credit than Popular and Power. That exception is written down in the
+    // header of src/config/credits.ts and is a pricing decision, not a bug to
+    // patch from here.
+    //
+    // What must hold everywhere — and is the only thing the margin floor
+    // depends on — is that no smaller pack beats the BIGGEST one per credit. If
+    // that ever fails, WORST_CASE_USD_PER_CREDIT is aimed at the wrong pack and
+    // every price derived from it is overstated in the flattering direction.
+    for (const tier of REGIONAL_TIERS) {
+      const priced = tier.packs.map((p) => ({
+        id: p.id,
+        rate: netRate(p.price_cents, p.credits, p.bonus),
+      }));
+      const biggest = priced[priced.length - 1];
+      for (const pack of priced.slice(0, -1)) {
+        expect(
+          pack.rate,
+          `tier ${tier.code}: ${pack.id} is a better deal per credit than ${biggest.id}`,
+        ).toBeGreaterThan(biggest.rate);
+      }
+    }
+  });
 });
 
 describe("credit economy — every metered feature clears its cost", () => {
