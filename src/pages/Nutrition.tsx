@@ -660,7 +660,24 @@ const Nutrition = () => {
                     log the meal with your own figures.
                   </p>
                 )}
-                <motion.button onClick={addScanResult} whileTap={{ scale: 0.98 }} className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2 rounded-xl text-sm">Log This Meal</motion.button>
+                {/* Disabled when the scan produced no numbers at all.
+
+                    `addScanResult` writes `calories: scanResult.calories || null`
+                    and the same for every macro, so on the unreadable-photo path
+                    the button wrote a meal row called "Scanned Meal" with four
+                    nulls — a day of the log filled with a meal that has no
+                    figures in it, from a screen that had just said it could not
+                    read the photo. The manual "add meal" form below is where an
+                    athlete enters their own numbers, which is what the copy
+                    above points at. */}
+                <motion.button
+                  onClick={addScanResult}
+                  disabled={!hasScanNumbers}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2 rounded-xl text-sm disabled:opacity-50"
+                >
+                  {hasScanNumbers ? "Log This Meal" : "Nothing to log from this photo"}
+                </motion.button>
               </motion.div>
             )}
           </motion.div>

@@ -24,7 +24,7 @@
 // against the same MIN_MARGIN_MULTIPLE floor.
 // ============================================================================
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -43,6 +43,35 @@ const root = resolve(__dirname, "..", "..");
 const appSource = readFileSync(join(root, "src", "App.tsx"), "utf8");
 
 const revenueFor = (credits: number): number => credits * WORST_CASE_USD_PER_CREDIT;
+
+/**
+ * Every file that could hold a SPEND of a per-use key: the app's screens, hooks
+ * and libs, plus the edge functions where the server-side charges live.
+ *
+ * `src/config/` is excluded because it only *declares* the catalogue — a file
+ * that lists every key is not evidence that any of them is charged — and test
+ * files are excluded because pricing.test.ts lists every key by design. What is
+ * left is the code an athlete's tap actually runs through.
+ */
+function chargingSources(): Record<string, string> {
+  const files: Record<string, string> = {};
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name) || /\.test\.(ts|tsx)$/.test(entry.name)) continue;
+      const rel = full.slice(root.length + 1).split("\\").join("/");
+      if (rel.startsWith("src/config/")) continue;
+      files[rel] = readFileSync(full, "utf8");
+    }
+  };
+  walk(join(root, "src"));
+  walk(join(root, "supabase", "functions"));
+  return files;
+}
 
 /**
  * Server-priced products deliberately NOT in the shop.
@@ -143,6 +172,32 @@ describe("unlock catalogue — every entry clears its cost", () => {
 });
 
 describe("per-use reference — a price always leads somewhere", () => {
+  it("lists only keys something in the app actually spends", () => {
+    // The rule this list is named for, asserted rather than assumed. The check
+    // above proves the key is BILLABLE; this one proves it is BILLED, by finding
+    // the literal key in a source file that is not the catalogue.
+    //
+    // `development_trajectory` is the case that proved the difference: it was
+    // priced at 8 credits with "Spend it in Recovery" beside it, while the
+    // Development Trajectory screen computes projectTrajectory() locally for
+    // free and no function ever charged the key. Nothing failed, because the old
+    // test only asked whether a price existed.
+    const sources = chargingSources();
+    for (const { key } of PER_USE_ROUTES) {
+      const chargers = Object.entries(sources)
+        .filter(([, src]) => src.includes(`"${key}"`))
+        .map(([file]) => file);
+      expect(
+        chargers.length,
+        `${key} is priced in the per-use list but nothing outside src/config spends it — a price that leads nowhere`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("does not price a call nothing makes", () => {
+    expect(PER_USE_ROUTES.map((r) => r.key)).not.toContain("development_trajectory");
+  });
+
   it("only lists keys the app really charges, each with a real screen", () => {
     const seen = new Set<string>();
     for (const { key, route, routeLabel } of PER_USE_ROUTES) {

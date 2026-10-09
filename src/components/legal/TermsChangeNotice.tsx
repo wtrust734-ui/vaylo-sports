@@ -104,9 +104,6 @@ const TermsChangeNotice = () => {
   // No profile yet (signed out, or the row is still loading) means nothing is
   // known about what this person accepted, and asking on a guess would be worse
   // than asking a second later.
-  // No profile yet (signed out, or the row is still loading) means nothing is
-  // known about what this person accepted, and asking on a guess would be worse
-  // than asking a second later.
   if (!profile || accepted) return null;
 
   // A null `terms_version` is "never recorded", which is behind by definition —

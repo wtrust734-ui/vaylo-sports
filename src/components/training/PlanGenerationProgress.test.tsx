@@ -90,12 +90,20 @@ describe("the plan generation progress panel", () => {
   it("moves through the stages rather than sitting on the first one", () => {
     render(<PlanGenerationProgress weeks={6} />);
 
+    // Asserted on the DETAIL line, not the stage name. Every stage name is on
+    // screen from the first render — the list is the pipeline — so `getByText(
+    // "Writing the sessions")` passed at any elapsed time and would have kept
+    // passing with the stage selector deleted. The detail is rendered for the
+    // current stage only, so it is the thing that actually moves.
+    expect(screen.queryByText(/Every day of every week/)).not.toBeInTheDocument();
+
     // The writing stage owns most of the wait; by the middle of the estimate it
     // must be the stage on screen, because that is what is happening.
     advance(20);
-    expect(screen.getByText("Writing the sessions")).toBeInTheDocument();
+    expect(screen.getByText(/Every day of every week/)).toBeInTheDocument();
 
     advance(40);
-    expect(screen.getByText("Saving your plan")).toBeInTheDocument();
+    expect(screen.getByText("Almost there")).toBeInTheDocument();
+    expect(screen.queryByText(/Every day of every week/)).not.toBeInTheDocument();
   });
 });

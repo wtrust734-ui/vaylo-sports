@@ -158,6 +158,13 @@ export const unlockEntry = (product: UnlockProductId): UnlockCatalogEntry | unde
 // weekly charge, the limiter plan inside Training) are deliberately absent:
 // they are charged as part of something the athlete is already looking at, not
 // bought from a menu.
+//
+// `development_trajectory` is absent for a blunter reason: nothing charges it.
+// The Development Trajectory screen (/development) computes projectTrajectory()
+// locally and is free, so the row that used to sit here priced 8 credits and
+// pointed at /recovery — a price for a call no screen makes, which is the exact
+// defect this list exists to remove. If trajectory forecasting is ever billed,
+// it belongs here again, with a real charge behind it.
 export const PER_USE_ROUTES: { key: FeatureCostKey; route: string; routeLabel: string }[] = [
   { key: "training_plan_week", route: "/training", routeLabel: "Training" },
   { key: "form_analysis", route: "/form", routeLabel: "Form Analysis" },
@@ -166,5 +173,4 @@ export const PER_USE_ROUTES: { key: FeatureCostKey; route: string; routeLabel: s
   { key: "tactical_prep", route: "/tactics", routeLabel: "Tactics" },
   { key: "vaylo_coach_message", route: "/coach", routeLabel: "Coach" },
   { key: "weekly_coach_review", route: "/goals", routeLabel: "Goals" },
-  { key: "development_trajectory", route: "/recovery", routeLabel: "Recovery" },
 ];

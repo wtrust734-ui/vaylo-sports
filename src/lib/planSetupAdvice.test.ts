@@ -77,6 +77,24 @@ describe("the age caps win", () => {
     expect(advice.restDays).toBeGreaterThanOrEqual(3);
   });
 
+  it("does not argue for a number a cap has already taken away", () => {
+    // The beginner reason used to hardcode "three full-body sessions" while
+    // interpolating the number in front of it, so a one-session cap produced
+    // "1 training days: three full-body sessions …". A sentence that contradicts
+    // its own first word is how the panel stops being believed.
+    const advice = recommendSetup({
+      level: "beginner",
+      caps: { maxSessionsPerWeek: 1, minRestDays: 0, maxMinutesPerSession: 30 },
+    });
+
+    expect(advice.daysPerWeek).toBe(1);
+    expect(advice.reasons.daysPerWeek).toContain("1 training day:");
+    expect(advice.reasons.daysPerWeek).not.toMatch(/three full-body/i);
+    // The uncapped answer keeps the plain sentence, so the common case is not
+    // saddled with a caveat that does not apply to it.
+    expect(recommendSetup({ level: "beginner" }).reasons.daysPerWeek).toMatch(/three full-body/i);
+  });
+
   it("downgrades intensity for a developing athlete, even an advanced one", () => {
     const advice = recommendSetup({ level: "advanced", age: 14 });
     expect(advice.intensityPref).toBe("easy");

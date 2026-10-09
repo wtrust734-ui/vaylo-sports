@@ -1307,25 +1307,29 @@ const Training = () => {
     setAiEditBusy(true);
     let result: PlanEditOutcome = await requestPlanEdit(request);
 
-    // Not enough credits is the one failure the athlete can do something about,
-    // so it opens the top-up sheet and then retries the SAME request. Reusing
-    // the request id is safe: a refused spend never wrote a ledger row, so the
-    // retry cannot be billed twice.
-    if (!result.ok && result.quotaExceeded) {
-      const outcome = await requestCreditTopUp({
-        shortfall: result.shortfall ?? Math.max(0, (result.cost ?? cost) - (result.balance ?? 0)),
-        reasonLabel: featureLabel(editCostKey(aiEditScope)),
-        balance: result.balance ?? 0,
-      });
-      if (!outcome.purchased) {
-        setAiEditBusy(false);
-        toast({ title: "Not enough credits", description: result.error ?? "Top up to apply this edit.", variant: "destructive" });
-        return;
+    try {
+      // Not enough credits is the one failure the athlete can do something
+      // about, so it opens the top-up sheet and then retries the SAME request.
+      // Reusing the request id is safe: a refused spend never wrote a ledger
+      // row, so the retry cannot be billed twice.
+      if (!result.ok && result.quotaExceeded) {
+        const outcome = await requestCreditTopUp({
+          shortfall: result.shortfall ?? Math.max(0, (result.cost ?? cost) - (result.balance ?? 0)),
+          reasonLabel: featureLabel(editCostKey(aiEditScope)),
+          balance: result.balance ?? 0,
+        });
+        if (!outcome.purchased) {
+          toast({ title: "Not enough credits", description: result.error ?? "Top up to apply this edit.", variant: "destructive" });
+          return;
+        }
+        result = await requestPlanEdit(request);
       }
-      result = await requestPlanEdit(request);
+    } finally {
+      // Released in a `finally`: the top-up sheet is a call that can throw, and
+      // a stuck `aiEditBusy` leaves Apply disabled for the rest of the session.
+      setAiEditBusy(false);
     }
 
-    setAiEditBusy(false);
     if (!result.ok) {
       toast({ title: "Edit not applied", description: result.error ?? "The edit could not be applied.", variant: "destructive" });
       return;

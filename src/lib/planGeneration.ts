@@ -37,6 +37,15 @@ export const MIN_EXPECTED_SECONDS = 12;
 const safeWeeks = (weeks: number): number =>
   Number.isFinite(weeks) ? Math.max(1, Math.min(52, Math.floor(weeks))) : 4;
 
+/**
+ * A guarded chunk size, for the same reason `safeWeeks` exists: the second
+ * parameter is public too, and `Math.max(1, Math.floor(NaN))` is NaN, which
+ * would make the whole estimate NaN and the bar jump to its ceiling. A bad
+ * chunk size falls back to the one the server would really use.
+ */
+const safeChunk = (chunkWeeks: number, weeks: number): number =>
+  Number.isFinite(chunkWeeks) ? Math.max(1, Math.floor(chunkWeeks)) : planChunkWeeks(weeks);
+
 /** Chunk size for a plan of this length. Mirrors the server's rule exactly. */
 export function planChunkWeeks(weeks: number): number {
   return safeWeeks(weeks) <= ONE_WEEK_CHUNK_MAX_WEEKS ? 1 : PLAN_CHUNK_WEEKS;
@@ -53,7 +62,7 @@ export function planChunkWeeks(weeks: number): number {
  */
 export function expectedPlanSeconds(weeks: number, chunkWeeks = planChunkWeeks(weeks)): number {
   const total = safeWeeks(weeks);
-  const perCall = Math.max(1, Math.floor(chunkWeeks));
+  const perCall = safeChunk(chunkWeeks, total);
   const estimate = 9 + 12 + perCall * 16 + total * 0.6;
   return Math.max(MIN_EXPECTED_SECONDS, Math.min(90, Math.round(estimate)));
 }
@@ -65,5 +74,5 @@ export function expectedPlanSeconds(weeks: number, chunkWeeks = planChunkWeeks(w
  */
 export function planChunkCount(weeks: number, chunkWeeks = planChunkWeeks(weeks)): number {
   const total = safeWeeks(weeks);
-  return Math.max(1, Math.ceil(total / Math.max(1, Math.floor(chunkWeeks))));
+  return Math.max(1, Math.ceil(total / safeChunk(chunkWeeks, total)));
 }

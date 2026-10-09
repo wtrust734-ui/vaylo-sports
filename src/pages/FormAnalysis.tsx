@@ -356,6 +356,27 @@ const FormAnalysis = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Object URLs are owned by whoever created them. The web path mints one per
+   * upload, and nothing released the previous one, so every photo checked in a
+   * session stayed in memory until the tab closed — the preview is the biggest
+   * allocation on the screen. Replacing the preview now releases the last one,
+   * and unmounting releases the current one (Nutrition does the same for its
+   * scan previews). Data URLs — the native capture path — are untouched: they
+   * are strings, not object URLs, and revoking one is a no-op.
+   */
+  const previewRef = useRef<string | null>(null);
+  const showPreview = (url: string) => {
+    const previous = previewRef.current;
+    if (previous && previous !== url && previous.startsWith("blob:")) URL.revokeObjectURL(previous);
+    previewRef.current = url;
+    setPreviewUrl(url);
+  };
+  useEffect(() => () => {
+    const current = previewRef.current;
+    if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+  }, []);
+
   const hasAccess = hasFeature("form_analysis");
 
   // The card quoted a price and then sent the athlete to the Market, which
@@ -417,7 +438,7 @@ const FormAnalysis = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    setPreviewUrl(URL.createObjectURL(file));
+    showPreview(URL.createObjectURL(file));
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -443,7 +464,7 @@ const FormAnalysis = () => {
     if (!user) return;
     const shot = await capturePhoto();
     if (!shot) return;
-    setPreviewUrl(shot.previewUrl);
+    showPreview(shot.previewUrl);
     hapticImpact("medium");
     await runAnalysis(shot.base64);
   };
@@ -459,7 +480,7 @@ const FormAnalysis = () => {
   const onChoosePhoto = () => {
     if (isNative()) void pickPhoto().then((shot) => {
       if (!shot) return;
-      setPreviewUrl(shot.previewUrl);
+      showPreview(shot.previewUrl);
       void runAnalysis(shot.base64);
     });
     else fileInputRef.current?.click();

@@ -56,6 +56,23 @@ describe("the plan-generation estimate", () => {
     }
   });
 
+  it("survives junk in the chunk size, which is an argument too", () => {
+    // `Math.max(1, Math.floor(NaN))` is NaN, and one NaN turned the whole
+    // estimate — and the block count — into NaN: a bar rendering "NaN%" beside
+    // "~NaNs left". The chunk size falls back to the server's own rule instead.
+    for (const bad of [NaN, -1, 0, Infinity, -Infinity]) {
+      const estimate = expectedPlanSeconds(8, bad as number);
+      expect(Number.isFinite(estimate), `estimate for chunkWeeks=${bad}`).toBe(true);
+      expect(estimate).toBeGreaterThanOrEqual(MIN_EXPECTED_SECONDS);
+      expect(estimate).toBeLessThanOrEqual(90);
+      expect(planChunkCount(8, bad as number)).toBeGreaterThan(0);
+    }
+
+    // A junk chunk size is the same as no chunk size: the server's rule wins.
+    expect(expectedPlanSeconds(8, NaN)).toBe(expectedPlanSeconds(8));
+    expect(planChunkCount(24, NaN)).toBe(planChunkCount(24));
+  });
+
   it("counts the work in the same pieces the server asks for", () => {
     // A week per call up to the server's call ceiling, two weeks beyond it.
     expect(planChunkCount(1)).toBe(1);

@@ -125,10 +125,16 @@ Deno.serve(async (req) => {
     }
 
     const feature = scope === "plan" ? "plan_edit_full" : "plan_edit";
+    // The key fingerprints the WHOLE request, the weeks included — not just its
+    // prose. Two requests sharing a request id but carrying different weeks are
+    // two different edits, and a key that ignored them would answer "already
+    // charged" to the second and hand back a rewrite nobody paid for.
     const spend = await spendForUser(req, userId, feature, `Plan edit: ${instruction.slice(0, 80)}`, {
       quantity: 1,
       source: "edit-plan",
-      idempotencyKey: `edit-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(`${scope}|${week}|${instruction}`)}`,
+      idempotencyKey: `edit-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(
+        `${scope}|${week}|${duration}|${instruction}|${JSON.stringify(targets)}`,
+      )}`,
     });
     if (!spend.success) {
       return json({
@@ -137,6 +143,15 @@ Deno.serve(async (req) => {
         cost: spend.cost,
         balance: spend.balance,
       }, 402);
+    }
+    if (spend.duplicate) {
+      // The claim already exists, so this request was already charged and is
+      // either in flight or already answered. Nothing was debited for THIS
+      // attempt, which is the whole point: `credits_spend` reports the original
+      // cost on a replay without taking it, so remembering it as `charged` and
+      // then refunding it would MINT credits the athlete never spent. The work
+      // is not run a second time either — a replay must not buy a free rewrite.
+      return json({ error: "That edit is already being applied. Wait for it to finish, then try again." }, 409);
     }
     if (!spend.unlimited && spend.cost > 0) {
       charged = spend.cost;

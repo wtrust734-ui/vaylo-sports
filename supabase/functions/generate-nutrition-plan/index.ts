@@ -258,10 +258,23 @@ Deno.serve(async (req) => {
     let cost = 0;
     let balance: number | null = null;
     if (!ownsPack) {
+      // The key fingerprints the WHOLE request, the targets included — not just
+      // the goal and the length. The same request id with different calorie or
+      // macro targets is a different plan, and a key that ignored them would
+      // answer "already charged" to the second and hand back a plan nobody paid
+      // for.
+      const targetsKey = JSON.stringify([
+        body.calories_target ?? null,
+        body.protein_target ?? null,
+        body.carbs_target ?? null,
+        body.fat_target ?? null,
+      ]);
       const spend = await spendForUser(req, userId, "nutrition_plan_week", `Nutrition plan: ${goal} (${weeks}w)`, {
         quantity: weeks,
         source: "generate-nutrition-plan",
-        idempotencyKey: `nutrition-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(`${goal}|${weeks}|${notes}`)}`,
+        idempotencyKey: `nutrition-plan:${userId}:${requestId || "no-request-id"}:${fingerprint(
+          `${goal}|${weeks}|${notes}|${targetsKey}`,
+        )}`,
       });
       if (!spend.success) {
         return json({
@@ -270,6 +283,14 @@ Deno.serve(async (req) => {
           cost: spend.cost,
           balance: spend.balance,
         }, 402);
+      }
+      if (spend.duplicate) {
+        // The claim already exists, so this request was already charged and is
+        // either in flight or already answered. Nothing was debited for THIS
+        // attempt — `credits_spend` reports the original cost on a replay
+        // without taking it — so remembering it as `charged` and refunding it
+        // on a later failure would MINT credits the athlete never spent.
+        return json({ error: "That nutrition plan is already being written. Wait for it to finish, then try again." }, 409);
       }
       cost = spend.cost;
       balance = spend.balance;

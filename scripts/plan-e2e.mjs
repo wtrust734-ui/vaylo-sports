@@ -38,7 +38,22 @@ if (!Number.isInteger(WEEKS) || WEEKS < 1 || WEEKS > 52) {
   process.exit(2);
 }
 
-const cfg = JSON.parse(readFileSync(".freebuff/ui-audit.local.json", "utf8"));
+// The Play reviewer account's credentials. Read defensively: the path is a
+// Freebuff-checkout convention, so in the real repository this file does not
+// exist, and an unguarded read dies with a raw ENOENT that says nothing about
+// where the credentials come from. (Same guarded shape as scripts/ai-health.mjs.)
+const CREDENTIALS = process.env.VAYLO_E2E_CREDENTIALS ?? ".freebuff/ui-audit.local.json";
+let cfg;
+try {
+  cfg = JSON.parse(readFileSync(CREDENTIALS, "utf8"));
+} catch (e) {
+  console.error(
+    `Could not read the review-account credentials from ${CREDENTIALS} (${e instanceof Error ? e.message : e}).\n` +
+    "Point VAYLO_E2E_CREDENTIALS at a JSON file of {\"email\":\"…\",\"password\":\"…\"}, or run this from the " +
+    "Freebuff checkout. Nothing was charged.",
+  );
+  process.exit(2);
+}
 const supabase = createClient(URL_BASE, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const { data: sess, error } = await supabase.auth.signInWithPassword({ email: cfg.email, password: cfg.password });

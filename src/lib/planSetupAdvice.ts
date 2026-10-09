@@ -191,13 +191,22 @@ export function recommendSetup(input: SetupAdviceInput): SetupAdvice {
   const trimmedFocus = focusAreas.slice(0, 4);
 
   const restWord = restDays === 1 ? "rest day" : "rest days";
+  // A cap can leave one session in the week, and "1 training days" reads as a
+  // template rather than a recommendation.
+  const dayWord = daysPerWeek === 1 ? "training day" : "training days";
   const reasons: SetupAdvice["reasons"] = {
     daysPerWeek:
       level === "beginner"
-        ? `${daysPerWeek} training days: three full-body sessions with a day between them is where a beginner adapts fastest. More sessions mostly adds fatigue you cannot yet recover from.`
+        ? daysPerWeek === 3
+          ? `${daysPerWeek} ${dayWord}: three full-body sessions with a day between them is where a beginner adapts fastest. More sessions mostly adds fatigue you cannot yet recover from.`
+          : // A cap (age, or a first week back) can push this below the level's
+            // own recommendation, and the reason must not then claim the number
+            // it just refused to give — a sentence that contradicts its own
+            // first word is how an athlete stops trusting the panel.
+            `${daysPerWeek} ${dayWord}: full-body sessions with a day between them is where a beginner adapts fastest, and this is the most the limits on your profile allow right now. More sessions mostly adds fatigue you cannot yet recover from.`
         : level === "intermediate"
-        ? `${daysPerWeek} training days: enough frequency to build each quality twice a week without stacking hard days back to back.`
-        : `${daysPerWeek} training days: the frequency a trained athlete needs to keep progressing. You know your own week — adjust it.`,
+        ? `${daysPerWeek} ${dayWord}: enough frequency to build each quality twice a week without stacking hard days back to back.`
+        : `${daysPerWeek} ${dayWord}: the frequency a trained athlete needs to keep progressing. You know your own week — adjust it.`,
     restDays: restDays === 0
       ? "No dedicated full rest days — only sensible at a high training age, and only if your easy days are genuinely easy."
       : `${restDays} full ${restWord}: a full rest day is where the adaptation you trained for actually happens. ${level === "beginner" ? "Beginners need more of them than they expect." : "Keep at least one."}`,
