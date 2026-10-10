@@ -55,6 +55,15 @@
 --   * `app_version` is part of the key, so a fixed version stops accumulating
 --     rows and the difference between two builds is one query.
 --
+--   * THE WHOLE FILE IS SAFE TO RE-RUN, and that is not decoration. It was
+--     applied to this project by hand (`supabase db query --file ...`) rather
+--     than through `db push`, because the project's migration history has
+--     remote versions whose SQL is not in this repository and `db push` refuses
+--     to run while that is true. Applying a file by hand means nobody's history
+--     table records it, so a later reconciliation may apply it again: every
+--     statement here is therefore idempotent (if-not-exists, or-replace, and an
+--     explicit drop before each create policy). Re-running it changes nothing.
+--
 --   * Reads and writes are both closed to anon. The writer is the edge function
 --     via the service role; the readers are admins, who get a select policy so
 --     the operator can triage from /admin/errors on their phone instead of
@@ -144,6 +153,7 @@ create index if not exists app_error_reports_triage_idx
 
 alter table public.app_error_reports enable row level security;
 
+drop policy if exists "app_error_reports_select_denied" on public.app_error_reports;
 create policy "app_error_reports_select_denied"
   on public.app_error_reports
   for select
@@ -153,6 +163,7 @@ create policy "app_error_reports_select_denied"
 -- No client insert, ever. The app goes through the edge function so that the
 -- fingerprint, the caps and the rate limit cannot be bypassed by calling
 -- PostgREST directly with the publishable key.
+drop policy if exists "app_error_reports_insert_denied" on public.app_error_reports;
 create policy "app_error_reports_insert_denied"
   on public.app_error_reports
   for insert
@@ -162,6 +173,7 @@ create policy "app_error_reports_insert_denied"
 -- Status is the only column an operator changes, and it is changed from the
 -- admin screen. Deletes stay denied for everyone: a failure that has been fixed
 -- is evidence that the fix was needed.
+drop policy if exists "app_error_reports_delete_denied" on public.app_error_reports;
 create policy "app_error_reports_delete_denied"
   on public.app_error_reports
   for delete
