@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Star, Shield, Crown, Zap, Target, Flame, Brain, ShoppingBag, Dumbbell, Droplets, Medal, Award, Check, Plus, X, Users, Calendar, TrendingUp, Heart, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -285,24 +286,42 @@ const Achievements = () => {
 
   const fetchAll = async () => {
     if (!user) return;
-    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes] = await Promise.all([
+    // Sixteen requests on every visit, eleven of which only ever wanted a
+    // number. `head: true` is the count-only form: PostgREST answers with a
+    // count and no rows, so nothing is transferred that the code ignores. The
+    // two tables whose ROWS the stats below actually use (recovery_logs for
+    // green days and hrv, events for results) no longer ask for a count at all,
+    // which folds the separate hrv query into the first one. Values are
+    // unchanged: the same rows, the same counts, the same medals.
+    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes] = await Promise.all([
       supabase.from("achievements").select("*").eq("user_id", user.id),
-      supabase.from("challenges").select("*").order("created_at", { ascending: false }),
+      // A global table, one row per challenge ever created, bounded so an
+      // athlete with no challenges of their own is not downloading everyone's.
+      supabase.from("challenges").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
-      supabase.from("workouts").select("id", { count: "exact" }).eq("user_id", user.id).eq("completed", true),
-      supabase.from("recovery_logs").select("id, readiness_score", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("events").select("id, actual_position", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("event_rivals").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("training_plans").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("friendships").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("meal_logs").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("water_logs").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("coach_messages").select("id", { count: "exact" }).eq("user_id", user.id).eq("role", "user"),
-      supabase.from("mental_checkins").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("cue_words").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("mental_reviews").select("id", { count: "exact" }).eq("user_id", user.id),
-      supabase.from("recovery_logs").select("id", { count: "exact" }).eq("user_id", user.id).not("hrv", "is", null),
+      supabase.from("workouts").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("completed", true),
+      supabase.from("recovery_logs").select("id, readiness_score, hrv").eq("user_id", user.id),
+      supabase.from("events").select("id, actual_position").eq("user_id", user.id),
+      supabase.from("event_rivals").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("training_plans").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("friendships").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("meal_logs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("water_logs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("coach_messages").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("role", "user"),
+      supabase.from("mental_checkins").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("cue_words").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("mental_reviews").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     ]);
+
+    // A failed read here arrives as "0 workouts" and quietly withholds medals
+    // the athlete has earned, so it is said once (the counts that did come back
+    // are still used — a stale count beats a vanished one).
+    readFailed(
+      [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes]
+        .map((r) => r.error)
+        .find((e) => e) ?? null,
+      "your progress",
+    );
 
     setEarnedAchievements(achRes.data || []);
     setChallenges(chRes.data || []);
@@ -318,9 +337,9 @@ const Achievements = () => {
     const createdChallenges = (chRes.data || []).filter((c) => c.creator_id === user.id).length;
     const baseStats: AchievementStats = {
       workouts: workRes.count || 0,
-      checkins: recRes.count || 0,
+      checkins: (recRes.data || []).length,
       greenDays,
-      events: eventRes.count || 0,
+      events: events.length,
       rivals: rivalRes.count || 0,
       plans: planRes.count || 0,
       friends: friendRes.count || 0,
@@ -330,7 +349,7 @@ const Achievements = () => {
       mentalCheckins: mentalRes.count || 0,
       cueWords: cueRes.count || 0,
       reviews: reviewRes.count || 0,
-      hrvLogs: hrvRes.count || 0,
+      hrvLogs: (recRes.data || []).filter((r) => r.hrv != null).length,
       purchases: pIds,
       results: results.length,
       firstPlace,
@@ -361,7 +380,13 @@ const Achievements = () => {
       }
     }
     // Re-fetch achievements after awarding
-    const { data: refreshed } = await supabase.from("achievements").select("*").eq("user_id", user.id).order("earned_at", { ascending: false });
+    const { data: refreshed, error: refreshError } = await supabase
+      .from("achievements")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("earned_at", { ascending: false })
+      .limit(200);
+    readFailed(refreshError, "your achievements");
     setEarnedAchievements(refreshed || []);
   };
 

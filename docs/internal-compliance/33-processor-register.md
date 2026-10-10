@@ -19,7 +19,7 @@
 | P5 | **Wearable / health platform providers** | Data source, athlete-initiated | Activity, heart rate, sleep, workouts, GPS — **only after the athlete connects one** | Feature exists; **no connections are live**, and no provider is named anywhere in the code |
 | P6 | **Payment providers** | Payment processing | Transaction references. Full card details are **not** held — the app records a purchase event, not a card | Purchases are recorded as events |
 | P7 | **Email delivery** | Not configured | None | **No provider is configured.** Sign-in and support mail are effectively unverified |
-| P8 | **Error/analytics service** | Deliberately absent | None | No analytics is installed, by choice, and the Privacy Policy says so |
+| P8 | **Error/analytics service (third party)** | Deliberately absent | None | Still no third-party service, by choice, and the Privacy Policy says so. Failure reports are first-party and land in P1 — see §2 |
 
 ## 2. The entries that matter most
 
@@ -52,6 +52,38 @@ There is no configured email provider. This has a consequence that is easy to mi
 published complaint procedure, the child-safety route and the security disclosure route **all
 rely on an inbox someone reads**. Until that inbox is reliably delivered to and monitored, the
 safety routes in documents 31 and 38 are weaker on the ground than they read on paper.
+
+### P8 — Error reporting
+
+The third-party entry stays absent, deliberately. What now exists is a first-party failure report: since
+the closed-testing build, the app sends its own JavaScript failures (an uncaught error, an unhandled
+rejection, a React render error) to the `report-error` edge function, which stores them in
+`public.app_error_reports`. No new processor is involved — the rows sit in the same database as
+everything else, under P1, and no SDK from a crash vendor is installed anywhere in the app or the
+native shell. That distinction is the whole reason it was built this way: a crash service would have
+made "no analytics or error-reporting SDK" in `advertising.html` §3 and `cookies.html` §4 false, and
+would have added a processor that receives athlete data.
+
+The data is narrow on purpose: the failure name and message, the route it happened on (ids removed,
+query string dropped), the app version, the platform and the device user-agent string. There is **no
+athlete column at all** — deliberately, not by omission. A row here is a shared counter for a failure
+across the whole tester population rather than a row belonging to one person, so an account id on it
+would make the row personal data of whoever reported it first while giving account deletion and an
+Article 20 export no honest answer (deleting it would destroy other testers' counts). Tokens, email
+addresses, URLs' query strings, long identifier-like runs, health values, message contents and
+photographs are removed on the device before a report is sent, and the server caps and re-validates
+every field. Nothing in these rows identifies an athlete, which is also why the account-deletion
+coverage guard needs no entry for the table: a table with no user-keyed column cannot leak a row.
+
+Two obligations follow, and neither is satisfied by this document:
+
+- **Play Console Data safety must declare it.** "Crash logs" and "Diagnostics" under app info and
+  performance, purpose app functionality. The form asks about the data, not the vendor, so "no SDK"
+  is not an answer it accepts. This is recorded in `PLAY_STORE.md`.
+- **Native crashes are not covered.** A Kotlin-side crash or a killed WebView process never reaches
+  JavaScript, so it cannot appear in this table and is only visible through Play Console's own Android
+  vitals. Nothing in this repository needs to change for that, but a quiet `app_error_reports` table
+  must not be read as "nothing crashed".
 
 ## 3. Not yet decided
 

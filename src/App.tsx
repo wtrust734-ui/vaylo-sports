@@ -105,6 +105,9 @@ const AdminPricing = lazy(() => import("./pages/AdminPricing"));
 const AdminRewards = lazy(() => import("./pages/AdminRewards"));
 const AdminEventPacks = lazy(() => import("./pages/AdminEventPacks"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
+// Failures the app reported about itself. The table is admin-only in RLS; this
+// screen is how an operator triages from a phone instead of a SQL console.
+const AdminErrorReports = lazy(() => import("./pages/AdminErrorReports"));
 const EventPackLanding = lazy(() => import("./pages/EventPackLanding"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const ChallengeDetail = lazy(() => import("./pages/ChallengeDetail"));
@@ -553,6 +556,7 @@ const App = () => (
                 <Route path="/admin/rewards" element={<RequireAdmin><AdminRewards /></RequireAdmin>} />
                 <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
                 <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
+                <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
                 <Route path="/collection" element={<Collection />} />
                 <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
                 <Route path="/settings/delete-account" element={<DeleteAccount />} />

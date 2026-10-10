@@ -34,6 +34,20 @@ export interface DeviceNotification {
   body: string;
   /** In-app route, or null for "just open the app". */
   link?: string | null;
+  /**
+   * Which KIND of reminder this is — one shade id per kind (see
+   * `notificationId`). Omitted means "general", which still gets its own slot so
+   * it cannot collide with a reminder that names its kind.
+   */
+  kind?: string;
+  /**
+   * The item within the kind, when the kind speaks about more than one thing
+   * (a specific challenge, say). A stable value here is what makes a repeat of
+   * the same reminder UPDATE the copy on the shade instead of stacking a second
+   * notification beside it. Never include a date: the date belongs to the dedup
+   * key that decides whether to speak at all.
+   */
+  itemKey?: string;
 }
 
 export type DeviceNotifyOutcome =
@@ -79,6 +93,41 @@ export const LOCAL_CHANNEL_REMINDERS = "vaylo_reminders";
 /** Notification ids must be stable 32-bit ints; this is the "vaylo" namespace. */
 const BASE_ID = 8_100_000;
 
+/**
+ * One id range per KIND of notification, and the item inside it.
+ *
+ * The id used to be derived from the current millisecond
+ * (`Math.abs(Date.parse(new Date().toISOString())) % 10_000`), which was wrong in
+ * both directions: two notifications shown in the same millisecond took the same
+ * id, so the second silently replaced the first, and the same logical reminder
+ * never reused an id anyway, so it could never update itself — the shade filled
+ * with copies of a streak warning that had already been acted on.
+ *
+ * The layout is structural rather than a hash over the whole scheme: the kind
+ * picks a range, so two different kinds can never land on the same id however
+ * their items hash, and within a kind the id comes from the ITEM (never the
+ * date, never the clock) so the same reminder updates in place.
+ */
+const KIND_RANGE = 100_000;
+const KIND_SLOT: Record<string, number> = { streak: 0, workout: 1, challenge: 2, general: 3 };
+
+/** djb2, bounded to one kind's range. Not a security boundary, just a spread. */
+function hashToRange(value: string, range: number): number {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) hash = ((hash << 5) + hash + value.charCodeAt(i)) | 0;
+  return Math.abs(hash) % range;
+}
+
+/**
+ * The shade id for one notification. Stable for the same kind and item; a
+ * different kind cannot collide with it by construction. Exported for the test
+ * that pins the two properties (no clock in the id, no cross-kind collision).
+ */
+export function notificationId(kind: string, itemKey: string): number {
+  const slot = KIND_SLOT[kind] ?? KIND_SLOT.general;
+  return BASE_ID + slot * KIND_RANGE + (itemKey ? hashToRange(itemKey, KIND_RANGE) : 0);
+}
+
 let permissionAsked = false;
 let channelReady = false;
 
@@ -113,7 +162,14 @@ async function ensureChannel(p: LocalNotificationsPlugin): Promise<void> {
       id: LOCAL_CHANNEL_REMINDERS,
       name: "Training reminders",
       description: "Training plan nudges, streak warnings and challenge deadlines.",
-      importance: 3,
+      // LOW (2), and it must match PushPlugin.kt, which creates this same id at
+      // IMPORTANCE_LOW. Android freezes a channel's importance at its first
+      // creation and silently ignores every later disagreement, so whichever of
+      // the two runs first would decide whether a streak alert buzzes at 06:00 —
+      // a coin toss, not a design. The channel is shared with push on purpose
+      // (one switch for one idea), which is exactly why both sides have to say
+      // the same thing.
+      importance: 2,
       visibility: 0,
     })
     .catch(() => {
@@ -139,7 +195,13 @@ export async function showDeviceNotification(
     await p.schedule({
       notifications: [
         {
-          id: BASE_ID + (Math.abs(Date.parse(new Date().toISOString())) % 10_000),
+          // Falls back to the title as the item, so two different general
+          // notifications still differ from one another rather than one quietly
+          // replacing the other.
+          id: notificationId(
+            notification.kind ?? "general",
+            notification.itemKey ?? (notification.kind ? "" : notification.title),
+          ),
           title: notification.title,
           body: notification.body,
           channelId: LOCAL_CHANNEL_REMINDERS,

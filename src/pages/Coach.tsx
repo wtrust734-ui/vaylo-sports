@@ -5,6 +5,7 @@ import { DISCLAIMERS } from "@/config/disclaimers";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { readFailed } from "@/lib/dbRead";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { useTranslation } from "react-i18next";
 import { isCurrentLanguageRtl } from "@/i18n";
@@ -42,13 +43,20 @@ const Coach = () => {
   useEffect(() => {
     if (!user) return;
     supabase.from("coach_conversations").select("*").eq("user_id", user.id)
-      .order("updated_at", { ascending: false }).then(({ data }) => setConvs(data || []));
+      .order("updated_at", { ascending: false }).then(({ data, error }) => {
+        // A failed read must not read as "you have no conversations" — the
+        // sidebar would look like every chat the athlete ever had was deleted.
+        if (readFailed(error, "your coach conversations")) return;
+        setConvs(data || []);
+      });
   }, [user]);
 
   useEffect(() => {
     if (!activeConv || !user) { setMessages([]); return; }
     supabase.from("coach_messages").select("*").eq("conversation_id", activeConv)
-      .order("created_at", { ascending: true }).then(({ data }) => {
+      .order("created_at", { ascending: true }).then(({ data, error }) => {
+        // An empty transcript has to mean "no messages yet".
+        if (readFailed(error, "this conversation")) return;
         setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
       });
   }, [activeConv, user]);
@@ -57,7 +65,10 @@ const Coach = () => {
 
   const loadMemories = async () => {
     if (!user) return;
-    const { data } = await supabase.from("coach_memories").select("*").eq("user_id", user.id).order("updated_at", { ascending: false });
+    const { data, error } = await supabase.from("coach_memories").select("*").eq("user_id", user.id).order("updated_at", { ascending: false });
+    // "Nothing remembered yet" is a statement about the athlete; only a read
+    // that succeeded gets to make it.
+    if (readFailed(error, "what Coach remembers")) return;
     setMemories(data || []);
   };
 
@@ -106,11 +117,12 @@ const Coach = () => {
   const parseMemorySaves = useCallback(async (_text: string) => {
     if (!user) return;
     // Re-read the user's memories so the sidebar reflects what the server saved.
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("coach_memories")
       .select("*")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
+    if (readFailed(error, "what Coach remembers")) return;
     setMemories(data ?? []);
   }, [user]);
 

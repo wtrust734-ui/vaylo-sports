@@ -5,6 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
+import { readFailed } from "@/lib/dbRead";
+import { formatDate } from "@/i18n/format";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 
 type Tab = "events" | "rivals";
@@ -18,6 +20,9 @@ const Events = () => {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("events");
   const [events, setEvents] = useState<EventRow[]>([]);
+  // The Rivals tab reads an empty list as "you have not created an event yet",
+  // which a failed read cannot support.
+  const [eventsFailed, setEventsFailed] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
   const [rivals, setRivals] = useState<RivalRow[]>([]);
@@ -59,19 +64,22 @@ const Events = () => {
 
   const fetchEvents = async () => {
     if (!user) return;
-    const { data } = await supabase.from("events").select("*").eq("user_id", user.id).order("event_date", { ascending: true });
+    const { data, error } = await supabase.from("events").select("*").eq("user_id", user.id).order("event_date", { ascending: true });
+    setEventsFailed(readFailed(error, "your events"));
     setEvents(data || []);
   };
 
   const fetchRivals = async (eventId: string) => {
     if (!user) return;
-    const { data } = await supabase.from("event_rivals").select("*").eq("event_id", eventId).eq("user_id", user.id);
+    const { data, error } = await supabase.from("event_rivals").select("*").eq("event_id", eventId).eq("user_id", user.id);
+    readFailed(error, "the rivals for this event");
     setRivals(data || []);
   };
 
   const fetchAllRivals = async () => {
     if (!user) return;
-    const { data } = await supabase.from("event_rivals").select("*, events(title, event_date, sport)").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("event_rivals").select("*, events(title, event_date, sport)").eq("user_id", user.id).order("created_at", { ascending: false });
+    readFailed(error, "your rivals");
     setAllRivals((data as RivalWithEvent[] | null) || []);
   };
 
@@ -226,7 +234,7 @@ const Events = () => {
             {getCountdown(selectedEvent.event_date)}
           </motion.p>
           <p className="text-sm text-muted-foreground mt-2">
-            {new Date(selectedEvent.event_date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {formatDate(selectedEvent.event_date, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
           {selectedEvent.location && <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1"><MapPin size={12} />{selectedEvent.location}</p>}
           {selectedEvent.distance_km && <p className="text-xs text-muted-foreground mt-1">{Number(selectedEvent.distance_km)} km · {selectedEvent.sport}</p>}
@@ -408,7 +416,13 @@ const Events = () => {
           </div>
         </div>
 
-        {events.length === 0 ? (
+        {eventsFailed ? (
+          <div className="px-5 text-center py-12">
+            <p className="text-sm text-muted-foreground mb-3">
+              We couldn't load your events just now. Nothing has been changed — check your connection and try again.
+            </p>
+          </div>
+        ) : events.length === 0 ? (
           <div className="px-5 text-center py-12">
             <p className="text-sm text-muted-foreground mb-3">Create an event first before adding rivals.</p>
             <motion.button onClick={() => { setTab("events"); setShowCreate(true); }} whileTap={{ scale: 0.98 }}
@@ -559,7 +573,7 @@ const Events = () => {
                   <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-full">{getCountdown(evt.event_date)}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Calendar size={12} />{new Date(evt.event_date).toLocaleDateString()}</span>
+                  <span className="flex items-center gap-1"><Calendar size={12} />{formatDate(evt.event_date)}</span>
                   {evt.location && <span className="flex items-center gap-1"><MapPin size={12} />{evt.location}</span>}
                   {evt.distance_km && <span>{Number(evt.distance_km)} km</span>}
                 </div>
@@ -611,7 +625,7 @@ const Events = () => {
                 <div>
                   <h4 className="font-semibold text-sm">{evt.title}</h4>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(evt.event_date).toLocaleDateString()}
+                    {formatDate(evt.event_date)}
                     {evt.actual_time && ` · ${evt.actual_time}`}
                     {evt.actual_position && ` · #${evt.actual_position}`}
                   </p>

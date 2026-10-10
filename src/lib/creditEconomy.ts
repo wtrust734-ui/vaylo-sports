@@ -3,6 +3,7 @@
 // Local defaults are merged with remote config from `economy_config` table.
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import type { Json } from "@/integrations/supabase/types";
 import { isOfferLive } from "@/lib/offerWindow";
 
@@ -109,11 +110,15 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
     if (region) country = region;
   } catch { /* locale API unavailable */ }
 
-  const { data: map } = await supabase
+  const { data: map, error: mapError } = await supabase
     .from("country_pricing_map")
     .select("country_code, tier_code, currency")
     .eq("country_code", country)
     .maybeSingle();
+  // No row means "not mapped", which correctly falls back to the default tier;
+  // a FAILED read takes the same branch, and that one is worth a trace because
+  // it quietly shows the wrong market's prices.
+  readFailed(mapError, "your regional prices", { quiet: true });
 
   const result = map
     ? { country, currency: map.currency, tier_code: map.tier_code }

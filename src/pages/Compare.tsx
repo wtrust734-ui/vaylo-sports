@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Trophy, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { calculateVPR, type MetricRow, type VPRScores } from "@/lib/performance";
 import { Radar, RadarChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, ResponsiveContainer } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,6 +27,7 @@ const Compare = () => {
   const { user, profile } = useAuth();
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const userSport = profile?.sport?.split(",")[0]?.trim() || "Running";
   const [compareSport, setCompareSport] = useState(userSport);
 
@@ -35,12 +37,24 @@ const Compare = () => {
   useEffect(() => { if (user) void load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200);
+    const { data, error } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200);
+    setLoadFailed(readFailed(error, "your performance metrics"));
     setMetrics(data || []);
     setLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+
+  // An empty metrics list draws a zeroed radar chart, which reads as "you score
+  // nothing" rather than "we could not read your metrics".
+  if (loadFailed) return (
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto">
+      <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground">
+        We could not load your performance metrics, so there is nothing honest to compare yet. This is a
+        loading problem — try again in a moment.
+      </p>
+    </div>
+  );
 
   const userVpr = calculateVPR(metrics, userSport);
   const elite = ELITES[compareSport] || ELITES.default;

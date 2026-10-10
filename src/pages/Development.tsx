@@ -3,7 +3,9 @@ import { motion } from "framer-motion";
 import { TrendingUp, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { projectTrajectory } from "@/lib/performance";
+import { formatDate } from "@/i18n/format";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 
 const Development = () => {
@@ -11,24 +13,48 @@ const Development = () => {
   type SnapshotRow = { created_at: string; overall_vpr: number; speed_index: number; power_index: number; endurance_capacity: number; [key: string]: unknown };
   const [snaps, setSnaps] = useState<SnapshotRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const age = profile?.date_of_birth ? Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000) : undefined;
 
   useEffect(() => { if (user) load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("vpr_snapshots").select("*").eq("user_id", user.id).order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("vpr_snapshots")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      // Bounded: a snapshot is written at most once per session, so 500 is a
+      // decade of history — far more than this chart draws, and it stops a
+      // table that somehow grew an order of magnitude from being pulled into
+      // one render.
+      .limit(500);
+    setLoadFailed(readFailed(error, "your VPR snapshots"));
     setSnaps(data || []); setLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   const proj = projectTrajectory(snaps, age);
-  const data = snaps.map((s) => ({ d: new Date(s.created_at).toLocaleDateString(), VPR: s.overall_vpr, Speed: s.speed_index, Power: s.power_index, Endurance: s.endurance_capacity }));
-  const flag = proj.slope > 1 ? "Late bloomer trajectory" : proj.slope > 0.3 ? "Steady upward trend" : proj.slope < -0.3 ? "Stagnation — change stimulus" : "Plateau";
+  const data = snaps.map((s) => ({ d: formatDate(s.created_at), VPR: s.overall_vpr, Speed: s.speed_index, Power: s.power_index, Endurance: s.endurance_capacity }));
+  // With no snapshots to read, the slope is 0 and this would print "Plateau" — a
+  // verdict about the athlete drawn from a failed query.
+  const flag = loadFailed
+    ? "Trajectory unavailable — snapshots could not be loaded"
+    : proj.slope > 1 ? "Late bloomer trajectory" : proj.slope > 0.3 ? "Steady upward trend" : proj.slope < -0.3 ? "Stagnation — change stimulus" : "Plateau";
 
   return (
     <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
+      {loadFailed && (
+        <p
+          role="alert"
+          className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground"
+        >
+          We could not load your VPR snapshots, so anything projected below would be a guess. This is a
+          loading problem, not an empty history — try again in a moment.
+        </p>
+      )}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><TrendingUp size={14} /> Athlete Development Map</div>
         <h1 className="text-4xl font-display font-bold mt-2">Development <span className="text-gradient-electric">Trajectory</span></h1>

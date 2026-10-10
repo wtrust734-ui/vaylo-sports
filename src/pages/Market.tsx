@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Zap, Coins, X, Infinity as InfinityIcon, Gift, Flame, Clock, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { useToast } from "@/hooks/use-toast";
 import {
   purchaseItems,
@@ -108,8 +109,11 @@ const Market = () => {
       if (user) setClaimedOffers(await claimedOfferSlugs(user.id));
       let regionValue = cfg.region;
       if (user) {
-        const { data: settings } = await supabase
+        const { data: settings, error: settingsError } = await supabase
           .from("user_settings").select("currency").eq("user_id", user.id).maybeSingle();
+        // Quiet: the region default is a correct answer to fall back to, so this
+        // never misstates a price — it just may not be the athlete's own currency.
+        readFailed(settingsError, "your currency", { quiet: true });
         if (settings?.currency) regionValue = { ...regionValue, currency: settings.currency };
       }
       setRegion(regionValue);
@@ -118,7 +122,12 @@ const Market = () => {
     })();
     if (user) {
       supabase.from("basket_items").select("*").eq("user_id", user.id)
-        .then(({ data }) => setBasket(data || []));
+        .then(({ data, error }) => {
+          // An empty basket is what the athlete sees if this read fails, and the
+          // basket is where a purchase they already started is sitting.
+          readFailed(error, "your basket");
+          setBasket(data || []);
+        });
     }
   }, [user]);
 

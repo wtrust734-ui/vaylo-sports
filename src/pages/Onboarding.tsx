@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin, Dumbbell, Ruler, Weight } from "lucide-react";
 import { toast } from "sonner";
+import { readFailed } from "@/lib/dbRead";
 import { AUDIENCE_COPY, ageBand, earliestDob, registrationAgeRefusalReason, validateDob } from "@/lib/age";
 import { localDateKey } from "@/lib/dates";
 import CountrySelect from "@/components/geo/CountrySelect";
@@ -88,11 +89,14 @@ export default function Onboarding() {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      const { data: row } = await supabase
+      const { data: row, error: regionReadError } = await supabase
         .from("user_region")
         .select("country")
         .eq("user_id", user.id)
         .maybeSingle();
+      // Prefill only: a failed read means the country is not remembered, which
+      // the athlete can simply pick again. Logged, not announced.
+      readFailed(regionReadError, "your saved country", { quiet: true });
       if (!cancelled && row?.country) {
         setData((prev) => ({ ...prev, country: prev.country || row.country }));
       }
@@ -153,11 +157,18 @@ export default function Onboarding() {
     try {
       // Merge rather than overwrite: extended_profile is shared JSON and other
       // flows may add keys to it later.
-      const { data: current } = await supabase
+      const { data: current, error: profileReadError } = await supabase
         .from("profiles")
         .select("extended_profile")
         .eq("user_id", user.id)
         .maybeSingle();
+      // The write below merges onto this row. Merging onto a read that failed
+      // would drop every key already in `extended_profile` — it is shared JSON
+      // that other flows add to — so the save stops here instead. Thrown like
+      // the update's own error, so it lands in the same catch and resets busy.
+      if (readFailed(profileReadError, "your existing profile details", { quiet: true })) {
+        throw new Error("We couldn't read your saved profile, so nothing was saved. Please try again.");
+      }
       const existingExtended = (current?.extended_profile ?? {}) as Record<string, unknown>;
 
       const { error } = await supabase.from("profiles").update({

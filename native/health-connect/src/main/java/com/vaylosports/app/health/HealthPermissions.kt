@@ -9,9 +9,9 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 
 /**
- * The complete list of Health Connect permissions Vaylo Sports requests.
+ * The complete list of Health Connect permissions Vaylo requests.
  *
- * Deliberately minimal — read access only, only data Vaylo Sports actually uses:
+ * Deliberately minimal — read access only, only data Vaylo actually uses:
  * workouts, distance, active calories, heart rate, steps, sleep. New data
  * types are added by appending one entry here and bumping PERMISSIONS_VERSION;
  * the JS layer versions its stored consent against it so added permissions

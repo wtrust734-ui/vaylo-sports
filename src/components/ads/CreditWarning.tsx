@@ -33,7 +33,17 @@ const CreditWarning = () => {
         // Matches QuickActionSheet and the Coach composer.
         className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] left-4 right-4 z-[60] bg-gradient-card border border-energy/30 rounded-2xl p-4 shadow-electric"
       >
-        <button onClick={() => { setShow(false); setDismissed(true); }} className="absolute top-3 right-3 text-muted-foreground"><X size={16} /></button>
+        {/* Named, and 44px: it was a 16px glyph with no label, so the only
+            control that dismisses this card was invisible to a screen reader
+            and hard to hit on a phone. */}
+        <button
+          type="button"
+          aria-label="Dismiss low-credit warning"
+          onClick={() => { setShow(false); setDismissed(true); }}
+          className="absolute end-2 top-2 flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground active:opacity-70"
+        >
+          <X size={16} aria-hidden />
+        </button>
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 rounded-full bg-energy/20"><Zap size={20} className="text-energy" /></div>
           <div>

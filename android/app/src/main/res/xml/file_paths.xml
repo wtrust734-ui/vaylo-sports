@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    What this app's FileProvider is willing to hand out.
+
+    Only the cache directory. The camera capture writes a throwaway JPEG into
+    `cacheDir/vaylo-capture` and immediately reads it back for downscaling, so
+    that is the only file this provider ever needs to serve — and the URI granted
+    to the camera app is scoped to the one file it is given.
+
+    There used to be an `<external-path name="my_images" path="." />` entry here
+    as well. Nothing created a URI from it (grep CameraCapturePlugin: every URI
+    comes from cacheDir), so it was dead configuration whose only effect was to
+    let a granted URI address anything under the shared external storage root.
+    Dead configuration with a security consequence is worse than none.
+-->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
 </paths>

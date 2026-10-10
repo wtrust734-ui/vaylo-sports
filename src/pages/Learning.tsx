@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { LESSONS, categoryFor, difficultyFor, typeFor, type Lesson } from "@/lib/learningContent";
 import {
   buildVisibleLessons,
@@ -54,12 +55,16 @@ export default function Learning() {
     localStorage.setItem("vaylo:learning:sport", sport);
   }, [sport]);
 
+  // Without this, a failed read left `progress` empty and every lesson rendered
+  // as "not started" — the app telling an athlete their progress was gone.
+  const [progressFailed, setProgressFailed] = useState(false);
   const load = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
     }
-    const { data } = await supabase.from("learning_progress").select("*").eq("user_id", user.id);
+    const { data, error } = await supabase.from("learning_progress").select("*").eq("user_id", user.id);
+    setProgressFailed(readFailed(error, "your lesson progress"));
     setProgress((data || []) as ProgressRecord[]);
     setLoading(false);
   }, [user]);
@@ -184,6 +189,15 @@ export default function Learning() {
 
   return (
     <main className="min-h-screen overflow-hidden pb-28 pt-[var(--vaylo-screen-top)]">
+      {progressFailed && (
+        <p
+          role="alert"
+          className="mx-5 mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-[12px] leading-relaxed text-foreground"
+        >
+          We could not load your lesson progress, so the badges below show nothing completed. This is a
+          loading problem, not a reset — what you have done is still saved.
+        </p>
+      )}
       {/* 1 — Hero */}
       <section className="mx-auto max-w-6xl px-5">
         <div className="relative overflow-hidden rounded-[2rem] border border-electric-purple/25 bg-gradient-to-br from-electric-purple/20 via-card to-navy-deep p-6 shadow-card sm:p-9">

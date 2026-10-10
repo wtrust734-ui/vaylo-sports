@@ -30,9 +30,11 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import {
   clearQueue,
+  dismissFailures,
   flushQueue,
   insertOrQueue,
   isNetworkError,
+  pendingFailures,
   pendingWrites,
   subscribeToQueue,
   updateOrQueue,
@@ -357,5 +359,76 @@ describe("flushQueue", () => {
   it("does nothing at all when the queue is empty", async () => {
     expect(await flushQueue()).toBe(0);
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("dead letters — a change given up on is still reported", () => {
+  it("records a rejected write with the server's own reason", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "refused", n: 1 });
+    insert.mockReset();
+    insert.mockResolvedValue({ error: rejectError("invalid input value for enum") });
+
+    expect(await flushQueue()).toBe(0);
+
+    // Out of the queue (it could never succeed and would block the rest), but
+    // not out of the app's knowledge.
+    expect(pendingWrites()).toHaveLength(0);
+    expect(pendingFailures()).toHaveLength(1);
+    expect(pendingFailures()[0]).toMatchObject({
+      id: "refused",
+      table: "workouts",
+      reason: "rejected",
+      message: "invalid input value for enum",
+      code: "23514",
+    });
+  });
+
+  it("records an update whose row was deleted before it could be sent", async () => {
+    updateWhere.mockResolvedValue({ error: offlineError() });
+    await updateOrQueue("life_events", "gone", { note: "x" });
+    updateWhere.mockReset();
+    updateWhere.mockResolvedValue({
+      error: rejectError("JSON object requested, no rows returned", "PGRST116"),
+    });
+
+    await flushQueue();
+
+    expect(pendingFailures()[0]).toMatchObject({
+      id: "gone",
+      table: "life_events",
+      reason: "row_missing",
+      code: "PGRST116",
+    });
+  });
+
+  it("records the oldest change when the queue overflows instead of dropping it in silence", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    for (let i = 0; i <= 100; i++) await insertOrQueue("workouts", { id: `w${i}`, n: i });
+
+    // 101 writes against a cap of 100: the oldest is the one that pays for it.
+    expect(pendingWrites()).toHaveLength(100);
+    expect(pendingWrites()[0].id).toBe("w1");
+    expect(pendingFailures()).toHaveLength(1);
+    expect(pendingFailures()[0]).toMatchObject({ id: "w0", table: "workouts", reason: "overflow" });
+  });
+
+  it("keeps them until they are acknowledged, across later successful drains", async () => {
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "a", n: 1 });
+    insert.mockReset();
+    insert.mockResolvedValue({ error: rejectError("row-level security") });
+    await flushQueue();
+
+    // A drain that succeeds does not erase the record of one that was refused.
+    insert.mockResolvedValue({ error: offlineError() });
+    await insertOrQueue("workouts", { id: "b", n: 2 });
+    insert.mockReset();
+    insert.mockResolvedValue({ error: null });
+    expect(await flushQueue()).toBe(1);
+    expect(pendingFailures()).toHaveLength(1);
+
+    dismissFailures();
+    expect(pendingFailures()).toHaveLength(0);
   });
 });

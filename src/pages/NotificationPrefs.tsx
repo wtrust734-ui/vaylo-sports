@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
 import { Bell, BellOff, CheckCircle2, Smartphone } from "lucide-react";
@@ -40,6 +41,9 @@ type PushState =
 export default function NotificationPrefs() {
   const { user } = useAuth();
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  // The defaults below are the APP's defaults. A failed read must not present
+  // them as the athlete's saved choices without saying so.
+  const [prefsFailed, setPrefsFailed] = useState(false);
   const [quiet, setQuiet] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const [loading, setLoading] = useState(true);
   const [push, setPush] = useState<PushState>({ kind: "checking" });
@@ -48,7 +52,8 @@ export default function NotificationPrefs() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase.from("notification_prefs").select("*").eq("user_id", user.id).maybeSingle();
+      const { data, error } = await supabase.from("notification_prefs").select("*").eq("user_id", user.id).maybeSingle();
+      setPrefsFailed(readFailed(error, "your notification settings"));
       setPrefs(data || KEYS.reduce((a, k) => ({ ...a, [k.key]: true }), {}));
       if (data?.quiet_start && data?.quiet_end) {
         // time columns come back as "HH:MM:SS"; <input type="time"> wants "HH:MM".
@@ -179,6 +184,16 @@ export default function NotificationPrefs() {
           </div>
         </div>
       </div>
+
+      {prefsFailed && (
+        <p
+          role="alert"
+          className="mb-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-[12px] leading-relaxed text-foreground"
+        >
+          We could not load your notification settings, so the switches below show the app's defaults
+          rather than your saved choices. Changing one will save it.
+        </p>
+      )}
 
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : (
         <div className="space-y-2">

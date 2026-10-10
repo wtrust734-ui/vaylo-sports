@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, X, Trophy, HeartPulse, Pencil, Apple, Gamepad2 } from "lucide-react";
@@ -33,6 +33,29 @@ const QuickActionSheet = () => {
   const [open, setOpen] = useState(false);
   const personalization = usePersonalization();
   const actions = personalization.visible([...ACTIONS]);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const fabRef = useRef<HTMLButtonElement | null>(null);
+
+  // The sheet declares itself a dialog, so it takes on the dialog contract:
+  // Escape closes it, focus lands on the panel when it opens and returns to the
+  // button that opened it. Without that, a keyboard or screen-reader athlete
+  // opened it and was left tabbing through the page underneath.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    panelRef.current?.focus();
+    // Captured now rather than read in the cleanup: by then React may have
+    // re-pointed the ref (the rule exists because that is the normal case), and
+    // focus has to go back to the button that actually opened the sheet.
+    const fab = fabRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      fab?.focus();
+    };
+  }, [open]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };
 
@@ -59,6 +82,9 @@ const QuickActionSheet = () => {
 
       <motion.div
         role="dialog"
+        aria-modal={open}
+        tabIndex={-1}
+        ref={panelRef}
         aria-label={t("navigation.quickActions")}
         aria-hidden={!open}
         initial={{ y: 24, opacity: 0 }}
@@ -115,6 +141,7 @@ const QuickActionSheet = () => {
         type="button"
         aria-label={open ? t("navigation.closeQuickActions") : t("navigation.openQuickActions")}
         aria-expanded={open}
+        ref={fabRef}
         whileTap={{ scale: 0.97 }}
         onClick={() => setOpen((o) => !o)}
         className="press relative z-20 -mt-2 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary border border-white/15"

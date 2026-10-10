@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, Copy, Download, Mail, UserMinus2, UserPlus2 } from "lucide-react";
+import { formatDate } from "@/i18n/format";
 
 /**
  * The waiting list, as the operator sees it.
@@ -213,11 +214,7 @@ export default function AdminWaitlist() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {row.display_name ? `${row.display_name} · ` : ""}
                 {row.source} · joined{" "}
-                {new Date(row.created_at).toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {formatDate(row.created_at, { day: "numeric", month: "short", year: "numeric" })}
                 {row.unsubscribed_at && " · removed"}
               </p>
             </div>

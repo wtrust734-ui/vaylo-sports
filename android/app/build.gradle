@@ -187,9 +187,25 @@ android {
         // onboarding instead of living only in the legal pages. WebView-only —
         // no manifest, permission or plugin change.
         //
+        // 22 / 1.2.18 is the closed-test feedback release, and it exists for one
+        // reason: a closed test where failures never arrive is a test of the
+        // happy path. The app now reports its own JavaScript failures — an
+        // uncaught error, an unhandled rejection, a React render error — to this
+        // project's own backend, where they are grouped one row per failure per
+        // build and triaged at /admin/errors. It is deliberately NOT a crash SDK:
+        // the published advertising and cookie documents promise there is no
+        // analytics or error-reporting SDK, and a first-party reporter keeps that
+        // promise true. Tokens, email addresses, URL query strings, long
+        // identifier-like runs and health data are stripped on the device before
+        // a report is sent, and a report carries no athlete identifier at all.
+        // Native crashes — Kotlin, or the WebView process being killed — cannot
+        // reach JavaScript and stay with Play Console's Android vitals. The
+        // published privacy policy now describes these reports. WebView-only —
+        // no manifest, permission or plugin change.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 21
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.17"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 22
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.18"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

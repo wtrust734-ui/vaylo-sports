@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { loadPlugin, openExternal } from "@/lib/platform";
 import { readPurchaseError } from "@/lib/billing";
 import {
@@ -440,10 +441,14 @@ export async function fetchUndeliveredOrders(coachId: string): Promise<CoachOrde
   const paid = orders.filter((o) => o.status === "paid");
   if (paid.length === 0) return [];
 
-  const { data: delivered } = await supabase
+  const { data: delivered, error: deliveredError } = await supabase
     .from("coach_deliveries")
     .select("order_id")
     .eq("coach_id", coachId);
+  // These are the orders already delivered. Failed and read as empty, the coach's
+  // queue shows work they have finished as outstanding, and the screen asks them
+  // to deliver it a second time.
+  readFailed(deliveredError, "your delivered orders", { quiet: true });
   const done = new Set((delivered ?? []).map((d) => d.order_id));
   return paid.filter((o) => !done.has(o.id));
 }

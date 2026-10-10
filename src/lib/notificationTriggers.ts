@@ -15,6 +15,7 @@
 // `vaylo:<kind>:<yyyy-mm-dd>`. Each kind fires at most once per day.
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { localDateKey } from "./dates";
 import { showDeviceNotification } from "./localNotifications";
 
@@ -46,12 +47,18 @@ async function insertOncePerDay(
 ): Promise<boolean> {
   const today = localDateKey();
   const dedupKey = `vaylo:${kind}:${today}`;
-  const { data: existing } = await supabase
+  const { data: existing, error: dedupError } = await supabase
     .from("notifications")
     .select("id")
     .eq("user_id", userId)
     .eq("link", dedupKey)
     .maybeSingle();
+  if (readFailed(dedupError, "your notifications", { quiet: true })) {
+    // The dedup read is what keeps a trigger to one message a day. If it cannot
+    // be answered, the honest outcome is silence rather than a second copy of
+    // something the athlete may already have been told.
+    return false;
+  }
   if (existing) return false;
   const { error } = await supabase.from("notifications").insert({
     user_id: userId,
@@ -72,7 +79,7 @@ async function insertOncePerDay(
   try {
     const prefs = await prefsFor(userId);
     if (!isWithinQuietHours(prefs)) {
-      void showDeviceNotification({ title, body, link: link ?? null });
+      void showDeviceNotification({ title, body, link: link ?? null, ...notificationIdentity(kind) });
     }
   } catch {
     // A prefs read that fails must not lose the in-app notification, which is
@@ -82,14 +89,36 @@ async function insertOncePerDay(
 }
 
 async function prefsFor(userId: string): Promise<Record<string, boolean>> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("notification_prefs")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
-  // Missing row = user never opened settings = everything on (app default).
+  // Quiet: this runs on app load and on every trigger, and a toast per attempt
+  // would be noise. The read failing still has to be visible somewhere, and the
+  // console trace is that place — see lib/dbRead.ts.
+  //
+  // Missing row = user never opened settings = everything on (app default), and
+  // a failed read now lands on the same default deliberately: the alternative is
+  // silently treating an outage as "the athlete muted everything", which would
+  // suppress reminders they asked for.
+  readFailed(error, "your notification settings", { quiet: true });
   // Cast via unknown: the row mixes booleans with quiet_start/end strings.
   return (data as unknown as Record<string, boolean>) || {};
+}
+
+/**
+ * Which shade id a trigger's notification belongs to: one slot per KIND, and
+ * the item inside it (a challenge's own id). Never the date — the date is in the
+ * dedup key that decides whether to speak, and putting it in the id would make
+ * each day's reminder a new notification instead of an update of the one the
+ * athlete already has on their shade. See notificationId in lib/localNotifications.ts.
+ */
+function notificationIdentity(kind: string): { kind: string; itemKey: string } {
+  if (kind === "streak") return { kind: "streak", itemKey: "" };
+  if (kind === "workout") return { kind: "workout", itemKey: "" };
+  // `chal-<uuid>` — one reminder per challenge, updating in place.
+  return { kind: "challenge", itemKey: kind.replace(/^chal-/, "") };
 }
 
 /** True when the user's day boundary has rolled over since the last check. */
@@ -135,7 +164,19 @@ export async function checkStreakAlert(
   }
 }
 
-/** Nudge when today's training-plan session is still untouched in the evening. */
+/**
+ * Nudge in the evening when this WEEK's training-plan sessions are still
+ * untouched.
+ *
+ * The scope is the week, not the day, and the copy now says so. It used to say
+ * "Today's session": the sessions are every non-rest, non-skipped session of the
+ * current week with no day filter, so after 17:00 on a Monday the app could nudge
+ * about Wednesday's session and call it today's. A reminder that names the wrong
+ * day is exactly the overstatement this app's copy must not make. Filtering to
+ * today would be the other way to make the two agree, but the week is the honest
+ * unit here: a missed Tuesday is still waiting, and late in the week is when it
+ * matters.
+ */
 export async function checkWorkoutReminder(
   userId: string,
   plan: { id: string; title: string; week_current: number; duration_weeks: number; plan_data: unknown } | null,
@@ -148,15 +189,16 @@ export async function checkWorkoutReminder(
   const week = (plan.plan_data as { week: number; sessions?: { skipped?: boolean; isRest?: boolean }[] }[] | null)?.find(
     (w) => w.week === plan.week_current,
   );
-  const todaySessions = week?.sessions ?? [];
-  const actionable = todaySessions.filter((s) => !s.skipped && !s.isRest);
-  if (!actionable.length) return; // rest day — nothing to remind about
+  const weekSessions = week?.sessions ?? [];
+  const actionable = weekSessions.filter((s) => !s.skipped && !s.isRest);
+  if (!actionable.length) return; // a week of rest — nothing to remind about
+  const remaining = actionable.length;
   await insertOncePerDay(
     userId,
     "workout",
     "workout_reminder",
-    "Today's session is waiting",
-    `Week ${plan.week_current} of ${plan.title} has ${actionable.length} session${actionable.length === 1 ? "" : "s"} waiting.`,
+    remaining === 1 ? "A session is still waiting this week" : `${remaining} sessions still to do this week`,
+    `Week ${plan.week_current} of ${plan.title} has ${remaining} session${remaining === 1 ? "" : "s"} still to do.`,
     // Deep-linked to the plan, not to /workouts. The workout log screen was
     // removed; the plan is where those sessions are still listed and can be
     // ticked off, so "left to log" also went — there is nothing to log.

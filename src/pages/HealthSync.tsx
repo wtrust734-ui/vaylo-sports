@@ -21,6 +21,7 @@ import { oauthStart, oauthDisconnect, parseWearableRedirect, stripWearableRedire
 import { fetchWearableConnections, type WearableConnectionMap } from "@/lib/health/connections";
 import { correctedSportColumns, loadColumnsFor } from "@/lib/recoveryPlanning";
 import { Link } from "react-router-dom";
+import { formatDate, formatDateTimeExact } from "@/i18n/format";
 import {
   DEFAULT_IMPORT_WINDOW,
   IMPORT_WINDOWS,
@@ -671,7 +672,7 @@ const HealthSync = () => {
           )}
           {lastSync && (
             <p className="mt-2 text-[12px] text-muted-foreground flex items-center gap-1">
-              <Clock size={10} /> Last sync {new Date(lastSync).toLocaleString()}
+              <Clock size={10} /> Last sync {formatDateTimeExact(lastSync)}
             </p>
           )}
 
@@ -913,7 +914,7 @@ const HealthSync = () => {
                               <p className="text-xs font-bold leading-tight">{w.title ?? ACTIVITY_LABELS[w.activity_type] ?? `Activity ${w.activity_type}`}</p>
                               <span className="shrink-0 rounded-full bg-white/[0.06] border border-white/[0.06] px-2 py-0.5 text-[12px] font-semibold text-muted-foreground">{providerLabel}</span>
                             </div>
-                            <p className="text-[12px] font-mono text-muted-foreground mt-0.5">{new Date(w.start_time).toLocaleString()}</p>
+                            <p className="text-[12px] font-mono text-muted-foreground mt-0.5">{formatDateTimeExact(w.start_time)}</p>
                             <div className="mt-1.5 grid grid-cols-3 gap-2 text-[12px]">
                               <span className="flex items-center gap-1 text-muted-foreground"><Timer size={12} /> {fmtDuration(w.duration_seconds)}</span>
                               <span className="flex items-center gap-1 text-muted-foreground"><Activity size={12} /> {fmtDist(w.distance_meters)}</span>
@@ -935,7 +936,7 @@ const HealthSync = () => {
                       {recentSamples.map((s) => (
                         <div key={s.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur px-3 py-2 text-xs">
                           <span className="flex items-center gap-1.5 font-semibold capitalize">{s.metric === "sleep" ? <Moon size={12} /> : s.metric === "steps" ? <Footprints size={12} /> : <Activity size={12} />}{s.metric}<span className="rounded-full bg-white/[0.06] border border-white/[0.06] px-1.5 py-0.5 text-[12px] font-mono text-muted-foreground ml-1">{s.source ?? "—"}</span></span>
-                          <span className="text-muted-foreground font-mono text-[12px]">{s.metric === "sleep" && s.value == null ? `${Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000 * 10) / 10}h` : s.value != null ? `${s.value} ${s.unit}` : "—"} · {new Date(s.start_time).toLocaleDateString()}</span>
+                          <span className="text-muted-foreground font-mono text-[12px]">{s.metric === "sleep" && s.value == null ? `${Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000 * 10) / 10}h` : s.value != null ? `${s.value} ${s.unit}` : "—"} · {formatDate(s.start_time)}</span>
                         </div>
                       ))}
                     </div>

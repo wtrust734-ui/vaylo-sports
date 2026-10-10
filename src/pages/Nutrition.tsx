@@ -9,6 +9,7 @@ import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { readFailed } from "@/lib/dbRead";
 import { useNavigate } from "react-router-dom";
 import { creditCost } from "@/lib/credits";
 // The AI plan path: the server charges and refunds (see the function's own
@@ -134,27 +135,39 @@ const Nutrition = () => {
 
   useEffect(() => { if (user) { fetchWater(); fetchMeals(); fetchSettings(); fetchPlans(); } }, [user]);
 
+  // Every read below is a claim about the athlete once it renders: "no goal
+  // saved", "nothing drunk today", "no meals logged", "no plans". A read that
+  // failed says none of that, so each one reports the failure and leaves the
+  // number it already had rather than replacing it with a zero.
   const fetchSettings = async () => {
     if (!user) return;
-    const { data } = await supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle();
+    const { data, error } = await supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle();
+    // Quiet: the goal has a sane default and this refresh is not something the
+    // athlete is waiting on. Logged, not announced.
+    if (readFailed(error, "your hydration goal", { quiet: true })) return;
     if (data?.water_goal_ml) { setWaterGoal(data.water_goal_ml); setNewWaterGoal(String(data.water_goal_ml)); }
   };
 
   const fetchWater = async () => {
     if (!user) return;
-    const { data } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
+    const { data, error } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
+    if (readFailed(error, "today's water log")) return;
     setWaterMl((data || []).reduce((sum, r) => sum + r.amount_ml, 0));
   };
 
   const fetchMeals = async () => {
     if (!user) return;
-    const { data } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
+    const { data, error } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
+    if (readFailed(error, "today's meals")) return;
     setMeals(data || []);
   };
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    // A plan can be one the athlete paid for week by week; an unreadable list
+    // must not read as "you have no plans".
+    if (readFailed(error, "your nutrition plans")) return;
     setPlans(data || []);
   };
 

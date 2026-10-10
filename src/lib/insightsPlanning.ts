@@ -24,6 +24,7 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { readAnalysisSessions, IMPORT_SOURCE } from "./health/importRunner";
 import { ageFromDob } from "./age";
 import { localDateKey } from "./dates";
@@ -160,13 +161,16 @@ const dayKeys = (date: string, days: number) =>
  */
 async function readCompetition(userId: string, today: string): Promise<InsightCompetition | null> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("events")
       .select("title, event_date")
       .eq("user_id", userId)
       .gte("event_date", `${today}T00:00:00`)
       .order("event_date", { ascending: true })
       .limit(1);
+    // The swallow above is deliberate — a missing `events` table must not cost
+    // the whole insights screen — so the failure is logged rather than raised.
+    readFailed(error, "your upcoming competition", { quiet: true });
     const row = (data ?? [])[0] as CompetitionRow | undefined;
     if (!row?.event_date) return null;
     const when = localDateKey(new Date(row.event_date));
@@ -258,13 +262,17 @@ async function readPlanEvents(
   windowStart: string,
   windowEnd: string,
 ): Promise<PlanEventRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("plan_events")
     .select("scheduled_date, title, status, important, life_event_id")
     .eq("user_id", userId)
     .gte("scheduled_date", windowStart)
     .lte("scheduled_date", windowEnd)
     .limit(500);
+  // This is the denominator of adherence: "of the sessions that were planned,
+  // how many happened". A failed read makes it zero, which reads as "nothing was
+  // planned" and flatters the percentage instead of emptying it.
+  readFailed(error, "your planned sessions", { quiet: true });
   return (data ?? []) as PlanEventRow[];
 }
 
@@ -277,12 +285,13 @@ async function readPlanEvents(
  */
 async function readLifeEvents(userId: string, windowStart: string, today: string): Promise<LifeEvent[]> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("life_events")
       .select("id, start_date, end_date, event_type, activity_level, allow_training")
       .eq("user_id", userId)
       .gte("end_date", windowStart)
       .lte("start_date", today);
+    readFailed(error, "your breaks and time away", { quiet: true });
     return (data ?? []) as LifeEvent[];
   } catch {
     return [];
@@ -291,13 +300,14 @@ async function readLifeEvents(userId: string, windowStart: string, today: string
 
 async function readRecovery(userId: string, recoveryStart: string): Promise<RecoveryRow[]> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("recovery_logs")
       .select("log_date, sleep_quality, fatigue, soreness, stress, rest_hours, readiness_score")
       .eq("user_id", userId)
       .gte("log_date", recoveryStart)
       .order("log_date", { ascending: false })
       .limit(RECOVERY_READ_LIMIT);
+    readFailed(error, "your recovery check-ins", { quiet: true });
     return (data ?? []) as RecoveryRow[];
   } catch {
     return [];
@@ -306,7 +316,7 @@ async function readRecovery(userId: string, recoveryStart: string): Promise<Reco
 
 async function readGoals(userId: string): Promise<GoalRow[]> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("outcome_goals")
       .select(
         "title, category, metric_unit, current_value, target_value, deadline, created_at, current_level, phase, development_areas, milestones, progress_status, roadmap_updated_at",
@@ -314,6 +324,7 @@ async function readGoals(userId: string): Promise<GoalRow[]> {
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(GOALS_READ_LIMIT);
+    readFailed(error, "your goals", { quiet: true });
     return (data ?? []) as GoalRow[];
   } catch {
     return [];
@@ -322,13 +333,15 @@ async function readGoals(userId: string): Promise<GoalRow[]> {
 
 async function readActivePlan(userId: string): Promise<PlanRow | null> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("training_plans")
       .select("id, title, sport, created_at, week_current, duration_weeks, plan_data, plan_adjustments")
       .eq("user_id", userId)
       .eq("active", true)
       .order("created_at", { ascending: false })
       .limit(1);
+    // Null means "no active plan", which the insights screen states as a fact.
+    readFailed(error, "your active plan", { quiet: true });
     return ((data ?? []) as PlanRow[])[0] ?? null;
   } catch {
     return null;
@@ -339,11 +352,12 @@ async function readProfile(
   userId: string,
 ): Promise<{ date_of_birth: string | null; sport: string | null } | null> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("date_of_birth, sport")
       .eq("user_id", userId)
       .maybeSingle();
+    readFailed(error, "your profile", { quiet: true });
     return (data as { date_of_birth: string | null; sport: string | null } | null) ?? null;
   } catch {
     return null;

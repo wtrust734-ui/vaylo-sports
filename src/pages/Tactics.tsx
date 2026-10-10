@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Swords, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { shortfallFromEdgeError } from "@/lib/shortfall";
 import { requestCreditTopUp } from "@/lib/topUpStore";
+import { formatDate } from "@/i18n/format";
 
 const Tactics = () => {
   const { user, profile, refreshProfile } = useAuth();
@@ -26,13 +28,15 @@ const Tactics = () => {
   };
   const [plans, setPlans] = useState<TacticalPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [briefing, setBriefing] = useState("");
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => { if (user) load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("tactical_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20);
+    const { data, error } = await supabase.from("tactical_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20);
+    setLoadFailed(readFailed(error, "your tactical plans"));
     setPlans((data || []) as unknown as TacticalPlanRow[]); setLoading(false);
   };
 
@@ -127,6 +131,15 @@ const Tactics = () => {
 
   return (
     <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
+      {loadFailed && (
+        <p
+          role="alert"
+          className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground"
+        >
+          We could not load your saved tactical plans, so the list below may read as empty. This is a
+          loading problem — your plans are still there, and generating one still works.
+        </p>
+      )}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Swords size={14} /> Tactical Intelligence</div>
         <h1 className="text-4xl font-display font-bold mt-2">Tactical <span className="text-gradient-electric">Prep</span></h1>
@@ -153,7 +166,7 @@ const Tactics = () => {
         {plans.map((p, i) => (
           <motion.div key={p.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
             className="bg-card/60 backdrop-blur border border-border rounded-2xl p-5">
-            <div className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</div>
+            <div className="text-xs text-muted-foreground">{formatDate(p.created_at)}</div>
             <div className="font-semibold mt-1 text-sm whitespace-pre-wrap">{p.opponent_style || "General prep"}</div>
             <ul className="mt-3 space-y-1.5 text-sm">
               {(p.generated_priorities ?? []).map((pr: string, j: number) => (

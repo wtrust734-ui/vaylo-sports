@@ -86,8 +86,24 @@ const MilestoneCelebration = () => {
             <motion.div initial={{ scale: 0.6, opacity: 0, y: 40 }} animate={{ scale: 1, opacity: 1, y: 0 }}
               transition={{ type: "spring", stiffness: 280, damping: 22 }}
               className="relative w-full max-w-md bg-gradient-card border border-primary/40 rounded-3xl p-8 text-center shadow-glow">
-              <button onClick={() => setActive(null)} className="absolute top-3 right-3 p-2 text-muted-foreground hover:text-foreground"><X size={18} /></button>
-              <button onClick={() => setMuted(m => !m)} className="absolute top-3 left-3 p-2 text-muted-foreground hover:text-foreground">
+              {/* Both top controls are icon-only and were 34px: they carry a
+                  name now, and a 44px target, which is the floor the rest of
+                  the app holds itself to. */}
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setActive(null)}
+                className="absolute end-2 top-2 flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-label={muted ? "Unmute celebration sound" : "Mute celebration sound"}
+                aria-pressed={muted}
+                onClick={() => setMuted(m => !m)}
+                className="absolute start-2 top-2 flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+              >
                 {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
               <div className="text-7xl">{MESSAGES[active].emoji}</div>

@@ -7,6 +7,7 @@ import androidx.health.connect.client.permission.HealthPermission.Companion.getR
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import kotlin.reflect.KClass
 
 /**
  * VayloHealthConnect — minimal custom Capacitor plugin.
@@ -169,6 +171,39 @@ class HealthConnectPlugin : Plugin() {
                     return@launch
                 }
 
+                // A PARTIAL grant is its own outcome, not a revocation.
+                //
+                // It used to fall through to the reads below, where the first
+                // ungranted type threw SecurityException and the catch at the
+                // bottom turned the whole sync into `permission_revoked` — which
+                // the JS layer answers by clearing the stored consent and telling
+                // the athlete their permissions were revoked. Anyone who had
+                // granted five of six was told they had granted none, and the
+                // actual fix (granting the sixth) was hidden behind that lie.
+                //
+                // `permission_partial` carries the missing permissions, by short
+                // name, in its message so the athlete can be told which ones to
+                // re-grant; the structured list is also available from
+                // checkPermissionsStatus(). Nothing is read until the grant is
+                // complete, because workoutJson aggregates several record types
+                // per session and a half-read session is a wrong session.
+                //
+                // The message is `permission_partial:steps,sleep session` and the
+                // shape is load-bearing: src/lib/health/sync.ts parses the list
+                // back out of it (`permissionOutcome`), and the screen names the
+                // reads from there. Prose in the message means the athlete is told
+                // "some permissions are off" and never which. The code repeats on
+                // its own for logcat and for anything reading the error object
+                // rather than its message.
+                if (missing.isNotEmpty()) {
+                    call.reject(
+                        "permission_partial:" +
+                            missing.joinToString(",") { shortPermission(it) },
+                        "permission_partial"
+                    )
+                    return@launch
+                }
+
                 val endTimeFilter = sinceMs?.let {
                     TimeRangeFilter.between(java.time.Instant.ofEpochMilli(it), java.time.Instant.now())
                 } ?: TimeRangeFilter.between(java.time.Instant.EPOCH, java.time.Instant.now())
@@ -182,13 +217,33 @@ class HealthConnectPlugin : Plugin() {
                     if (current == null || end > current) latestCursor = end
                 }
 
-                hc.readRecords(
-                    ReadRecordsRequest(
-                        recordType = ExerciseSessionRecord::class,
-                        timeRangeFilter = endTimeFilter,
-                        pageSize = limit,
-                    )
-                ).let { resp: ReadRecordsResponse<ExerciseSessionRecord> ->
+                /**
+                 * A page of records, but only while its permission is still
+                 * granted. One helper so the guard cannot be forgotten on one of
+                 * the four reads: a grant can be revoked between the check above
+                 * and the read here, and the resulting SecurityException must not
+                 * be mistaken for a revocation of everything.
+                 */
+                // `suspend` is load-bearing, not decoration: a local function does
+                // not inherit the surrounding coroutine's suspend context, and
+                // Health Connect's readRecords is a suspend call. Without it the
+                // build fails outright with "Suspension functions can be called
+                // only within coroutine body", which no amount of reading the
+                // JavaScript side would reveal.
+                suspend fun <T : Record> grantedRead(
+                    permission: String,
+                    type: KClass<T>,
+                ): ReadRecordsResponse<T>? =
+                    if (grantedSet.contains(permission)) {
+                        hc.readRecords(
+                            ReadRecordsRequest(recordType = type, timeRangeFilter = endTimeFilter, pageSize = limit)
+                        )
+                    } else {
+                        null
+                    }
+
+                grantedRead(getReadPermission(ExerciseSessionRecord::class), ExerciseSessionRecord::class)
+                    ?.let { resp: ReadRecordsResponse<ExerciseSessionRecord> ->
                     for (r in resp.records) {
                         workouts.add(workoutJson(hc, grantedSet, r))
                         considerCursor(r.endTime.toEpochMilli())
@@ -198,9 +253,7 @@ class HealthConnectPlugin : Plugin() {
 
                 // Independent metric streams (steps / sleep) that exist outside sessions.
                 val samples = mutableListOf<JSObject>()
-                hc.readRecords(
-                    ReadRecordsRequest(StepsRecord::class, endTimeFilter, pageSize = limit)
-                ).let { resp ->
+                grantedRead(getReadPermission(StepsRecord::class), StepsRecord::class)?.let { resp ->
                     for (r in resp.records) {
                         samples.add(
                             JSObject().apply {
@@ -217,9 +270,7 @@ class HealthConnectPlugin : Plugin() {
                     hasMore = hasMore || resp.pageToken != null
                 }
 
-                hc.readRecords(
-                    ReadRecordsRequest(SleepSessionRecord::class, endTimeFilter, pageSize = limit)
-                ).let { resp ->
+                grantedRead(getReadPermission(SleepSessionRecord::class), SleepSessionRecord::class)?.let { resp ->
                     for (r in resp.records) {
                         samples.add(
                             JSObject().apply {
@@ -317,6 +368,19 @@ class HealthConnectPlugin : Plugin() {
             put("steps", steps)
         }
     }
+
+    /**
+     * "android.permission.health.READ_SLEEP_SESSION" -> "sleep session".
+     *
+     * Used only in the `permission_partial` message, where a list of qualified
+     * permission constants would tell the athlete nothing. The JS layer matches
+     * on the code and can read the full strings from checkPermissionsStatus().
+     */
+    private fun shortPermission(permission: String): String =
+        permission.substringAfterLast("health.", permission)
+            .removePrefix("READ_")
+            .lowercase()
+            .replace('_', ' ')
 
     /** JSArray from a collection — avoids the KT-48162 spread-on-non-vararg error. */
     private fun jsArray(items: Collection<*>): JSArray = JSArray(items)

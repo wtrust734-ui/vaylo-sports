@@ -110,12 +110,22 @@ class PushPlugin : Plugin() {
         defaults.setShowBadge(true)
         manager.createNotificationChannel(defaults)
 
-        // Reminders are the quiet-hours case: low importance so a streak alert
-        // does not buzz the phone at 6am.
+        // Reminders are the quiet-hours case: LOW importance so a streak alert
+        // does not buzz the phone at 6am — which is what this comment always
+        // claimed and what the channel did not actually do.
+        //
+        // Channel metadata is frozen the first time an id is created: Android
+        // ignores a later createNotificationChannel() for the same id, including
+        // a different importance, and the athlete can only change it in system
+        // settings afterwards. src/lib/localNotifications.ts creates this same
+        // id from the WebView side, so the two definitions have to agree and both
+        // have to be right the first time. This one is the definition: the plugin
+        // registers — and so creates the channel — before any reminder can be
+        // scheduled.
         val reminders = NotificationChannel(
             PushChannels.REMINDERS_ID,
             "Workout reminders",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_LOW
         )
         manager.createNotificationChannel(reminders)
     }
@@ -165,15 +175,65 @@ class PushPlugin : Plugin() {
     }
 
     /**
-     * Deletes this device's registration on the server.
+     * Drops this device's registration: the FCM token, and the copy cached for
+     * the next sign-in.
      *
      * Sign-out has to reach this: a phone that keeps its token after the athlete
      * signs out will keep receiving the next account's notifications on a
      * handset they may have handed to somebody else.
+     *
+     * Two halves, and the plugin can only do one of them honestly. The server row
+     * is deleted by src/lib/push.ts, which holds the athlete's session; the plugin
+     * has no credentials and could not tell whose registration it was. What the
+     * plugin owns is the device side — deleteToken() stops this install receiving
+     * anything, and clearing the cache stops the stale token being re-registered
+     * on the next sign-in. It used to resolve an empty object and do neither,
+     * while this comment claimed otherwise.
      */
     @PluginMethod
     fun unregister(call: PluginCall) {
-        call.resolve(JSObject())
+        clearCachedToken()
+
+        if (!ensureFirebase()) {
+            // Push was never configured, so there is no token to delete. Said
+            // rather than implied: the caller can still delete its server row.
+            call.resolve(
+                JSObject().apply {
+                    put("configured", false)
+                    put("deleted", false)
+                }
+            )
+            return
+        }
+
+        try {
+            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { task ->
+                call.resolve(
+                    JSObject().apply {
+                        put("configured", true)
+                        put("deleted", task.isSuccessful)
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            // Never rejects: signing out must not be blocked by push.
+            call.resolve(
+                JSObject().apply {
+                    put("configured", true)
+                    put("deleted", false)
+                }
+            )
+        }
+    }
+
+    /** Forget the token cached by onNewToken for the next sign-in to re-register. */
+    private fun clearCachedToken() {
+        runCatching {
+            ctx.getSharedPreferences(PushBridge.PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .remove(PushBridge.KEY_TOKEN)
+                .apply()
+        }
     }
 
     @PermissionCallback

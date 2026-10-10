@@ -64,16 +64,24 @@ export async function getStarterOfferState(userId?: string | null): Promise<Star
   if (!userId) return { status: "unavailable" };
 
   const { supabase } = await import("@/integrations/supabase/client");
+  // Lazy for the same reason as supabase above: this module keeps its top level
+  // free of client imports so the window maths stays unit-testable.
+  const { readFailed } = await import("@/lib/dbRead");
 
   // 1. Already bought? (user_purchases is readable for own rows.)
   try {
-    const { data: prior } = await supabase
+    const { data: prior, error: priorError } = await supabase
       .from("user_purchases")
       .select("id")
       .eq("user_id", userId)
       .eq("product_id", STARTER_OFFER_PRODUCT_ID)
       .limit(1)
       .maybeSingle();
+    // Read as empty, a failed check offers the Welcome Bundle to someone who has
+    // already redeemed it. Harmless in the end — process-purchase answers the
+    // second attempt with its 409 guard, and the price never comes from here —
+    // but it is the difference between a banner and an error, so it is logged.
+    readFailed(priorError, "your purchases", { quiet: true });
     if (prior) return { status: "claimed" };
   } catch {
     // RLS/tables unavailable — treat as unavailable rather than blocking the UI.
@@ -81,21 +89,27 @@ export async function getStarterOfferState(userId?: string | null): Promise<Star
   }
 
   // 2. Active offer row (price and window come from here).
-  const { data: offer } = await supabase
+  const { data: offer, error: offerError } = await supabase
     .from("special_offers")
     .select("title, description, pack_id, bonus_flat, price_cents, ends_at")
     .eq("slug", STARTER_OFFER_SLUG)
     .eq("active", true)
     .maybeSingle();
+  // No offer row is the normal "not running" answer; a failed read hides an
+  // offer that is running, which is lost revenue with no visible cause.
+  readFailed(offerError, "the Welcome Bundle offer", { quiet: true });
 
   if (!offer) return { status: "unavailable" };
 
   // 3. Within the account-age window (and the row's own ends_at, if set).
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("created_at")
     .eq("user_id", userId)
     .maybeSingle();
+  // Without `created_at` the 72-hour window cannot be computed, so the offer is
+  // withheld. Logged because "the offer is not showing" is otherwise unfalsifiable.
+  readFailed(profileError, "your account age", { quiet: true });
 
   const accountHoursLeft = hoursLeftInWindow(Date.now(), profile?.created_at);
   const rowHoursLeft = offer.ends_at ? hoursLeftInWindow(Date.now(), offer.ends_at, 0) : accountHoursLeft;

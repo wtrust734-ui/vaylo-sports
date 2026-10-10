@@ -24,6 +24,7 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { fetchDisplayNames } from "@/lib/publicIdentity";
 
 export interface Friend {
@@ -298,11 +299,14 @@ export async function ensureMyFriendCode(userId: string): Promise<string | null>
     if (!error && data?.code) return data.code;
     // 23505 on user_id means another device created it a moment ago; re-read.
     if (error?.code === "23505") {
-      const { data: again } = await supabase
+      const { data: again, error: againError } = await supabase
         .from("friend_codes")
         .select("code")
         .eq("user_id", userId)
         .maybeSingle();
+      // This is the "did the insert actually land" re-read. A failed one makes a
+      // code that exists look missing, so the athlete is handed a second code.
+      readFailed(againError, "your friend code", { quiet: true });
       if (again?.code) return again.code;
     }
     // Any other error (including a code collision) retries with a fresh code.

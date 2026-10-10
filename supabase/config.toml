@@ -185,3 +185,24 @@ verify_jwt = false
 # trusting anything, so the marketplace can ship before the Stripe account exists.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# In-app failure reports.
+#
+# verify_jwt is OFF because the caller is a phone that may have no session. The
+# failures worth catching most are the ones at sign-in and around a dropped
+# connection, and a reporter that only worked for signed-in users would miss
+# exactly those. Declared HERE rather than passed as --no-verify-jwt at deploy
+# time, for the reason stated above: a flag is not recorded anywhere in the
+# repository, so a later redeploy without it silently switches the function back
+# to requiring a JWT and every report becomes a 401 nobody sees — the same way
+# support-request answered 401 to every website form until 2026-10-04.
+#
+# Safe to expose for a structural reason: every field is length-capped and two
+# of them are closed sets, the fingerprint is derived inside the function rather
+# than accepted from the client, the write is an upsert keyed on that
+# fingerprint — so a replay flood adds a counter, not rows — and the shared
+# helper throttles per client address. The most a successful call can do is add
+# one row to the failure queue, or bump one counter, and send at most one email
+# the first time a fingerprint is seen.
+[functions.report-error]
+verify_jwt = false

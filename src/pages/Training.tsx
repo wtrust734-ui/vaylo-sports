@@ -1,4 +1,5 @@
 import { getAiLocale } from "@/i18n";
+import { formatDate } from "@/i18n/format";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, useInView, AnimatePresence } from "framer-motion";
@@ -6,6 +7,7 @@ import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, Ale
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { readFailed } from "@/lib/dbRead";
 import { spendCredits, creditCost, spendErrorMessage, featureLabel } from "@/lib/credits";
 import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
@@ -305,6 +307,11 @@ const Training = () => {
   const { toast } = useToast();
   const spendWithTopUp = useSpendWithTopUp();
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
+  // A read that failed is not "you have no plan". `hasNoPlans` gates the
+  // create-plan card, and creating a plan is charged per week — so the flag is
+  // what stops an outage from being rendered as an invitation to buy a plan the
+  // athlete may already own.
+  const [plansFailed, setPlansFailed] = useState(false);
   // The break banner on the plans view (audit B1): an active availability
   // window is visible here, not only on /availability.
   const activeBreak = useActiveBreak();
@@ -487,7 +494,17 @@ const Training = () => {
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    // A failed read is not "you have no plan". An empty list on this screen is
+    // the invitation to create one, and creating one is charged per week — so a
+    // read that failed leaves the list it already had alone and says so, rather
+    // than showing an athlete an empty screen where a plan they own should be
+    // and inviting them to buy it again.
+    if (readFailed(error, "your training plans")) {
+      setPlansFailed(true);
+      return;
+    }
+    setPlansFailed(false);
     setPlans(data || []);
   };
 
@@ -1688,7 +1705,7 @@ const Training = () => {
                 {log.calories_burned && <span className="text-[12px] text-muted-foreground">{log.calories_burned} kcal</span>}
               </div>
               {log.notes && <p className="text-xs text-muted-foreground mt-1">{log.notes}</p>}
-              <p className="text-[12px] text-muted-foreground mt-1">{new Date(log.created_at).toLocaleDateString()}</p>
+              <p className="text-[12px] text-muted-foreground mt-1">{formatDate(log.created_at)}</p>
             </motion.div>
           ))}
         </div>
@@ -1933,7 +1950,7 @@ const Training = () => {
                       {change.sessions.map((s) => (
                         <div key={`${s.scheduled_date}-${s.title}`} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
                           <span className="min-w-0 truncate">
-                            {new Date(`${s.scheduled_date}T00:00:00`).toLocaleDateString()} · {s.title}
+                            {formatDate(`${s.scheduled_date}T00:00:00`)} · {s.title}
                             {s.important && <span className="text-info"> · key session</span>}
                           </span>
                           <span className="shrink-0">{sessionStatusMeta(s.status).label}</span>
@@ -2135,7 +2152,7 @@ const Training = () => {
   }
 
   // === MAIN PLANS VIEW ===
-  const hasNoPlans = plans.length === 0;
+  const hasNoPlans = plans.length === 0 && !plansFailed;
 
   return (
     <div className="min-h-screen bg-background">
@@ -2147,6 +2164,16 @@ const Training = () => {
       {activeBreak && (
         <div className="mx-5 mb-5">
           <ActiveBreakBanner event={activeBreak} />
+        </div>
+      )}
+
+      {plansFailed && (
+        <div role="alert" className="mx-5 mb-5 flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
+          <div>
+            <p className="text-sm font-medium">We couldn't load your plans</p>
+            <p className="text-xs text-muted-foreground mt-1">Check your connection and try again — anything you already own is still there.</p>
+          </div>
         </div>
       )}
 
@@ -2420,7 +2447,7 @@ const Training = () => {
 
 
 
-      {!hasNoPlans && (
+      {plans.length > 0 && (
         <div className="px-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-muted-foreground">Your Plans</h3>
@@ -2431,14 +2458,26 @@ const Training = () => {
               <motion.div key={plan.id} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
                 className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}>
+                  {/* A div with onClick is unreachable by keyboard, and this is
+                      the only way into a plan the athlete has paid for. A real
+                      button gets focus, Enter and Space for free; `text-start`
+                      keeps the title aligned the way the div did. */}
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}
+                    className="flex flex-1 cursor-pointer items-center gap-3 text-start"
+                  >
                     <div className="p-2 rounded-lg bg-primary/10"><Dumbbell size={18} className="text-primary" /></div>
                     <div><h4 className="font-semibold text-sm">{plan.title}</h4><p className="text-xs text-muted-foreground">{plan.duration_weeks}w · {plan.sport} · {plan.level}</p></div>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-2">
                     {plan.active ? <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Active</span> : null}
                     <motion.button onClick={(e) => { e.stopPropagation(); deletePlan(plan.id); }} whileTap={{ scale: 0.9 }}
-                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></motion.button>
+                      /* p-1.5 kept the glyph small, but the hit area is the
+                         control: without an explicit min-w the button measured
+                         ~26px across, under the 44px floor's intent even though
+                         its height passed. min-h/min-w leave the glyph at 14px. */
+                      className="p-1.5 min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></motion.button>
                   </div>
                 </div>
               </motion.div>

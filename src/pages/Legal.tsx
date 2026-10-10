@@ -8,6 +8,7 @@ import { legalPath, type LegalSlug } from "@/lib/legalUrls";
 import { useAuth } from "@/contexts/AuthContext";
 import { ageBand } from "@/lib/age";
 import { requestMyData, downloadExport, fetchMyReports, type PortabilityExport } from "@/lib/safety";
+import { formatDate, formatDateTimeExact } from "@/i18n/format";
 
 // ============================================================================
 // LEGAL & SAFETY CENTRE
@@ -271,7 +272,7 @@ const Legal = () => {
           <p className="mt-2 text-xs text-muted-foreground">
             {exported.summary.tables_included} of {exported.summary.tables_expected} tables ·{" "}
             {exported.summary.total_rows} rows · exported{" "}
-            {new Date(exported.exported_at).toLocaleString()}
+            {formatDateTimeExact(exported.exported_at)}
           </p>
         )}
       </section>
@@ -310,7 +311,7 @@ const Legal = () => {
                     <span className="capitalize">{r.reason.replace("_", " ")}</span>
                     <span className="opacity-60">· {r.status}</span>
                     <span className="opacity-60">
-                      · {new Date(r.created_at).toLocaleDateString()}
+                      · {formatDate(r.created_at)}
                     </span>
                   </li>
                 ))}

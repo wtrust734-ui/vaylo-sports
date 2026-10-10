@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { USER_TABLES as SHARED_USER_TABLES } from "../_shared/userTables.ts";
+import { jwtAgeSeconds } from "../_shared/jwt.ts";
 
 // Max age (seconds) of the auth token that may authorise a deletion.
 const MAX_TOKEN_AGE_SECONDS = 30 * 60;
@@ -81,15 +82,16 @@ Deno.serve(async (req) => {
     userId = user.id;
 
     // Require recent authentication (fresh token) before destructive action.
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const issuedAt = Number(payload.iat ?? 0);
-      const age = Math.floor(Date.now() / 1000) - issuedAt;
-      if (!issuedAt || age > MAX_TOKEN_AGE_SECONDS) {
-        return json({ error: "reauth_required", message: "Please sign in again before deleting your account." }, 403);
-      }
-    } catch (_) {
-      return json({ error: "reauth_required" }, 403);
+    //
+    // `jwtAgeSeconds` reads the segment as base64URL. A bare `atob` throws on
+    // any token whose payload contains `-` or `_` — which is a large fraction of
+    // real tokens, not an edge — and the try/catch that used to wrap this turned
+    // that throw into a 403, so deletion, a published capability, failed for a
+    // slice of athletes with nothing they could do about it. It still fails
+    // closed, and now only when the age genuinely cannot be read.
+    const tokenAge = jwtAgeSeconds(token);
+    if (tokenAge === null || tokenAge > MAX_TOKEN_AGE_SECONDS) {
+      return json({ error: "reauth_required", message: "Please sign in again before deleting your account." }, 403);
     }
 
     // An explicit confirmation is required, and it is required in the BODY.

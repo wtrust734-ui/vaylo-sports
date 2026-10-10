@@ -60,12 +60,18 @@ export interface WhyDisclosureProps {
   className?: string;
 }
 
-/** The rule down the left edge carries the tone; the words stay neutral. */
+/**
+ * The rule down the leading edge carries the tone; the words stay neutral.
+ *
+ * `border-s-*` rather than `border-l-*` so the rule follows the text direction:
+ * in Arabic the panel reads right-to-left and a left-edge rule sits at the end
+ * of every line instead of the start, which points at nothing.
+ */
 const ACCENT: Record<ExplanationTone, string> = {
-  positive: "border-l-emerald-400",
-  info: "border-l-sky-400",
-  watch: "border-l-amber-400",
-  safety: "border-l-destructive",
+  positive: "border-s-emerald-400",
+  info: "border-s-sky-400",
+  watch: "border-s-amber-400",
+  safety: "border-s-destructive",
 };
 
 /**
@@ -159,7 +165,7 @@ const WhyDisclosure = ({
 
   return (
     <div
-      className={`rounded-xl border border-l-2 border-border/60 bg-card/40 ${ACCENT[tone]} ${className}`}
+      className={`rounded-xl border border-s-2 border-border/60 bg-card/40 ${ACCENT[tone]} ${className}`}
     >
       <button
         type="button"

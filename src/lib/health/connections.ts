@@ -13,6 +13,7 @@
 // ===========================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import type { WearableProviderId } from "./providers";
 import type { WearableConnectionStatus } from "./types";
 
@@ -55,10 +56,14 @@ export async function fetchWearableConnections(userId: string): Promise<Wearable
 
   // --- Cloud / multi-provider rows (new table) ------------------------------
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("health_connections")
       .select("provider, status, connected, last_sync_at, last_cursor, updated_at")
       .eq("user_id", userId);
+    // The map this builds is what the Health screen reads as "which wearables
+    // are connected", so an empty result after a failed read tells a synced
+    // athlete they have nothing connected.
+    readFailed(error, "your connected wearables", { quiet: true });
     for (const row of (data ?? []) as Array<{
       provider: WearableProviderId; status: string; connected: boolean;
       last_sync_at: string | null; last_cursor: string | null; updated_at: string | null;
@@ -78,11 +83,15 @@ export async function fetchWearableConnections(userId: string): Promise<Wearable
   try {
     const local = readLocalHcState(userId);
     const hasConsent = readLocalHcConsent(userId);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("health_sync_state")
       .select("connected, last_sync_at, last_incremental_cursor, updated_at")
       .eq("user_id", userId)
       .maybeSingle();
+    // Same again for the legacy row: null is read as "not connected", and the
+    // local consent fallback below is the only thing standing between a failed
+    // read and a reconnect prompt.
+    readFailed(error, "your Health Connect sync state", { quiet: true });
     const connected = !!(data?.connected ?? hasConsent);
     const lastSync = (local.lastSyncAt ?? data?.last_sync_at) ?? null;
     const cursor = local.cursorMs != null

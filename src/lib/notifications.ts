@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 
 export interface AppNotification {
   id: string;
@@ -12,9 +13,12 @@ export interface AppNotification {
 }
 
 export async function listNotifications(userId: string, limit = 50): Promise<AppNotification[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("notifications").select("*")
     .eq("user_id", userId).order("created_at", { ascending: false }).limit(limit);
+  // An empty inbox and an unreadable one look identical to the athlete, and
+  // "you have no notifications" is a claim this app should not make by accident.
+  readFailed(error, "your notifications", { quiet: true });
   return (data || []) as AppNotification[];
 }
 

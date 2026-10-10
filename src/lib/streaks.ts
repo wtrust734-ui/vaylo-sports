@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { readFailed } from "@/lib/dbRead";
 import { localDateKey } from "@/lib/dates";
 
 export interface StreakState {
@@ -17,6 +18,10 @@ export async function touchStreak(): Promise<{ current: number; longest: number 
 }
 
 export async function getStreak(userId: string): Promise<StreakState | null> {
-  const { data } = await supabase.from("streaks").select("*").eq("user_id", userId).maybeSingle();
+  const { data, error } = await supabase.from("streaks").select("*").eq("user_id", userId).maybeSingle();
+  // Null means "no streak record yet" and renders as a broken streak: an athlete
+  // on day 40 cannot tell the difference, and neither can the caller, so the
+  // console is the only place the distinction can be recorded.
+  readFailed(error, "your streak", { quiet: true });
   return data as StreakState | null;
 }

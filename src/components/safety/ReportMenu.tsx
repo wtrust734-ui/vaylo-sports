@@ -66,11 +66,17 @@ const ReportMenu = ({
   const [details, setDetails] = useState("");
   const [message, setMessage] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Dismiss on outside click and on Escape — a menu that traps a young user
   // mid-decision is its own problem.
   useEffect(() => {
     if (!open) return;
+    // Focus moves into the panel and returns to the flag on close. The menu is
+    // as likely to be opened by keyboard as by tap, and it used to leave focus
+    // behind on the trigger with the panel sitting open beside it.
+    const previous = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -82,6 +88,7 @@ const ReportMenu = ({
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      previous?.focus?.();
     };
   }, [open]);
 
@@ -131,16 +138,26 @@ const ReportMenu = ({
           setStatus("idle");
           setMessage("");
         }}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        /* 44x44 — the floor in src/index.css. `h-8 w-8` is a utility, so it wins
+           over that floor's `:where()` rule, and it left the control an athlete
+           reaches for when something has gone wrong at 32px: the smallest target
+           on the profile it sits on. */
+        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
       >
         <Flag size={14} />
       </button>
 
       {open && (
         <div
+          /* `role="dialog"` without `aria-modal`: this is a popover anchored to
+             its own trigger, the page behind it stays usable, and claiming
+             modalship would make a screen reader ignore content the athlete can
+             still reach. What it did need was the focus handling above. */
           role="dialog"
+          ref={panelRef}
+          tabIndex={-1}
           aria-label="Report or block"
-          className="absolute right-0 z-50 mt-1 w-[19rem] rounded-2xl border border-border bg-card p-4 shadow-xl"
+          className="absolute end-0 z-50 mt-1 w-[19rem] rounded-2xl border border-border bg-card p-4 shadow-xl"
         >
           {status === "sent" || status === "blocked" ? (
             <div className="flex gap-3">

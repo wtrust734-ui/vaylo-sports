@@ -7,6 +7,8 @@ import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarC
 import { fetchDisplayName } from "@/lib/publicIdentity";
 import { useAuth } from "@/contexts/AuthContext";
 import ReportMenu from "@/components/safety/ReportMenu";
+import { readFailed } from "@/lib/dbRead";
+import { formatDate, formatNumber } from "@/i18n/format";
 
 // ============================================================================
 // VAYLO SPORTS — public athlete profile
@@ -77,6 +79,14 @@ const PublicProfile = () => {
       ]);
 
       // Public name: `avatars.display_name` is the only cross-user name column.
+      // `avatarRes` is the profile itself and its error is already carried into
+      // state below, so only the reads whose failures were being dropped are
+      // reported here. The three below are decoration: a failed cosmetics or
+      // community read should not turn a real profile into an error screen.
+      readFailed(privRes?.error, "this athlete's privacy settings", { quiet: true });
+      readFailed(partsRes?.error, "their challenge entries", { quiet: true });
+      readFailed(cosRes?.error, "their equipped cosmetics", { quiet: true });
+
       const name = await fetchDisplayName(username);
 
       // Equipped cosmetics are public (`user_profile_cosmetics` and
@@ -86,7 +96,8 @@ const PublicProfile = () => {
       let nameColor: string | null = null;
       const cosmeticIds = [cosRes?.data?.title_id, cosRes?.data?.name_color_id].filter((id): id is string => !!id);
       if (cosmeticIds.length) {
-        const { data: defs } = await supabase.from("reward_definitions").select("id,name,payload").in("id", cosmeticIds);
+        const { data: defs, error: defsError } = await supabase.from("reward_definitions").select("id,name,payload").in("id", cosmeticIds);
+        readFailed(defsError, "the cosmetic definitions", { quiet: true });
         const byId = new Map<string, CosmeticDefRow>((defs ?? []).map(d => [d.id, d as CosmeticDefRow]));
         const title = cosRes?.data?.title_id ? byId.get(cosRes.data.title_id) : undefined;
         const color = cosRes?.data?.name_color_id ? byId.get(cosRes.data.name_color_id) : undefined;
@@ -128,7 +139,11 @@ const PublicProfile = () => {
       let challenges: ProfileState["challenges"] = [];
       if (parts.length) {
         const ids = parts.map(p => p.challenge_id);
-        const { data: rows } = await supabase.from("challenges").select("id,title,icon").in("id", ids);
+        const { data: rows, error: rowsError } = await supabase.from("challenges").select("id,title,icon").in("id", ids);
+        // A failed read here leaves `challenges` empty, which the page shows as
+        // "no challenges" — logged quietly, because the rest of the profile is
+        // what the visitor came for.
+        readFailed(rowsError, "their challenges", { quiet: true });
         const byId = new Map((rows ?? []).map(c => [c.id, c]));
         challenges = parts
           .map(p => {
@@ -139,10 +154,11 @@ const PublicProfile = () => {
           .slice(0, 8);
       }
 
-      const { count: communityCount } = await supabase
+      const { count: communityCount, error: communityError } = await supabase
         .from("community_members")
         .select("community_id", { count: "exact", head: true })
         .eq("user_id", username);
+      readFailed(communityError, "their community count", { quiet: true });
 
       if (cancelled) return;
 
@@ -176,7 +192,17 @@ const PublicProfile = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <button onClick={() => navigate(-1)} className="absolute top-4 left-4 z-10 p-2 rounded-xl bg-card/80 border border-border"><ArrowLeft size={18} /></button>
+      {/* Icon-only, so it needs a name; 36px before, 44px now. `start-4`
+          because this is the back control and in Arabic it belongs on the
+          right. */}
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        aria-label="Go back"
+        className="absolute start-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-card/80"
+      >
+        <ArrowLeft size={18} aria-hidden />
+      </button>
 
       <div className="bg-gradient-card border-b border-primary/20 px-5 pt-16 pb-6">
         <div className="flex items-center gap-4">
@@ -201,7 +227,7 @@ const PublicProfile = () => {
                 </span>
               )}
               <span className="text-[12px] uppercase tracking-wider bg-energy/15 text-energy px-2 py-0.5 rounded-md font-bold">
-                {state.points.toLocaleString()} pts
+                {formatNumber(state.points)} pts
               </span>
             </div>
           </div>
@@ -209,7 +235,7 @@ const PublicProfile = () => {
       </div>
 
       <div className="px-5 mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat icon={Activity} label="Points" value={state.points.toLocaleString()} />
+        <Stat icon={Activity} label="Points" value={formatNumber(state.points)} />
         <Stat icon={Trophy} label="Challenges" value={state.joinedChallenges} />
         <Stat icon={Users} label="Communities" value={state.communities} />
         <Stat icon={Target} label="Rank" value={state.rank ? `#${state.rank}` : "—"} />
@@ -217,7 +243,7 @@ const PublicProfile = () => {
 
       {state.rank && state.competitors > 0 && (
         <p className="px-5 mt-2 text-[12px] text-muted-foreground">
-          Ranked #{state.rank} of {state.competitors.toLocaleString()} athletes by total points.
+          Ranked #{state.rank} of {formatNumber(state.competitors)} athletes by total points.
         </p>
       )}
 
@@ -253,7 +279,7 @@ const PublicProfile = () => {
 
       {state.lastActive && (
         <p className="px-5 mt-4 text-[12px] text-muted-foreground text-center">
-          Profile last updated {new Date(state.lastActive).toLocaleDateString()}
+          Profile last updated {formatDate(state.lastActive)}
         </p>
       )}
 

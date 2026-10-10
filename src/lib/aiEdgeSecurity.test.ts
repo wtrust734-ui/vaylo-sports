@@ -22,6 +22,8 @@ const WEEKLY = "/supabase/functions/weekly-review/index.ts";
 const PLAN = "/supabase/functions/generate-plan/index.ts";
 const EDIT_PLAN = "/supabase/functions/edit-plan/index.ts";
 const NUTRITION_PLAN = "/supabase/functions/generate-nutrition-plan/index.ts";
+const EXPORT_MY_DATA = "/supabase/functions/export-my-data/index.ts";
+const WAITLIST_BROADCAST = "/supabase/functions/waitlist-broadcast/index.ts";
 const LEARNING = "/supabase/functions/learning-recommend/index.ts";
 const DELETE = "/supabase/functions/delete-account/index.ts";
 const GUARD = "/supabase/functions/_shared/guard.ts";
@@ -228,6 +230,34 @@ describe("charging discipline across AI functions", () => {
     expect(migration).toMatch(/COALESCE\(auth\.jwt\(\) ->> 'role', ''\) <> 'service_role'/);
     expect(migration).toMatch(/FROM PUBLIC, anon, authenticated/);
     expect(migration).toMatch(/public\.credit_cost\(p_feature\)/);
+  });
+});
+
+describe("token decoding", () => {
+  it("reads a JWT segment as base64URL through the shared decoder, never inline", () => {
+    // A JWT segment is base64URL: `-` and `_` replace `+` and `/`, and it is not
+    // padded. `atob` rejects those, so decoding a segment where it is read
+    // throws for a large fraction of real tokens — which made account deletion
+    // answer 403 reauth_required intermittently, and made the export's freshness
+    // check silently inapplicable. None of these files may decode one itself.
+    for (const file of [DELETE, EXPORT_MY_DATA, WAITLIST_BROADCAST]) {
+      const src = read(file);
+      expect(src, `${file} decodes a token segment inline`).not.toMatch(/split\("\."\)\[1\]/);
+      expect(src, `${file} does not use the shared decoder`).toMatch(/from "\.\.\/_shared\/jwt\.ts"/);
+    }
+  });
+
+  it("fails closed when a token's age cannot be read", () => {
+    // "We could not prove this token is fresh" is not the same claim as "it is
+    // fresh". Both the destructive endpoint and the bulk-read endpoint compare a
+    // NULLABLE age, so a token whose iat cannot be read is refused rather than
+    // waved through.
+    for (const file of [DELETE, EXPORT_MY_DATA]) {
+      expect(
+        read(file),
+        `${file} does not refuse an unreadable token age`,
+      ).toMatch(/tokenAge === null \|\| tokenAge > MAX_TOKEN_AGE_SECONDS/);
+    }
   });
 });
 

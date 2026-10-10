@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalPrice } from "@/lib/creditEconomy";
+import { readFailed } from "@/lib/dbRead";
 
 type PackEntry = { id: string; label?: string; credits?: number; price_cents: number; bonus?: number; [key: string]: unknown };
 
@@ -52,12 +53,16 @@ export default function AdminPricing() {
   useEffect(() => {
     if (!user) { setIsAdmin(false); return; }
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("role", "admin")
         .maybeSingle();
+      // A failed read leaves the screen saying "not an admin", which is the
+      // safer of the two possible lies. Quiet, because an admin whose session
+      // blipped does not need a toast on every reload — the log is the signal.
+      readFailed(error, "your admin role", { quiet: true });
       setIsAdmin(!!data);
     })();
   }, [user]);
@@ -66,27 +71,35 @@ export default function AdminPricing() {
   useEffect(() => {
     if (!isAdmin) return;
     (async () => {
-      const [{ data: t }, { data: c }] = await Promise.all([
+      const [{ data: t, error: tiersError }, { data: c, error: countriesError }] = await Promise.all([
         supabase.from("pricing_tiers").select("*").order("sort_order"),
         supabase.from("country_pricing_map").select("*").order("country_name"),
       ]);
+      readFailed(tiersError, "the pricing tiers");
+      readFailed(countriesError, "the country price map");
       setTiers((t || []) as unknown as Tier[]);
       setCountries(c || []);
-      loadAnalytics();
+      // The rows are passed in rather than read back off state: `setCountries`
+      // has not been applied yet, so the analytics below used to run against the
+      // PREVIOUS country list — an empty one on first load, which mapped every
+      // purchase to tier "?" until something else re-triggered the effect.
+      loadAnalytics(c || []);
     })();
-  }, [isAdmin]);
-
-  const loadAnalytics = async () => {
-    const { data: purchases } = await supabase
+  }, [isAdmin]);  const loadAnalytics = async (countryRows: typeof countries = countries) => {
+    const { data: purchases, error: purchasesError } = await supabase
       .from("purchase_analytics")
       .select("region,currency,amount_cents,event_type,pack_id,user_id")
       .eq("event_type", "purchase");
+
+    // Zeros on this screen read as "no purchases this month", so a failed read is
+    // reported rather than left to look like an empty ledger.
+    readFailed(purchasesError, "the purchase analytics");
 
     const rows = purchases || [];
     const byCountryMap = new Map<string, { country: string; rev: number; count: number; users: Set<string> }>();
     const byTierMap = new Map<string, { tier: string; rev: number; count: number }>();
     const tierByCountry: Record<string, string> = {};
-    countries.forEach((c) => { tierByCountry[c.country_code] = c.tier_code; });
+    countryRows.forEach((c) => { tierByCountry[c.country_code] = c.tier_code; });
 
     let totalRev = 0;
     let unlimitedCount = 0;
@@ -108,7 +121,8 @@ export default function AdminPricing() {
       byTierMap.set(tier, bt);
     }
 
-    const { data: segs } = await supabase.from("user_segments").select("segment");
+    const { data: segs, error: segmentsError } = await supabase.from("user_segments").select("segment");
+    readFailed(segmentsError, "the athlete segments");
     const segCount: Record<string, number> = { new: 0, casual: 0, active: 0, vip: 0 };
     (segs || []).forEach((s) => { segCount[s.segment] = (segCount[s.segment] || 0) + 1; });
 

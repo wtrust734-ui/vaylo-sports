@@ -10,6 +10,7 @@ import { isPreviewHost, publicAppUrl } from "@/lib/share";
 import { isNativeShell } from "@/lib/platform";
 import { promoBonus } from "@/lib/credits";
 import { toast } from "sonner";
+import { readFailed } from "@/lib/dbRead";
 
 function genCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -20,6 +21,8 @@ export default function Referrals() {
   const [code, setCode] = useState<string>("");
   type ReferralRow = { status: string; [key: string]: unknown };
   const [referrals, setReferrals] = useState<ReferralRow[]>([]);
+  /** True when the referral list could not be read, so it is not reported as zero. */
+  const [refsUnread, setRefsUnread] = useState(false);
   const [redeem, setRedeem] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,15 +30,25 @@ export default function Referrals() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      let { data } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
-      if (!data) {
+      const { data, error: codeError } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
+      // A failed read must not be treated as "no code yet": the branch below
+      // would then try to create a second code on every single load and fail on
+      // the unique constraint, which the athlete reads as their referral code
+      // being broken.
+      if (readFailed(codeError, "your referral code")) return;
+      let codeRow = data;
+      if (!codeRow) {
         const newCode = genCode();
         const { data: ins, error: insError } = await supabase.from("referral_codes").insert({ user_id: user.id, code: newCode }).select().maybeSingle();
         if (insError) { toast.error(`Couldn't create your referral code: ${insError.message}`); return; }
-        data = ins;
+        codeRow = ins;
       }
-      setCode(data?.code || "");
-      const { data: refs } = await supabase.from("referrals").select("*").eq("referrer_id", user.id);
+      setCode(codeRow?.code || "");
+      const { data: refs, error: refsError } = await supabase.from("referrals").select("*").eq("referrer_id", user.id);
+      // "0 friends invited, 0 credits earned" is a statement about the athlete,
+      // and only the read that succeeded earns the right to make it.
+      if (readFailed(refsError, "your referrals")) { setRefsUnread(true); return; }
+      setRefsUnread(false);
       setReferrals(refs || []);
     })();
   }, [user]);
@@ -106,6 +119,14 @@ export default function Referrals() {
         </div>
       </motion.div>
 
+      {refsUnread ? (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            We couldn't load your referrals just now, so the totals below would have been wrong. Reopen this
+            screen in a moment.
+          </p>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="p-4 rounded-2xl bg-card border border-border">
           <Users className="h-4 w-4 text-electric-purple mb-2" />
@@ -118,6 +139,7 @@ export default function Referrals() {
           <p className="text-xs text-muted-foreground">Credits earned</p>
         </div>
       </div>
+      )}
 
       <div className="p-5 rounded-2xl border border-border bg-card">
         <p className="font-semibold mb-1">Got a code?</p>

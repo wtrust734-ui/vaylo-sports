@@ -177,6 +177,35 @@ describe("flushQueue — merging over a concurrent change", () => {
     expect(pendingWrites().map((w) => w.id)).toEqual(["conflicted"]);
   });
 
+  it("keeps a conflict it already found when the signal drops later in the same pass", async () => {
+    // The regression this pins: the network-failure branch rebuilt `keep` from
+    // scratch, so every conflict collected earlier in the same drain was thrown
+    // away — the athlete's edit deleted with no trace and nothing left to
+    // resolve, in exactly the situation conflicts are found in (replaying on a
+    // connection that flaps). It also silently broke ConflictInfo's promise that
+    // nothing is discarded when a conflict is recorded.
+    updateWhere.mockResolvedValueOnce({ error: offlineError() });
+    await updateOrQueue("life_events", "e1", { note: "mine" }, { base: BASE });
+    updateWhere.mockResolvedValueOnce({ error: offlineError() });
+    await updateOrQueue("life_events", "e2", { note: "mine" }, { base: BASE });
+
+    // e1 clashes with another device's edit (so it becomes a conflict and no
+    // write is attempted); e2's row is untouched, so its replay is attempted —
+    // and the network is gone by then.
+    maybeSingle
+      .mockResolvedValueOnce({ data: { id: "e1", note: "changed elsewhere" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "e2", note: "first" }, error: null });
+    updateWhere.mockResolvedValue({ error: offlineError() });
+
+    const sent = await flushQueue();
+
+    expect(sent).toBe(0);
+    expect(pendingConflicts().map((w) => w.id)).toEqual(["e1"]);
+    // Both stay queued: the conflict still needs an answer, and e2 still needs a
+    // connection.
+    expect(pendingWrites().map((w) => w.id)).toEqual(["e1", "e2"]);
+  });
+
   it("drops an edit the server has already applied", async () => {
     updateWhere.mockResolvedValueOnce({ error: offlineError() });
     await updateOrQueue("life_events", "e1", { note: "edited offline" }, { base: BASE });

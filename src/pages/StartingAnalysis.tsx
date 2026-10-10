@@ -65,7 +65,7 @@ type LoadState =
  */
 function InsightCard({ insight, accent }: { insight: AnalysisInsight; accent: string }) {
   return (
-    <li className={`rounded-xl border border-l-2 border-border/60 bg-card/40 p-3 ${accent}`}>
+    <li className={`rounded-xl border border-s-2 border-border/60 bg-card/40 p-3 ${accent}`}>
       <p className="text-sm font-semibold">{insight.title}</p>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{insight.detail}</p>
       <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground/70">
@@ -305,7 +305,7 @@ const StartingAnalysisPage = () => {
           <h2 className="font-display text-lg font-bold">What is working</h2>
           <ul className="mt-3 space-y-2">
             {analysis.strengths.map((s) => (
-              <InsightCard key={s.id} insight={s} accent="border-l-emerald-400" />
+              <InsightCard key={s.id} insight={s} accent="border-s-emerald-400" />
             ))}
           </ul>
         </section>
@@ -318,7 +318,7 @@ const StartingAnalysisPage = () => {
           </h2>
           <ul className="mt-3 space-y-2">
             {analysis.issues.map((s) => (
-              <InsightCard key={s.id} insight={s} accent="border-l-amber-400" />
+              <InsightCard key={s.id} insight={s} accent="border-s-amber-400" />
             ))}
           </ul>
         </section>
@@ -329,7 +329,7 @@ const StartingAnalysisPage = () => {
           <h2 className="font-display text-lg font-bold">Where to go next</h2>
           <ul className="mt-3 space-y-2">
             {analysis.nextSteps.map((s) => (
-              <InsightCard key={s.id} insight={s} accent="border-l-sky-400" />
+              <InsightCard key={s.id} insight={s} accent="border-s-sky-400" />
             ))}
           </ul>
           <Link
