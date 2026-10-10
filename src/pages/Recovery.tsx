@@ -300,8 +300,11 @@ const Recovery = () => {
     const score = calcReadiness100(hrvVal, baseline, sleep, fatigue, soreness, mood, recentRpeAvg);
     const zone = getZone(score);
 
+    // A bad morning check-in adapts today's training for everyone: the
+    // readiness score and the adjusted session are the check-in's whole point,
+    // not a Pro extra. (HRV trend charts and insights stay Pro-gated below.)
     let adjusted = null;
-    if (todaySession && isPremium) {
+    if (todaySession) {
       adjusted = adjustSession(todaySession, zone);
       setAdjustedSession(adjusted);
     }
@@ -497,12 +500,10 @@ const Recovery = () => {
               </motion.div>
             )}
 
-            {!adjustedSession && todaySession && !isPremium && (
+            {!adjustedSession && todaySession && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
                 className="mt-3 bg-card border border-border rounded-xl p-3 text-center">
-                <Lock size={16} className="mx-auto text-muted-foreground mb-1" />
-                <p className="text-xs font-semibold mb-0.5">Auto Training Adjustments</p>
-                <p className="text-[12px] text-muted-foreground">Upgrade to Pro to automatically adjust your training based on readiness.</p>
+                <p className="text-[12px] text-muted-foreground">No active plan session today, so there is nothing to adapt — your readiness score above still stands.</p>
               </motion.div>
             )}
           </motion.div>

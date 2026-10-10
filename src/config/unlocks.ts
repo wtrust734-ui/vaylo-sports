@@ -115,8 +115,11 @@ export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
       "Which of your strengths carry over, and which gaps do not close",
       "Cross-training blocks ordered by transfer, not by habit",
     ],
-    route: "/cross-training",
-    routeLabel: "Open Cross-Sport Analysis",
+    // Was /cross-training: that standalone tab is gone, and cross-training now
+    // lives inside the plan itself (equipment answered at setup), so the plan
+    // is the honest home for this price.
+    route: "/training",
+    routeLabel: "Open Training Plans",
     pairsWith: ["injury_management"],
   },
 ];

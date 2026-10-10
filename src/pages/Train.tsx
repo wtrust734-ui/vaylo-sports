@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Dumbbell, Timer, Flame, ScanLine, Shuffle, Zap, CalendarRange, ClipboardList, Gamepad2 } from "lucide-react";
+import { Dumbbell, Flame, ScanLine, Zap, CalendarRange, ClipboardList, Gamepad2 } from "lucide-react";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
 
@@ -23,8 +23,6 @@ const Train = () => {
         // normal part of training, and an athlete who cannot find it will just
         // train through the holiday.
         { icon: CalendarRange, label: t("hub.train.availability"), description: t("hub.train.availabilityDesc"), path: "/availability", feature: "training.availability" },
-        { icon: Timer, label: t("hub.train.routines"), description: t("hub.train.routinesDesc"), path: "/routines", feature: "training.routines" },
-        { icon: Shuffle, label: t("hub.train.crossTraining"), description: t("hub.train.crossTrainingDesc"), path: "/cross-training", feature: "training.crossTraining" },
       ],
     },
     {

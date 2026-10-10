@@ -24,8 +24,6 @@ export type FeatureKey =
   // Train
   | "training.plans"
   | "training.availability"
-  | "training.routines"
-  | "training.crossTraining"
   | "training.pbs"
   | "training.form"
   | "training.workouts"
@@ -67,17 +65,21 @@ export type FeatureDef = {
 };
 
 export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
-  // Train — plans & routines are universal; form/AR lean skill+team (technique
-  // sports); cross-training matters most to single-discipline athletes, which
-  // is every family here — so it stays universal.
+  // Train — plans are universal; form leans skill+team (technique sports).
+  // Cross-training no longer has a standalone surface: it is prescribed inside
+  // the plan itself from the equipment answered at setup, so there is no key
+  // for it here. Routines were removed the same way — no tab, no key.
   "training.plans": { key: "training.plans", families: ["*"], route: "/training" },
   // Universal, like plans: every athlete has a life, and an availability layer
   // that a single-sport athlete cannot reach would be the wrong kind of
   // personal rather than a smart one.
   "training.availability": { key: "training.availability", families: ["*"], route: "/availability" },
-  "training.routines": { key: "training.routines", families: ["*"], route: "/routines" },
-  "training.crossTraining": { key: "training.crossTraining", families: ["*"], route: "/cross-training" },
-  "training.pbs": { key: "training.pbs", families: ["endurance", "skill", "strength", "multi"], route: "/pbs" },
+  // PBs are an endurance concept (run / bike / swim times) plus "Other", whose
+  // sport is unknown rather than PB-less: hiding records from an athlete the
+  // app cannot classify would be the wrong kind of personal. Team, skill,
+  // strength and combat athletes (football, cricket, tennis, lifting, MMA)
+  // never see the tab — their sports have no PBs.
+  "training.pbs": { key: "training.pbs", families: ["endurance", "multi"], route: "/pbs" },
   "training.form": { key: "training.form", families: ["skill", "team", "strength", "combat", "multi"], route: "/form" },
   // Logging a finished session is not a preference any sport opts out of: the
   // record it writes is what the recovery read, the streak and the insights all

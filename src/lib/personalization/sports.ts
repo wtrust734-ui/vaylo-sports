@@ -20,6 +20,7 @@ export const SPORT_DISCIPLINES: Discipline[] = [
   { name: "Cycling", family: "endurance" },
   { name: "Swimming", family: "endurance" },
   { name: "Triathlon", family: "endurance" },
+  { name: "Cricket", family: "team" },
   { name: "Football", family: "team" },
   { name: "Basketball", family: "team" },
   { name: "Rugby", family: "team" },

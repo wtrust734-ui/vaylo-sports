@@ -80,8 +80,8 @@ export function classifyBreak(days: number): BreakCategory {
   return "reset";
 }
 
-/** What one week back is for, which drives the copy and the styling. */
-export type ReturnFocus = "rebuild" | "restore" | "resume" | "compete";
+/** What one week is for, which drives the copy and the styling. */
+export type ReturnFocus = "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
 
 export interface ProgressionStep {
   /** 1 = the first week back. */
@@ -631,11 +631,19 @@ const WEEK_FOCUS_COPY: Record<ReturnFocus, { lead: string; ask: string }> = {
   restore: { lead: "Still rebuilding", ask: "a little more than last week" },
   resume: { lead: "Almost back", ask: "nearly your normal training" },
   compete: { lead: "Competition week", ask: "stay fresh rather than fit" },
+  preload: { lead: "Loading week", ask: "bank a little extra before your break" },
+  holiday: { lead: "Holiday week", ask: "easy movement only while you are away" },
 };
 
 /** The line the Training screen shows above the week. */
 export function weekNote(step: ProgressionStep): string {
   const copy = WEEK_FOCUS_COPY[step.focus];
+  if (step.focus === "preload") {
+    return `${copy.lead} — about ${step.volumePct}% of your usual volume, ${copy.ask} at up to ${step.intensityPct}% intensity. Bank it now; the break does the resting.`;
+  }
+  if (step.focus === "holiday") {
+    return `${copy.lead} — about ${step.volumePct}% of your usual volume, ${copy.ask} at up to ${step.intensityPct}% intensity. The fitness comes back after, not during.`;
+  }
   return `${copy.lead} — about ${step.volumePct}% of your usual volume, ${copy.ask} at up to ${step.intensityPct}% intensity. Nothing was moved from your break into this week.`;
 }
 
@@ -702,6 +710,12 @@ export function rebuildExplanation(input: {
       `${weeks} week${weeks === 1 ? "" : "s"} around your most important sessions rather than trying to make up everything you missed.`,
   );
 
+  if (steps.some((s) => s.focus === "preload")) {
+    parts.push("The week before is loaded a little higher (about 110% of your usual volume) so you bank fitness going in.");
+  }
+  if (steps.some((s) => s.focus === "holiday")) {
+    parts.push("The holiday week itself is eased right back to easy movement rather than left as normal training.");
+  }
   if (credited >= 1) {
     parts.push(
       `You kept training during some of it, so ${Math.floor(credited)} of those days ${Math.floor(credited) === 1 ? "is" : "are"} already accounted for.`,
@@ -792,6 +806,81 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
   const youth = context.age !== null && context.age !== undefined && context.age < 18;
   const locked = new Set(input.locked ?? []);
 
+  const applied: AdjustmentStep[] = [];
+  const snapshots: SessionSnapshot[] = [];
+  const rebuilt = new Map<number, PlanWeekLike>();
+
+  const playableCount = (week: PlanWeekLike): number =>
+    week.sessions.filter((s) => !isRestDay(s)).length;
+
+  const recordStep = (
+    week: PlanWeekLike,
+    step: ProgressionStep & { weekNumber: number; fromDay?: number },
+    result: { week: PlanWeekLike; snapshot: SessionSnapshot[]; droppedTitles: string[] },
+  ): void => {
+    rebuilt.set(step.weekNumber, result.week);
+    snapshots.push(...result.snapshot);
+    applied.push({
+      week: step.weekNumber,
+      back: step.back,
+      volumePct: step.volumePct,
+      intensityPct: step.intensityPct,
+      focus: step.focus,
+      sessions: result.week.sessions.filter((s) => !isRestDay(s)).length,
+      dropped: result.droppedTitles.length,
+      previousNote: typeof week.extraNote === "string" ? week.extraNote : undefined,
+      previousTag: week.returnFromBreak,
+    });
+  };
+
+  // A planned break reshapes the weeks around it, not just the ones after.
+  // Someone on holiday in week 5 of 10 gets three things: the week before
+  // loaded a little higher to bank fitness, the holiday week itself eased back
+  // to easy movement, and the existing return progression climbing back after.
+  // Only for breaks that can be seen coming (holiday, travel): preloading an
+  // illness is nonsense advice, and rewriting the weeks inside a medical break
+  // would fight the conservatism the progression applies to it.
+  const shapesSurroundings =
+    (facts.eventType === "holiday" || facts.eventType === "travel") && !context.medical;
+
+  if (shapesSurroundings) {
+    // The week before: about 10% more volume, banked while the athlete can
+    // still train. Only when the week is still ahead of them — a week that has
+    // already finished is history, and days already behind them inside the
+    // current week stay exactly as they are.
+    const preWeek = weekContaining(weeks, weekStart, addDays(facts.startDate, -1));
+    if (preWeek !== null) {
+      const week = weeks.find((w) => w.week === preWeek);
+      const startKey = weekStart(preWeek);
+      if (week && startKey >= today && playableCount(week) > 0 && !rebuilt.has(preWeek)) {
+        const fromDay = today > startKey && today <= addDays(startKey, 6) ? dayOfWeek(today) : 1;
+        const step = { back: 0, volumePct: 110, intensityPct: 100, focus: "preload" as ReturnFocus, weekNumber: preWeek, fromDay };
+        const result = rebuildWeek(week, step, facts.eventId, locked);
+        if (result.snapshot.length) recordStep(week, step, result);
+      }
+    }
+
+    // The weeks the break falls in: eased back to easy movement, so opening
+    // the plan mid-holiday shows sessions that are actually doable. Skipped
+    // when the athlete said they want no training — those sessions are already
+    // cancelled by the availability layer, and rewriting them would destroy
+    // the record of what was planned.
+    if (facts.allowTraining !== "no") {
+      for (const week of weeks) {
+        const startKey = weekStart(week.week);
+        const endKey = addDays(startKey, 6);
+        if (endKey < facts.startDate || startKey > facts.endDate) continue;
+        if (endKey < today) continue;
+        if (rebuilt.has(week.week)) continue;
+        if (playableCount(week) === 0) continue;
+        const fromDay = today > startKey && today <= endKey ? dayOfWeek(today) : 1;
+        const step = { back: 0, volumePct: 50, intensityPct: 60, focus: "holiday" as ReturnFocus, weekNumber: week.week, fromDay };
+        const result = rebuildWeek(week, step, facts.eventId, locked);
+        if (result.snapshot.length) recordStep(week, step, result);
+      }
+    }
+  }
+
   /**
    * The week of a competition, which is a taper rather than a rebuild.
    *
@@ -818,10 +907,6 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
   const competitionWeek = competingSoon
     ? weekContaining(weeks, weekStart, windowCompetitions[0].date)
     : null;
-
-  const applied: AdjustmentStep[] = [];
-  const snapshots: SessionSnapshot[] = [];
-  const rebuilt = new Map<number, PlanWeekLike>();
 
   steps.forEach((step, index) => {
     const weekNumber = startWeek + index;
@@ -853,20 +938,12 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
     // a week nothing was scaled in would be the app describing a change it did
     // not make.
     if (!result.snapshot.length) return;
-    rebuilt.set(weekNumber, result.week);
-    snapshots.push(...result.snapshot);
-    applied.push({
-      week: weekNumber,
-      back: step.back,
-      volumePct: effectiveStep.volumePct,
-      intensityPct: effectiveStep.intensityPct,
-      focus: effectiveStep.focus,
-      sessions: result.week.sessions.filter((s) => !isRestDay(s)).length,
-      dropped: result.droppedTitles.length,
-      previousNote: typeof week.extraNote === "string" ? week.extraNote : undefined,
-      previousTag: week.returnFromBreak,
-    });
+    recordStep(week, effectiveStep, result);
   });
+
+  // Pre-break and in-break steps are recorded before the return progression
+  // above; chronological order is what every reader expects.
+  applied.sort((a, b) => a.week - b.week);
 
   if (!applied.length) return { reason: "nothing-planned", adjustment: null, weeks: [...weeks] };
 

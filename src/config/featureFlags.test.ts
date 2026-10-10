@@ -72,7 +72,7 @@ describe("isRouteVisible", () => {
     // Regression guard for the shape of the helper: a route that is not in the
     // map must never be hidden, or a typo in FLAGGED_ROUTES would silently
     // delete navigation across the app.
-    for (const path of ["/", "/training", "/routines", "/recover", "/market", "/profile"]) {
+    for (const path of ["/", "/training", "/pbs", "/recover", "/market", "/profile"]) {
       expect(isRouteVisible(path), `${path} should stay visible`).toBe(true);
   }
   });

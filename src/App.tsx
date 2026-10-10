@@ -82,7 +82,7 @@ const Development = lazy(() => import("./pages/Development"));
 const Identity = lazy(() => import("./pages/Identity"));
 const Injury = lazy(() => import("./pages/Injury"));
 
-const CrossTraining = lazy(() => import("./pages/CrossTraining"));
+
 const Learning = lazy(() => import("./pages/Learning"));
 const LearningArticle = lazy(() => import("./pages/LearningArticle"));
 const MetricsHub = lazy(() => import("./pages/MetricsHub"));
@@ -96,7 +96,7 @@ const Insights = lazy(() => import("./pages/Insights"));
 
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const PBs = lazy(() => import("./pages/PBs"));
-const Routines = lazy(() => import("./pages/Routines"));
+
 // Log only: this screen records a session that has already happened. It
 // cannot start or track one — the Android build declares no location
 // permission, so a live workout would have no route and no distance.
@@ -460,7 +460,7 @@ const App = () => (
                 <Route path="/workouts" element={<Workouts />} />
                 <Route path="/stats" element={<Navigate to="/metrics" replace />} />
                 <Route path="/load" element={<Navigate to="/metrics" replace />} />
-                <Route path="/cross-sport" element={<Navigate to="/cross-training" replace />} />
+                <Route path="/cross-sport" element={<Navigate to="/training" replace />} />
                 <Route path="/competition" element={<Navigate to="/events" replace />} />
                 {/* Removed 2026-10-08: surfaces that were broken, empty or
                     pointless in a closed test. Redirects rather than 404s, so an
@@ -483,7 +483,10 @@ const App = () => (
                 <Route path="/opponents" element={<Navigate to="/compete" replace />} />
                 <Route path="/ar-overlay" element={<Navigate to="/form" replace />} />
                 
-                <Route path="/cross-training" element={<CrossTraining />} />
+                {/* Removed: the standalone cross-training tab. Cross-training is
+                    prescribed inside the plan itself from the equipment answered
+                    at setup, so these land on the plan. Same for /routines. */}
+                <Route path="/cross-training" element={<Navigate to="/training" replace />} />
                 <Route path="/learning" element={<Learning />} />
                 <Route path="/learning/:lessonId" element={<LearningArticle />} />
                 <Route path="/metrics" element={<MetricsHub />} />
@@ -514,7 +517,7 @@ const App = () => (
                     not behind the wearableSync flag either. */}
                 <Route path="/insights" element={<Insights />} />
                 <Route path="/pbs" element={<PBs />} />
-                <Route path="/routines" element={<Routines />} />
+                <Route path="/routines" element={<Navigate to="/training" replace />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/profile/notifications" element={<NotificationPrefs />} />
                 <Route path="/referrals" element={<Referrals />} />

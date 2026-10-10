@@ -71,12 +71,12 @@ const SESSION_FILE = arg("session", ".qa/session.json");
 const session = existsSync(SESSION_FILE) ? readFileSync(SESSION_FILE, "utf8") : null;
 
 const DEFAULT_ROUTES = [
-  "/", "/train", "/perform", "/profile", "/availability", "/training", "/routines",
+  "/", "/train", "/perform", "/profile", "/availability", "/training",
   "/metrics", "/stats", "/vpr", "/recovery", "/mental", "/nutrition", "/injury",
   "/form", "/form/video", "/health-sync", "/coach", "/market", "/pricing",
   "/subscription", "/avatar", "/collection", "/identity", "/workouts",
   "/challenges", "/competition", "/events", "/pbs",
-  "/compare", "/cross-training", "/cross-sport", "/tactics",
+  "/compare", "/tactics",
   "/skills", "/goals", "/guardian", "/starting-analysis", "/insights", "/achievements", "/trophies", "/learning", "/notifications",
   "/referrals", "/referral-leaderboard", "/event-packs", "/marketplace", "/arcade",
   "/discord", "/compete", "/settings/delete-account", "/auth",

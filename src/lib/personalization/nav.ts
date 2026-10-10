@@ -40,8 +40,6 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     items: [
       { feature: "training.plans", labelKey: "sidebar.trainingPlans", path: "/training", newFirst: true },
       { feature: "training.availability", labelKey: "sidebar.availability", path: "/availability" },
-      { feature: "training.routines", labelKey: "sidebar.routines", path: "/routines" },
-      { feature: "training.crossTraining", labelKey: "sidebar.crossTraining", path: "/cross-training", establishedFirst: true },
       { feature: "training.pbs", labelKey: "sidebar.pbs", path: "/pbs", establishedFirst: true },
       { feature: "training.form", labelKey: "sidebar.formAnalysis", path: "/form" },
     ],

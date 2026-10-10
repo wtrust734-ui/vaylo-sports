@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert, Video } from "lucide-react";
 import { fetchAICatalog, runAIDetailed, testAIConnection, type AIFeature, type AIResult } from "@/lib/aiService";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,24 @@ const AIDev = () => {
   const [result, setResult] = useState<AIResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  // Ad workflow state
+  const [adBrief, setAdBrief] = useState({
+    name: "Spring Push",
+    objective: "app_installs",
+    audience: "Club runners aged 18-30",
+    platform: "reels",
+    budgetUsd: 25,
+    message: "Track every session and watch your VPR improve",
+    callToAction: "Join the waitlist",
+  });
+  const [adLoading, setAdLoading] = useState(false);
+  const [adError, setAdError] = useState<string | null>(null);
+  const [adResult, setAdResult] = useState<any>(null);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [selectedConcept, setSelectedConcept] = useState<any>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<any>(null);
 
   // Admin gate — this console burns AI tokens and reveals prompts, so it must
   // never be reachable by regular users (mirrors AdminPricing's check).
@@ -79,6 +97,86 @@ const AIDev = () => {
       });
     });
 
+  const createCampaign = async () => {
+    setAdLoading(true);
+    setAdError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("campaign", {
+        body: { action: "brief", brief: adBrief },
+      });
+      if (error) throw new Error(error.message);
+      setAdResult(data);
+    } catch (e) {
+      setAdError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAdLoading(false);
+    }
+  };
+
+  const getConcepts = async () => {
+    setAdLoading(true);
+    setAdError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("campaign", {
+        body: { action: "concepts", brief: adBrief },
+      });
+      if (error) throw new Error(error.message);
+      setAdResult(data);
+      if (data.concepts?.[0]) {
+        setSelectedConcept(data.concepts[0]);
+      }
+    } catch (e) {
+      setAdError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAdLoading(false);
+    }
+  };
+
+  const startRender = async () => {
+    if (!selectedConcept) return;
+    setAdLoading(true);
+    setAdError(null);
+    try {
+      // Build a minimal render request for testing
+      const renderReq = {
+        presetId: "reels",
+        clips: [
+          { src: "https://www.w3schools.com/tags/mov_bbb.mp4", trimStart: 0, trimEnd: 3 }
+        ],
+        overlays: [],
+        keepSourceAudio: true,
+        outputPath: "test.mp4",
+      };
+      const { data, error } = await supabase.functions.invoke("ad-render", {
+        body: { action: "render", renderRequest: renderReq },
+      });
+      if (error) throw new Error(error.message);
+      setAdResult(data);
+      setJobId(data.jobId);
+    } catch (e) {
+      setAdError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAdLoading(false);
+    }
+  };
+
+  const pollJob = async () => {
+    if (!jobId) return;
+    setAdLoading(true);
+    setAdError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("ad-render", {
+        body: { action: "status", jobId },
+      });
+      if (error) throw new Error(error.message);
+      setJobStatus(data.job);
+    } catch (e) {
+      setAdError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAdLoading(false);
+    }
+  };
+
   if (isAdmin === null) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Checking access…</div>;
   }
@@ -124,6 +222,71 @@ const AIDev = () => {
             className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-2.5 rounded-xl text-sm disabled:opacity-60">
             {loading ? <><Loader2 size={16} className="animate-spin" /> Running…</> : "Run integration check"}
           </motion.button>
+        </div>
+
+        {/* Ad Workflow (Experimental) */}
+        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Video size={18} className="text-primary" />
+            <h3 className="font-semibold text-sm">Ad Workflow (Experimental)</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">Steps 1-4 scaffold + steps 5-6 persistence. Tests campaign + concepts + render dispatch.</p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+              <input value={adBrief.name} onChange={e => setAdBrief({...adBrief, name: e.target.value})}
+                className="w-full bg-muted border border-border rounded-lg px-2 py-1.5 text-xs"/>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Platform</label>
+              <select value={adBrief.platform} onChange={e => setAdBrief({...adBrief, platform: e.target.value})}
+                className="w-full bg-muted border border-border rounded-lg px-2 py-1.5 text-xs">
+                <option value="reels">reels</option>
+                <option value="tiktok">tiktok</option>
+                <option value="shorts">shorts</option>
+                <option value="feed">feed</option>
+                <option value="youtube">youtube</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Message</label>
+            <input value={adBrief.message} onChange={e => setAdBrief({...adBrief, message: e.target.value})}
+              className="w-full bg-muted border border-border rounded-lg px-2 py-1.5 text-xs"/>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading} onClick={createCampaign}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs disabled:opacity-60">
+              Validate Brief
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading} onClick={getConcepts}
+              className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
+              Get Concepts
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading || !selectedConcept} onClick={startRender}
+              className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
+              Start Render (test)
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading || !jobId} onClick={pollJob}
+              className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
+              Poll Job
+            </motion.button>
+          </div>
+
+          {adError && <p className="text-xs text-destructive">{adError}</p>}
+          {adResult && (
+            <pre className="text-xs overflow-auto max-h-40 bg-muted p-2 rounded-lg">{JSON.stringify(adResult, null, 2)}</pre>
+          )}
+          {jobStatus && (
+            <div className="text-xs">
+              <div className="font-semibold">Job: {jobStatus.job_id}</div>
+              <div>Status: {jobStatus.status} ({jobStatus.progress}%)</div>
+              {jobStatus.error && <div className="text-destructive">{jobStatus.error}</div>}
+            </div>
+          )}
         </div>
 
         {/* Feature picker */}

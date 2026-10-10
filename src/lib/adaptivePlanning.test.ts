@@ -449,10 +449,14 @@ describe("rebuildPlanForBreak", () => {
     const plan = planRow();
     const result = await rebuildPlanForBreak({ userId: "u1", plan, event: holiday(), age: 30, today: TODAY });
     const written = db.writes[0].values.plan_data as PlanWeekLike[];
-    // The break is in week 2 and the return is in week 3: weeks 1 and 2 are the
-    // same objects, so nothing inside them can have changed.
-    expect(written[0]).toBe(plan.plan_data[0]);
+    // The break is in week 2 and the return is in week 3. Week 2 (no training
+    // allowed) is the same object, so nothing inside it can have changed.
     expect(written[1]).toBe(plan.plan_data[1]);
+    // Week 1 is the loading week before the holiday: still ahead of the
+    // athlete, so it banks ~10% more volume (60 min -> 65) rather than being
+    // rewritten as history.
+    expect(written[0]).not.toBe(plan.plan_data[0]);
+    expect(written[0].sessions.find((s) => s.day === 1)!.duration_minutes).toBe(65);
   });
 
   it("refuses to apply the same break twice", async () => {

@@ -13,7 +13,7 @@ import CountrySelect from "@/components/geo/CountrySelect";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
 import { EQUIPMENT, describeEquipment, normaliseEquipment, type EquipmentId } from "@/config/equipment";
 
-const SPORTS = ["Running", "Cycling", "Football", "Basketball", "Tennis", "Swimming", "Weightlifting", "Triathlon", "Climbing", "MMA / Boxing", "Other"];
+const SPORTS = ["Running", "Cycling", "Football", "Cricket", "Basketball", "Tennis", "Swimming", "Weightlifting", "Triathlon", "Climbing", "MMA / Boxing", "Other"];
 const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
 const GOALS = [
   "Build endurance", "Get stronger", "Lose fat", "Gain muscle", "Compete & win", "Improve health",

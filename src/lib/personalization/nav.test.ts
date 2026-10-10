@@ -46,6 +46,29 @@ describe("isFeatureRelevant", () => {
     expect(isFeatureRelevant("perform.skills", ["endurance"])).toBe(false);
   });
 
+  it("shows PBs only to PB sports: runners see it, cricketers and lifters do not", () => {
+    expect(isFeatureRelevant("training.pbs", ["endurance"])).toBe(true);
+    expect(isFeatureRelevant("training.pbs", ["multi"])).toBe(true);
+    expect(isFeatureRelevant("training.pbs", ["team"])).toBe(false);
+    expect(isFeatureRelevant("training.pbs", ["strength"])).toBe(false);
+    expect(isFeatureRelevant("training.pbs", ["skill"])).toBe(false);
+    expect(isFeatureRelevant("training.pbs", ["combat"])).toBe(false);
+  });
+
+  it("maps Cricket to the team family, so cricketers never see the PBs tab", () => {
+    expect(familiesForProfile({ sports: ["Cricket"], experience: "established" })).toEqual(["team"]);
+    const paths = visibleFeatures(
+      NAV_CATALOG.flatMap((g) => g.items),
+      { sports: ["Cricket"], experience: "established" },
+    ).map((i) => i.path);
+    expect(paths).not.toContain("/pbs");
+    const runPaths = visibleFeatures(
+      NAV_CATALOG.flatMap((g) => g.items),
+      runner,
+    ).map((i) => i.path);
+    expect(runPaths).toContain("/pbs");
+  });
+
   it("never hides universal features", () => {
     for (const key of ["training.plans", "recover.injury", "compete.challenges"] as const) {
       expect(isFeatureRelevant(key, ["endurance"])).toBe(true);
@@ -110,7 +133,7 @@ describe("escape hatch", () => {
 describe("ordering", () => {
   it("new athletes see onboarding surfaces first", () => {
     const items = [
-      { feature: "training.crossTraining" as const, newFirst: false, establishedFirst: true, id: "cross" },
+      { feature: "training.pbs" as const, newFirst: false, establishedFirst: true, id: "pbs" },
       { feature: "training.plans" as const, newFirst: true, id: "plans" },
     ];
     const ordered = orderForExperience(items, { sports: ["Running"], experience: "new" });
@@ -120,10 +143,10 @@ describe("ordering", () => {
   it("established athletes see depth surfaces first", () => {
     const items = [
       { feature: "training.plans" as const, newFirst: true, id: "plans" },
-      { feature: "training.crossTraining" as const, establishedFirst: true, id: "cross" },
+      { feature: "training.pbs" as const, establishedFirst: true, id: "pbs" },
     ];
     const ordered = orderForExperience(items, { sports: ["Running"], experience: "established" });
-    expect(ordered[0].id).toBe("cross");
+    expect(ordered[0].id).toBe("pbs");
   });
 
   it("orderByRelevance is stable and only reorders, never removes", () => {

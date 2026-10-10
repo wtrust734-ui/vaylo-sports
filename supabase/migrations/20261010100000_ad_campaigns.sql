@@ -23,7 +23,6 @@ create index if not exists ad_campaigns_created_at_idx on public.ad_campaigns (c
 
 alter table public.ad_campaigns enable row level security;
 
--- Deny by default, allow owner
 create policy "ad_campaigns_owner_rw" on public.ad_campaigns
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
@@ -58,7 +57,7 @@ alter table public.ad_concepts enable row level security;
 create policy "ad_concepts_owner_rw" on public.ad_concepts
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
--- Assets (narration, shots, etc.)
+-- Assets
 create table if not exists public.ad_assets (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.ad_campaigns (id) on delete cascade,
@@ -85,7 +84,7 @@ alter table public.ad_assets enable row level security;
 create policy "ad_assets_owner_rw" on public.ad_assets
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
--- Exports (final renders)
+-- Exports
 create table if not exists public.ad_exports (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.ad_campaigns (id) on delete cascade,
@@ -116,7 +115,7 @@ alter table public.ad_exports enable row level security;
 create policy "ad_exports_owner_rw" on public.ad_exports
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
--- Render jobs (worker tracking)
+-- Render jobs
 create table if not exists public.ad_render_jobs (
   id uuid primary key default gen_random_uuid(),
   job_id text not null unique,
@@ -149,36 +148,9 @@ alter table public.ad_render_jobs enable row level security;
 create policy "ad_render_jobs_owner_rw" on public.ad_render_jobs
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
--- Storage bucket for ad renders/exports
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  values (
-    'ad-renders',
-    'ad-renders',
-    false,
-    200 * 1024 * 1024, -- 200MB
-    ARRAY['video/mp4', 'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/aac', 'image/png', 'image/jpeg', 'image/webp']
-  )
-  on conflict (id) do nothing;
-
--- Storage policies: owners can manage their own files (path includes owner_id)
-create policy if not exists "ad_renders_owner_read" on storage.objects
-  for select using (
-    bucket_id = 'ad-renders'
-    and auth.uid()::text = (storage.foldername(name))[1]
-  );
-
-create policy if not exists "ad_renders_owner_write" on storage.objects
-  for insert with check (
-    bucket_id = 'ad-renders'
-    and auth.uid()::text = (storage.foldername(name))[1]
-  );
-
-create policy if not exists "ad_renders_owner_update" on storage.objects
-  for update using (
-    bucket_id = 'ad-renders'
-    and auth.uid()::text = (storage.foldername(name))[1]
-  );
-
-create policy if not exists "ad_renders_owner_delete" on storage.objects
-  for delete using (
-    bucket_id = 'ad-renders'
+-- Grants
+grant all on public.ad_campaigns to authenticated, service_role;
+grant all on public.ad_concepts to authenticated, service_role;
+grant all on public.ad_assets to authenticated, service_role;
+grant all on public.ad_exports to authenticated, service_role;
+grant all on public.ad_render_jobs to authenticated, service_role;

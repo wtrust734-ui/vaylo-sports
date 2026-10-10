@@ -514,11 +514,14 @@ describe("planRebuild", () => {
     expect(byDay(week3, 3).title).toBe("Interval Training");
     expect(byDay(week3, 7).isRest).toBe(true);
 
-    // The skipped weeks are the very same objects, not copies with equal
-    // values: there is no path by which they were touched.
-    expect(outcome.weeks[0]).toBe(outcome.weeks[0]);
+    // Week 1 is the loading week before the holiday: every session is still
+    // there, just ~10% longer (60 min -> 65, rounded to five minutes).
     const original = plan();
-    expect(outcome.weeks[0]).toEqual(original[0]);
+    expect(outcome.weeks[0]).not.toBe(original[0]);
+    for (const day of [1, 3, 5, 7]) expect(byDay(outcome.weeks[0], day).duration_minutes).toBe(65);
+    expect(outcome.weeks[0].extraNote).toContain("Loading week");
+    // The holiday week itself (no training allowed) and the later weeks are
+    // the very same objects: there is no path by which they were touched.
     expect(outcome.weeks[1]).toEqual(original[1]);
     expect(outcome.weeks[3]).toEqual(original[3]);
   });
@@ -529,6 +532,7 @@ describe("planRebuild", () => {
     expect(adjustment!.explanation).toContain("rather than trying to make up everything you missed");
     expect(adjustment!.headline).toBe("Rebuilt for a holiday");
     expect(adjustment!.steps).toEqual([
+      { week: 1, back: 0, volumePct: 110, intensityPct: 100, focus: "preload", sessions: 4, dropped: 0, previousNote: undefined },
       { week: 3, back: 1, volumePct: 70, intensityPct: 80, focus: "rebuild", sessions: 3, dropped: 1, previousNote: undefined },
     ]);
   });
@@ -570,8 +574,10 @@ describe("planRebuild", () => {
     });
     expect(outcome.reason).toBe("applied");
     expect(outcome.adjustment!.creditedDays).toBe(4);
-    expect(outcome.adjustment!.steps).toHaveLength(1);
-    expect(outcome.adjustment!.steps[0].volumePct).toBe(70);
+    // The loading week plus the one-week return progression.
+    expect(outcome.adjustment!.steps).toHaveLength(2);
+    expect(outcome.adjustment!.steps[0]).toMatchObject({ week: 1, focus: "preload", volumePct: 110 });
+    expect(outcome.adjustment!.steps[1].volumePct).toBe(70);
     expect(outcome.adjustment!.explanation).toContain("You kept training during some of it");
   });
 
@@ -592,7 +598,10 @@ describe("planRebuild", () => {
       facts: facts({ startDate: "2026-10-12", endDate: "2026-10-25", days: 14 }),
       competitions: [{ title: "Sunday League", date: "2026-10-31" }],
     });
-    const [first, second] = outcome.adjustment!.steps;
+    const steps = outcome.adjustment!.steps;
+    // A loading week is banked before the break; the return starts after it.
+    expect(steps[0]).toMatchObject({ week: 1, focus: "preload", volumePct: 110 });
+    const [first, second] = steps.slice(1);
     expect(first.week).toBe(4);
     // Volume cut to at most half, intensity kept — arriving fresh is the only
     // thing left to optimise in the week of a match.
@@ -614,12 +623,16 @@ describe("planRebuild", () => {
     // A hard session completed on the Monday before the break, recorded the way
     // the adaptive record records it: week 1, day 1, and therefore locked.
     const outcome = run({ weeks: original, locked: [weekDayKey(1, 1)] });
-    // Weeks 1 and 2 are the very same objects, so no duration or type inside
-    // them can have changed: there is no path by which they were rewritten.
-    expect(outcome.weeks[0]).toBe(original[0]);
-    expect(outcome.weeks[1]).toBe(original[1]);
+    // The loading week still banks fitness around the completed session, but
+    // the session itself is left exactly as it was.
+    expect(outcome.weeks[0]).not.toBe(original[0]);
     expect(outcome.weeks[0].sessions[0].duration_minutes).toBe(60);
     expect(outcome.weeks[0].sessions[0].type).toBe("speed");
+    expect(outcome.weeks[0].sessions[0].returnFromBreak).toBeUndefined();
+    // The other days of the loading week still bank their extra 10%.
+    expect(byDay(outcome.weeks[0], 3).duration_minutes).toBe(65);
+    // The holiday week is the very same object: no path rewrote it.
+    expect(outcome.weeks[1]).toBe(original[1]);
   });
 
   it("case 6 (cont.) — a hard session completed on the way back is locked out of the rebuild", () => {
@@ -658,8 +671,9 @@ describe("planRebuild", () => {
 
   it("case 8 — poor recovery logging takes another notch off the first week back", () => {
     const outcome = run({ context: { recoveryPoor: true } });
-    expect(outcome.adjustment!.steps[0].volumePct).toBe(60);
-    expect(outcome.adjustment!.steps[0].intensityPct).toBe(70);
+    const firstBack = outcome.adjustment!.steps.find((s) => s.focus === "rebuild")!;
+    expect(firstBack.volumePct).toBe(60);
+    expect(firstBack.intensityPct).toBe(70);
   });
 
   it("case 9 — an illness or injury break is capped harder and says it is not medical advice", () => {
@@ -686,7 +700,8 @@ describe("planRebuild", () => {
       id: "adj-1",
       facts: facts({ startDate: "2026-10-12", endDate: "2026-10-25", days: 14 }),
     });
-    expect(first.adjustment!.steps.map((s) => s.week)).toEqual([4, 5]);
+    // The loading week comes first, then the two-week return progression.
+    expect(first.adjustment!.steps.map((s) => s.week)).toEqual([1, 4, 5]);
     expect(byDay(first.weeks[4], 3).duration_minutes).toBe(45); // 60 × 75%
 
     // Their availability changes again the moment they are back: another week
@@ -699,12 +714,16 @@ describe("planRebuild", () => {
       facts: facts({ eventId: "ev-2", startDate: "2026-10-26", endDate: "2026-11-01", days: 7 }),
     });
     expect(second.reason).toBe("applied");
-    expect(second.adjustment!.steps[0].week).toBe(5);
+    // The second break banks its own loading week (week 3, on top of the
+    // first rebuild's values) and returns into week 5.
+    expect(second.adjustment!.steps.map((s) => s.week)).toEqual([3, 5]);
+    expect(second.adjustment!.steps[1].week).toBe(5);
     // Scaled off what was already there: 60 → 45 → 30. Nothing is resurrected
     // and nothing is stacked.
     expect(byDay(second.weeks[4], 3).duration_minutes).toBe(30);
-    // And the second break is not allowed to re-apply the first one.
-    expect(second.adjustment!.steps).toHaveLength(1);
+    // And the second break is not allowed to re-apply the first one: its two
+    // steps are its own loading week and its own return, nothing from ev-1.
+    expect(second.adjustment!.steps).toHaveLength(2);
 
     // Undoing in reverse order walks the plan back to where it started.
     const undoneSecond = undoAdjustment(second.weeks, second.adjustment!);
@@ -785,8 +804,9 @@ describe("planRebuild", () => {
     // is left as a rest day.
     expect(saturday.map((s) => s.title)).toEqual(["Rest Day", "Football Match"]);
     expect(saturday[1].duration_minutes).toBe(65); // 90 × 70% = 63 → 65
-    expect(outcome.adjustment!.steps[0].volumePct).toBe(70);
-    expect(outcome.adjustment!.steps[0].sessions).toBeGreaterThanOrEqual(4);
+    const rebuilt = outcome.adjustment!.steps.find((s) => s.focus === "rebuild")!;
+    expect(rebuilt.volumePct).toBe(70);
+    expect(rebuilt.sessions).toBeGreaterThanOrEqual(4);
   });
 
   it("case 13 — a youth athlete gets a gentler, longer rebuild and development copy", () => {
@@ -818,7 +838,10 @@ describe("planRebuild", () => {
     // A break that ends mid-week returns the athlete into that same week; the
     // days from the return onwards are rebuilt and the days before are not.
     const outcome = run({ facts: facts({ startDate: "2026-10-12", endDate: "2026-10-16", days: 5 }) });
-    expect(outcome.adjustment!.steps[0].week).toBe(2);
+    // The loading week (week 1) is recorded first; the return still starts in
+    // the week the athlete comes back, not the week after it.
+    expect(outcome.adjustment!.steps[0]).toMatchObject({ week: 1, focus: "preload" });
+    expect(outcome.adjustment!.steps[1].week).toBe(2);
     const week2 = outcome.weeks[1];
     // Monday is before the return, so it is untouched despite the rebuild.
     expect(byDay(week2, 1).duration_minutes).toBe(60);
@@ -848,6 +871,92 @@ describe("planRebuild", () => {
     expect(outcome.adjustment!.steps[0].week).toBe(4);
     // Weeks 1–3 are untouched, which is the whole point.
     expect(outcome.weeks.slice(0, 3)).toEqual(plan().slice(0, 3));
+  });
+
+  it("shapes the weeks around a mid-plan holiday: load before, ease during, ramp after", () => {
+    // The exact shape asked for: a 10-week plan, holiday in week 5, training
+    // allowed while away. Week 4 banks ~10% more, week 5 drops to easy
+    // movement, week 6 climbs back at the normal return rate.
+    const outcome = run({
+      weeks: plan(10),
+      facts: facts({
+        startDate: "2026-11-02", // Monday of week 5
+        endDate: "2026-11-08", // Sunday of week 5
+        days: 7,
+        allowTraining: "optional",
+      }),
+    });
+    expect(outcome.reason).toBe("applied");
+    expect(outcome.adjustment!.steps.map((s) => [s.week, s.focus, s.volumePct, s.intensityPct])).toEqual([
+      [4, "preload", 110, 100],
+      [5, "holiday", 50, 60],
+      [6, "rebuild", 70, 80],
+    ]);
+
+    // Week 4: everything still there, ~10% longer.
+    for (const day of [1, 3, 5, 7]) expect(byDay(outcome.weeks[3], day).duration_minutes).toBe(65);
+    expect(outcome.weeks[3].extraNote).toContain("Loading week");
+
+    // Week 5: the key work survives at half volume with the intensity capped,
+    // the rest becomes rest days in place.
+    expect(byDay(outcome.weeks[4], 1).duration_minutes).toBe(30);
+    expect(byDay(outcome.weeks[4], 1).type).toBe("endurance"); // speed, downgraded
+    expect(byDay(outcome.weeks[4], 1).returnFromBreak).toBeDefined();
+    expect(byDay(outcome.weeks[4], 7).isRest).toBe(true);
+    expect(outcome.weeks[4].extraNote).toContain("Holiday week");
+
+    // Week 6: the normal return, untouched by the shaping around it.
+    expect(byDay(outcome.weeks[5], 3).duration_minutes).toBe(40);
+
+    // The explanation says all three parts in plain language.
+    expect(outcome.adjustment!.explanation).toContain("loaded a little higher");
+    expect(outcome.adjustment!.explanation).toContain("eased right back to easy movement");
+
+    // And the whole thing still undoes byte for byte.
+    const undone = undoAdjustment(outcome.weeks, outcome.adjustment!);
+    expect(undone.weeks).toEqual(plan(10));
+  });
+
+  it("leaves the holiday week stored as planned when no training is allowed", () => {
+    // "No training" weeks are cancelled by the availability layer at read
+    // time; the rebuild must not rewrite them as well.
+    const before = plan(10);
+    const outcome = run({
+      weeks: before,
+      facts: facts({
+        startDate: "2026-11-02",
+        endDate: "2026-11-08",
+        days: 7,
+        allowTraining: "no",
+      }),
+    });
+    expect(outcome.weeks[4]).toEqual(before[4]);
+    expect(outcome.adjustment!.steps.map((s) => [s.week, s.focus])).toEqual([
+      [4, "preload"],
+      [6, "rebuild"],
+    ]);
+  });
+
+  it("never preloads a medical break or a week that is already behind the athlete", () => {
+    const medical = run({ context: { medical: true } });
+    expect(medical.adjustment!.steps.some((s) => s.focus === "preload")).toBe(false);
+
+    // Marked mid-holiday: week 4 has already finished, so there is nothing to
+    // bank — but the rest of the holiday week is still eased from today.
+    const late = run({
+      today: "2026-11-03", // Tuesday of the holiday week
+      facts: facts({
+        startDate: "2026-11-02",
+        endDate: "2026-11-08",
+        days: 7,
+        allowTraining: "optional",
+      }),
+    });
+    expect(late.adjustment!.steps.some((s) => s.focus === "preload")).toBe(false);
+    // Monday is behind them: untouched. Wednesday onwards is eased.
+    expect(byDay(late.weeks[4], 1).duration_minutes).toBe(60);
+    expect(byDay(late.weeks[4], 1).returnFromBreak).toBeUndefined();
+    expect(byDay(late.weeks[4], 3).returnFromBreak).toBeDefined();
   });
 
   it("reports nothing-planned rather than inventing a week when all that is left is rest", () => {

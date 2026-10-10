@@ -194,9 +194,15 @@ android {
         // gains the Mini Games tile back to the arcade. No manifest,
         // permission or plugin change — WebView-only.
         //
+        // Morning check-in adapts training for everyone, holidays reshape the
+        // weeks around them (load/ease/ramp), Routines and Cross-Training tabs
+        // removed (cross-training lives in the plan via equipment), PBs tab
+        // only for PB sports. No manifest, permission or plugin change —
+        // WebView-only.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 24
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.20"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 25
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

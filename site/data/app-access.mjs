@@ -86,7 +86,6 @@ export const ACCESS = {
   "/mental": "mental_gym_unlock",
   "/learning": "learning_unlock",
   "/learning/:lessonId": "learning_unlock",
-  "/cross-sport": "cross_sport_unlock",
   "/training": "training_plan_week",
   "/coach": "vaylo_coach_message",
   "/goals": "weekly_coach_review",
