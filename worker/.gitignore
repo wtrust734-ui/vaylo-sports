@@ -1,0 +1,7 @@
+# Generated at image build time by build.mjs from
+# supabase/functions/_shared/renderPlan.ts. The source is the single definition
+# of a render; this is a copy of it and must never be edited or committed.
+dist/
+
+node_modules/
+npm-debug.log*

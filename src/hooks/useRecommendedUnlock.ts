@@ -16,10 +16,10 @@ const FAMILY_RECOMMENDATION: Record<
   SportFamily,
   { feature: string; why: string } | null
 > = {
-  endurance: { feature: "nutrition_pack", why: "Endurance athletes burn through fueling — the Nutrition Pack pays for itself in training blocks." },
-  strength: { feature: "form_analysis_unlock", why: "Bar-path and technique checks multiply every strength gain you make." },
+  endurance: { feature: "calorie_scan", why: "Endurance athletes burn through fuel — scan every meal and know what it gives back." },
+  strength: { feature: "video_form_analysis", why: "Bar-path and technique checks multiply every strength gain you make." },
   team: { feature: "injury_management_unlock", why: "Availability wins seasons — structured rehab keeps you on the pitch." },
-  skill: { feature: "form_analysis_unlock", why: "Frame-by-frame technique review is the fastest lever in skill sports." },
+  skill: { feature: "video_form_analysis", why: "Frame-by-frame technique review is the fastest lever in skill sports." },
   combat: { feature: "mental_gym_unlock", why: "Composure under pressure is trainable — that's what the Mental Gym builds." },
   multi: null,
 };

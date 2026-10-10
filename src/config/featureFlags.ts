@@ -34,6 +34,14 @@
 //   than the feature deserves during closed testing. On the web this works, so
 //   set VITE_ENABLE_gpsTracking=true for a self-hosted web build.
 //
+//   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
+//   default. The Android manifest declares no location permission, so
+//   `navigator.geolocation` never resolves and the button is inert. Declaring
+//   ACCESS_FINE_LOCATION would also mean declaring location in the Data safety
+//   form and handling it in the privacy policy, which is a larger commitment
+//   than the feature deserves during closed testing. On the web this works, so
+//   set VITE_ENABLE_gpsTracking=true for a self-hosted web build.
+//
 //   There is deliberately no `aiCoach` flag. AI is not a separate section of the
 //   app — it is inside the core pages (Training generates the plan, FormAnalysis,
 //   Nutrition and Tactics analyse, Goals writes the weekly review, Coach chats).

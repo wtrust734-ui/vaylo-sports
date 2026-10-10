@@ -1,7 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-import { reportError } from "@/lib/errorReporting";
-
 interface Props {
   children: ReactNode;
 }
@@ -26,18 +24,6 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled UI error:", error, info.componentStack);
-    // A render error is the failure a tester is most likely to meet: the screen
-    // they were using is replaced by the card below. Until this report existed,
-    // the only trace of it was on their phone, which is the one place nobody is
-    // reading during a closed test. The component stack is what names the screen
-    // that broke, so it is sent ahead of the bytecode stack — it is shorter and
-    // it is the part a human can act on.
-    reportError({
-      source: "react",
-      name: error.name,
-      message: error.message,
-      stack: info.componentStack ?? error.stack ?? null,
-    });
   }
 
   private reset = () => this.setState({ error: null });

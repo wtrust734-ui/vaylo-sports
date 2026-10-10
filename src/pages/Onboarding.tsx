@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin, Dumbbell, Ruler, Weight } from "lucide-react";
 import { toast } from "sonner";
-import { readFailed } from "@/lib/dbRead";
-import { AUDIENCE_COPY, ageBand, earliestDob, registrationAgeRefusalReason, validateDob } from "@/lib/age";
+import { AUDIENCE_COPY, ageBand, earliestDob, validateDob } from "@/lib/age";
 import { localDateKey } from "@/lib/dates";
 import CountrySelect from "@/components/geo/CountrySelect";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
@@ -89,14 +88,11 @@ export default function Onboarding() {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      const { data: row, error: regionReadError } = await supabase
+      const { data: row } = await supabase
         .from("user_region")
         .select("country")
         .eq("user_id", user.id)
         .maybeSingle();
-      // Prefill only: a failed read means the country is not remembered, which
-      // the athlete can simply pick again. Logged, not announced.
-      readFailed(regionReadError, "your saved country", { quiet: true });
       if (!cancelled && row?.country) {
         setData((prev) => ({ ...prev, country: prev.country || row.country }));
       }
@@ -131,10 +127,8 @@ export default function Onboarding() {
     // barrier for no safety gain. It is never a reason to block the athlete.
     if (cur.key === "equipment") return true;
     // Date of birth is optional — no age means no sponsored content, which is
-    // the safe default. An entered date must be plausible to continue, and it
-    // must clear the published 13+ floor (legal/terms.html): a declared age
-    // under 13 is the one input this step refuses outright.
-    if (cur.key === "age") return !validateDob(data.dob) && !registrationAgeRefusalReason(data.dob);
+    // the safe default. An entered date must be plausible to continue.
+    if (cur.key === "age") return !validateDob(data.dob);
     // Same shape as the age rule: blank is fine, an entered value must be sane.
     if (cur.key === "body") return inRange(data.heightCm, 90, 250) && inRange(data.weightKg, 25, 300);
     if (cur.key === "country") return !!normaliseCountryCode(data.country);
@@ -143,32 +137,15 @@ export default function Onboarding() {
 
   const save = async (complete: boolean) => {
     if (!user) return;
-    // Defence in depth: the Continue button already blocks an under-13 date on
-    // the age step, but the wizard draft is kept in localStorage and could be
-    // edited, so the floor is re-checked at the one place a date of birth is
-    // actually written to the profile.
-    const ageRefusal = registrationAgeRefusalReason(data.dob);
-    if (ageRefusal) {
-      toast.error(ageRefusal);
-      setStep(steps.findIndex((s) => s.key === "age"));
-      return;
-    }
     setBusy(true);
     try {
       // Merge rather than overwrite: extended_profile is shared JSON and other
       // flows may add keys to it later.
-      const { data: current, error: profileReadError } = await supabase
+      const { data: current } = await supabase
         .from("profiles")
         .select("extended_profile")
         .eq("user_id", user.id)
         .maybeSingle();
-      // The write below merges onto this row. Merging onto a read that failed
-      // would drop every key already in `extended_profile` — it is shared JSON
-      // that other flows add to — so the save stops here instead. Thrown like
-      // the update's own error, so it lands in the same catch and resets busy.
-      if (readFailed(profileReadError, "your existing profile details", { quiet: true })) {
-        throw new Error("We couldn't read your saved profile, so nothing was saved. Please try again.");
-      }
       const existingExtended = (current?.extended_profile ?? {}) as Record<string, unknown>;
 
       const { error } = await supabase.from("profiles").update({
@@ -377,11 +354,6 @@ export default function Onboarding() {
                 />
                 {validateDob(data.dob) ? (
                   <p className="text-xs text-destructive">{validateDob(data.dob)}</p>
-                ) : registrationAgeRefusalReason(data.dob) ? (
-                  // role="alert" so a screen reader announces the refusal the
-                  // moment it appears, rather than leaving the athlete to
-                  // discover why Continue is disabled.
-                  <p role="alert" className="text-xs text-destructive">{registrationAgeRefusalReason(data.dob)}</p>
                 ) : data.dob ? (
                   <p className="text-xs text-muted-foreground">
                     {ageBand(data.dob) === "adult"

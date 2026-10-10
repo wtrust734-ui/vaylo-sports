@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Star, Shield, Crown, Zap, Target, Flame, Brain, ShoppingBag, Dumbbell, Droplets, Medal, Award, Check, Plus, X, Users, Calendar, TrendingUp, Heart, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -147,7 +147,7 @@ const builtInAchievements = [
   { id: "10_streak", title: "10 Day Fire", desc: "10-day streak", icon: "flame", check: (d: AchievementStats) => d.streak >= 10 },
   { id: "first_purchase", title: "First Purchase", desc: "Buy something from the Market", icon: "shopping", check: (d: AchievementStats) => d.purchases.length >= 1 },
   { id: "3_purchases", title: "Collector", desc: "Make 3 purchases", icon: "shopping", check: (d: AchievementStats) => d.purchases.length >= 3 },
-  { id: "all_features", title: "Feature Complete", desc: "Own all individual features", icon: "crown", check: (d: AchievementStats) => ["form_analysis", "mental_gym", "injury_management", "nutrition_pack"].every((f) => d.purchases.includes(f)) },
+  { id: "all_features", title: "Feature Complete", desc: "Own all individual features", icon: "crown", check: (d: AchievementStats) => ["mental_gym", "injury_management", "cross_sport"].every((f) => d.purchases.includes(f)) },
   { id: "first_review", title: "Self Reflector", desc: "Complete a post-event review", icon: "award", check: (d: AchievementStats) => d.reviews >= 1 },
   { id: "10_reviews", title: "Review Expert", desc: "10 post-event reviews", icon: "award", check: (d: AchievementStats) => d.reviews >= 10 },
   { id: "hrv_tracker", title: "HRV Tracker", desc: "Log HRV 5 times", icon: "heart", check: (d: AchievementStats) => d.hrvLogs >= 5 },
@@ -266,12 +266,38 @@ const builtInChallenges = [
   { title: "Ultimate Athlete", desc: "500 workouts + 100 achievements + Pro sub", target: 1, unit: "status", type: "ultimate" },
 ];
 
-type TabType = "achievements" | "challenges" | "create";
+type TabType = "achievements" | "badges" | "challenges";
+
+/**
+ * The achievements earned by buying something from the Market — the badges
+ * shelf of the Trophy Room. These are the only achievement ids whose `check`
+ * reads `d.purchases`, so this set is the definition of "badges".
+ */
+const BADGE_IDS = new Set([
+  "mental_owner",
+  "form_owner",
+  "injury_owner",
+  "credit_sub",
+  "unlimited_sub",
+  "first_purchase",
+  "3_purchases",
+  "all_features",
+]);
 
 const Achievements = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<TabType>("achievements");
+  // Deep-linkable from the Perform hub's Trophy Room: /achievements?tab=badges
+  // opens the badges shelf directly.
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const initialTab: TabType =
+    searchParams.get("tab") === "badges"
+      ? "badges"
+      : searchParams.get("tab") === "challenges"
+        ? "challenges"
+        : "achievements";
+  const [tab, setTab] = useState<TabType>(initialTab);
   const [earnedAchievements, setEarnedAchievements] = useState<Achievement[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [purchases, setPurchases] = useState<string[]>([]);
@@ -286,42 +312,24 @@ const Achievements = () => {
 
   const fetchAll = async () => {
     if (!user) return;
-    // Sixteen requests on every visit, eleven of which only ever wanted a
-    // number. `head: true` is the count-only form: PostgREST answers with a
-    // count and no rows, so nothing is transferred that the code ignores. The
-    // two tables whose ROWS the stats below actually use (recovery_logs for
-    // green days and hrv, events for results) no longer ask for a count at all,
-    // which folds the separate hrv query into the first one. Values are
-    // unchanged: the same rows, the same counts, the same medals.
-    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes] = await Promise.all([
+    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes] = await Promise.all([
       supabase.from("achievements").select("*").eq("user_id", user.id),
-      // A global table, one row per challenge ever created, bounded so an
-      // athlete with no challenges of their own is not downloading everyone's.
-      supabase.from("challenges").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("challenges").select("*").order("created_at", { ascending: false }),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
-      supabase.from("workouts").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("completed", true),
-      supabase.from("recovery_logs").select("id, readiness_score, hrv").eq("user_id", user.id),
-      supabase.from("events").select("id, actual_position").eq("user_id", user.id),
-      supabase.from("event_rivals").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("training_plans").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("friendships").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("meal_logs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("water_logs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("coach_messages").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("role", "user"),
-      supabase.from("mental_checkins").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("cue_words").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("mental_reviews").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("workouts").select("id", { count: "exact" }).eq("user_id", user.id).eq("completed", true),
+      supabase.from("recovery_logs").select("id, readiness_score", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("events").select("id, actual_position", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("event_rivals").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("training_plans").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("friendships").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("meal_logs").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("water_logs").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("coach_messages").select("id", { count: "exact" }).eq("user_id", user.id).eq("role", "user"),
+      supabase.from("mental_checkins").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("cue_words").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("mental_reviews").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("recovery_logs").select("id", { count: "exact" }).eq("user_id", user.id).not("hrv", "is", null),
     ]);
-
-    // A failed read here arrives as "0 workouts" and quietly withholds medals
-    // the athlete has earned, so it is said once (the counts that did come back
-    // are still used — a stale count beats a vanished one).
-    readFailed(
-      [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes]
-        .map((r) => r.error)
-        .find((e) => e) ?? null,
-      "your progress",
-    );
 
     setEarnedAchievements(achRes.data || []);
     setChallenges(chRes.data || []);
@@ -337,9 +345,9 @@ const Achievements = () => {
     const createdChallenges = (chRes.data || []).filter((c) => c.creator_id === user.id).length;
     const baseStats: AchievementStats = {
       workouts: workRes.count || 0,
-      checkins: (recRes.data || []).length,
+      checkins: recRes.count || 0,
       greenDays,
-      events: events.length,
+      events: eventRes.count || 0,
       rivals: rivalRes.count || 0,
       plans: planRes.count || 0,
       friends: friendRes.count || 0,
@@ -349,7 +357,7 @@ const Achievements = () => {
       mentalCheckins: mentalRes.count || 0,
       cueWords: cueRes.count || 0,
       reviews: reviewRes.count || 0,
-      hrvLogs: (recRes.data || []).filter((r) => r.hrv != null).length,
+      hrvLogs: hrvRes.count || 0,
       purchases: pIds,
       results: results.length,
       firstPlace,
@@ -380,13 +388,7 @@ const Achievements = () => {
       }
     }
     // Re-fetch achievements after awarding
-    const { data: refreshed, error: refreshError } = await supabase
-      .from("achievements")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("earned_at", { ascending: false })
-      .limit(200);
-    readFailed(refreshError, "your achievements");
+    const { data: refreshed } = await supabase.from("achievements").select("*").eq("user_id", user.id).order("earned_at", { ascending: false });
     setEarnedAchievements(refreshed || []);
   };
 
@@ -441,10 +443,72 @@ const Achievements = () => {
       </motion.div>
 
 
-      {/* Achievements Grid */}
+      {/* Tabs — achievements, purchase badges, and challenges all live on this
+          one screen, reached from the Perform hub's Trophy Room. */}
+      <div className="px-5 mb-4">
+        <div className="flex gap-1.5">
+          {(["achievements", "badges", "challenges"] as const).map((key) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
+                tab === key ? "bg-gradient-to-r from-primary to-electric-purple text-primary-foreground border-transparent shadow-glow" : "bg-card border-border text-muted-foreground hover:border-primary/40"
+              }`}>
+              {key === "achievements" ? "Achievements" : key === "badges" ? "Badges" : "Challenges"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "challenges" ? (
+        <div className="px-5 space-y-3 mb-8">
+          <p className="text-sm text-muted-foreground">Take on challenges, or make your own. Personal suggestions and sponsored challenges live on the full Challenges screen.</p>
+          <button onClick={() => navigate("/challenges")}
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-sm font-semibold shadow-glow">
+            Open full Challenges
+          </button>
+          {/* Make a challenge */}
+          <div className="bg-card border border-border rounded-2xl p-4">
+            {!showCreate ? (
+              <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 text-sm font-semibold text-primary">
+                <Plus size={15} /> Create a challenge
+              </button>
+            ) : (
+              <div className="space-y-2.5">
+                <input value={newChTitle} onChange={(e) => setNewChTitle(e.target.value)} placeholder="Challenge title"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                <textarea value={newChDesc} onChange={(e) => setNewChDesc(e.target.value)} placeholder="Description (optional)" rows={2}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                <div className="flex gap-2">
+                  <input value={newChTarget} onChange={(e) => setNewChTarget(e.target.value)} inputMode="numeric" aria-label="Target value"
+                    className="w-24 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                  <input value={newChUnit} onChange={(e) => setNewChUnit(e.target.value)} aria-label="Target unit"
+                    className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={createChallenge} className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold">Create</button>
+                  <button onClick={() => setShowCreate(false)} className="px-3 py-2 rounded-lg border border-border text-xs text-muted-foreground">Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+          {challenges.map((c) => (
+            <button key={c.id} onClick={() => navigate(`/challenges/${c.id}`)}
+              className="w-full text-start bg-card border border-border rounded-2xl p-4 hover:border-primary/30 transition-colors">
+              <h3 className="font-display font-bold text-sm truncate">{c.title}</h3>
+              {c.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.description}</p>}
+              <p className="text-[12px] text-muted-foreground mt-1.5">Target: {String(c.target_value)} {String(c.target_unit)}</p>
+            </button>
+          ))}
+          {challenges.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">No challenges yet — create the first one above.</p>
+          )}
+        </div>
+      ) : (
       <div className="px-5">
+        {tab === "badges" && (
+          <p className="text-sm text-muted-foreground mb-3">Badges you earned from Market purchases — proof of what you own.</p>
+        )}
         <div className="grid grid-cols-2 gap-3 mb-8">
-          {builtInAchievements.map((ach, i) => {
+          {builtInAchievements.filter((ach) => tab === "achievements" || BADGE_IDS.has(ach.id)).map((ach, i) => {
             const earned = earnedIds.has(ach.id);
             const Icon = iconMap[ach.icon] || Trophy;
             return (
@@ -467,6 +531,7 @@ const Achievements = () => {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 };

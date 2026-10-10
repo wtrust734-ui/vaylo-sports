@@ -22,13 +22,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AI_USAGE_FEATURES,
   API_COST_CEILING_USD,
   CREDIT_PACKS,
   FEATURE_COSTS,
   FEATURE_LABELS,
   GOOGLE_PLAY_TAKE,
   MIN_MARGIN_MULTIPLE,
+  PERMANENT_UNLOCKS,
   REGIONAL_TIERS,
   WORST_CASE_USD_PER_CREDIT,
   type FeatureCostKey,
@@ -120,34 +120,6 @@ describe("credit economy — worst-case revenue per credit", () => {
         .toBeLessThan(rates[i - 1]);
     }
   });
-
-  it("makes the biggest pack the best value in EVERY tier, not just the default one", () => {
-    // (Both of these hold for the same reason: the credit value the whole price
-    // book is derived from has to be a rate a real buyer can actually pay.)
-    // The per-step fall above is asserted only for the default ladder (tier A),
-    // because one tier does not have it: inside tier D, Boost is a better deal
-    // per credit than Popular and Power. That exception is written down in the
-    // header of src/config/credits.ts and is a pricing decision, not a bug to
-    // patch from here.
-    //
-    // What must hold everywhere — and is the only thing the margin floor
-    // depends on — is that no smaller pack beats the BIGGEST one per credit. If
-    // that ever fails, WORST_CASE_USD_PER_CREDIT is aimed at the wrong pack and
-    // every price derived from it is overstated in the flattering direction.
-    for (const tier of REGIONAL_TIERS) {
-      const priced = tier.packs.map((p) => ({
-        id: p.id,
-        rate: netRate(p.price_cents, p.credits, p.bonus),
-      }));
-      const biggest = priced[priced.length - 1];
-      for (const pack of priced.slice(0, -1)) {
-        expect(
-          pack.rate,
-          `tier ${tier.code}: ${pack.id} is a better deal per credit than ${biggest.id}`,
-        ).toBeGreaterThan(biggest.rate);
-      }
-    }
-  });
 });
 
 describe("credit economy — every metered feature clears its cost", () => {
@@ -167,56 +139,34 @@ describe("credit economy — every metered feature clears its cost", () => {
     });
   }
 
-  it("charges for the AI nutrition plan, and declares what that call costs us", () => {
-    // This assertion used to be the exact opposite: nutrition_plan_week was the
-    // one priced feature with NO provider call (the plan just stored the macro
-    // targets the athlete typed in), so a ceiling would have been a made-up
-    // cost justifying a higher price.
-    //
-    // Since 2026-10-09 the plan is written by the model
-    // (generate-nutrition-plan -> OpenAI), so the key MUST carry a ceiling and
-    // MUST be in the metered list — the generic loop above then measures its
-    // 8x floor automatically. A price rise without a ceiling is exactly the
-    // failure this pair of assertions exists to catch.
-    expect(API_COST_CEILING_USD).toHaveProperty("nutrition_plan_week");
-    expect(AI_USAGE_FEATURES).toContain("nutrition_plan_week");
+  it("has no ceiling declared for a feature that makes no AI call", () => {
+    // nutrition_plan_week is the one priced feature with no provider call. It
+    // must NOT have a ceiling, because a ceiling implies a cost that does not
+    // exist and would be used to justify a price rise.
+    expect(API_COST_CEILING_USD).not.toHaveProperty("nutrition_plan_week");
     expect(FEATURE_COSTS.nutrition_plan_week).toBeGreaterThan(0);
-  });
-
-  it("keeps the AI nutrition plan cheaper than the training plan it sits beside", () => {
-    // Both are AI-written, both are sold per week, and the nutrition plan is
-    // the smaller output. If it ever cost as much as a training-plan week the
-    // pricing would be indefensible, and the Nutrition Pack (30, once) — which
-    // makes both the scan and the plan free for good — would stop being the
-    // obvious buy.
-    expect(FEATURE_COSTS.nutrition_plan_week).toBeLessThan(FEATURE_COSTS.training_plan_week);
-    // The pack (free scans, free plans, for good) has to be worth more than one
-    // week of plans or nobody would buy it...
-    expect(FEATURE_COSTS.nutrition_pack_unlock).toBeGreaterThan(FEATURE_COSTS.nutrition_plan_week);
-    // ...and cheaper than four, or a fortnight of planning would be the better
-    // deal and the unlock would never sell.
-    expect(FEATURE_COSTS.nutrition_pack_unlock).toBeLessThan(FEATURE_COSTS.nutrition_plan_week * 4);
   });
 });
 
-describe("credit economy — the flat-rate unlock is not a loss-maker", () => {
-  it("form_analysis_unlock break-even is beyond any realistic use", () => {
-    // One payment, unlimited photo analyses. Break-even = price / per-call cost.
-    const unlockRevenue = revenueFor(FEATURE_COSTS.form_analysis_unlock);
-    const perCallCeiling = API_COST_CEILING_USD.form_analysis;
-    const breakEven = unlockRevenue / perCallCeiling;
-    // 75 analyses of your own form is already implausible for one athlete; the
-    // old 54-credit price broke even at 34, which is not.
-    expect(breakEven).toBeGreaterThan(75);
+describe("credit economy — metered AI is never sold flat-rate", () => {
+  it("form analysis and nutrition have no unlimited tier", () => {
+    // A flat rate on a metered provider call loses money to exactly the heavy
+    // users it attracts: one payment against a year's worth of video analyses
+    // or calorie scans. So there is no unlock key for either, and adding one
+    // back must fail here first.
+    expect(FEATURE_COSTS).not.toHaveProperty("form_analysis_unlock");
+    expect(FEATURE_COSTS).not.toHaveProperty("nutrition_pack_unlock");
+    expect(PERMANENT_UNLOCKS).not.toContain("form_analysis_unlock");
+    expect(PERMANENT_UNLOCKS).not.toContain("nutrition_pack_unlock");
   });
 
-  it("is still the cheaper route for a heavy user, so it remains sellable", () => {
-    // If the unlock cost more than paying per call for any realistic number of
-    // analyses, nobody would buy it and the price would be pointless.
-    const unlock = FEATURE_COSTS.form_analysis_unlock;
-    const perCall = FEATURE_COSTS.form_analysis;
-    const analysesWhereUnlockWins = Math.ceil(unlock / perCall);
-    expect(analysesWhereUnlockWins).toBeLessThanOrEqual(8);
+  it("every analysis and scan carries its own profitable price", () => {
+    // The per-use prices that replace the retired flat rates, each clearing
+    // the 8x floor on its own (asserted again per-key in the loop above).
+    for (const key of ["video_form_analysis", "form_analysis", "calorie_scan"] as const) {
+      const revenue = revenueFor(FEATURE_COSTS[key]);
+      expect(revenue).toBeGreaterThanOrEqual(API_COST_CEILING_USD[key] * MIN_MARGIN_MULTIPLE);
+    }
   });
 });
 
@@ -230,24 +180,20 @@ describe("credit economy — spendable keys all resolve", () => {
     "development_trajectory",
     "cross_sport_unlock",
     "training_plan_week",
-    // The two AI plan-edit prices. Added with the migration
-    // 20261009120000_plan_edit_ai_cost.sql, which is the one place they exist
-    // in the database — if that migration is not applied, these two keys raise
-    // inside credit_cost() and every edit 500s instead of charging.
     "plan_edit",
     "plan_edit_full",
     "limiter_fix_plan",
     "form_analysis",
-    "form_analysis_unlock",
     "video_form_analysis",
     "injury_management_unlock",
     "calorie_scan",
     "nutrition_plan_week",
-    "nutrition_pack_unlock",
     "mental_gym_unlock",
     "vaylo_coach_message",
     "weekly_coach_review",
     "tactical_prep",
+    "training_insight",
+    "vpr_compare",
     "learning_unlock",
     "streak_shield",
   ] as const;

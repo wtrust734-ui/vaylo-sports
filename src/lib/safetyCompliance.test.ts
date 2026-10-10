@@ -209,7 +209,15 @@ describe("P0-6 promotional surfaces are adult-only", () => {
     // Unknown age must still count as NOT adult, matching the sponsored rule.
     expect(market, "the starter-offer promo is no longer adult-only").toMatch(/isAdult && starterOffer/);
     expect(market, "the double-credits promo is no longer adult-only").toMatch(/isAdult && doubleOffer/);
-    expect(market, "the recommendation banner is no longer adult-only").toMatch(/isAdult && section === "packs" && <FamilyPickBanner/);
+    // The banner now also shows in the unlocks section, not only packs — but
+    // the property that matters is the age gate, not the section list. Assert
+    // the gate on the expression that renders it rather than pinning sections.
+    {
+      const at = market.indexOf("<FamilyPickBanner");
+      expect(at, "Market.tsx no longer renders FamilyPickBanner").toBeGreaterThan(-1);
+      const gate = market.slice(market.lastIndexOf("{", at), at);
+      expect(gate, "the recommendation banner is no longer adult-only").toMatch(/isAdult/);
+    }
     // The buying controls must NOT be age-gated any more.
     expect(market, "the buying sections are age-gated again").not.toContain("canPurchase");
     expect(market, "the under-18 buying note is missing").toContain("GuardianNote");

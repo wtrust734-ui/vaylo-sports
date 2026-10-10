@@ -72,6 +72,8 @@
       "pbsDesc": "Every PB in one list",
       "formAnalysis": "Form analysis",
       "formAnalysisDesc": "Check your technique",
+      "miniGames": "Mini Games",
+      "miniGamesDesc": "Reaction, memory and accuracy games",
       "arOverlay": "AR overlay",
       "arOverlayDesc": "Live metrics while you train"
     },
@@ -96,7 +98,14 @@
       "goals": "Goals",
       "goalsDesc": "What you're working towards",
       "compare": "Compare",
-      "compareDesc": "You vs elite profiles"
+      "compareDesc": "You vs elite profiles",
+      "groupTrophyRoom": "Trophy Room",
+      "achievements": "Achievements",
+      "achievementsDesc": "Medals for consistency and mastery",
+      "badges": "Badges",
+      "badgesDesc": "Earned from Market purchases",
+      "challenges": "Challenges",
+      "challengesDesc": "Join, create and sponsored challenges"
     },
     "recover": {
       "title": "Recover",

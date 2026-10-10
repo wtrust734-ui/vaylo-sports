@@ -1,6 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { emailConfigured, gmailUser, sendMail, withFooter } from "../_shared/email.ts";
-import { jwtRole } from "../_shared/jwt.ts";
 
 // ============================================================================
 // waitlist-broadcast — send one message to everyone still on the waiting list
@@ -72,12 +71,16 @@ function bearer(req: Request): string {
  * foreign-signed token never reaches this code at all.
  */
 function roleOf(token: string): string {
-  // The base64URL translation and padding live in ../_shared/jwt.ts. This file
-  // was the only place that had them right, and it is not a good place to keep
-  // them: the two functions that needed the same decode (delete-account,
-  // export-my-data) had it wrong, and one shared reader is the fix for all of
-  // them rather than a third copy.
-  return jwtRole(token);
+  const segment = token.split(".")[1];
+  if (!segment) return "";
+  try {
+    const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const claims = JSON.parse(atob(padded)) as { role?: unknown };
+    return typeof claims.role === "string" ? claims.role : "";
+  } catch {
+    return "";
+  }
 }
 
 function authorised(req: Request, serviceKey: string): boolean {

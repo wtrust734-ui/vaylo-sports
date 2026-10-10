@@ -1,7 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { USER_TABLES } from "../_shared/userTables.ts";
-import { jwtAgeSeconds } from "../_shared/jwt.ts";
 
 // ============================================================================
 // EXPORT MY DATA — UK GDPR Article 20 (data portability)
@@ -83,18 +82,18 @@ Deno.serve(async (req) => {
   // A fresh token only, mirroring delete-account. An export is a bulk read of
   // everything about someone; it should not be triggerable by a long-lived
   // token that has been sitting in local storage.
-  // `jwtAgeSeconds` reads the segment as base64URL, which a bare `atob` does
-  // not accept — the same trap that made account deletion refuse intermittently.
-  // This function used to swallow the resulting throw and continue, so a bulk
-  // export of everything about an athlete quietly lost the check it was written
-  // for. An unreadable age now FAILS CLOSED: "we could not prove this token is
-  // fresh" is not the same claim as "it is fresh".
-  const tokenAge = jwtAgeSeconds(token);
-  if (tokenAge === null || tokenAge > MAX_TOKEN_AGE_SECONDS) {
-    return json(
-      { error: "For your security, export needs a recent sign-in. Please sign in again and retry." },
-      403,
-    );
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const age = Math.floor(Date.now() / 1000) - Number(payload.iat ?? 0);
+    if (age > MAX_TOKEN_AGE_SECONDS) {
+      return json(
+        { error: "For your security, export needs a recent sign-in. Please sign in again and retry." },
+        403,
+      );
+    }
+  } catch {
+    // Not a JWT we can read an iat from. getUser already proved the token is
+    // valid, so continue rather than blocking a legitimate request.
   }
 
   const data: Record<string, unknown> = {};

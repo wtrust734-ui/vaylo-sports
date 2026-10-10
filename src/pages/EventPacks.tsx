@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { formatLocalPrice, loadEconomyConfig } from "@/lib/creditEconomy";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -16,7 +15,6 @@ import {
 } from "@/lib/eventPacks";
 import { EVENT_PACK_SPORTS, EVENT_PACK_DIFFICULTIES, type EventPackDifficulty } from "@/config/eventPacks";
 import { requestCreditTopUp } from "@/lib/topUpStore";
-import { formatNumber } from "@/i18n/format";
 
 type SortKey = "popular" | "price_low" | "price_high" | "duration_short" | "duration_long";
 
@@ -120,7 +118,7 @@ function PackCard({
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="font-display text-base font-bold text-primary">
-              {formatNumber(pack.creditPrice)}<span className="text-[12px] font-semibold"> credits</span>
+              {pack.creditPrice.toLocaleString()}<span className="text-[12px] font-semibold"> credits</span>
             </p>
             <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(pack.priceCents, currency)} · v{pack.version}</p>
           </div>
@@ -178,11 +176,8 @@ const EventPacks = () => {
       const cfg = await loadEconomyConfig();
       let value = cfg.region.currency;
       if (userId) {
-        const { data: settings, error: settingsError } = await supabase
+        const { data: settings } = await supabase
           .from("user_settings").select("currency").eq("user_id", userId).maybeSingle();
-        // Quiet: the region default is a correct fallback, so a failure here is
-        // logged rather than announced — no price is misstated either way.
-        readFailed(settingsError, "your currency", { quiet: true });
         if (settings?.currency) value = settings.currency;
       }
       if (active) setCurrency(value);
@@ -315,7 +310,7 @@ const EventPacks = () => {
           if (!result.ok) {
             toast({
               title: "Still short of credits",
-              description: `${pack.name} needs ${formatNumber(result.required)} credits.`,
+              description: `${pack.name} needs ${result.required.toLocaleString()} credits.`,
               variant: "destructive",
             });
             return;
@@ -332,7 +327,7 @@ const EventPacks = () => {
       toast({
         title: pending.length === 1 ? "Event Pack unlocked 🎉" : `${pending.length} Event Packs unlocked 🎉`,
         description: spent > 0
-          ? `${formatNumber(spent)} credits spent · lifetime access, restored on any device you sign in to.`
+          ? `${spent.toLocaleString()} credits spent · lifetime access, restored on any device you sign in to.`
           : "Lifetime access — they'll restore on any device you sign in to.",
       });
     } catch (e) {
@@ -396,7 +391,7 @@ const EventPacks = () => {
                 <Trophy size={14} className="mx-auto mb-1 text-primary" />
                 <p className="text-[12px] text-muted-foreground">Price</p>
                 <p className="text-xs font-display font-bold text-primary">
-                  {formatNumber(detail.creditPrice)} credits
+                  {detail.creditPrice.toLocaleString()} credits
                 </p>
                 <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(detail.priceCents, currency)}</p>
               </div>
@@ -461,7 +456,7 @@ const EventPacks = () => {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold">{r.name}</span>
                     <span className="block text-[12px] text-muted-foreground">
-                      {r.sport} · {r.weeks}w · {formatNumber(r.creditPrice)} credits
+                      {r.sport} · {r.weeks}w · {r.creditPrice.toLocaleString()} credits
                     </span>
                   </span>
                   <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
@@ -493,7 +488,7 @@ const EventPacks = () => {
                 inBasket ? "border border-border bg-muted/40 text-muted-foreground" : "bg-gradient-primary text-primary-foreground shadow-glow"
               }`}
             >
-              {inBasket ? "In basket" : `Add to basket · ${formatNumber(detail.creditPrice)} credits`}
+              {inBasket ? "In basket" : `Add to basket · ${detail.creditPrice.toLocaleString()} credits`}
             </motion.button>
           )}
           </div>
@@ -514,7 +509,7 @@ const EventPacks = () => {
             </p>
             {profile && typeof profile.credits === "number" && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary">
-                <Sparkles size={11} /> {formatNumber(profile.credits)} credits available
+                <Sparkles size={11} /> {profile.credits.toLocaleString()} credits available
               </p>
             )}
           </div>
@@ -742,7 +737,7 @@ const EventPacks = () => {
                           <p className="truncate text-xs font-bold">{b.name}</p>
                           <p className="text-[12px] text-muted-foreground">{b.sport} · {b.weeks}w · lifetime access</p>
                         </div>
-                        <p className="text-xs font-bold text-primary">{formatNumber(b.creditPrice)} cr</p>
+                        <p className="text-xs font-bold text-primary">{b.creditPrice.toLocaleString()} cr</p>
                         <button onClick={() => setBasket(basket.filter((x) => x.id !== b.id))}>
                           <X size={14} className="text-muted-foreground" />
                         </button>
@@ -752,7 +747,7 @@ const EventPacks = () => {
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Total (one-time)</span>
                     <span className="font-display text-lg font-bold text-primary">
-                      {formatNumber(basketCredits)} credits
+                      {basketCredits.toLocaleString()} credits
                     </span>
                   </div>
                   <p className="mb-3 text-end text-[12px] text-muted-foreground">

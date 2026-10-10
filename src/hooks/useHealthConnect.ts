@@ -20,7 +20,6 @@ import {
   resolveHealthStatus,
   runHealthSync,
   type StoredHealthState,
-  type SyncOutcome,
 } from "@/lib/health/sync";
 import type { HealthConnectionStatus } from "@/lib/health/types";
 
@@ -43,30 +42,6 @@ export interface UseHealthConnect {
   disconnecting: boolean;
   managePermissions: () => Promise<void>;
   clearError: () => void;
-}
-
-/**
- * What to tell the athlete about a sync that did not finish.
- *
- * Three different situations, three different sentences. A partial grant names
- * the reads that are still off, because "some permissions are off" is a puzzle
- * when the fix is one toggle in another app; a revocation says the consent is
- * gone; and `not_connected` says the app refused to read at all, which the
- * generic failure line would misdescribe as a sync that ran and broke.
- */
-function syncErrorCopy(outcome: SyncOutcome): string {
-  switch (outcome.error) {
-    case "permission_revoked":
-      return "Health Connect permissions were revoked. Reconnect to resume syncing.";
-    case "permission_partial":
-      return outcome.missing?.length
-        ? `Some Health Connect permissions are still off (${outcome.missing.join(", ")}). Reconnect to turn them on — nothing was changed.`
-        : "Some Health Connect permissions are still off. Reconnect to turn them on — nothing was changed.";
-    case "not_connected":
-      return "Health Connect isn't connected on this device, so nothing was read. Connect it to sync.";
-    default:
-      return "Sync didn't complete. Your data wasn't changed — try again.";
-  }
 }
 
 export function useHealthConnect(): UseHealthConnect {
@@ -132,7 +107,13 @@ export function useHealthConnect(): UseHealthConnect {
     setError(null);
     try {
       const outcome = await runHealthSync(user.id);
-      if (!outcome.ok) setError(syncErrorCopy(outcome));
+      if (!outcome.ok) {
+        setError(
+          outcome.error === "permission_revoked"
+            ? "Health Connect permissions were revoked. Reconnect to resume syncing."
+            : "Sync didn't complete. Your data wasn't changed — try again.",
+        );
+      }
       await refresh();
     } finally {
       setSyncing(false);

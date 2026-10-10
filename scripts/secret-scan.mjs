@@ -219,9 +219,9 @@ function firstOf(...indexes) {
  *
  * @returns {{id: string, why: string, sample: string}[]}
  */
-export function scanText(text, rules = RULES) {
+export function scanText(text) {
   const out = []
-  for (const rule of rules) {
+  for (const rule of RULES) {
     // A `multiline` rule is matched against the whole text; everything else is
     // matched per line so a hit can be reported at a line number.
     const haystacks = rule.multiline ? [text] : text.split("\n")
@@ -239,49 +239,6 @@ export function scanText(text, rules = RULES) {
     }
   }
   return out
-}
-
-/**
- * Tracked build output, and the rules that are worth running on it.
- *
- * `webapp-clone/` is generated (`scripts/build-clone.cjs`, "a static, keyless
- * copy of the same React app") and committed so it can be deployed. Its
- * assets are ONE line of minified code, and two rules fire on that line for
- * reasons that have nothing to do with credentials:
- *
- *   - `hardcoded-password` matched the password field's own translated LABEL in
- *     the twelve languages the bundle ships (the Spanish, English and Arabic
- *     names of the field, quoted after the key) plus one demo placeholder value
- *     that is the string "local-demo". As a class those are short human labels
- *     and keywords — which is what a secret is not. (Written without quoting the
- *     shapes: this file is scanned by itself, on purpose.)
- *   - `env-fallback-literal` matched the SDK's own `token:",u)),this.rest=…`
- *     boundary artifact in `supabase-*.js`.
- *
- * Eight findings, all false, and a scanner that leaves eight false findings on
- * the CI gate is a scanner that gets switched off — the failure this file's
- * header is written about.
- *
- * So generated assets are scanned with the HIGH-SIGNAL rules only: a JWT, a
- * private key, an AWS/OpenAI/Google/Slack token, a legacy Supabase key, an
- * unowned preview host. Those still cover the one thing that matters in a
- * shipped bundle — a real credential baked in — and they are value-shaped
- * rather than prose-shaped, so minified copy cannot trip them. What is lost is
- * the shape-based rules on this one directory, and the reason that is
- * tolerable is that the bundle is generated from `src/`, which IS scanned with
- * every rule.
- *
- * Run `npm run build:clone` after changing this and commit the result.
- */
-const GENERATED_RE = [/^webapp-clone\//, /^dist\//, /^build\//]
-
-/** Rules whose only job is to spot a credential SHAPE, not a credential value. */
-const SHAPE_ONLY_RULES = new Set(["hardcoded-password", "env-fallback-literal"])
-
-/** The rule set to run on one path: everything, or everything value-shaped. */
-export function rulesForFile(file) {
-  if (!GENERATED_RE.some((re) => re.test(file))) return RULES
-  return RULES.filter((r) => !SHAPE_ONLY_RULES.has(r.id))
 }
 
 /**
@@ -437,7 +394,7 @@ function main() {
     if (text.includes("\0")) continue
 
     const lines = text.split("\n")
-    for (const hit of scanText(text, rulesForFile(file))) {
+    for (const hit of scanText(text)) {
       // Re-locate the line for reporting. scanText deliberately does not carry
       // line numbers so it stays trivially testable.
       const idx = lines.findIndex((l) => l.includes(hit.sample.slice(0, 40)))

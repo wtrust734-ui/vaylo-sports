@@ -7,7 +7,6 @@ import { formatLocalPrice } from "@/lib/creditEconomy";
 import { useStarterOffer } from "@/hooks/useStarterOffer";
 import { useAuth } from "@/contexts/AuthContext";
 import { ageBand } from "@/lib/age";
-import { formatNumber } from "@/i18n/format";
 
 /**
  * The Welcome Bundle — a new athlete's first purchase moment, shown on the
@@ -63,7 +62,7 @@ const StarterOfferCard = () => {
     hapticSuccess();
     setClaimed(true);
     toast({
-      title: `Welcome bundle claimed — +${formatNumber(result.creditsGranted)} credits 🎉`,
+      title: `Welcome bundle claimed — +${result.creditsGranted.toLocaleString()} credits 🎉`,
       description: "Spend them on plans, analysis and coaching anywhere in the app.",
     });
   };

@@ -8,7 +8,6 @@ import { unregisterPush } from "@/lib/push";
 import { guestEntryAvailable, GUEST_DISPLAY_NAME, isGuestUser } from "@/lib/guestMode";
 import { DEMO_MODE, demoGuestSession } from "@/lib/demoMode";
 import { recordTermsAcceptance } from "@/lib/consent";
-import { readFailed } from "@/lib/dbRead";
 
 type Profile = Tables<"profiles">;
 
@@ -211,14 +210,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Re-read the session rather than trusting the state at effect time: the
       // athlete may already be signed in, and signing them out to replace a real
       // account with a guest would be destructive.
-      const { data, error: sessionReadError } = await supabase.auth.getSession();
+      const { data } = await supabase.auth.getSession();
       if (!active) return;
       if (data.session) return;
-      // A failed session read is NOT "no session". Minting a guest here would
-      // sign a real athlete out of their own account and into a throwaway one,
-      // so the failure stops the guest path instead of feeding it. Quiet: this
-      // runs at startup, where a toast is noise and the log is the signal.
-      if (readFailed(sessionReadError, "your session", { quiet: true })) return;
       if (attempted) return;
       attempted = true;
 

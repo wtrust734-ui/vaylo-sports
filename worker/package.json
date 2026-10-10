@@ -1,0 +1,19 @@
+{
+  "name": "vaylo-ad-render-worker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FFmpeg render worker for Vaylo Sports advertising. Runs in its own container because Supabase Edge Functions cannot spawn subprocesses.",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -254,7 +254,10 @@ const Profile = () => {
     // possible guard against the row being quietly dropped in a refactor.
     { icon: Scale, label: "Legal & Safety", desc: "All 26 policies, your rights, and reporting", onClick: () => navigate("/legal") },
     { icon: Bell, label: "Notifications", desc: "Your alerts and what may be sent", path: "/notifications" },
-    { icon: Medal, label: "Achievements", desc: "Badges, milestones & challenges", path: "/achievements" },
+    // Achievements lived here until 2026-10-10. They now live in the Perform
+    // hub's Trophy Room (/achievements, /challenges) — they are earned by
+    // performing, so that is where an athlete looks for them. The sidebar
+    // still links /achievements directly, so nothing is unreachable.
     { icon: Zap, label: "Market", desc: "Credits, subscriptions & features", path: "/market" },
   ];
 

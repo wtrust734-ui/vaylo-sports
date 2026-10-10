@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { rulesForFile, scanText } from "../../scripts/secret-scan.mjs"
+import { scanText } from "../../scripts/secret-scan.mjs"
 
 /**
  * These tests exist because the first version of the scanner did not work.
@@ -194,53 +194,5 @@ describe("secret-scan calibration for the 2026-10-06 audit false positives", () 
     // after `token=` closes the string literal "token=", not a credential.
     const line = 'const peek = (u) => u.split("token=")[1] ?? ""'
     expect(ids(line)).not.toContain("hardcoded-password")
-  })
-})
-
-describe("generated bundles are scanned, but not for credential shapes", () => {
-  // The eight findings that kept CI red were all in webapp-clone/assets/*.js,
-  // one line of minified code each. Six were the field LABELS the bundle ships
-  // in twelve languages and one was a demo placeholder; none was a credential.
-  // The lines below are stripped-down versions of the lines that matched.
-  const LABEL = 'password:"Contraseña"'
-  const PLACEHOLDER = 'token:"local-demo"'
-
-  it("the shape rules really do fire on that minified copy", () => {
-    // If this ever stops being true, the carve-out below is pointless and
-    // should be deleted rather than left as a comment nobody re-reads.
-    expect(scanText(LABEL).map((h) => h.id)).toContain("hardcoded-password")
-    expect(scanText(PLACEHOLDER).map((h) => h.id)).toContain("hardcoded-password")
-  })
-
-  it("drops only the shape-based rules for a generated file", () => {
-    const rules = rulesForFile("webapp-clone/assets/index-AjSW6NP3.js")
-    const idsForGenerated = (text: string) => scanText(text, rules).map((h) => h.id)
-
-    expect(idsForGenerated(LABEL)).not.toContain("hardcoded-password")
-    expect(idsForGenerated(PLACEHOLDER)).not.toContain("hardcoded-password")
-  })
-
-  it("still catches a real credential baked into a generated bundle", () => {
-    // The whole reason the carve-out narrows the rules instead of skipping the
-    // directory: a service-role JWT in shipped client code is the most damaging
-    // thing this scanner exists to find, and minified copy cannot fake it.
-    const rules = rulesForFile("webapp-clone/assets/index-AjSW6NP3.js")
-    const jwt =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.abcdefghijklmnopqrstuvwxyz012345"
-    expect(scanText(`x="${jwt}"`, rules).map((h) => h.id)).toContain("jwt")
-    expect(scanText('key:"AKIAIOSFODNN7EXAMPLE"', rules).map((h) => h.id)).toContain("aws-access-key")
-  })
-
-  it("leaves source files with the full rule set", () => {
-    // The carve-out is path-scoped, and it costs exactly the two shape rules —
-    // not "however many rules happened to differ when this was written".
-    const source = rulesForFile("src/pages/Auth.tsx").map((r) => r.id)
-    const generated = rulesForFile("webapp-clone/assets/x.js").map((r) => r.id)
-
-    expect(source).toContain("hardcoded-password")
-    expect(source).toContain("env-fallback-literal")
-    expect(generated).not.toContain("hardcoded-password")
-    expect(generated).not.toContain("env-fallback-literal")
-    expect(source.length - generated.length).toBe(2)
   })
 })

@@ -9,14 +9,12 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarCharacter";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
 import { FIRST_PURCHASE_BUNDLE } from "@/config/coins";
-import { formatNumber } from "@/i18n/format";
 import {
   CATALOG, CATEGORY_META, RARITY_META, STARTER_ITEMS, DEFAULT_LOADOUT,
   ALL_CATEGORIES, IDENTITY_CATEGORIES,
@@ -51,18 +49,14 @@ const Avatar = () => {
     if (!user) return;
     let alive = true;
     (async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_purchases")
         .select("id")
         .eq("user_id", user.id)
         .eq("product_id", FIRST_PURCHASE_BUNDLE.id)
         .limit(1)
         .maybeSingle();
-      // A failed read must not offer the one-time bundle to someone who already
-      // bought it: `!data` on an error is the wrong answer in the direction that
-      // costs the athlete money, so the offer stays hidden until we know.
-      readFailed(error, "your purchases", { quiet: true });
-      if (alive) setFirstBundleAvailable(!data && !error);
+      if (alive) setFirstBundleAvailable(!data);
     })();
     return () => { alive = false; };
   }, [user]);
@@ -292,7 +286,7 @@ const Avatar = () => {
           <div className="absolute left-3 top-3 flex items-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur border border-energy/40">
               <Coins size={14} className="text-energy" />
-              <span className="text-sm font-display font-bold tabular-nums text-white">{formatNumber(coins)}</span>
+              <span className="text-sm font-display font-bold tabular-nums text-white">{coins.toLocaleString()}</span>
             </div>
             <button onClick={() => navigate("/market")}
               className="text-[12px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">

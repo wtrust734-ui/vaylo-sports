@@ -1,14 +1,11 @@
 import { getAiLocale } from "@/i18n";
-import { formatDate } from "@/i18n/format";
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
 import { motion, useInView, AnimatePresence } from "framer-motion";
-import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info, Loader2, Wand2 } from "lucide-react";
+import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { readFailed } from "@/lib/dbRead";
-import { spendCredits, creditCost, spendErrorMessage, featureLabel } from "@/lib/credits";
+import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
 import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { Tables, type Json } from "@/integrations/supabase/types";
@@ -29,22 +26,6 @@ import { explainDecision, explainWeek } from "@/lib/explanations";
 import { WhyBody } from "@/components/insights/WhyDisclosure";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
-import { matchesAdvice, recommendSetup, type SetupAdvice } from "@/lib/planSetupAdvice";
-import { AdvicePanel, AdvancedFreedomNote, RecommendedChip } from "@/components/training/PlanSetupAdvice";
-import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
-import {
-  MAX_EDIT_INSTRUCTION,
-  MIN_EDIT_INSTRUCTION,
-  editCost,
-  editCostKey,
-  newEditRequestId,
-  requestPlanEdit,
-  spliceEditedWeeks,
-  validateEditInstruction,
-  weeksForEdit,
-  type PlanEditOutcome,
-} from "@/lib/planEdit";
-import { requestCreditTopUp } from "@/lib/topUpStore";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -307,11 +288,6 @@ const Training = () => {
   const { toast } = useToast();
   const spendWithTopUp = useSpendWithTopUp();
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
-  // A read that failed is not "you have no plan". `hasNoPlans` gates the
-  // create-plan card, and creating a plan is charged per week — so the flag is
-  // what stops an outage from being rendered as an invitation to buy a plan the
-  // athlete may already own.
-  const [plansFailed, setPlansFailed] = useState(false);
   // The break banner on the plans view (audit B1): an active availability
   // window is visible here, not only on /availability.
   const activeBreak = useActiveBreak();
@@ -400,13 +376,6 @@ const Training = () => {
   const [planTimeOfDay, setPlanTimeOfDay] = useState<string>("Evening");
   const [planTargetEvent, setPlanTargetEvent] = useState<string>("");
   const [planRecoveryDays, setPlanRecoveryDays] = useState<number>(1);
-
-  // AI plan edit — the paid path (see `@/lib/planEdit`).
-  const [aiEditOpen, setAiEditOpen] = useState(false);
-  const [aiEditScope, setAiEditScope] = useState<"week" | "plan">("week");
-  const [aiEditWeek, setAiEditWeek] = useState<number>(1);
-  const [aiEditInstruction, setAiEditInstruction] = useState("");
-  const [aiEditBusy, setAiEditBusy] = useState(false);
   const [planQuizStep, setPlanQuizStep] = useState<number>(0); // 0 = basics, 1 = availability, 2 = preferences
 
 
@@ -494,82 +463,9 @@ const Training = () => {
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    // A failed read is not "you have no plan". An empty list on this screen is
-    // the invitation to create one, and creating one is charged per week — so a
-    // read that failed leaves the list it already had alone and says so, rather
-    // than showing an athlete an empty screen where a plan they own should be
-    // and inviting them to buy it again.
-    if (readFailed(error, "your training plans")) {
-      setPlansFailed(true);
-      return;
-    }
-    setPlansFailed(false);
+    const { data } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     setPlans(data || []);
   };
-
-  // ---------------------------------------------------------------------------
-  // Deep link into ONE day: `/training?week=3&day=5`
-  // ---------------------------------------------------------------------------
-  // The dashboard's "today" card is the surface an athlete actually taps, so the
-  // link it follows has to land on the session it just described — not on the
-  // plan list, with the right week collapsed and the right day somewhere below
-  // the fold. `day` is 1 = Monday … 7 = Sunday, the same numbering the plan
-  // itself stores, so the two can never disagree about which day is which.
-  const [searchParams] = useSearchParams();
-  const deepLinkApplied = useRef<string | null>(null);
-  const [highlightDay, setHighlightDay] = useState<{ week: number; day: number } | null>(null);
-
-  useEffect(() => {
-    const rawWeek = searchParams.get("week");
-    const rawDay = searchParams.get("day");
-    if (!rawWeek || !rawDay) return;
-    const week = Number(rawWeek);
-    const day = Number(rawDay);
-    if (!Number.isInteger(week) || !Number.isInteger(day)) return;
-
-    const key = `${week}:${day}`;
-    if (deepLinkApplied.current === key) return;
-
-    // The active plan is the one the dashboard card read from; falling back to
-    // the newest keeps a link working for a plan that was replaced since.
-    const plan = plans.find((p) => p.active) ?? plans[0];
-    if (!plan) return; // plans not loaded yet — this effect runs again when they are
-
-    const weeks = Array.isArray(plan.plan_data) ? (plan.plan_data as { week: number }[]) : [];
-    // A link naming a week this plan does not have (an old plan, a shortened
-    // one) is ignored silently: opening an empty week would look like a bug.
-    if (!weeks.some((w) => Number(w.week) === week)) return;
-
-    deepLinkApplied.current = key;
-    setSelectedPlan(plan);
-    setActiveView("planDetail");
-    setExpandedWeek(week);
-    setHighlightDay({ week, day });
-  }, [searchParams, plans]);
-
-  // Bring the named day into view once its week is expanded, then let the
-  // highlight go. A ring that stays put reads as a selected state the athlete
-  // cannot clear; one that fades reads as "this is the one you asked for".
-  useEffect(() => {
-    if (!highlightDay) return;
-    const scrollToDay = () =>
-      document
-        .querySelector(`[data-plan-day="${highlightDay.week}-${highlightDay.day}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Twice: the week opens with a height animation, so the day is already in
-    // the DOM when the first pass runs but its final position is not settled
-    // yet. The second pass lands it where it ends up rather than where it was
-    // mid-animation.
-    const first = window.setTimeout(scrollToDay, 160);
-    const second = window.setTimeout(scrollToDay, 700);
-    const clear = window.setTimeout(() => setHighlightDay(null), 2600);
-    return () => {
-      window.clearTimeout(first);
-      window.clearTimeout(second);
-      window.clearTimeout(clear);
-    };
-  }, [highlightDay]);
 
   const deletePlan = async (planId: string) => {
     if (!user) return;
@@ -658,33 +554,12 @@ const Training = () => {
       }
       if (!planData) planData = generatePlanData(sport, goal, level, duration, age, quiz);
 
-      const planRow = {
+      const { data: inserted, error: insertError } = await supabase.from("training_plans").insert({
         user_id: user.id, title: title.trim() || `${goals.join(" + ")} ${sport} Plan`, sport, goal, level, duration_weeks: duration,
         description: `${duration}-week ${goals.join(" + ").toLowerCase()} plan for ${sport.toLowerCase()} (age ${age}) · ${planDaysPerWeek}d/wk · ${planHoursPerWeek}h/wk · ${planIntensityPref} intensity${planTargetEvent ? ` · targeting ${planTargetEvent}` : ""}`,
         plan_data: planData as unknown as Json,
-      };
-      // The charge for this plan already happened inside generate-plan, so an
-      // insert that fails is an athlete who has paid for a plan that does not
-      // exist. The plan is sitting in memory right here, so one retry — after a
-      // beat — costs nothing and covers the ordinary transient failure. Only if
-      // that fails too is the athlete told the truth: the plan was written, the
-      // save failed, and the credits need returning by support.
-      let inserted = await supabase.from("training_plans").insert(planRow).select("id").single();
-      if (inserted.error || !inserted.data) {
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        inserted = await supabase.from("training_plans").insert(planRow).select("id").single();
-      }
-      if (inserted.error || !inserted.data) {
-        setLoading(false);
-        toast({
-          title: "Your plan was written but not saved",
-          description: "Please do not create it again yet — that would charge you a second time. Contact support from Profile and quote this message; the credits will be put back.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const insertedId = inserted.data.id;
+      }).select("id").single();
+      if (insertError) throw insertError;
 
       // A plan created days after a break *is* a return from that break, so the
       // same rebuild that runs when a break is added runs here too: the athlete
@@ -695,7 +570,7 @@ const Training = () => {
         const rebuilt = await rebuildPlanForBreak({
           userId: user.id,
           plan: {
-            id: insertedId,
+            id: inserted.id,
             created_at: new Date().toISOString(),
             plan_data: planData as unknown as Json,
             plan_adjustments: [],
@@ -715,6 +590,7 @@ const Training = () => {
           ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
           : undefined,
       });
+      void inserted;
       setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
     } catch (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
     finally { setLoading(false); }
@@ -1280,108 +1156,6 @@ const Training = () => {
   };
 
   /**
-   * The paid AI plan edit.
-   *
-   * The free edits (a session's title, a holiday, skipping a session) stay free
-   * and local; this is the one that asks a model, so this is the one that
-   * charges, and the charge happens server-side. What this function owns:
-   * never send an instruction that is not one, never splice a week the athlete
-   * did not ask about, and never leave the screen showing a change the database
-   * does not have.
-   *
-   * There is no refresh-the-balance-needed path here for the happy case: the
-   * server returns the new balance, and the profile is re-read so every credit
-   * count in the app agrees.
-   */
-  const runPlanEdit = async () => {
-    if (!selectedPlan || !user || aiEditBusy) return;
-
-    const check = validateEditInstruction(aiEditInstruction);
-    if (!check.ok) { toast({ title: check.error ?? "Tell the coach what to change", variant: "destructive" }); return; }
-
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const targets = weeksForEdit(planData, aiEditScope, aiEditWeek);
-    if (targets.length === 0) {
-      toast({ title: "That week isn't in this plan", variant: "destructive" });
-      return;
-    }
-
-    const cost = editCost(aiEditScope);
-    const request = {
-      scope: aiEditScope,
-      week: aiEditWeek,
-      instruction: check.instruction ?? aiEditInstruction.trim(),
-      weeks: targets,
-      sport: selectedPlan.sport,
-      level: selectedPlan.level,
-      durationWeeks: selectedPlan.duration_weeks,
-      targetEvent: planTargetEvent,
-      requestId: newEditRequestId(),
-      userLocale: getAiLocale(),
-    };
-
-    setAiEditBusy(true);
-    let result: PlanEditOutcome = await requestPlanEdit(request);
-
-    try {
-      // Not enough credits is the one failure the athlete can do something
-      // about, so it opens the top-up sheet and then retries the SAME request.
-      // Reusing the request id is safe: a refused spend never wrote a ledger
-      // row, so the retry cannot be billed twice.
-      if (!result.ok && result.quotaExceeded) {
-        const outcome = await requestCreditTopUp({
-          shortfall: result.shortfall ?? Math.max(0, (result.cost ?? cost) - (result.balance ?? 0)),
-          reasonLabel: featureLabel(editCostKey(aiEditScope)),
-          balance: result.balance ?? 0,
-        });
-        if (!outcome.purchased) {
-          toast({ title: "Not enough credits", description: result.error ?? "Top up to apply this edit.", variant: "destructive" });
-          return;
-        }
-        result = await requestPlanEdit(request);
-      }
-    } finally {
-      // Released in a `finally`: the top-up sheet is a call that can throw, and
-      // a stuck `aiEditBusy` leaves Apply disabled for the rest of the session.
-      setAiEditBusy(false);
-    }
-
-    if (!result.ok) {
-      toast({ title: "Edit not applied", description: result.error ?? "The edit could not be applied.", variant: "destructive" });
-      return;
-    }
-
-    const { plan: nextPlan, replaced, orphans } = spliceEditedWeeks(planData, result.weeks ?? [], aiEditScope, aiEditWeek);
-    if (replaced.length === 0 || orphans.length > 0) {
-      // The server validated the count, so this means the model returned weeks
-      // this plan does not contain. Nothing is written: a plan edited into the
-      // wrong place renders beautifully and is wrong.
-      toast({ title: "That edit didn't line up with your plan", description: "Nothing was changed. Please try again.", variant: "destructive" });
-      return;
-    }
-
-    const { error } = await supabase
-      .from("training_plans")
-      .update({ plan_data: nextPlan as unknown as Json })
-      .eq("id", selectedPlan.id)
-      .eq("user_id", user.id);
-    if (error) {
-      toast({ title: "Couldn't save the edit", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    setSelectedPlan({ ...selectedPlan, plan_data: nextPlan as unknown as Json });
-    setAiEditInstruction("");
-    await refreshProfile();
-    toast({
-      title: "Plan updated ✨",
-      description: replaced.length === 1
-        ? `Week ${replaced[0]} rewritten · ${result.cost ?? cost} credits (${result.balance} left)`
-        : `${replaced.length} weeks rewritten · ${result.cost ?? cost} credits (${result.balance} left)`,
-    });
-  };
-
-  /**
    * Undo a rebuild.
    *
    * The sessions that were replaced are restored from the rebuild's own record
@@ -1518,45 +1292,6 @@ const Training = () => {
 
   const chipClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${active ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`;
   const inputClass = "w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-300";
-
-  // ---- Recommended answers for the create wizard --------------------------
-  // Nearly every question the wizard asks needs training knowledge to answer,
-  // so every one of them carries a recommendation (see planSetupAdvice.ts for
-  // the numbers and the reasoning, both unit-tested). Recomputed on render:
-  // the level, the goals, the sport and the athlete's age all move it, and the
-  // maths is pure and trivial.
-  const planAdvice = recommendSetup({ level, goals, sport, age: getAge(), caps: getAgeCaps(getAge()) });
-  const adviceApplied = (field: keyof SetupAdvice, value: unknown) => matchesAdvice(planAdvice, field, value);
-
-  /** Puts one recommended value in place, for a single field. */
-  const applyAdviceField = (field: keyof SetupAdvice) => {
-    if (field === "daysPerWeek") setPlanDaysPerWeek(planAdvice.daysPerWeek);
-    else if (field === "restDays") setPlanRecoveryDays(planAdvice.restDays);
-    else if (field === "sessionLengthPref") setPlanSessionLengthPref(planAdvice.sessionLengthPref);
-    else if (field === "hoursPerWeek") setPlanHoursPerWeek(planAdvice.hoursPerWeek);
-    else if (field === "intensityPref") setPlanIntensityPref(planAdvice.intensityPref);
-    else if (field === "environment") setPlanEnvironment(planAdvice.environment);
-    else if (field === "focusAreas") setPlanFocusAreas(planAdvice.focusAreas);
-    else if (field === "durationWeeks") setDuration(planAdvice.durationWeeks);
-  };
-
-  /** Fills every answer the wizard owns — the "I don't know, you choose" path. */
-  const applyRecommendedSetup = () => {
-    (["daysPerWeek", "restDays", "sessionLengthPref", "hoursPerWeek", "intensityPref", "environment", "focusAreas", "durationWeeks"] as (keyof SetupAdvice)[])
-      .forEach(applyAdviceField);
-  };
-
-  /**
-   * Opens the wizard, pre-filled with the recommendation for anyone who is not
-   * advanced. Seeded here rather than in an effect on `showCreate` so it runs
-   * exactly once per open: an athlete who changes a field must not have it
-   * overwritten a moment later by a recommendation reacting to their level.
-   * An advanced athlete gets nothing pre-filled — see AdvancedFreedomNote.
-   */
-  const openCreateWizard = () => {
-    if (level !== "advanced") applyRecommendedSetup();
-    setShowCreate(true);
-  };
 
   // === LIMITER TEST VIEW ===
   if (activeView === "limiter") return (
@@ -1705,7 +1440,7 @@ const Training = () => {
                 {log.calories_burned && <span className="text-[12px] text-muted-foreground">{log.calories_burned} kcal</span>}
               </div>
               {log.notes && <p className="text-xs text-muted-foreground mt-1">{log.notes}</p>}
-              <p className="text-[12px] text-muted-foreground mt-1">{formatDate(log.created_at)}</p>
+              <p className="text-[12px] text-muted-foreground mt-1">{new Date(log.created_at).toLocaleDateString()}</p>
             </motion.div>
           ))}
         </div>
@@ -1742,102 +1477,6 @@ const Training = () => {
               Collapse all
             </button>
           </div>
-        </div>
-
-        {/* Edit with AI. Deliberately sits next to the free edits and says so:
-            an athlete who does not know a holiday is free will pay 10 credits
-            for one, and a paid button that hides the free option is a dark
-            pattern however good the AI is. */}
-        <div className="px-5 mb-4">
-          <button
-            type="button"
-            onClick={() => setAiEditOpen((open) => !open)}
-            aria-expanded={aiEditOpen}
-            className="flex w-full items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <Wand2 size={15} className="text-primary" /> Edit this plan with AI
-            </span>
-            <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
-              {editCost(aiEditScope)} credits
-              <ChevronDown size={14} className={`transition-transform ${aiEditOpen ? "rotate-180" : ""}`} />
-            </span>
-          </button>
-
-          {aiEditOpen && (
-            <div className="mt-2 space-y-3 rounded-2xl border border-border bg-gradient-card p-4">
-              <div className="flex gap-1.5">
-                {([["week", "This week"], ["plan", "Whole plan"]] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setAiEditScope(value)}
-                    aria-pressed={aiEditScope === value}
-                    className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold ${aiEditScope === value ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}
-                  >
-                    {label} · {editCost(value)} credits
-                  </button>
-                ))}
-              </div>
-
-              {aiEditScope === "week" && (
-                <label className="block">
-                  <span className="mb-1 block text-xs text-muted-foreground">Which week</span>
-                  <select
-                    value={aiEditWeek}
-                    onChange={(e) => setAiEditWeek(Number(e.target.value))}
-                    className={inputClass}
-                  >
-                    {(planData ?? []).map((w) => (
-                      <option key={w.week} value={w.week}>
-                        Week {w.week}{w.isDeload ? " — deload" : ""}{w.isHoliday ? " — holiday" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              <label className="block">
-                <span className="mb-1 block text-xs text-muted-foreground">What should change?</span>
-                {/* `resize-none` and a deliberate height: the browser's own
-                    resize handle sat on top of the text, and the long example
-                    placeholder was clipped rather than wrapped once the box
-                    was two rows tall. The example moved out of the box and
-                    under it, where it can be read in full. */}
-                <textarea
-                  value={aiEditInstruction}
-                  onChange={(e) => setAiEditInstruction(e.target.value.slice(0, MAX_EDIT_INSTRUCTION))}
-                  rows={4}
-                  placeholder="What should change?"
-                  className={`${inputClass} resize-none leading-relaxed`}
-                />
-                <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                  e.g. “my knee is sore — swap the running for swimming this week and keep the strength work”.
-                </span>
-                <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {aiEditInstruction.length}/{MAX_EDIT_INSTRUCTION} — the more specific you are, the better the edit.
-                </span>
-              </label>
-
-              <motion.button
-                type="button"
-                onClick={runPlanEdit}
-                disabled={aiEditBusy || aiEditInstruction.trim().length < MIN_EDIT_INSTRUCTION}
-                whileTap={{ scale: 0.98 }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
-              >
-                {aiEditBusy
-                  ? <><Loader2 size={16} className="animate-spin" /> Asking the coach…</>
-                  : <><Wand2 size={16} /> Apply edit ({editCost(aiEditScope)} credits)</>}
-              </motion.button>
-
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Holidays, session titles, durations and skipping a session are free and stay free — use those
-                for anything you can do with a tap. An AI edit that fails is refunded automatically, and nothing
-                is written to your plan unless the edit comes back complete.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* A rebuild is the biggest thing that can happen to a plan, so it is
@@ -1950,7 +1589,7 @@ const Training = () => {
                       {change.sessions.map((s) => (
                         <div key={`${s.scheduled_date}-${s.title}`} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
                           <span className="min-w-0 truncate">
-                            {formatDate(`${s.scheduled_date}T00:00:00`)} · {s.title}
+                            {new Date(`${s.scheduled_date}T00:00:00`).toLocaleDateString()} · {s.title}
                             {s.important && <span className="text-info"> · key session</span>}
                           </span>
                           <span className="shrink-0">{sessionStatusMeta(s.status).label}</span>
@@ -2001,18 +1640,8 @@ const Training = () => {
                       </motion.button>
                     </div>
                     <div className="space-y-2">
-                      {week.sessions?.map((session, si) => {
-                        // The day a deep link asked for. Computed once per row so
-                        // the ring rules below cannot disagree about which day it
-                        // is, and so a highlighted day never also wears the
-                        // cancelled-by-availability ring.
-                        const isHighlighted = highlightDay?.week === week.week && highlightDay?.day === session.day;
-                        return (
-                        <div
-                          key={si}
-                          data-plan-day={`${week.week}-${session.day}`}
-                          className={`rounded-lg transition-shadow duration-500 ${session.skipped ? "opacity-40" : ""} ${adaptive.statusFor(week.week, session.day) === "cancelled_due_to_availability" && !isHighlighted ? "opacity-70 ring-1 ring-info/30" : ""} ${isHighlighted ? "ring-2 ring-primary/60" : ""} ${session.isRest ? "bg-muted/20 border border-dashed border-border" : session.isRecovery ? "bg-accent/5 border border-accent/10" : "bg-muted/50 border border-border"} overflow-hidden`}
-                        >
+                      {week.sessions?.map((session, si) => (
+                        <div key={si} className={`rounded-lg ${session.skipped ? "opacity-40" : ""} ${adaptive.statusFor(week.week, session.day) === "cancelled_due_to_availability" ? "opacity-70 ring-1 ring-info/30" : ""} ${session.isRest ? "bg-muted/20 border border-dashed border-border" : session.isRecovery ? "bg-accent/5 border border-accent/10" : "bg-muted/50 border border-border"} overflow-hidden`}>
                           {editingSession?.week === week.week && editingSession?.day === session.day ? (
                             <div className="p-3 space-y-2">
                               <input value={editSessionTitle} onChange={e => setEditSessionTitle(e.target.value)} className={inputClass} placeholder="Session title" />
@@ -2076,61 +1705,36 @@ const Training = () => {
                                 )}
                               </div>
                               {session.description && <p className="text-[12px] text-muted-foreground px-3 pb-1">{session.description}</p>}
-                              {/* Warmup.
-
-                                  Two conditions, and both were bugs. An EMPTY
-                                  array still printed the heading, so a rest day
-                                  came back from the generator as a Warm-up
-                                  heading over blank space — a section that had
-                                  failed to load, in the athlete's reading of it.
-                                  And a rest day has nothing to warm up FOR, so an
-                                  answer that put mobility work in that slot is
-                                  shown as the day's own work below instead of as
-                                  a warm-up nobody is about to do. */}
-                              {!session.isRest && (session.warmup?.length ?? 0) > 0 && !session.skipped && (
+                              {/* Warmup */}
+                              {session.warmup && !session.skipped && (
                                 <div className="px-3 pb-1">
-                                  <p className="text-[12px] font-semibold text-energy uppercase tracking-wider mb-1">Warm-up</p>
+                                  <p className="text-[12px] font-semibold text-energy uppercase tracking-wider mb-0.5">Warm-up</p>
                                   {session.warmup.map((ex, ei) => (
-                                    <div key={ei} className="border-b border-white/[0.05] py-1.5 last:border-b-0">
-                                      <p className="text-[12.5px] font-medium leading-snug text-foreground/90 break-words">{ex.name}</p>
-                                      <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground break-words">{ex.sets}</p>
+                                    <div key={ei} className="flex justify-between text-[12px] text-muted-foreground py-0.5">
+                                      <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
                                     </div>
                                   ))}
                                 </div>
                               )}
                               {/* Main exercises */}
-                              {(session.exercises?.length ?? 0) > 0 && !session.skipped && (
+                              {session.exercises && !session.skipped && (
                                 <div className="px-3 pb-1">
-                                  {!session.isRest && !session.isRecovery && <p className="text-[12px] font-semibold text-primary uppercase tracking-wider mb-1">Main Session</p>}
-                                  {/* Stacked, not two columns.
-
-                                      These rows used to be
-                                      `flex justify-between` with the
-                                      prescription right-aligned inside a
-                                      `max-w-[50%]` column, so on a 390px phone
-                                      "3 x 8 each side @ RPE 6-7, rest 75 sec,
-                                      controlled depth" wrapped into four ragged
-                                      lines beside a name that wrapped into two.
-                                      A prescription is a sentence, not a value:
-                                      it belongs under the movement it belongs
-                                      to, where it can use the full width. */}
+                                  {!session.isRest && !session.isRecovery && <p className="text-[12px] font-semibold text-primary uppercase tracking-wider mb-0.5">Main Session</p>}
                                   {session.exercises.map((ex, ei) => (
-                                    <div key={ei} className="border-b border-white/[0.05] py-1.5 last:border-b-0">
-                                      <p className="text-[12.5px] font-medium leading-snug text-foreground break-words">{ex.name}</p>
-                                      <p className="mt-0.5 text-[12px] font-medium leading-snug text-primary/90 break-words">{ex.sets}</p>
+                                    <div key={ei} className="flex justify-between text-[12px] py-0.5">
+                                      <span className="font-medium text-foreground">{ex.name}</span>
+                                      <span className="text-muted-foreground text-right ml-2 flex-shrink-0 max-w-[50%]">{ex.sets}</span>
                                     </div>
                                   ))}
                                 </div>
                               )}
-                              {/* Cooldown — the same empty-heading and
-                                  rest-day rules as the warm-up above. */}
-                              {!session.isRest && (session.cooldown?.length ?? 0) > 0 && !session.skipped && (
+                              {/* Cooldown */}
+                              {session.cooldown && !session.skipped && (
                                 <div className="px-3 pb-2">
-                                  <p className="text-[12px] font-semibold text-info uppercase tracking-wider mb-1">Cool-down</p>
+                                  <p className="text-[12px] font-semibold text-info uppercase tracking-wider mb-0.5">Cool-down</p>
                                   {session.cooldown.map((ex, ei) => (
-                                    <div key={ei} className="border-b border-white/[0.05] py-1.5 last:border-b-0">
-                                      <p className="text-[12.5px] font-medium leading-snug text-foreground/90 break-words">{ex.name}</p>
-                                      <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground break-words">{ex.sets}</p>
+                                    <div key={ei} className="flex justify-between text-[12px] text-muted-foreground py-0.5">
+                                      <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -2138,8 +1742,7 @@ const Training = () => {
                             </>
                           )}
                         </div>
-                        );
-                      })}
+                      ))}
                     </div>
                   </motion.div>
                 )}
@@ -2152,7 +1755,7 @@ const Training = () => {
   }
 
   // === MAIN PLANS VIEW ===
-  const hasNoPlans = plans.length === 0 && !plansFailed;
+  const hasNoPlans = plans.length === 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -2167,23 +1770,13 @@ const Training = () => {
         </div>
       )}
 
-      {plansFailed && (
-        <div role="alert" className="mx-5 mb-5 flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
-          <div>
-            <p className="text-sm font-medium">We couldn't load your plans</p>
-            <p className="text-xs text-muted-foreground mt-1">Check your connection and try again — anything you already own is still there.</p>
-          </div>
-        </div>
-      )}
-
       {hasNoPlans && !showCreate && (
         <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           className="mx-5 mb-5 bg-gradient-card border border-primary/30 rounded-2xl p-5 shadow-card text-center">
           <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}><Dumbbell size={32} className="mx-auto text-primary mb-3" /></motion.div>
           <h3 className="font-display font-bold text-lg">No training plan yet</h3>
           <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first personalised plan to get started.</p>
-          <motion.button onClick={openCreateWizard} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
+          <motion.button onClick={() => setShowCreate(true)} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
             className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
             <Plus size={18} /> Create Training Plan
           </motion.button>
@@ -2225,22 +1818,10 @@ const Training = () => {
               <div key={i} className={`flex-1 h-1 rounded-full ${i <= planQuizStep ? "bg-primary" : "bg-muted"}`} />
             ))}
           </div>
-          {loading ? (
-            <PlanGenerationProgress weeks={duration} />
-          ) : (
-            <p className="text-[12px] text-muted-foreground">Step {planQuizStep + 1} of 3 · {["Basics", "Availability", "Preferences"][planQuizStep]}</p>
-          )}
+          <p className="text-[12px] text-muted-foreground">Step {planQuizStep + 1} of 3 · {["Basics", "Availability", "Preferences"][planQuizStep]}</p>
 
-          {!loading && planQuizStep === 0 && (
+          {planQuizStep === 0 && (
             <div className="space-y-3">
-              <AdvicePanel
-                step={1}
-                advice={planAdvice}
-                onApplyAll={applyRecommendedSetup}
-                onApplyField={applyAdviceField}
-                applied={{ durationWeeks: adviceApplied("durationWeeks", duration) }}
-              />
-              {level === "advanced" && <AdvancedFreedomNote />}
               <input type="text" placeholder="Plan name (optional)" value={title} onChange={e => setTitle(e.target.value)} maxLength={100} className={inputClass} />
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Your Age *</label>
@@ -2261,37 +1842,25 @@ const Training = () => {
                 <p className="text-[12px] text-muted-foreground mt-1">{goals.length} goal{goals.length === 1 ? "" : "s"} selected — the plan will blend all of them.</p>
               </div>
               <div><label className="text-xs text-muted-foreground mb-1 block">Level</label><div className="flex gap-1.5">{levelOptions.map(l => (<button key={l} onClick={() => setLevel(l)} className={`flex-1 capitalize ${chipClass(level === l)}`}>{l}</button>))}</div></div>
-              <div><div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Plan length</label><RecommendedChip value={`${planAdvice.durationWeeks}w`} applied={adviceApplied("durationWeeks", duration)} onApply={() => applyAdviceField("durationWeeks")} /></div><div className="flex gap-1.5">{durationOptions.map(d => (<button key={d} onClick={() => setDuration(d)} className={`flex-1 ${chipClass(duration === d)}`}>{d}w</button>))}</div></div>
+              <div><label className="text-xs text-muted-foreground mb-1 block">Plan length</label><div className="flex gap-1.5">{durationOptions.map(d => (<button key={d} onClick={() => setDuration(d)} className={`flex-1 ${chipClass(duration === d)}`}>{d}w</button>))}</div></div>
             </div>
           )}
 
-          {!loading && planQuizStep === 1 && (
+          {planQuizStep === 1 && (
             <div className="space-y-3">
-              <AdvicePanel
-                step={2}
-                advice={planAdvice}
-                onApplyAll={applyRecommendedSetup}
-                onApplyField={applyAdviceField}
-                applied={{
-                  daysPerWeek: adviceApplied("daysPerWeek", planDaysPerWeek),
-                  restDays: adviceApplied("restDays", planRecoveryDays),
-                  sessionLengthPref: adviceApplied("sessionLengthPref", planSessionLengthPref),
-                  hoursPerWeek: adviceApplied("hoursPerWeek", planHoursPerWeek),
-                }}
-              />
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Days per week you can train</label><RecommendedChip value={`${planAdvice.daysPerWeek} days`} applied={adviceApplied("daysPerWeek", planDaysPerWeek)} onApply={() => applyAdviceField("daysPerWeek")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Days per week you can train</label>
                 <div className="flex gap-1.5 flex-wrap">{[2,3,4,5,6,7].map(n => (
                   <button key={n} onClick={() => setPlanDaysPerWeek(n)} className={`flex-1 ${chipClass(planDaysPerWeek === n)}`}>{n}</button>
                 ))}</div>
               </div>
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Total hours per week</label><RecommendedChip value={`~${planAdvice.hoursPerWeek}h`} applied={adviceApplied("hoursPerWeek", planHoursPerWeek)} onApply={() => applyAdviceField("hoursPerWeek")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Total hours per week</label>
                 <input type="number" min={1} max={30} step={0.5} value={planHoursPerWeek} onChange={e => setPlanHoursPerWeek(parseFloat(e.target.value) || 0)} className={inputClass} />
                 <p className="text-[12px] text-muted-foreground mt-1">Sessions will average ~{Math.round((planHoursPerWeek * 60) / Math.max(1, planDaysPerWeek))} min.</p>
               </div>
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Preferred session length</label><RecommendedChip value={planAdvice.sessionLengthPref} applied={adviceApplied("sessionLengthPref", planSessionLengthPref)} onApply={() => applyAdviceField("sessionLengthPref")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Preferred session length</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {([["short","Short"],["standard","Standard"],["long","Long"]] as const).map(([v,l]) => (
                     <button key={v} onClick={() => setPlanSessionLengthPref(v)} className={chipClass(planSessionLengthPref === v)}>{l}</button>
@@ -2310,7 +1879,7 @@ const Training = () => {
                 </div>
               </div>
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Dedicated full rest days per week</label><RecommendedChip value={`${planAdvice.restDays} full rest`} applied={adviceApplied("restDays", planRecoveryDays)} onApply={() => applyAdviceField("restDays")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Dedicated full rest days per week</label>
                 <div className="flex gap-1.5">{[0,1,2,3].map(n => (
                   <button key={n} onClick={() => setPlanRecoveryDays(n)} className={`flex-1 ${chipClass(planRecoveryDays === n)}`}>{n}</button>
                 ))}</div>
@@ -2318,21 +1887,10 @@ const Training = () => {
             </div>
           )}
 
-          {!loading && planQuizStep === 2 && (
+          {planQuizStep === 2 && (
             <div className="space-y-3">
-              <AdvicePanel
-                step={3}
-                advice={planAdvice}
-                onApplyAll={applyRecommendedSetup}
-                onApplyField={applyAdviceField}
-                applied={{
-                  intensityPref: adviceApplied("intensityPref", planIntensityPref),
-                  environment: adviceApplied("environment", planEnvironment),
-                  focusAreas: adviceApplied("focusAreas", planFocusAreas),
-                }}
-              />
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Intensity preference</label><RecommendedChip value={planAdvice.intensityPref} applied={adviceApplied("intensityPref", planIntensityPref)} onApply={() => applyAdviceField("intensityPref")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Intensity preference</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {([["easy","Easy"],["balanced","Balanced"],["hard","Hard"]] as const).map(([v,l]) => (
                     <button key={v} onClick={() => setPlanIntensityPref(v)} className={chipClass(planIntensityPref === v)}>{l}</button>
@@ -2381,7 +1939,7 @@ const Training = () => {
                 </p>
               </div>
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Training environment</label><RecommendedChip value={planAdvice.environment} applied={adviceApplied("environment", planEnvironment)} onApply={() => applyAdviceField("environment")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Training environment</label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {["Indoor","Outdoor","Mixed","Altitude"].map(e => (
                     <button key={e} onClick={() => setPlanEnvironment(e)} className={`text-[12px] ${chipClass(planEnvironment === e)}`}>{e}</button>
@@ -2389,7 +1947,7 @@ const Training = () => {
                 </div>
               </div>
               <div>
-                <div className="mb-1 flex items-center gap-2"><label className="text-xs text-muted-foreground">Focus areas <span className="text-muted-foreground/70">(easy → advanced)</span></label><RecommendedChip value={`${planAdvice.focusAreas.length} areas`} applied={adviceApplied("focusAreas", planFocusAreas)} onApply={() => applyAdviceField("focusAreas")} /></div>
+                <label className="text-xs text-muted-foreground mb-1 block">Focus areas <span className="text-muted-foreground/70">(easy → advanced)</span></label>
                 <div className="space-y-2">
                   {[
                     { tier: "Easy", color: "text-success", items: ["General Fitness","Mobility","Flexibility","Active Recovery","Fat Loss","Posture","Core Basics","Walking Base"] },
@@ -2424,7 +1982,6 @@ const Training = () => {
             </div>
           )}
 
-          {!loading && (
           <div className="flex gap-2 pt-1">
             {planQuizStep > 0 && (
               <button onClick={() => setPlanQuizStep(s => s - 1)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground">Back</button>
@@ -2437,47 +1994,34 @@ const Training = () => {
             ) : (
               <motion.button onClick={createPlan} disabled={loading || !planAge} whileTap={{ scale: 0.98 }}
                 className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl disabled:opacity-50 shadow-glow">
-                <Zap size={16} /> Create Plan ({creditCost("training_plan_week", duration)} credits)
+                <Zap size={16} /> {loading ? "Creating..." : `Create Plan (${creditCost("training_plan_week", duration)} credits)`}
               </motion.button>
             )}
           </div>
-          )}
         </motion.div>
       )}
 
 
 
-      {plans.length > 0 && (
+      {!hasNoPlans && (
         <div className="px-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-muted-foreground">Your Plans</h3>
-            <button onClick={openCreateWizard} className="text-xs text-primary font-semibold flex items-center gap-1"><Plus size={14} /> New</button>
+            <button onClick={() => setShowCreate(true)} className="text-xs text-primary font-semibold flex items-center gap-1"><Plus size={14} /> New</button>
           </div>
           <div className="space-y-3 mb-6">
             {plans.map((plan, i) => (
               <motion.div key={plan.id} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
                 className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
                 <div className="flex items-center justify-between">
-                  {/* A div with onClick is unreachable by keyboard, and this is
-                      the only way into a plan the athlete has paid for. A real
-                      button gets focus, Enter and Space for free; `text-start`
-                      keeps the title aligned the way the div did. */}
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}
-                    className="flex flex-1 cursor-pointer items-center gap-3 text-start"
-                  >
+                  <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}>
                     <div className="p-2 rounded-lg bg-primary/10"><Dumbbell size={18} className="text-primary" /></div>
                     <div><h4 className="font-semibold text-sm">{plan.title}</h4><p className="text-xs text-muted-foreground">{plan.duration_weeks}w · {plan.sport} · {plan.level}</p></div>
-                  </button>
+                  </div>
                   <div className="flex items-center gap-2">
                     {plan.active ? <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Active</span> : null}
                     <motion.button onClick={(e) => { e.stopPropagation(); deletePlan(plan.id); }} whileTap={{ scale: 0.9 }}
-                      /* p-1.5 kept the glyph small, but the hit area is the
-                         control: without an explicit min-w the button measured
-                         ~26px across, under the 44px floor's intent even though
-                         its height passed. min-h/min-w leave the glyph at 14px. */
-                      className="p-1.5 min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></motion.button>
+                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></motion.button>
                   </div>
                 </div>
               </motion.div>

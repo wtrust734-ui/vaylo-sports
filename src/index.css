@@ -209,7 +209,6 @@
        this duration have to agree or the swap lands on the wrong frame. */
     --vaylo-nav-fade-out: 140ms;
     --vaylo-nav-fade: 280ms;
-    --vaylo-nav-fade: 280ms;
 
     /* ── Spacing scale ────────────────────────────────────────────────────
        The status-bar inset is already applied to `body` (see below), so
@@ -230,18 +229,6 @@
     --vaylo-title-gap: 24px;   /* section header → content below it      */
     --vaylo-card-pad: 16px;    /* card interior                          */
     --vaylo-card-gap: 16px;    /* between stacked cards                  */
-
-    /* The desktop sidebar's width, and the only place it is written down.
-
-       It used to be written twice — `w-[272px]` on the aside (AppSidebar) and
-       `lg:pl-60` (240px) on the content (AppLayout) — so the sidebar's last
-       32px sat over every screen at every desktop width, on top of a
-       translucent card. Under RTL it was worse: `start-0` mirrors the sidebar
-       to the right while the padding stayed on the left, so the sidebar covered
-       the content entirely. One token plus a LOGICAL padding (`ps-`) means the
-       two cannot disagree, and RTL is right by construction rather than by a
-       second rule someone has to remember. */
-    --vaylo-sidebar-w: 272px;
 
     /* ── Surface + elevation ──────────────────────────────────────────────
        One border and two elevations. The border is a translucent white at 8%

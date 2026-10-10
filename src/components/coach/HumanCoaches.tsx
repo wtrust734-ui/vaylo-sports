@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { readFailed } from "@/lib/dbRead";
-import { formatDateTimeExact } from "@/i18n/format";
 
 interface Coach { user_id: string; display_name: string; bio?: string; specialties?: string[]; verified?: boolean; }
 
@@ -22,23 +20,18 @@ export default function HumanCoaches() {
   };
   const [bookings, setBookings] = useState<CoachBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  // A read failure is not "no coaches are taking bookings". That sentence is a
-  // claim about the marketplace, and it is the one an athlete reads as fact.
-  const [listFailed, setListFailed] = useState(false);
 
   useEffect(() => {
     (async () => {
       // Explicit columns: since the 2026-10-06 audit migration, SELECT on
       // creator_profiles is column-scoped and payout_email is unreadable by
       // clients — select("*") would now fail with permission denied.
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("creator_profiles")
         .select("user_id, display_name, bio, specialties, verified");
-      setListFailed(readFailed(error, "the coach list"));
       setCoaches((data || []) as Coach[]);
       if (user) {
-        const { data: b, error: bookingsError } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
-        readFailed(bookingsError, "your booked sessions");
+        const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
         setBookings(b || []);
       }
       setLoading(false);
@@ -60,9 +53,7 @@ export default function HumanCoaches() {
     setBooking(null);
     if (error) { toast.error(error.message); return; }
     toast.success(`Requested ${minutes}-min session with ${coach.display_name}`);
-    const { data: b, error: refreshError } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
-    // The booking itself landed; only the list behind it failed to refresh.
-    readFailed(refreshError, "your booked sessions");
+    const { data: b } = await supabase.from("coach_bookings").select("*").eq("client_id", user.id);
     setBookings(b || []);
   };
 
@@ -75,7 +66,7 @@ export default function HumanCoaches() {
             {bookings.map((b) => (
               <div key={b.id} className="p-4 rounded-2xl border border-border bg-card flex items-center justify-between">
                 <div>
-                  <p className="font-medium">{formatDateTimeExact(b.starts_at)}</p>
+                  <p className="font-medium">{new Date(b.starts_at).toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground">{b.duration_minutes} min · {b.status}</p>
                 </div>
                 {b.video_link && (
@@ -92,12 +83,6 @@ export default function HumanCoaches() {
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Available coaches</h3>
         {loading ? <p className="text-sm text-muted-foreground">Loading…</p> :
-         listFailed ? (
-          <div className="p-8 rounded-2xl border border-border bg-card text-center text-sm text-muted-foreground">
-            We couldn't load the coach list just now — this looks like a connection problem rather than an empty
-            marketplace. Reload the screen to try again.
-          </div>
-         ) :
          coaches.length === 0 ? (
           <div className="p-8 rounded-2xl border border-border bg-card text-center text-sm text-muted-foreground">
             No human coaches are taking bookings yet. Verified coaches are being onboarded — check back soon, or keep training with Vaylo Sports Coach in the meantime.

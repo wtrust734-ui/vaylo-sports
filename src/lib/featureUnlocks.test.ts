@@ -49,11 +49,11 @@ describe("unlockFeature", () => {
   it("recomputes the shortfall when the server sends only the cost", async () => {
     purchaseItems.mockResolvedValue({
       ok: false,
-      error: "Not enough credits for form_analysis (need 54).",
+      error: "Not enough credits for cross_sport (need 54).",
       data: { code: "insufficient_credits", required: 54, balance: 20 },
     });
 
-    expect(await unlockFeature("form_analysis")).toEqual({
+    expect(await unlockFeature("cross_sport")).toEqual({
       status: "insufficient",
       cost: 54,
       balance: 20,
@@ -75,7 +75,7 @@ describe("unlock catalogue", () => {
     // These are the ids subscriptions and the achievements page compare against,
     // so a typo here means a paid unlock that never appears to have worked.
     expect(featureKeyFor("mental_gym")).toBe("mental_gym");
-    expect(featureKeyFor("form_analysis")).toBe("form_analysis");
+    expect(featureKeyFor("cross_sport")).toBe("cross_sport");
     expect(featureKeyFor("injury_management")).toBe("injury_management");
   });
 

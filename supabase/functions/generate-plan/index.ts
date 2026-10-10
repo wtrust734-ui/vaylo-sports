@@ -6,15 +6,6 @@ import { refundCredits } from "../_shared/refund.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 import { equipmentDirective, normaliseEquipment, type EquipmentId } from "../_shared/equipment.ts";
-import { cleanPlanWeeks as cleanWeekObjects } from "../_shared/planSchema.ts";
-import {
-  buildWeekSkeleton,
-  chunkSkeleton,
-  planChunkWeeks,
-  skeletonContinuityNote,
-  skeletonTargetLines,
-  type WeekSkeleton,
-} from "../_shared/planPeriodisation.ts";
 
 // Prompt-stuffing caps — this function spends real AI budget.
 const MAX_PB_ITEMS = 20;
@@ -254,7 +245,7 @@ Deno.serve(async (req) => {
         }. Write the plan for the athlete's normal level and do NOT reduce volume or intensity yourself, do NOT add make-up sessions for the missed days, and do NOT schedule a testing week. Make week 1 back easy to shorten: technique, aerobic work, short sessions, nothing maximal.`
       : "";
 
-    const systemHead = `You are an elite sports coach writing ONE PART of a structured training plan.\nTHE INTENDED VAYLO SPORTS ATHLETE IS AN ADULT AGED 18–30, from a developing athlete through a serious, competitive one. Never assume or imply the athlete is younger, and never address them as a child, a teenager or a junior. The safety bands below apply only when the athlete's own date of birth puts them outside that range.
+    const system = `You are an elite sports coach generating structured training plans.\nTHE INTENDED VAYLO SPORTS ATHLETE IS AN ADULT AGED 18–30, from a developing athlete through a serious, competitive one. Never assume or imply the athlete is younger, and never address them as a child, a teenager or a junior. The safety bands below apply only when the athlete's own date of birth puts them outside that range.
 ${ageGuidance}
 ${capsLine}
 ${equipmentLine}
@@ -262,32 +253,7 @@ ${voiceDirective}
 ${breakLine}
 ${returnLine}
 ${dossierText ? `\n${dossierText}\n— Use the dossier to tailor volume, focus and exercise selection to THIS athlete (PBs, injuries, goals, recovery). Avoid movements that aggravate listed injuries.\n\nAny \`sessionLoads\` in the dossier are sport-specific load figures the app computed from the athlete's own logged sessions — an hour of swimming is NOT an hour of running in those numbers, and a field/court match is worth more than the same time training. Where recovery data is thin, write for the athlete's normal week. Never state a probability of injury or illness, never diagnose, and never claim the plan prevents anything: the only permitted register is "their recent load and recovery indicators suggest that X may be appropriate".` : ""}
-`;
-
-    // ---- The plan's periodisation, computed here ---------------------------
-    // The app decides the SHAPE of the plan — deload placement, each block's
-    // focus, the volume and intensity target per week — and the model fills in
-    // sessions inside that shape. Three consequences, all deliberate:
-    //
-    //   * the weeks can be written in parallel, which is where the speed comes
-    //     from, without the plan fraying at the seams: progression does not
-    //     depend on a model remembering what it wrote seven minutes ago for
-    //     week 3, because the numbers it has to hit are computed here;
-    //   * "every 4th week is a deload" stops being a sentence a model is free
-    //     to ignore — the flags are stamped onto the merged plan below;
-    //   * the reasoning lives in a pure, unit-tested module
-    //     (_shared/planPeriodisation.ts), which a prompt cannot be.
-    const skeleton = buildWeekSkeleton({
-      duration,
-      deloadEvery: effectiveCaps.deloadEvery,
-      level,
-      sessionsPerWeek: typeof safeQuiz.daysPerWeek === "number" ? safeQuiz.daysPerWeek : 4,
-    });
-    // One week per call up to twelve weeks (see planChunkWeeks): latency grows
-    // with the weeks inside a call, and every call here runs at the same time.
-    const chunks = chunkSkeleton(skeleton, planChunkWeeks(duration));
-
-    const planSchema = `Return ONLY valid JSON matching this exact schema (no markdown, no prose):
+Return ONLY valid JSON matching this exact schema (no markdown, no prose):
 {
   "weeks": [
     {
@@ -313,128 +279,103 @@ ${dossierText ? `\n${dossierText}\n— Use the dossier to tailor volume, focus a
     }
   ]
 }
-Each week you are asked for has exactly 7 day objects (day 1 = Monday, day 7 = Sunday). Rest days have empty warmup/exercises/cooldown (just a note in exercises) and duration_minutes=0. Every prescribed exercise MUST be safe for the athlete's chronological age and caps above.`;
+Rules: exactly ${duration} weeks, each week has exactly 7 days (Mon-Sun). Every 4th week is a deload (on the tighter ${effectiveCaps.deloadEvery}-week cycle, which the caps set for an under-18 or masters athlete). Rest days have empty warmup/exercises/cooldown (just a note in exercises) and duration_minutes=0. Every prescribed exercise MUST be safe for the athlete's chronological age and caps above.`;
 
-    // What THIS call is writing. The shared head (systemHead) and the schema
-    // above are byte-identical for every chunk, which is what keeps the safety
-    // rules independent of which slice a call happened to be given — and what
-    // lets the provider cache the large prefix instead of re-reading it per
-    // chunk.
-    const chunkBrief = (chunk: WeekSkeleton[]): string => {
-      const first = chunk[0]?.week ?? 1;
-      const last = chunk[chunk.length - 1]?.week ?? first;
-      return `Write ONLY weeks ${first}-${last} of this plan: exactly ${chunk.length} week object${chunk.length === 1 ? "" : "s"}, numbered ${first} to ${last}. The other weeks are written by other calls running at the same time — do not write them and do not mention them.
-Keep every entry to one line: the name, then sets/reps/RPE/rest/cues. 3-5 exercises per session, 2-4 warmup entries, 2-3 cooldown entries. No sentences inside an entry.
-These are the app's own periodisation targets for the whole plan — hit them; they are the structure, not a suggestion:
-${skeletonTargetLines(skeleton, chunk)}
-${skeletonContinuityNote(chunk, skeleton)}${chunk.some((w) => w.isDeload) ? "\nA deload week is not the same week with easier numbers: one fewer session, reduced loads, technique and mobility work kept in. Write it as its own week." : ""}`;
-    };
+    const user = `Generate a ${duration}-week ${goal} plan for ${sport} (level: ${level}, age: ${age ?? "unknown"}).
+Availability Quiz (already capped to age-safe limits): ${JSON.stringify(safeQuiz)}
+Equipment available to this athlete: ${equipment.length ? equipment.join(", ") : "none recorded — bodyweight and space only"}
+${dossierText ? `Athlete dossier already in system prompt — do not ask for it again.` : ""}`;
 
-    /**
-     * One model call: the sessions for a single slice of the skeleton.
-     *
-     * Each chunk is independent, and that is the point — four two-week calls
-     * running at once come back in roughly the time one of them takes, where the
-     * single whole-plan call this replaces took minutes on a long plan and got
-     * slower (and likelier to time out) the more weeks it was asked for.
-     *
-     * A failure comes back as `ok: false` with the provider's status instead of
-     * throwing, so the caller keeps the same 429/402/500 mapping this function
-     * has always returned: a rate limit is worth retrying, a malformed response
-     * is not.
-     */
-    const generateChunk = async (
-      chunk: WeekSkeleton[],
-    ): Promise<{ ok: true; weeks: Record<string, unknown>[] } | { ok: false; status: number }> => {
-      const first = chunk[0]?.week ?? 1;
-      const last = chunk[chunk.length - 1]?.week ?? first;
-      try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: MODELS.CHAT.MINI,
-            messages: [
-              {
-                role: "system",
-                content: systemHead + planSchema + chunkBrief(chunk) + (langDirective ? "\n\n" + langDirective : ""),
-              },
-              {
-                role: "user",
-                content: `Write weeks ${first}-${last} of a ${duration}-week ${goal} plan for ${sport} (level: ${level}, age: ${age ?? "unknown"}).\nAvailability Quiz (already capped to age-safe limits): ${JSON.stringify(safeQuiz)}\nEquipment available to this athlete: ${equipment.length ? equipment.join(", ") : "none recorded — bodyweight and space only"}\n${dossierText ? "Athlete dossier already in system prompt — do not ask for it again." : ""}`,
-              },
-            ],
-            response_format: { type: "json_object" },
-            // Output budget scales with the weeks THIS call writes, not with the
-            // whole plan. Measured need is ~1.9k completion tokens per week;
-            // 3k/week leaves room for verbosity while still bounding a runaway
-            // generation instead of letting it bill up to the model's ceiling.
-            max_completion_tokens: Math.min(32000, chunk.length * 3000 + 1500),
-          }),
-        });
-
-        if (!response.ok) {
-          // Status + marker only — never the raw provider body.
-          console.error("AI gateway error:", response.status, "upstream_error");
-          return { ok: false, status: response.status };
-        }
-
-        const data = await response.json();
-        const content = data?.choices?.[0]?.message?.content ?? "{}";
-        let parsed: { weeks?: unknown } | null = null;
-        try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
-        catch { return { ok: false, status: 502 }; }
-
-        // The prompt asks for exactly the weeks this chunk was given. A short
-        // slice means the model answered a different question, so it is a failed
-        // call rather than a plan missing weeks the athlete paid for.
-        const raw = Array.isArray(parsed?.weeks) ? (parsed.weeks as unknown[]) : [];
-        const clean = cleanWeekObjects(raw).slice(0, chunk.length);
-        if (clean.length !== chunk.length) return { ok: false, status: 502 };
-        return { ok: true, weeks: clean };
-      } catch (e) {
-        console.error("generate-plan chunk error:", e instanceof Error ? e.name : e);
-        return { ok: false, status: 500 };
-      }
-    };
-
-    // Every chunk starts together. One chunk failing does not cancel the others
-    // mid-flight, and a single retry covers the ordinary provider hiccup.
-    const results = await Promise.all(
-      chunks.map(async (chunk) => {
-        const first = await generateChunk(chunk);
-        return first.ok ? first : await generateChunk(chunk);
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODELS.CHAT.MINI,
+        messages: [
+          { role: "system", content: system + (langDirective ? "\n\n" + langDirective : "") },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_object" },
+        // Output budget scales with plan length. Measured need is ~1.9k
+        // completion tokens per week; 3k/week leaves room for verbosity while
+        // still bounding a runaway generation instead of letting it bill up to
+        // the model's 128k ceiling.
+        max_completion_tokens: Math.min(128000, duration * 3000 + 3000),
       }),
-    );
+    });
 
-    const failure = results.find((r) => !r.ok);
-    if (failure && !failure.ok) {
-      // Charged, and nothing usable came back — refund before reporting it.
-      await refundAndReset();
-      if (failure.status === 429) return json({ error: "Rate limited. Try again shortly." }, 429);
-      if (failure.status === 402) return json({ error: "AI credits exhausted." }, 402);
-      if (failure.status === 502) return json({ error: "The AI returned a plan we could not read. Please try again." }, 502);
+    if (!response.ok) {
+      // Status + marker only — never the raw provider body.
+      console.error("AI gateway error:", response.status, "upstream_error");
+      // Charged but nothing delivered — refund before reporting the failure.
+      if (chargedUserId) {
+        await refundCredits({
+          supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+          serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          userId: chargedUserId,
+          amount: charged,
+          reason: "Training plan failed — AI error (auto refund)",
+        });
+        chargedUserId = null;
+      }
+      if (response.status === 429) return json({ error: "Rate limited. Try again shortly." }, 429);
+      if (response.status === 402) return json({ error: "AI credits exhausted." }, 402);
       return json({ error: "AI generation failed" }, 500);
     }
 
-    const weeks = results.flatMap((r) => (r.ok ? r.weeks : []));
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content ?? "{}";
+    let parsed: { weeks?: unknown } | null = null;
+    try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
+    catch {
+      await refundAndReset();
+      return json({ error: "AI returned invalid JSON" }, 502);
+    }
 
-    // The merged plan, validated and stamped. Week numbering, deload placement
-    // and the holiday flag are the app's, not the model's: a chunk was told
-    // which weeks to write, so any other numbering is corrected here, and a week
-    // cannot be labelled a deload on a whim.
-    const cleanWeeks = cleanWeekObjects(weeks).slice(0, duration).map((w, i) => ({
-      ...w,
-      week: i + 1,
-      isDeload: skeleton[i]?.isDeload === true,
-      isHoliday: w.isHoliday === true,
-    }));
-    if (cleanWeeks.length !== duration) {
-      // Charged but short: the athlete paid for `duration` weeks, so a partial
-      // plan is refunded rather than kept.
+    const weeks = Array.isArray(parsed?.weeks) ? (parsed.weeks as unknown[]) : [];
+    if (weeks.length === 0) {
+      await refundAndReset();
+      return json({ error: "AI returned an empty plan" }, 502);
+    }
+
+    // Plan-structure validation before the plan is returned (and before the
+    // client can save it): every week must carry exactly 7 day objects with a
+    // safe type and non-negative numeric durations. Malformed shapes are
+    // dropped; if nothing valid remains the charge is refunded.
+    const isSafeString = (v: unknown, max: number): boolean =>
+      typeof v === "string" && v.length <= max && !/\p{C}/u.test(v);
+    // A week is an OBJECT carrying a `sessions` array — that is what the schema
+    // above asks the model for and what the client reads (planData[i].sessions).
+    // Treating each week as a bare array of days dropped every week and refunded
+    // every plan as "malformed", so the shape check follows the two ends that
+    // have to agree. The per-day safety checks below are unchanged.
+    const cleanWeeks: Record<string, unknown>[] = [];
+    for (const week of weeks.slice(0, duration)) {
+      if (!week || typeof week !== "object" || Array.isArray(week)) continue;
+      const w = week as Record<string, unknown>;
+      const sessions = Array.isArray(w.sessions) ? w.sessions : null;
+      if (!sessions) continue;
+      const days = sessions.filter(
+        (d): d is Record<string, unknown> =>
+          !!d && typeof d === "object" &&
+          isSafeString((d as Record<string, unknown>).dayName, 20) &&
+          isSafeString((d as Record<string, unknown>).title, 120) &&
+          isSafeString((d as Record<string, unknown>).type, 30),
+      ).map((d) => ({
+        ...d,
+        duration_minutes: Math.max(0, Math.min(600, Number(d.duration_minutes) || 0)),
+      }));
+      if (days.length !== 7) continue;
+      cleanWeeks.push({
+        ...w,
+        week: Number.isFinite(Number(w.week)) ? Number(w.week) : cleanWeeks.length + 1,
+        sessions: days,
+      });
+    }
+    if (cleanWeeks.length === 0) {
       await refundAndReset();
       return json({ error: "The generated plan was malformed. Please try again." }, 502);
     }

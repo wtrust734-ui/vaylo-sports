@@ -33,17 +33,7 @@ const CreditWarning = () => {
         // Matches QuickActionSheet and the Coach composer.
         className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] left-4 right-4 z-[60] bg-gradient-card border border-energy/30 rounded-2xl p-4 shadow-electric"
       >
-        {/* Named, and 44px: it was a 16px glyph with no label, so the only
-            control that dismisses this card was invisible to a screen reader
-            and hard to hit on a phone. */}
-        <button
-          type="button"
-          aria-label="Dismiss low-credit warning"
-          onClick={() => { setShow(false); setDismissed(true); }}
-          className="absolute end-2 top-2 flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground active:opacity-70"
-        >
-          <X size={16} aria-hidden />
-        </button>
+        <button onClick={() => { setShow(false); setDismissed(true); }} className="absolute top-3 right-3 text-muted-foreground"><X size={16} /></button>
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 rounded-full bg-energy/20"><Zap size={20} className="text-energy" /></div>
           <div>
@@ -58,16 +48,16 @@ const CreditWarning = () => {
           onClick={() => {
             setShow(false); setDismissed(true);
             // Sell a concrete goal, not a currency: the shortfall to afford the
-            // cheapest premium unlock (e.g. Form Analysis) opens the top-up
+            // cheapest permanent unlock (Cross-Sport Analysis) opens the top-up
             // sheet with the pack that covers it.
             const balance = profile?.credits ?? 0;
-            const goal = creditCost("form_analysis_unlock");
-            void requestCreditTopUp({ shortfall: Math.max(1, goal - balance), reasonLabel: "Form Analysis" });
+            const goal = creditCost("cross_sport_unlock");
+            void requestCreditTopUp({ shortfall: Math.max(1, goal - balance), reasonLabel: "Cross-Sport Analysis" });
           }}
           whileTap={{ scale: 0.98 }}
           className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow text-sm"
         >
-          <ShoppingBag size={16} /> Top up & unlock Form Analysis
+          <ShoppingBag size={16} /> Top up & unlock Cross-Sport
         </motion.button>
       </motion.div>
     </AnimatePresence>

@@ -32,14 +32,10 @@
 //      exist, because a past session's real sport is a guess and a guess written
 //      into history becomes a fact nobody can distinguish from a logged one.
 //
-// Pure: no Supabase, no clock, no React — the only outside thing it reads is the
-// athlete's language, through `src/i18n/locale`, which is itself React-free for
-// exactly this reason. Every band below is the specification's own number, and
-// every deviation from it is named in a comment rather than buried in a
-// constant.
+// Pure: no Supabase, no clock, no React. Every band below is the specification's
+// own number, and every deviation from it is named in a comment rather than
+// buried in a constant.
 // ============================================================================
-
-import { formatNumber } from "@/i18n/locale";
 
 // ---------------------------------------------------------------------------
 // What we know about a session
@@ -140,9 +136,9 @@ export const loadExplanation = (input: SessionLoadInput, result: SessionLoad): s
   const rpe = Number.isFinite(input.rpe) ? ` at RPE ${Math.round(input.rpe)}` : "";
   switch (result.method) {
     case "volume-load-x-rpe":
-      return `${formatNumber(Math.round(input.volumeLoad ?? 0))} kg lifted × RPE ${Math.round(input.rpe ?? 0)} ÷ 10 = ${result.load}`;
+      return `${Math.round(input.volumeLoad ?? 0).toLocaleString("en")} kg lifted × RPE ${Math.round(input.rpe ?? 0)} ÷ 10 = ${result.load}`;
     case "distance-x-stroke":
-      return `${formatNumber(Math.round(input.distanceMeters ?? 0))} m ${input.stroke ?? "swum"}${rpe} = ${result.load}`;
+      return `${Math.round((input.distanceMeters ?? 0)).toLocaleString("en")} m ${input.stroke ?? "swum"}${rpe} = ${result.load}`;
     case "match-minutes-x-factor":
       return `${minutes} of match play × 1.4 = ${result.load}`;
     case "practice-minutes-x-factor":

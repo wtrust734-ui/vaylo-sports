@@ -252,13 +252,7 @@ const ReadinessStrip = () => {
 const DailyExtras = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  // Nutrition and the Arcade are here for reachability: both sit inside a hub
-  // (/recover, /compete) and the sidebar that links those hubs is desktop-only,
-  // so on a phone they had no entry point at all. The dashboard is the one
-  // screen everybody opens.
   const rows = [
-    { label: t("hub.recover.nutrition"), desc: t("hub.recover.nutritionDesc"), path: "/nutrition", feature: "recover.nutrition" as const },
-    { label: t("hub.compete.arcade"), desc: t("hub.compete.arcadeDesc"), path: "/arcade", feature: "compete.arcade" as const },
     { label: t("hub.perform.goals"), desc: t("dashboard.goalsDesc"), path: "/goals", feature: "perform.goals" as const },
     { label: t("hub.compete.challenges"), desc: t("dashboard.challengesDesc"), path: "/challenges", feature: "compete.challenges" as const },
   ];

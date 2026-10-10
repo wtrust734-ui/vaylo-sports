@@ -6,9 +6,10 @@ import { useEffect, useState } from "react";
 
 /**
  * "Picked for you" — one line of merchandising driven by the athlete's sport
- * family: endurance sees the Nutrition Pack, skill/strength see Form Analysis,
- * combat sees the Mental Gym, team sees Injury Management. Hidden entirely when
- * there's no signal (unknown sport) or the recommendation isn't a priced feature.
+ * family: endurance sees the AI calorie scan, skill/strength see video form
+ * analysis, combat sees the Mental Gym, team sees Injury Management. Hidden
+ * entirely when there's no signal (unknown sport) or the recommendation isn't
+ * a priced feature.
  */
 const FamilyPickBanner = ({ currency = "USD" }: { currency?: string }) => {
   const rec = useRecommendedUnlock();

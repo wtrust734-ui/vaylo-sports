@@ -70,15 +70,19 @@ export const METERED_KEYS = (() => {
  * Per-screen access: the credit key that screen spends, or null for free.
  *
  * A screen is listed when *using it* spends credits. Where a screen mixes free
- * and paid parts — /form has a free analysis and a paid video upload — the paid
- * part is what is listed, because that is the part a reader would otherwise
- * discover after installing.
+ * and paid parts — /form has free drills and a paid video analysis, /nutrition
+ * has free logging and paid scans/plans — the paid part is what is listed,
+ * because that is the part a reader would otherwise discover after installing.
  */
+// Form analysis is video-only and per analysis (no unlimited tier), and
+// nutrition is a standard tab: opening it is free, the AI calorie scan and the
+// weekly plan charge per use. /nutrition names the scan — the AI per-use cost
+// a reader would otherwise discover after installing.
 export const ACCESS = {
-  "/form": "form_analysis_unlock",
+  "/form": "video_form_analysis",
   "/form/video": "video_form_analysis",
   "/injury": "injury_management_unlock",
-  "/nutrition": "nutrition_pack_unlock",
+  "/nutrition": "calorie_scan",
   "/mental": "mental_gym_unlock",
   "/learning": "learning_unlock",
   "/learning/:lessonId": "learning_unlock",

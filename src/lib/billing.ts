@@ -70,7 +70,7 @@ export const isPaymentsUnavailable = (result: PurchaseResult): boolean =>
   !result.ok && (result.data as { code?: string } | undefined)?.code === "payments_not_available";
 
 export const PAYMENTS_UNAVAILABLE_MESSAGE =
-  "Purchases aren't available yet. Credits you earn in the app still unlock Mental Gym, Form Analysis, Injury Management and Event Packs.";
+  "Purchases aren't available yet. Credits you earn in the app still unlock Mental Gym, Injury Management and Event Packs.";
 
 /**
  * True when the server refused because the closed-test switch is on but the

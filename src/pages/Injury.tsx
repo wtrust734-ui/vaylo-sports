@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { analyzeLoads, type LoadRow } from "@/lib/performance";
 import { creditCost } from "@/lib/credits";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,23 +100,32 @@ const Injury = () => {
   const [injuries, setInjuries] = useState<InjuryRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
-  const [unlocked, setUnlocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const unlock = useUnlockFeature();
+  const { hasFeature, loading: entitlementsLoading, refresh: refreshEntitlements } = useSubscription();
+
+  // Access comes from the shared entitlement check, not a query of this page's
+  // own. hasFeature() is true for a bought unlock AND for Unlimited, and it is
+  // the same fact the Market and every other locked screen read — so a
+  // purchase stays visible on every visit, on every device, not just once.
+  const unlocked = hasFeature("injury_management");
+
+  // Everything on this tab is computed on the device (load ratios from your
+  // own logs, static recovery scaffolds): no AI call, no provider cost, and
+  // therefore no per-use charge. If an AI-backed assessment is ever added, it
+  // must carry its own per-use credit price like every other AI feature.
 
   useEffect(() => { if (user) load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const [l, r, i, u] = await Promise.all([
+    const [l, r, i] = await Promise.all([
       supabase.from("training_loads").select("*").eq("user_id", user.id).order("log_date").limit(60),
       supabase.from("recovery_logs").select("*").eq("user_id", user.id).order("log_date", { ascending: false }).limit(14),
       supabase.from("injury_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabase.from("user_purchases").select("product_id").eq("user_id", user.id).eq("product_id", "injury_management").maybeSingle(),
     ]);
     setLoads(l.data || []);
     setRecovery(r.data || []);
     setInjuries(i.data || []);
-    setUnlocked(!!u.data);
     setLoading(false);
   };
 
@@ -138,8 +148,11 @@ const Injury = () => {
       // the other two locked features now do too.
       const res = await unlock("injury_management");
       if (res.status === "failed") { toast.error(res.error || "Could not unlock Injury Management"); return; }
-      await refreshProfile();
-      setUnlocked(true);
+      // Entitlements and the credit balance are two separate reads: refresh
+      // both so the tab stays open and the balance drops together. Reading
+      // access back through hasFeature() (above) is what keeps the purchase
+      // visible on every later visit instead of just this one.
+      await Promise.all([refreshEntitlements(), refreshProfile()]);
       toast.success("Injury Management unlocked!");
     } catch (e) {
       toast.error(e.message || "Failed to unlock");
@@ -202,7 +215,7 @@ const Injury = () => {
     load();
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  if (loading || entitlementsLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   if (!unlocked) {
     return (

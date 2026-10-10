@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { Flame, Plus, Trash2, TrendingUp } from "lucide-react";
 import { lsGet, lsSet } from "@/lib/localStore";
 import { triggerMilestone } from "@/components/MilestoneCelebration";
-import { formatDate } from "@/i18n/format";
 
 interface PB {
   id: string;
@@ -93,7 +92,7 @@ const PBs = () => {
                 <div>
                   <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{p.metric}</p>
                   <p className="text-3xl font-display font-bold text-primary mt-1">{p.value}<span className="text-sm text-muted-foreground ml-1">{p.unit}</span></p>
-                  <p className="text-[12px] text-muted-foreground mt-1">{formatDate(p.date)}</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">{new Date(p.date).toLocaleDateString()}</p>
                 </div>
                 <button onClick={() => remove(p.id)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 size={14} /></button>
               </div>

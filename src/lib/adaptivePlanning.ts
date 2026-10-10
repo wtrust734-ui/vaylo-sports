@@ -39,7 +39,6 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 
 import { localDateKey } from "./dates";
 import {
@@ -165,16 +164,12 @@ export async function loadReturnContext(input: ReturnContextInput): Promise<Retu
   // Their own recovery logging, last three entries. Low readiness makes the
   // first week easier — it is never grounds for holding a session back, which
   // is a medical decision this app does not make.
-  const { data: recovery, error: recoveryError } = await supabase
+  const { data: recovery } = await supabase
     .from("recovery_logs")
     .select("readiness_score")
     .eq("user_id", input.userId)
     .order("log_date", { ascending: false })
     .limit(3);
-  // Reported, not raised: this file's contract is that a failed context read
-  // degrades the rebuild to its conservative default rather than blocking it.
-  // Logged so the degradation can be told apart from an athlete who logs nothing.
-  readFailed(recoveryError, "your recent recovery scores", { quiet: true });
 
   // `typeof === "number"` rather than `Number(...)`: the column is nullable,
   // and `Number(null)` is 0 — which would read a missing score as the worst
@@ -191,16 +186,12 @@ export async function loadReturnContext(input: ReturnContextInput): Promise<Retu
   // One read answers both questions, and `log_date` is already a calendar day,
   // so nothing here can be shifted by a timezone.
   const from = addDaysKey(facts.startDate, -42);
-  const { data: loads, error: loadsError } = await supabase
+  const { data: loads } = await supabase
     .from("training_loads")
     .select("log_date")
     .eq("user_id", input.userId)
     .gte("log_date", from)
     .lte("log_date", today);
-  // Empty here means "no training history", which decides whether the return
-  // week is cut back at all — the single most athlete-visible number in a
-  // rebuild, so a failed read must not masquerade as a quiet break.
-  readFailed(loadsError, "your logged training days", { quiet: true });
 
   const days = [...new Set((loads ?? []).map((row) => String(row.log_date)))].sort();
   const duringBreak = days.filter((day) => day >= facts.startDate && day <= facts.endDate);
@@ -300,15 +291,12 @@ export async function loadReturnContext(input: ReturnContextInput): Promise<Retu
  * planner addresses sessions by their place in the grid.
  */
 export async function lockedSessionKeys(input: { userId: string; plan: TrainingPlanLike }): Promise<string[]> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("plan_events")
     .select("scheduled_date, status")
     .eq("user_id", input.userId)
     .eq("training_plan_id", input.plan.id)
     .in("status", ["completed", "modified", "replaced"]);
-  // These keys are the sessions a rebuild must not overwrite. Failed and read as
-  // empty, a rebuild would happily rewrite sessions the athlete has already done.
-  readFailed(error, "the sessions you have completed", { quiet: true });
 
   const done = new Set((data ?? []).map((row) => String(row.scheduled_date)));
   if (!done.size) return [];
@@ -368,15 +356,12 @@ export async function breakBriefForGenerator(input: {
   today?: string;
 }): Promise<GeneratorBreakBrief> {
   const today = input.today ?? localDateKey(new Date());
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("life_events")
     .select("*")
     .eq("user_id", input.userId)
     .order("start_date", { ascending: false })
     .limit(8);
-  // No breaks reads as "the athlete is in a normal week", which is the wrong
-  // context to write a plan from if the read simply failed.
-  readFailed(error, "your breaks and time away", { quiet: true });
 
   const events = (data ?? []) as LifeEvent[];
 
@@ -425,16 +410,13 @@ export async function upcomingCompetitions(
   today: string,
   limit = 12,
 ): Promise<{ title: string; date: string }[]> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("events")
     .select("title, event_date")
     .eq("user_id", userId)
     .gte("event_date", today)
     .order("event_date", { ascending: true })
     .limit(limit);
-  // An empty list hides every upcoming competition, which changes what the
-  // periodisation is aimed at.
-  readFailed(error, "your upcoming competitions", { quiet: true });
 
   return (data ?? [])
     .filter((row) => !!row.event_date)

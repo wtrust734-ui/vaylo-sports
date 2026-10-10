@@ -37,6 +37,8 @@ export type FeatureKey =
   | "perform.identity"
   | "perform.goals"
   | "perform.compare"
+  | "perform.achievements"
+  | "perform.challenges"
   | "perform.guardian"
   | "perform.startingAnalysis"
   | "perform.insights"
@@ -76,15 +78,7 @@ export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
   "training.routines": { key: "training.routines", families: ["*"], route: "/routines" },
   "training.crossTraining": { key: "training.crossTraining", families: ["*"], route: "/cross-training" },
   "training.pbs": { key: "training.pbs", families: ["endurance", "skill", "strength", "multi"], route: "/pbs" },
-  // UNIVERSAL, and deliberately so. Form Analysis is a purchasable surface: it
-  // is sold in the Market at a stated price, and it was hidden here from every
-  // pure-endurance athlete. Hiding a paid feature from the athletes whose sport
-  // does not score for it does not make the app more personal — it makes the
-  // product unsellable and, worse, unfindable: the athlete reads the price on
-  // the shop screen and then cannot reach the thing they just bought. Any
-  // surface that can be bought is universal; personalisation still governs
-  // optional depth (/skills, /pbs), which is what it was built for.
-  "training.form": { key: "training.form", families: ["*"], route: "/form" },
+  "training.form": { key: "training.form", families: ["skill", "team", "strength", "combat", "multi"], route: "/form" },
   // Logging a finished session is not a preference any sport opts out of: the
   // record it writes is what the recovery read, the streak and the insights all
   // consume, so it is universal like plans are.
@@ -97,6 +91,10 @@ export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
   "perform.identity": { key: "perform.identity", families: ["*"], route: "/identity" },
   "perform.goals": { key: "perform.goals", families: ["*"], route: "/goals" },
   "perform.compare": { key: "perform.compare", families: ["*"], route: "/compare" },
+  // The Trophy Room: achievements, purchase badges and challenges are
+  // universal — every sport earns medals and takes on challenges.
+  "perform.achievements": { key: "perform.achievements", families: ["*"], route: "/achievements" },
+  "perform.challenges": { key: "perform.challenges", families: ["*"], route: "/challenges" },
   // Kept for under-18 accounts: the guardian layer is how a parent or guardian
   // reaches the sanitized view of a minor's training, and a route only the minor
   // could reach would be unreachable through the one surface that explains it.
@@ -119,13 +117,12 @@ export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
     families: ["*"],
     route: "/insights",
   },
-  // Recover — injury & mental are universal (every sport breaks and stresses);
-  // wearables matter most where readiness data exists; nutrition skews endurance.
+  // Recover — injury, mental and nutrition are universal. Every sport breaks,
+  // stresses and eats: hiding the nutrition tab from pure-skill athletes made
+  // the tab feel missing rather than personal, and fueling matters whatever
+  // the sport. Wearables stay scoped to where readiness data exists.
   "recover.recovery": { key: "recover.recovery", families: ["*"], route: "/recovery" },
   "recover.wearables": { key: "recover.wearables", families: ["endurance", "team", "multi"], route: "/health-sync" },
-  // Universal for the same reason as /form: the Nutrition Pack and the AI
-  // calorie scan are sold in the Market, and a pure-skill athlete used to be
-  // unable to reach either — see the note on training.form above.
   "recover.nutrition": { key: "recover.nutrition", families: ["*"], route: "/nutrition" },
   "recover.mental": { key: "recover.mental", families: ["*"], route: "/mental" },
   "recover.injury": { key: "recover.injury", families: ["*"], route: "/injury" },

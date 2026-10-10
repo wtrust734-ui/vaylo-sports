@@ -32,7 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatDate } from "@/i18n/format";
 import {
   COACH_COMMISSION_PERCENT,
   COACH_MIN_PLAN_CENTS,
@@ -425,7 +424,7 @@ export default function CoachStudio() {
                       {formatMinorUnits(order.gross_cents, order.currency)}
                     </p>
                     <p className="text-[12px] text-muted-foreground">
-                      Bought {formatDate(order.created_at)}
+                      Bought {new Date(order.created_at).toLocaleDateString()}
                     </p>
 
                     {draftFor === order.id ? (

@@ -3,7 +3,7 @@ import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteD
 import { MODELS, OUTPUT_SAFETY_CONTRACT, SAFETY_PREAMBLE } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
-import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled, userOwnsProduct } from "../_shared/guard.ts";
+import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
 // ============================================================================
@@ -253,11 +253,12 @@ Deno.serve(async (req) => {
       }, 403);
     }
 
-    // ---- Charge (Nutrition Pack owners are free; Unlimited is honoured inside) ----
-    const ownsPack = await userOwnsProduct(userId, "nutrition_pack");
+    // ---- Charge (per week, for everyone; Unlimited is honoured inside) ----
+    // Nutrition is a standard tab: there is no pack and no free pass, so every
+    // plan charges nutrition_plan_week per week, priced server-side.
     let cost = 0;
     let balance: number | null = null;
-    if (!ownsPack) {
+    {
       // The key fingerprints the WHOLE request, the targets included — not just
       // the goal and the length. The same request id with different calorie or
       // macro targets is a different plan, and a key that ignored them would
@@ -298,10 +299,6 @@ Deno.serve(async (req) => {
         charged = spend.cost;
         chargedUserId = userId;
       }
-    } else {
-      // Free with the pack, so a failure has nothing to refund — but the pack
-      // holder still gets the same validation and the same 502 on a bad answer.
-      cost = 0;
     }
 
     // ---- The plan's skeleton: the app's targets, not the model's ----

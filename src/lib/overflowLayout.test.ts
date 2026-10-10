@@ -69,11 +69,9 @@ const SAFE_ON_LINE = [
  * remove the reason, which is why each one names what would break.
  */
 const ALLOWED: Record<string, Record<string, string>> = {
-  // AppSidebar's 272px aside used to need an entry here. It is now
-  // `w-[var(--vaylo-sidebar-w)]`, so the width is stated once (in src/index.css)
-  // and shared with AppLayout's padding — and it no longer matches this scan,
-  // which is why the entry is gone rather than kept "just in case": an unused
-  // allowlist entry is how an allowlist stops meaning what it says.
+  "components/layout/AppSidebar.tsx": {
+    "272": "the desktop aside, which is `hidden lg:flex` — no mobile layout",
+  },
   "pages/Avatar.tsx": {
     "520": "decorative ambient-glow circle, `absolute`, inside a wrapper with `overflow-hidden`",
     "300": "decorative ambient-glow circle, `absolute`, inside a wrapper with `overflow-hidden`",

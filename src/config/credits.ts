@@ -31,18 +31,12 @@
  *   3x coach message .............  24
  *   AI form analysis .............  15
  *   weekly coach review ..........  10
- *   4-week nutrition plan ........  60   (4 x 15, AI-written)
+ *   4-week nutrition plan ........  32   (4 x 8)
  *   ------------------------------------
- *   total ........................ 281
+ *   total ........................ 253
  *   granted ...................... 260
  *
- * That basket is no longer covered end to end — the AI nutrition plan is 60 of
- * it and the plan alone is 160 — so the honest statement is the one the grant
- * actually makes: an 8-week plan leaves 100 credits, which still buys the scan,
- * the form analysis and the review. The nutrition plan is a second purchase or
- * a Nutrition Pack, not part of the free basket.
- *
- * Giving that basket away costs about $0.04 in provider calls, so the whole
+ * Giving that basket away costs about $0.032 in provider calls, so the whole
  * onboarding experience is effectively free and the grant is a conversion
  * argument rather than a cost.
  */
@@ -60,16 +54,16 @@ export type FeatureCostKey =
   | "plan_edit_full"
   | "limiter_fix_plan"
   | "form_analysis"
-  | "form_analysis_unlock"
   | "video_form_analysis"
   | "injury_management_unlock"
   | "calorie_scan"
   | "nutrition_plan_week"
-  | "nutrition_pack_unlock"
   | "mental_gym_unlock"
   | "vaylo_coach_message"
   | "weekly_coach_review"
   | "tactical_prep"
+  | "training_insight"
+  | "vpr_compare"
   | "learning_unlock"
   | "streak_shield";
 
@@ -82,56 +76,34 @@ export type FeatureCostKey =
 // break-even is a business that goes backwards the moment a user is heavy.
 //
 // The maths, so it can be re-checked rather than taken on trust:
-////   Revenue per credit. The pack prices are CREDIT_PACKS below, and the credits
-//   a buyer actually receives are `credits` PLUS `bonus` — quoting the base
-//   count is how these figures went stale once already:
 //
-//     Starter  30 credits / 249c  = 8.30 c/credit
-//     Boost    65 / 499c          = 7.68
-//     Popular  165 / 999c         = 6.06
-//     Power    290 / 1499c        = 5.17
-//     Elite    660 / 2499c        = 3.79   <- tier A; see the tiers below
+//   Revenue per credit. The pack prices are CREDIT_PACKS below. Effective
+//   credits include the bonus, so the biggest pack is the best deal and the
+//   worst case for us:
+//
+//     Starter  25 credits / 249c  = 9.96 c/credit
+//     Boost    60 / 499c          = 8.32
+//     Popular  145 / 999c         = 6.89
+//     Power   250 / 1499c         = 6.00
+//     Elite    650 / 2499c         = 3.84   <- tier A; see the tiers below
 //
 //   That ladder is TIER A — and the pack ladder is regional (pricing_tiers,
 //   mirrored in REGIONAL_TIERS below). price_cents are USD cents in every
 //   tier: formatLocalPrice() converts to local currency for display, so tier
-//   D really does sell the 660-credit pack at $9.99, not $24.99. The four
-//   active tiers, on the biggest pack, GROSS and then NET of the store's cut:
+//   D really does sell the 650-credit pack at $9.99, not $24.99. The four
+//   active tiers, best pack first:
 //
-//     Tier A  Premium   660 / 2499c = 3.79 c/credit  (2.65 net)
-//     Tier B  Developed 660 / 1999c = 3.03           (2.12)
-//     Tier C  Emerging  660 / 1499c = 2.27           (1.59)
-//     Tier D  Growth    660 /  999c = 1.51           (1.06)  <- the number that matters
+//     Tier A  Premium   650 / 2499c = 3.845 c/credit
+//     Tier B  Developed 650 / 1999c = 3.075
+//     Tier C  Emerging  650 / 1499c = 2.306
+//     Tier D  Growth    650 /  999c = 1.537  <- the number that matters
 //
-//   So $0.0105 per credit NET is what we can count on: every metered price
-//   below clears MIN_MARGIN_MULTIPLE × its ceiling at THAT rate, in every
-//   market we sell in. Every clause of that sentence was wrong once, and each
-//   was found by re-deriving it rather than by trusting it:
-//
-//     * NET, not gross. The figure used to be $0.0153 — the same pack's GROSS
-//       rate — so every margin this file claimed was a third larger than the
-//       money that actually arrives, because Google Play keeps 30%.
-//     * The BIGGEST pack, not a middling one. Pricing off the flattering
-//       tier-A rate overstated revenue by 2.5× in eight countries and quietly
-//       put most AI features under their own floor there (the 2026-10-03
-//       regional audit).
-//     * The packs WITH their bonuses, not at the base credit count.
-//
-//   pricing.test.ts re-derives all of it from REGIONAL_TIERS and fails if the
-//   constant, the tier table or CREDIT_PACKS drift apart.
-//
-//   ONE KNOWN DEFECT, deliberately not fixed here because it is a monetisation
-//   decision rather than a code one: cost per credit falls at every step of the
-//   default ladder and of tiers A, B and C, but NOT inside tier D. Its Boost
-//   pack (65 credits for 99c = 1.52 c/credit gross) is a better deal than its
-//   Popular (165/299 = 1.81) and Power (290/499 = 1.72) packs, so a buyer in a
-//   growth market gets more by buying Boost twice than by buying the pack the UI
-//   marks "Popular". What still holds in every tier — and is all the margin
-//   floor depends on — is that the biggest pack is the cheapest per credit, and
-//   pricing.test.ts now asserts exactly that, tier by tier, so this cannot
-//   quietly get worse. Repairing the middle of tier D means either granting more
-//   credits (which lowers the worst-case rate every price below is derived from)
-//   or taking credits away from buyers, so it is a pricing call, not a patch.
+//   So $0.0153 per credit is what we can count on: every metered price below
+//   clears MIN_MARGIN_MULTIPLE × its ceiling at THAT rate, in every market we
+//   sell in — not only at the flattering tier-A rate, which overstated
+//   revenue by 2.5× in eight countries and quietly put most AI features under
+//   their own floor there (found by the 2026-10-03 regional audit; the test
+//   suite re-derives all of this from REGIONAL_TIERS).
 //
 //   Cost ceilings. API_COST_CEILING_USD is a deliberate over-estimate of a
 //   single call: we assume a larger, more expensive model than we would
@@ -164,19 +136,13 @@ export const API_COST_CEILING_USD = {
   // are the numbers most likely to need revisiting once a provider is live.
   vaylo_coach_message: 0.0024, // 6k in / 1.2k out
   weekly_coach_review: 0.0024, // 6k in / 1.2k out
+  training_insight: 0.0024, // 6k in / 1.2k out (stats_insight call)
   training_plan_week: 0.00562, // 8k in / 4k out
-  // The same per-week cost model as generating one: an edit sends the week it
-  // is changing plus the instruction and gets a week back, so the ceiling is the
-  // same shape, one week rather than a whole plan's worth of chunks.
-  plan_edit: 0.003, // 5k in / 2.5k out
-  plan_edit_full: 0.006, // every week rewritten in parallel, 2 weeks per call
+  // AI plan edits: one OpenAI call per two weeks of plan, Luna-class — the
+  // same cost model training_plan_week uses (see the plan-edit migration).
+  plan_edit: 0.003,
+  plan_edit_full: 0.003,
   calorie_scan: 0.0014, // 2.5k in / 0.9k out
-  // A nutrition plan is now written by the model (generate-nutrition-plan),
-  // two weeks per call at ~6k in / ~8k out on Luna — about $0.0046 a call, so
-  // ~$0.0023 a week — doubled for a bad token estimate. Until 2026-10-09 this
-  // key had NO ceiling because the feature made no provider call at all: the
-  // plan just stored the numbers the athlete typed in.
-  nutrition_plan_week: 0.006,
   tactical_prep: 0.0029, // 7k in / 1.5k out
   development_trajectory: 0.0017, // 4k in / 0.9k out
   archetype_view: 0.0022, // 5k in / 1.2k out
@@ -248,46 +214,58 @@ export const FEATURE_COSTS: Record<FeatureCostKey, number> = {
   // 20 x 8 weeks = a full 8-week plan for 160 credits. This is the number the
   // whole economy is arranged around: the starting grant covers it exactly.
   training_plan_week: 20,
-  // EDITING A PLAN YOU ALREADY OWN. Two prices, because they are two products:
-  // a week (or a single session, which is the same call asked more narrowly) for
-  // 10, and the whole plan rewritten for 20. Both are one OpenAI call per two
-  // weeks, so both clear the margin floor several times over, and both are
-  // deliberately far cheaper than the plan itself — an athlete who cannot afford
-  // to change a plan they paid for is an athlete who abandons it.
+  // AI plan edits, enforced by the plan-edit migration and spent by edit-plan:
+  // 10 for one week ("swap Thursday for a swim"), 20 for the whole plan.
+  // A whole-plan edit must stay below a fresh 4-week plan (4 x 20 = 80) or it
+  // is a worse deal than starting again — 20 clears that with room to spare,
+  // and both clear the 8x floor 35x and 70x over.
   plan_edit: 10,
   plan_edit_full: 20,
   // The most expensive call in the app (Sol, $2/$10 per 1M, 8k output tokens) and
   // priced as such. It is still a one-off deep-dive, not a metered habit.
   limiter_fix_plan: 120,
-  // A photo on Gemini Flash costs about $0.0036. 15 credits clears it 22x over
-  // and, at the best pack, costs an athlete about 13 cents — small enough to be
-  // an impulse, which is the point of the feature. Buy too many and the unlock
-  // below becomes the better deal, exactly as it should.
+  // Form analysis is VIDEO-only and strictly per analysis: there is no
+  // unlimited tier. A flat rate cannot work here — one heavy user analysing
+  // every session would burn provider budget all year against a single
+  // payment, so every analysis carries its own price and its own margin.
+  // A clip is many frames, so the video call is the second-costliest in the
+  // app (ceiling $0.0272). 45 credits clears it ~17x over and, at the best
+  // pack, costs an athlete about 40 cents — small enough to be an impulse,
+  // which is the point of the feature.
+  //
+  // `form_analysis` (15) is the legacy single-image call, kept priced so old
+  // builds that still send a photo are charged rather than 500ing. Nothing in
+  // the current UI offers it: every form-analysis screen points at video.
   form_analysis: 15,
-  // FLAT-RATE: one payment, unlimited photo analyses. The question is not the
-  // 8x floor but how long break-even takes. At the net credit value this buys
-  // $1.17 of revenue against $0.0036 per call, so it breaks even after 326
-  // analyses — far beyond anything one athlete does — while still beating the
-  // per-call price after 8 (110/15), so it stays sellable to anyone
-  // photographing a lift regularly.
-  form_analysis_unlock: 110,
-  // A clip is many frames, so this is the second-costliest call in the app.
   video_form_analysis: 45,
   injury_management_unlock: 25,
   calorie_scan: 12,
-  // AI-WRITTEN, per week, re-priced 8 -> 15 on 2026-10-09 when the model took
-  // over the plan. Against a $0.006 ceiling this is 15 x $0.0105 = $0.1575 of
-  // NET revenue on the worst pack in the worst market, i.e. 26x the ceiling and
-  // comfortably past the 8x floor AFTER Google Play's 30% — the same figure the
-  // suite re-derives. The scan above is 90x, so the two halves of this screen
-  // are both profitable on their own; the Nutrition Pack (30 credits, once)
-  // remains the cheaper route for anyone who scans or plans twice.
-  nutrition_plan_week: 15,
-  nutrition_pack_unlock: 30,
+  // NOT an AI feature, and priced as such. Creating a nutrition plan writes the
+  // macro targets the athlete typed in (see Nutrition.tsx createNutritionPlan)
+  // — there is no provider call and therefore no per-use cost. It has no
+  // ceiling and no margin floor: pricing a free action against a cost it does
+  // not incur would be a made-up justification, and pricing.test.ts only
+  // requires it to be above zero.
+  //
+  // There is deliberately NO nutrition unlock. Nutrition is a standard tab,
+  // free to open: the plan charges per week and the AI calorie scan charges
+  // per scan (12). A pack that made either free would be a flat rate on a
+  // metered cost, which is the product this file refuses to sell.
+  //
+  // The AI half of this screen is calorie_scan (photo -> macros), priced at 12.
+  nutrition_plan_week: 8,
   mental_gym_unlock: 30,
   vaylo_coach_message: 8,
   weekly_coach_review: 10,
   tactical_prep: 12,
+  // AI training-insight call (stats_insight). Same Luna-class cost as the
+  // weekly review, same price logic: 8 credits clears the ceiling ~35x over.
+  training_insight: 8,
+  // Comparing your VPR against an elite profile is pure arithmetic over
+  // numbers already on the device — no provider call, so no ceiling and no
+  // margin floor. Priced at 2 credits for value, like the nutrition plan week:
+  // above zero is the only requirement pricing.test.ts makes of it.
+  vpr_compare: 2,
   learning_unlock: 25,
   streak_shield: 3,
 };
@@ -298,29 +276,27 @@ export const FEATURE_LABELS: Record<FeatureCostKey, string> = {
   development_trajectory: "Development Trajectory",
   cross_sport_unlock: "Cross-Sport Analysis",
   training_plan_week: "AI Training Plan (per week)",
-  plan_edit: "AI plan edit (one week)",
-  plan_edit_full: "AI plan edit (whole plan)",
+  plan_edit: "AI Plan Edit (one week)",
+  plan_edit_full: "AI Plan Edit (whole plan)",
   limiter_fix_plan: "Limiter Fix Plan",
-  form_analysis: "AI Form Analysis (per photo)",
-  form_analysis_unlock: "Form Analysis unlock (unlimited photos)",
+  form_analysis: "AI Form Analysis (per analysis)",
   video_form_analysis: "AI Video Form Analysis",
   injury_management_unlock: "Injury Management unlock",
   calorie_scan: "AI Calorie Scan",
   nutrition_plan_week: "Nutrition Plan (per week)",
-  nutrition_pack_unlock: "Nutrition Pack unlock",
   mental_gym_unlock: "Mental Gym unlock",
   vaylo_coach_message: "Vaylo Sports Coach message",
   weekly_coach_review: "Weekly Coach Review",
   tactical_prep: "Tactical Analysis",
+  training_insight: "Training Insight (AI)",
+  vpr_compare: "VPR Elite Comparison",
   learning_unlock: "Learning Hub unlock",
   streak_shield: "Streak Shield",
 };
 
 /** Features that are permanent one-off unlocks (entitlements). */
 export const PERMANENT_UNLOCKS: FeatureCostKey[] = [
-  "form_analysis_unlock",
   "injury_management_unlock",
-  "nutrition_pack_unlock",
   "mental_gym_unlock",
   "learning_unlock",
   "cross_sport_unlock",
@@ -334,13 +310,13 @@ export const AI_USAGE_FEATURES: FeatureCostKey[] = [
   "video_form_analysis",
   "tactical_prep",
   "training_plan_week",
-  "nutrition_plan_week",
   "plan_edit",
   "plan_edit_full",
   "development_trajectory",
   "archetype_view",
   "form_analysis",
   "limiter_fix_plan",
+  "training_insight",
 ];
 
 // ---------------------------------------------------------------------------

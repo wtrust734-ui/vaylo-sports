@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { Target, TrendingDown, TrendingUp, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { fatigueImpact, metricToIndex, type MetricRow } from "@/lib/performance";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
@@ -11,29 +10,15 @@ const SkillAnalytics = () => {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => { if (user) load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).order("log_date", { ascending: true }).limit(300);
-    setLoadFailed(readFailed(error, "your performance metrics"));
+    const { data } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).order("log_date", { ascending: true }).limit(300);
     setMetrics(data || []); setLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
-
-  // "No data yet." is a statement about the athlete. It must not be what a
-  // failed read looks like, and every strength and weakness below is derived
-  // from these rows.
-  if (loadFailed) return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto">
-      <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground">
-        We could not load your performance metrics, so the skill breakdown below would be invented. This
-        is a loading problem, not an empty history — try again in a moment.
-      </p>
-    </div>
-  );
 
   const types = Array.from(new Set(metrics.map((m) => m.metric_type)));
   const fatigue = fatigueImpact(metrics);

@@ -59,16 +59,8 @@ const CueWords = ({ onWordsChange }: Props) => {
             <motion.div key={w.id} initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
               className="relative bg-primary/10 border border-primary/30 rounded-xl px-5 py-3">
               <span className="text-lg font-display font-black text-primary">{w.word}</span>
-              {/* The chip is small, so the visible control stays small — but
-                  it has a name now, and a transparent 44px hit area around it
-                  (`after:-inset-4`) instead of a 16px one. */}
-              <button
-                type="button"
-                aria-label={`Remove ${w.word}`}
-                onClick={() => removeWord(w.id)}
-                className="absolute -top-2 -end-2 rounded-full border border-border bg-card p-0.5 after:absolute after:-inset-4 after:content-['']"
-              >
-                <X size={12} className="text-muted-foreground" aria-hidden />
+              <button onClick={() => removeWord(w.id)} className="absolute -top-2 -right-2 bg-card border border-border rounded-full p-0.5">
+                <X size={12} className="text-muted-foreground" />
               </button>
             </motion.div>
           ))}

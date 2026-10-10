@@ -30,9 +30,9 @@ const Mental = () => {
   // Access comes from the subscription context, not a query of this page's own.
   // The old check asked user_purchases for "pro" and "pro_subscription" — ids
   // the app no longer writes — so it missed every current subscriber, and it
-  // could only ever see a one-time purchase. hasFeature covers the active
-  // plans as well, which is what "also included with the Premium plan" on the
-  // card below actually promises.
+  // could only ever see a one-time purchase. hasFeature covers Unlimited
+  // (unlimited_credits) as well, which is what "included with Unlimited" on
+  // the card below actually promises.
   const hasAccess = hasFeature("mental_gym");
   const loading = entitlementsLoading;
   const unlock = useUnlockFeature();
@@ -69,7 +69,7 @@ const Mental = () => {
             className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-3 rounded-xl mb-3 disabled:opacity-60">
             <ShoppingBag size={18} /> {unlocking ? "Unlocking…" : `Unlock for ${creditCost("mental_gym_unlock")} credits`}
           </motion.button>
-          <p className="text-xs text-muted-foreground">One-time unlock. Also included with the Premium plan.</p>
+          <p className="text-xs text-muted-foreground">One-time unlock. Also included with Unlimited.</p>
         </motion.div>
       </div>
     );

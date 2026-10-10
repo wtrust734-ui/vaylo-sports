@@ -16,7 +16,6 @@ import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { COINS_PER_CREDIT } from "@/config/coins";
 import { planTopUp, type BundleOffer } from "@/lib/topUp";
-import { formatNumber } from "@/i18n/format";
 
 interface Props {
   open: boolean;
@@ -90,7 +89,7 @@ export default function CoinTopUpSheet({
     await refreshProfile();
     const wasFree = result.data?.free === true;
     toast({
-      title: `${formatNumber(offer.total)} Coins added${wasFree ? " — free" : ""}`,
+      title: `${offer.total.toLocaleString()} Coins added${wasFree ? " — free" : ""}`,
       description: wasFree
         ? `Nothing was charged — ${CLOSED_TESTING.label.toLowerCase()}.`
         : itemName ? `You can afford ${itemName} now.` : undefined,
@@ -114,7 +113,7 @@ export default function CoinTopUpSheet({
     const awarded = (data as { awarded?: number } | null)?.awarded ?? gap;
     hapticSuccess();
     await refreshProfile();
-    toast({ title: `Converted ${plan.convertCredits} credits → ${formatNumber(awarded)} Coins` });
+    toast({ title: `Converted ${plan.convertCredits} credits → ${awarded.toLocaleString()} Coins` });
     onClose();
   };
 
@@ -133,11 +132,11 @@ export default function CoinTopUpSheet({
       <div className="flex items-center gap-2">
         <Coins size={15} className="text-energy shrink-0" />
         <span className="font-display text-sm font-bold">
-          {formatNumber(offer.total)} Coins
+          {offer.total.toLocaleString()} Coins
         </span>
         {offer.bonus > 0 && (
           <span className="text-[12px] font-bold uppercase tracking-wider text-energy">
-            incl. {formatNumber(offer.bonus)} bonus
+            incl. {offer.bonus.toLocaleString()} bonus
           </span>
         )}
         {offer.first_purchase_only && (
@@ -153,10 +152,10 @@ export default function CoinTopUpSheet({
       </div>
       <p className="mt-1.5 text-[12px] text-muted-foreground">
         {highlight === "cheapest"
-          ? `Closes your ${formatNumber(gap)} Coin gap${
-              offer.leftover > 0 ? ` with ${formatNumber(offer.leftover)} left over` : ""
+          ? `Closes your ${gap.toLocaleString()} Coin gap${
+              offer.leftover > 0 ? ` with ${offer.leftover.toLocaleString()} left over` : ""
             }.`
-          : `Better value per Coin, and ${formatNumber(offer.total)} Coins to spend.`}
+          : `Better value per Coin, and ${offer.total.toLocaleString()} Coins to spend.`}
       </p>
     </button>
   );
@@ -171,7 +170,7 @@ export default function CoinTopUpSheet({
           <Coins size={17} className="text-energy" />
         </div>
       }
-      title={`${formatNumber(gap)} more Coins needed`}
+      title={`${gap.toLocaleString()} more Coins needed`}
       subtitle={itemName ? `${itemName} costs more Coins than you have.` : "Top up to unlock it now."}
     >
             <div className="space-y-2">
@@ -198,7 +197,7 @@ export default function CoinTopUpSheet({
                     Or convert {plan.convertCredits} credits
                   </p>
                   <p className="text-[12px] text-muted-foreground">
-                    Instant — you have {formatNumber(credits)} credits (1 credit = {COINS_PER_CREDIT} Coins).
+                    Instant — you have {credits.toLocaleString()} credits (1 credit = {COINS_PER_CREDIT} Coins).
                   </p>
                 </div>
                 {busy === "convert" ? (

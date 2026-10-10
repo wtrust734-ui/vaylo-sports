@@ -6,9 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalPrice } from "@/lib/creditEconomy";
 import { COIN_BUNDLES, COINS_PER_CREDIT, FIRST_PURCHASE_BUNDLE, creditsToCoins } from "@/config/coins";
-import { readFailed } from "@/lib/dbRead";
 import ProductFacts from "./ProductFacts";
-import { formatNumber } from "@/i18n/format";
 
 export default function CoinBundlesSection({ currency = "USD" }: { currency?: string }) {
   const { profile, refreshProfile } = useAuth();
@@ -25,22 +23,14 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
     if (!profile?.user_id) return;
     let alive = true;
     (async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_purchases")
         .select("id")
         .eq("user_id", profile.user_id)
         .eq("product_id", FIRST_PURCHASE_BUNDLE.id)
         .limit(1)
         .maybeSingle();
-      if (!alive) return;
-      // A failed read is not "unused". `!data` would show the one-time bundle
-      // to an athlete who has already bought it, so the failure keeps it hidden
-      // and says so in the log rather than inventing an offer.
-      if (readFailed(error, "your purchases", { quiet: true })) {
-        setFirstBundleAvailable(false);
-        return;
-      }
-      setFirstBundleAvailable(!data);
+      if (alive) setFirstBundleAvailable(!data);
     })();
     return () => { alive = false; };
   }, [profile?.user_id]);
@@ -79,12 +69,12 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
       <div className="flex gap-2">
         <div className="flex-1 rounded-2xl border border-border bg-card/60 px-3 py-2.5 flex items-center gap-2">
           <Coins size={14} className="text-energy" />
-          <span className="text-sm font-bold tabular-nums">{formatNumber(coins)}</span>
+          <span className="text-sm font-bold tabular-nums">{coins.toLocaleString()}</span>
           <span className="text-xs text-muted-foreground">Coins</span>
         </div>
         <div className="flex-1 rounded-2xl border border-border bg-card/60 px-3 py-2.5 flex items-center gap-2">
           <Sparkles size={14} className="text-primary" />
-          <span className="text-sm font-bold tabular-nums text-primary">{formatNumber(credits)}</span>
+          <span className="text-sm font-bold tabular-nums text-primary">{credits.toLocaleString()}</span>
           <span className="text-xs text-muted-foreground">credits</span>
         </div>
       </div>
@@ -111,7 +101,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
           />
           <span className="text-muted-foreground text-sm">→</span>
           <div className="flex-1 rounded-xl border border-energy/30 bg-energy/10 px-3 py-2.5 text-sm font-bold tabular-nums flex items-center gap-1.5">
-            <Coins size={13} className="text-energy" /> {formatNumber(previewCoins)} Coins
+            <Coins size={13} className="text-energy" /> {previewCoins.toLocaleString()} Coins
           </div>
         </div>
         <div className="mt-2 flex gap-1.5">
@@ -151,7 +141,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
               <div className="min-w-0 flex-1">
                 <p className="text-[12px] font-bold uppercase tracking-wider text-primary">{FIRST_PURCHASE_BUNDLE.label}</p>
                 <p className="font-display text-xl font-bold">
-                  {formatNumber(FIRST_PURCHASE_BUNDLE.coins)} Coins
+                  {FIRST_PURCHASE_BUNDLE.coins.toLocaleString()} Coins
                 </p>
                 <p className="text-[12px] text-muted-foreground">
                   Best Coin rate in the app — available once per account.
@@ -212,7 +202,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                         <span className="text-[12px] font-bold text-energy">+{b.bonus} bonus</span>
                       </span>
                     )}
-                    {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {formatNumber(total)} total</p>}
+                    {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {total.toLocaleString()} total</p>}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-display text-2xl font-bold text-gradient-electric">{formatLocalPrice(b.price_cents, currency)}</p>
@@ -220,7 +210,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                   </div>
                 </div>
                 <ProductFacts
-                  receive={`${formatNumber(total)} Coins added instantly${b.bonus > 0 ? ` (${b.coins} + ${b.bonus} bonus)` : ""} — avatar cosmetics only`}
+                  receive={`${total.toLocaleString()} Coins added instantly${b.bonus > 0 ? ` (${b.coins} + ${b.bonus} bonus)` : ""} — avatar cosmetics only`}
                   expires="Never expires"
                   renews="One-off purchase — nothing renews"
                   lifetime="Coins stay until you spend them on avatar items"

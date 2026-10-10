@@ -6,12 +6,8 @@ export type MarketSection = "packs" | "unlocks" | "coins" | "subscriptions" | "l
 
 export const MARKET_SECTIONS: { key: MarketSection; label: string; icon: typeof Zap; blurb: string }[] = [
   { key: "packs", label: "Credit Packs", icon: Zap, blurb: "Buy credits once. They never expire." },
-  // Unlocks sit immediately after the credits they are bought with: the two are
-  // halves of one transaction, and a shop that sells the currency on one tab and
-  // the things it buys on four other screens is how a priced feature ends up
-  // unbuyable.
-  { key: "unlocks", label: "Unlocks", icon: KeyRound, blurb: "Spend credits on features that stay yours — no subscription, no renewal." },
-  { key: "coins", label: "Coins", icon: Coins, blurb: "Coins for avatar cosmetics — bundles or convert credits (1 credit = 7.5 Coins)." },
+  { key: "unlocks", label: "Unlocks", icon: KeyRound, blurb: "One credit payment, yours forever. Buy here — no need to hunt through tabs." },
+  { key: "coins", label: "Coins", icon: Coins, blurb: "Coins buy avatar cosmetics only — never features. Bundles, or convert credits (1 credit = 7.5 Coins)." },
   { key: "subscriptions", label: "Subscriptions", icon: Repeat, blurb: "Credits every month, or unlimited credits." },
   { key: "lifetime", label: "Lifetime", icon: InfinityIcon, blurb: "One payment. No renewal. Yours forever." },
   { key: "coaching", label: "Coaches", icon: UserRound, blurb: "Real coaches who set their own prices, and their plans." },

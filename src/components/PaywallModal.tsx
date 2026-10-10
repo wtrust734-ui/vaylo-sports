@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, X, Coins, Repeat, Infinity as InfinityIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,24 +26,6 @@ const ICONS = { credit: Repeat, unlimited: InfinityIcon } as const;
 
 export default function PaywallModal() {
   const { open, feature, hide } = usePaywall();
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  // Same contract as the other overlays: Escape closes, focus moves in, focus
-  // comes back. A paywall an athlete cannot leave with a keyboard is a trap,
-  // and this one covers the whole screen.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") hide();
-    };
-    document.addEventListener("keydown", onKey);
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
-    };
-  }, [open, hide]);
   const navigate = useNavigate();
 
   return (
@@ -56,11 +37,6 @@ export default function PaywallModal() {
           onClick={hide}
         >
           <motion.div
-            ref={panelRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="paywall-title"
             initial={{ scale: 0.9, y: 20, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -81,7 +57,7 @@ export default function PaywallModal() {
                 <Zap className="h-8 w-8 text-white" />
               </div>
             </div>
-            <h2 id="paywall-title" className="text-2xl font-bold text-center mb-2">Unlock {feature}</h2>
+            <h2 className="text-2xl font-bold text-center mb-2">Unlock {feature}</h2>
             <p className="text-sm text-muted-foreground text-center mb-6">
               This feature is unlocked with credits. Choose how you want to get them.
             </p>

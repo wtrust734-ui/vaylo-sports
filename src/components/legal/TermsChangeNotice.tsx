@@ -4,7 +4,9 @@ import { FileText, Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { legalPath } from "@/lib/legalUrls";
 import { TERMS_VERSION, recordTermsAcceptance } from "@/lib/consent";
-import { cookieConsentPending, subscribeCookieConsent } from "@/lib/cookieNotice";
+
+const COOKIE_NOTICE_KEY = "vaylo:cookie-notice";
+const COOKIE_NOTICE_VERSION = "2026-10-07";
 
 // ============================================================================
 // TERMS RE-ACCEPTANCE NOTICE
@@ -93,22 +95,18 @@ const TermsChangeNotice = () => {
     };
   }, [shown]);
 
-  // Does the storage notice still need an answer? If so it goes first, and this
-  // banner waits — deliberately, rather than both stacking in the same corner.
-  // The read lives in src/lib/cookieNotice.ts, NOT here: this component must
-  // never touch device storage for its own state, because a locally remembered
-  // "already accepted" flag is exactly how a reinstall skips a consent event
-  // (termsReacceptance.test.ts asserts the absence of storage in this file).
-  //
-  // Read into state and SUBSCRIBED to, rather than read once per render: this
-  // banner is second in the queue, so the moment that matters is the one where
-  // the athlete answers the storage notice while this is already mounted. A
-  // plain read left the corner empty until something unrelated re-rendered the
-  // banner — a navigation, or a profile refresh — which on a quiet screen is a
-  // long wait to be told about a Terms change.
-  const [cookieNeedsAccept, setCookieNeedsAccept] = useState(cookieConsentPending);
-  useEffect(() => subscribeCookieConsent(() => setCookieNeedsAccept(cookieConsentPending())), []);
+  // Check if cookie notice should be shown (takes priority)
+  let cookieNeedsAccept = false;
+  try {
+    const remembered = window.localStorage.getItem(COOKIE_NOTICE_KEY);
+    cookieNeedsAccept = remembered !== COOKIE_NOTICE_VERSION;
+  } catch {
+    cookieNeedsAccept = false;
+  }
 
+  // No profile yet (signed out, or the row is still loading) means nothing is
+  // known about what this person accepted, and asking on a guess would be worse
+  // than asking a second later.
   // No profile yet (signed out, or the row is still loading) means nothing is
   // known about what this person accepted, and asking on a guess would be worse
   // than asking a second later.
@@ -138,12 +136,11 @@ const TermsChangeNotice = () => {
         return;
       }
       setAccepted(true);
-      // Single refetch after the write, awaited so the order the test pins is
-      // the order that runs: stamp the version, then re-read the profile. The
-      // banner no longer re-fetches on every render while it is up; the only
-      // thing that can change while it is up is whether the acceptance landed,
-      // and that is either already on record or it is not.
-      await refreshProfile();
+      // Single refetch after the write. The banner no longer re-fetches profile
+      // on every render while it is on screen; the only thing that can change
+      // while it is up is whether the acceptance landed, and that is either
+      // already on record or it is not.
+      refreshProfile();
     } finally {
       setSaving(false);
     }

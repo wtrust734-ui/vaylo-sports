@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Paperclip, Send, Sparkles, UserMinus, X } from "lucide-react";
 import { toast } from "sonner";
-import { formatDate } from "@/i18n/format";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchFriends, unfriend, type Friend } from "@/lib/friends";
@@ -48,7 +47,7 @@ import ReportMenu from "@/components/safety/ReportMenu";
 const clock = (iso: string) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return formatDate(d, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
 const FriendChat = () => {

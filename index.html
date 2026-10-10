@@ -10,21 +10,37 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Official Vaylo Sports mark. It sits on the dark shell in /public, so it is
+         referenced root-absolute: the app base is "/" for both the web server and
+         the Capacitor shell, and a relative href would 404 from a nested route. -->
+    <link rel="icon" href="/logo.png" type="image/png" sizes="256x256" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/logo.png" sizes="180x180" />
+
     <title>Vaylo Sports</title>
     <meta name="description" content="Vaylo Sports is an all-sports training log: log sessions, understand load and recovery, find your limiter and prepare for events.">
     <meta name="author" content="Vaylo Sports" />
 
+    <!-- Social preview. Left as-is on purpose: see the note below.
+
+         `website/assets/og.png` (1200x630, the brand's real OG artwork) is committed
+         but is NOT deployed — https://vaylo-sports.netlify.app/assets/og.png returns
+         404, so both this app and the marketing site point at a social image that the
+         live host does not serve yet. The app's own site (vaylo-sports-app.netlify.app)
+         has no OG image either, and its `_redirects` SPA fallback answers 200 with
+         text/html for any unknown path, so an invented path there is not an image.
+
+         Pointing og:image at a 404 is worse than this placeholder, so this is left
+         untouched until the real OG asset is actually deployed. -->
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/dtMqhUOGRSUvbwKY9Y9bEIMDdp53/social-images/social-1778222524654-5805.webp">
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@vaylosports" />
     <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/dtMqhUOGRSUvbwKY9Y9bEIMDdp53/social-images/social-1778222524654-5805.webp">
-    
-  
-  
-  
-  <meta property="og:title" content="Vaylo Sports">
+
+    <meta property="og:title" content="Vaylo Sports">
   <meta name="twitter:title" content="Vaylo Sports">
   <meta property="og:description" content="An all-sports training log: log sessions, understand load and recovery, find your limiter, prepare for events.">
   <meta name="twitter:description" content="An all-sports training log: log sessions, understand load and recovery, find your limiter, prepare for events.">

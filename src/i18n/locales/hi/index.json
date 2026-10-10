@@ -72,6 +72,8 @@
       "pbsDesc": "हर PB एक सूची में",
       "formAnalysis": "फॉर्म विश्लेषण",
       "formAnalysisDesc": "अपनी तकनीक जांचें",
+      "miniGames": "मिनी गेम्स",
+      "miniGamesDesc": "रिएक्शन, मेमोरी और एक्यूरेसी गेम्स",
       "arOverlay": "AR ओवरले",
       "arOverlayDesc": "ट्रेनिंग के दौरान लाइव मीट्रिक्स"
     },
@@ -96,7 +98,14 @@
       "goals": "लक्ष्य",
       "goalsDesc": "जिस पर आप काम कर रहे हैं",
       "compare": "तुलना",
-      "compareDesc": "आप बनाम एलीट प्रोफ़ाइल"
+      "compareDesc": "आप बनाम एलीट प्रोफ़ाइल",
+      "groupTrophyRoom": "ट्रॉफी रूम",
+      "achievements": "उपलब्धियाँ",
+      "achievementsDesc": "निरंतरता और महारत के पदक",
+      "badges": "बैज",
+      "badgesDesc": "मार्केट खरीदारी से अर्जित",
+      "challenges": "चैलेंज",
+      "challengesDesc": "चैलेंज में शामिल हों, बनाएं और प्रायोजित"
     },
     "recover": {
       "title": "रिकवरी",

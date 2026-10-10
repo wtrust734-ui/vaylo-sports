@@ -6,13 +6,11 @@ import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import {
   authenticate,
-  hasEntitlement,
   json,
   readJsonBody,
   spendForUser,
   aiCallAllowed,
   throttled,
-  userOwnsProduct,
   validImagePayload,
 } from "../_shared/guard.ts";
 
@@ -72,16 +70,23 @@ Deno.serve(async (req) => {
     }
 
     // ---- Server-side charging (authoritative; honours Unlimited subscriptions) ----
+    // Every AI type charges per use, with no free passes for past pack or
+    // unlock ownership. Nutrition is a standard tab (each scan is charged)
+    // and form analysis is per analysis — flat rates on metered provider
+    // calls lose money, so the server does not honour them, not even for
+    // entitlements written before the packs were retired.
     let chargeFeature: string | null = null;
     if (type === "calorie_scan") {
-      // Nutrition Pack owners scan free — verified server-side, not client-side.
-      chargeFeature = (await userOwnsProduct(userId, "nutrition_pack")) ? null : "calorie_scan";
+      chargeFeature = "calorie_scan";
     } else if (type === "tactical_prep") {
       chargeFeature = "tactical_prep";
     } else if (type === "form_analysis") {
-      // Unlock-style feature: active subscription or one-off "form_analysis" purchase.
-      chargeFeature = (await hasEntitlement(userId, "form_analysis")) ? null : "form_analysis";
-    } // stats_insight is free — never carried a client-side cost.
+      chargeFeature = "form_analysis";
+    } else if (type === "stats_insight") {
+      // Training insight is an AI call with a real provider cost, so it
+      // carries the training_insight per-use charge like every other one.
+      chargeFeature = "training_insight";
+    }
 
     let spend: Awaited<ReturnType<typeof spendForUser>> | null = null;
     if (chargeFeature) {
@@ -142,8 +147,14 @@ WORKFLOW (follow strictly):
 Athlete context (tailor advice, do not alter calorie math):
 ${dossierText}
 
+Then judge the meal FOR THIS ATHLETE: against their goal, training load and the
+rest of a training day, is this plate pulling its weight? Answer with a verdict:
+"fuel" (a strong choice for their training), "light" (fine but thin for an
+athlete — say what to add), or "treat" (enjoyable, not training fuel — no
+shame, no lecture, one line on when it fits). Keep the reason to one sentence.
+
 Return ONLY valid JSON, no markdown, no prose outside JSON:
-{"name":"<primary dish>","description":"<all components + estimated grams>","calories":<int>,"protein":<num>,"carbs":<num>,"fat":<num>,"fiber":<num>,"serving":"<total grams or ml>","confidence":"<low|medium|high>"}
+{"name":"<primary dish>","description":"<all components + estimated grams>","calories":<int>,"protein":<num>,"carbs":<num>,"fat":<num>,"fiber":<num>,"serving":"<total grams or ml>","confidence":"<low|medium|high>","verdict":"<fuel|light|treat>","verdict_reason":"<one sentence, personalised to their goal and training>"}
 
 Do NOT under-report calories on calorie-dense foods (oils, cheese, nuts, sauces, fried items). Include oil absorbed in frying (~10% of item weight). Include dressings and sauces visible on the plate.`;
       userContent = [

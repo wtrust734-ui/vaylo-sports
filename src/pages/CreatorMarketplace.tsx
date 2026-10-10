@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Star, ShoppingBag, Plus } from "lucide-react";
@@ -35,17 +34,12 @@ export default function CreatorMarketplace() {
   const [sort, setSort] = useState<"new" | "popular" | "price">("popular");
   const [loading, setLoading] = useState(true);
 
-  // "No listings yet" reads as "the marketplace is empty", which is not what a
-  // failed read means.
-  const [listFailed, setListFailed] = useState(false);
-
   // useCallback rather than an inline async body: the buy flow re-reads the list
   // after a purchase so the sales count is current, and that means the loader is
   // referenced from two places. A bare function recreated each render would make
   // the effect below re-run on every render.
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from("marketplace_listings").select("*").eq("active", true);
-    setListFailed(readFailed(error, "the marketplace"));
+    const { data } = await supabase.from("marketplace_listings").select("*").eq("active", true);
     setListings((data || []) as Listing[]);
     setLoading(false);
   }, []);
@@ -107,15 +101,9 @@ export default function CreatorMarketplace() {
        filtered.length === 0 ? (
         <div className="p-12 rounded-3xl border border-border bg-card text-center">
           <ShoppingBag className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="font-medium">{listFailed ? "Could not load the listings" : "No listings yet"}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {listFailed
-              ? "This is a loading problem, not an empty marketplace — reopen this screen in a moment."
-              : "Be one of the first creators to publish a program."}
-          </p>
-          {!listFailed && (
-            <Button onClick={() => navigate("/market/become-creator")} className="mt-4">Become a creator</Button>
-          )}
+          <p className="font-medium">No listings yet</p>
+          <p className="text-sm text-muted-foreground mt-1">Be one of the first creators to publish a program.</p>
+          <Button onClick={() => navigate("/market/become-creator")} className="mt-4">Become a creator</Button>
         </div>
        ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

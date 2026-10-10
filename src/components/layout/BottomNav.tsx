@@ -49,18 +49,8 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
           isActive ? "text-primary -translate-y-px scale-105" : "text-muted-foreground/60"
         }`}
       />
-      {/* The label WRAPS instead of truncating.
-
-          It was `tracking-widest truncate max-w-[64px]`: at 0.1em of tracking a
-          12-character label needs ~94px, so French "Entraînement" (12),
-          "Performance" (11) and Dutch "Presteren" (9) were all cut to
-          "Entraînem…" on a phone — in the tab bar, on every screen. The wide
-          tracking is decoration and cost ~14% of the width, so it is gone, and
-          the label is allowed two lines with `break-words` as the last resort
-          for a word with nowhere to wrap. A clipped word is unreadable in
-          every language; a label that wraps is not. */}
       <span
-        className={`relative z-10 max-w-[4.5rem] break-words text-center text-[12px] font-bold leading-tight tracking-tight transition-colors duration-200 ${
+        className={`relative z-10 text-[12px] font-bold tracking-widest truncate max-w-[64px] transition-colors duration-200 ${
           isActive ? "text-primary" : "text-muted-foreground/60"
         }`}
       >
@@ -137,17 +127,7 @@ const BottomNav = () => {
               every width, in every language, without a magic number. The tabs
               inside a group keep their natural width, which is what keeps
               "Perform" from truncating: giving each of the five an equal share
-              instead would have clipped it on a 320px phone.
-
-              The one case that still bends it is the longest language on the
-              narrowest phone: at 320px each group gets 108px, so two tabs share
-              ~52px each, and French "Entraînement" needs ~80px even without
-              tracking. It wraps to two lines and, if a single word cannot fit,
-              breaks rather than disappearing — which lets that one group grow
-              past its share and nudges the action button a few pixels off
-              centre in French at 320px. That is the deliberate side of the
-              trade: a few pixels of centring is invisible, a cut-off tab label
-              is not. */}
+              instead would have clipped it on a 320px phone. */}
           <div className="flex flex-1 items-center justify-around gap-1">
             {LEFT.map((item) => (
               <NavButton key={item.path} item={item} />

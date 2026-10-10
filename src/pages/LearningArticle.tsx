@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bookmark, Check, CheckCircle2, Clock3, Share2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
-import { readFailed } from "@/lib/dbRead";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { LESSONS, categoryFor, difficultyFor, typeFor } from "@/lib/learningContent";
@@ -40,18 +39,13 @@ export default function LearningArticle() {
     if (!user || !lesson) return;
     let cancelled = false;
     void (async () => {
-      const { data, error: progressError } = await supabase
+      const { data } = await supabase
         .from("learning_progress")
         .select("*")
         .eq("user_id", user.id)
         .eq("lesson_id", lesson.id)
         .maybeSingle();
       if (cancelled) return;
-      // Everything after this point is written FROM this row: the upsert below
-      // stamps completed, mastery_level, quiz_score and completed_at. If the
-      // read failed then `data` is null and that upsert would erase progress
-      // the athlete already has, so the failure stops the effect instead.
-      if (readFailed(progressError, "your progress on this lesson")) return;
       setRow((data ?? null) as ProgressRow | null);
       if (data) {
         setSaved(data.saved);
@@ -75,15 +69,12 @@ export default function LearningArticle() {
           { onConflict: "user_id,lesson_id" },
         );
       if (viewError) console.error("lesson view tracking failed:", viewError.message);
-      const { data: feedbackRow, error: feedbackError } = await supabase
+      const { data: feedbackRow } = await supabase
         .from("learning_feedback")
         .select("rating")
         .eq("user_id", user.id)
         .eq("lesson_id", lesson.id)
         .maybeSingle();
-      // Secondary to reading the lesson: logged so it is visible in the console,
-      // not announced over the article.
-      readFailed(feedbackError, "your rating for this lesson", { quiet: true });
       if (!cancelled && feedbackRow) setFeedback(feedbackRow.rating as FeedbackRating);
     })();
     return () => {

@@ -10,7 +10,6 @@ import TabShell, { isTabRoot } from "./TabShell";
 import BackBar from "./BackBar";
 import { RefreshCw, LogOut } from "lucide-react";
 import CookieNotice from "@/components/CookieNotice";
-import { readFailed } from "@/lib/dbRead";
 import { isGuestUser } from "@/lib/guestMode";
 import {
   checkChallengeDeadlines,
@@ -47,25 +46,16 @@ const AppLayout = () => {
             .eq("user_id", uid),
         ]);
         if (!alive) return;
-        // Quiet: this is a once-a-day background check that retries on the next
-        // app open, so a toast here would be noise. It is still REPORTED rather
-        // than swallowed, which is the difference between a check that fails
-        // silently forever and one that shows up in the console.
-        if (readFailed(joinedRes.error, "your challenges", { quiet: true })) return;
-        if (readFailed(plansRes.error, "your training plan", { quiet: true })) return;
+        if (joinedRes.error || plansRes.error) return;
         const joined = joinedRes.data ?? [];
         if (joined.length) {
           const ids = joined.map((p) => p.challenge_id);
-          const { data: chs, error: chsError } = await supabase
+          const { data: chs } = await supabase
             .from("challenges")
             .select("id, title, end_date, target_value")
             .in("id", ids);
           if (!alive) return;
-          // Without titles and dates there is no deadline to check, and
-          // `chs?.length` cannot tell a failed read from no challenges.
-          if (!readFailed(chsError, "your challenges", { quiet: true }) && chs?.length) {
-            await checkChallengeDeadlines(uid, chs, joined);
-          }
+          if (chs?.length) await checkChallengeDeadlines(uid, chs, joined);
         }
         await checkWorkoutReminder(uid, plansRes.data ?? null);
       } catch {
@@ -171,15 +161,8 @@ const AppLayout = () => {
           takes the first one directly under the status bar, and the page's own
           root takes the second, which is what separates the page's first
           element from the Back button above it. Neither carries a bottom pad,
-          so the two cannot collapse into one.
-
-          The desktop offset is the sidebar's own width (`--vaylo-sidebar-w`),
-          applied as `ps-` (padding-inline-start) so it follows the sidebar
-          under RTL. It was `lg:pl-60` — 240px against a 272px aside — which
-          left the sidebar's last 32px over the content on every desktop
-          screen, and under RTL padded the left while the sidebar moved to the
-          right, so it covered the content completely. */}
-      <main className="relative pb-28 lg:ps-[var(--vaylo-sidebar-w)]">
+          so the two cannot collapse into one. */}
+      <main className="relative pb-28 lg:pl-60">
         {/* `min-w-0` on the flex/grid child is what actually stops a wide
             descendant (a long username, an AI response, a stat grid) from
             pushing the page wider than the viewport. Without it the child is

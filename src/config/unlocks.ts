@@ -6,10 +6,16 @@
 //
 // Why this file exists. The app advertised unlock prices in two places — the
 // Market's cost list and each feature's own button — while only *some* features
-// had a purchase call at all. Nutrition Pack had no purchase call anywhere;
-// Cross-Sport Analysis was priced in the shop and had no feature behind it at
-// all; Learning was priced and fully free. An athlete could read a price for
-// three things they could not buy and, in one case, could not even find.
+// had a purchase call at all. Cross-Sport Analysis was priced in the shop and
+// had no feature behind it at all; Learning was priced and fully free. An
+// athlete could read a price for things they could not buy and, in one case,
+// could not even find.
+//
+// Deliberately NOT here: form analysis and nutrition. Form analysis is
+// video-only and per analysis (a flat rate on a metered video call loses
+// money), and nutrition is a standard tab with per-use charges (plan per week,
+// calorie scan per scan). Neither is a one-off entitlement, so neither is in
+// the permanent-unlock catalogue.
 //
 // The rules encoded here, each one checked by unlocks.test.ts:
 //
@@ -35,8 +41,6 @@ import { API_COST_CEILING_USD, type FeatureCostKey } from "@/config/credits";
 type MeteredKey = keyof typeof API_COST_CEILING_USD;
 
 export type UnlockProductId =
-  | "form_analysis"
-  | "nutrition_pack"
   | "mental_gym"
   | "injury_management"
   | "cross_sport";
@@ -59,11 +63,10 @@ export type UnlockCatalogEntry = {
   /**
    * The metered AI key (or keys) this unlock makes free for the athlete — and
    * therefore the cost the unlock has to cover. A list, because an unlock can
-   * remove more than one charge: the Nutrition Pack makes the calorie scan free
-   * AND removes the weekly plan charge, and asserting only the cheaper of the
-   * two would certify a margin the pack never has to clear. `form_analysis` is
-   * the flat-rate case: the unlock removes an unlimited number of calls, so its
-   * break-even is asserted separately in pricing.test.ts.
+   * remove more than one charge, and asserting only the cheaper of the two
+   * would certify a margin the unlock never has to clear. No current entry
+   * uses it: flat rates on metered calls (unlimited analyses, free scans) are
+   * retired, so every remaining unlock is access to a local feature.
    */
   enables?: MeteredKey | MeteredKey[];
   /** Other unlocks the same athlete tends to want, shown as a nudge. */
@@ -71,41 +74,6 @@ export type UnlockCatalogEntry = {
 };
 
 export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
-  {
-    product: "form_analysis",
-    feature: "form_analysis",
-    costKey: "form_analysis_unlock",
-    label: "Form Analysis",
-    tagline: "One payment, unlimited AI photo breakdowns of your technique.",
-    unlocks: [
-      "Every future photo form check, with no per-photo charge",
-      "Feedback across running, lifting, cycling and team-sport movement",
-      "An analysis history you can compare week to week",
-    ],
-    route: "/form",
-    routeLabel: "Open Form Analysis",
-    enables: "form_analysis",
-    pairsWith: ["cross_sport", "injury_management"],
-  },
-  {
-    product: "nutrition_pack",
-    feature: "nutrition_pack",
-    costKey: "nutrition_pack_unlock",
-    label: "Nutrition Pack",
-    tagline: "Free calorie scans and no weekly plan charge, permanently.",
-    unlocks: [
-      "AI Calorie Scan free on every meal photo you take",
-      "Nutrition plans without the per-week credit charge",
-      "Macro targets, meal log and hydration in one place",
-    ],
-    route: "/nutrition",
-    routeLabel: "Open Nutrition",
-    // Both charges it removes, not the cheap one. The weekly plan charge has a
-    // ceiling four times the scan's ($0.006 against $0.0014) and is the one an
-    // athlete who buys this pack actually stops paying every week.
-    enables: ["calorie_scan", "nutrition_plan_week"],
-    pairsWith: ["form_analysis"],
-  },
   {
     product: "mental_gym",
     feature: "mental_gym",
@@ -119,7 +87,7 @@ export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
     ],
     route: "/mental",
     routeLabel: "Open Mental Gym",
-    pairsWith: ["injury_management"],
+    pairsWith: ["injury_management", "cross_sport"],
   },
   {
     product: "injury_management",
@@ -134,7 +102,7 @@ export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
     ],
     route: "/injury",
     routeLabel: "Open Injury Management",
-    pairsWith: ["cross_sport", "form_analysis"],
+    pairsWith: ["cross_sport"],
   },
   {
     product: "cross_sport",

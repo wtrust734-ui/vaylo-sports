@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { legalPath } from "@/lib/legalUrls";
 import { useAuth } from "@/contexts/AuthContext";
 import { TERMS_VERSION } from "@/lib/consent";
-import { cookieConsentPending, rememberCookieConsent } from "@/lib/cookieNotice";
 
 /**
  * Cookie / storage notice for the app and the downloadable web-app clone.
@@ -30,34 +29,57 @@ import { cookieConsentPending, rememberCookieConsent } from "@/lib/cookieNotice"
  * app stores on a device is a change worth telling people about.
  */
 
+const COOKIE_NOTICE_KEY = "vaylo:cookie-notice";
+const COOKIE_NOTICE_VERSION = "2026-10-07";
+
 export default function CookieNotice() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  // React owns the visibility. It used to be written straight to the DOM
-  // (`notice.hidden`) from the same effect that attached a native click
-  // listener, which is the same fact stored in two places — and the one React
-  // was holding (`shouldShow`) was never read. The effect now only decides
-  // whether the notice is owed; the render decides where it goes.
+  const noticeRef = useRef<HTMLDivElement | null>(null);
+  const acceptRef = useRef<HTMLButtonElement | null>(null);
   const [shouldShow, setShouldShow] = useState(false);
 
   useEffect(() => {
-    // Blocked or unavailable storage counts as owed, not accepted — the single
-    // rule lives in src/lib/cookieNotice.ts, and the terms banner reads the very
-    // same answer so the two cards can never both decide they are next.
-    const cookieNeedsAccept = cookieConsentPending();
+    const notice = noticeRef.current;
+    const accept = acceptRef.current;
+    if (!notice) return;
+
+    let remembered: string | null = null;
+    try {
+      remembered = window.localStorage.getItem(COOKIE_NOTICE_KEY);
+    } catch {
+      // Blocked or unavailable. Leave `remembered` null so the notice shows.
+      remembered = null;
+    }
+
+    const cookieNeedsAccept = remembered !== COOKIE_NOTICE_VERSION;
     // Don't show cookie notice if terms notice needs to show (priority - one at a time)
     const termsNeedsAccept = !!profile && (profile.terms_version ?? null) !== TERMS_VERSION;
 
-    setShouldShow(cookieNeedsAccept && !termsNeedsAccept);
-  }, [profile]);
+    if (cookieNeedsAccept && !termsNeedsAccept) {
+      notice.hidden = false;
+      setShouldShow(true);
+    } else {
+      notice.hidden = true;
+      setShouldShow(false);
+    }
 
-  const accept = () => {
-    // A failed write is not reported and not dressed up: the notice simply comes
-    // back on the next load, which is the honest outcome. The write is also what
-    // tells the terms banner the corner is free, so the handover happens now.
-    rememberCookieConsent();
-    setShouldShow(false);
-  };
+    if (!accept) return;
+
+    const handler = () => {
+      try {
+        window.localStorage.setItem(COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION);
+      } catch {
+        // Nothing to do about it, and nothing to say: the notice stays on
+        // screen for next time, which is the honest outcome.
+      }
+      notice.hidden = true;
+      setShouldShow(false);
+    };
+
+    accept.addEventListener("click", handler);
+    return () => accept.removeEventListener("click", handler);
+  }, [profile]);
 
   return (
     /* `bottom-20` was a fixed 80px, which is inside the floating tab bar once a
@@ -72,10 +94,11 @@ export default function CookieNotice() {
        it is up. So the notice sits where it always did, or just above the
        banner, and never under it. */
     <div
+      ref={noticeRef}
       role="region"
       aria-label="Cookies and stored preferences"
       className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.5rem+var(--vaylo-notice-lift))] left-0 right-0 z-[45] mx-auto max-w-2xl px-4"
-      hidden={!shouldShow}
+      hidden
     >
       <div className="rounded-2xl border border-border bg-card/95 p-4 backdrop-blur shadow-lg dark:bg-card">
         <p className="text-sm text-muted-foreground">
@@ -112,8 +135,8 @@ export default function CookieNotice() {
           </a>
         </p>
         <button
+          ref={acceptRef}
           type="button"
-          onClick={accept}
           className="press ml-3 inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Accept

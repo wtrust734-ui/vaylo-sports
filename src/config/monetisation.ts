@@ -108,7 +108,6 @@ export const UNLIMITED_PACKS: UnlimitedPackConfig[] = [
 export const FEATURE_ENTITLEMENTS = [
   "form_analysis",
   "injury_management",
-  "nutrition_pack",
   "mental_gym",
   "coach_pro",
   "hrv_insights",

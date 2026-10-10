@@ -438,16 +438,8 @@ async function main() {
       const seen = new Set();
       // A carousel is supposed to stick out of the viewport: anything inside a
       // horizontal scroller is reachable by swiping, so it is not a defect.
-      //
-      // The walk starts at the element ITSELF. Starting at its parent was wrong
-      // in the one case that mattered: the scroller's own row is a full-bleed
-      // full-bleed ('-mx-5 overflow-x-auto') element, so its box sticks out of
-      // and its textContent is every card title inside it — which made all three
-      // carousels on /learning report as "cut off by their own container" on
-      // every run. A scroller's own overflow is the design; its children were
-      // already exempt.
       const inScroller = (el) => {
-        for (let p = el; p && p !== document.body; p = p.parentElement) {
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
           const ox = getComputedStyle(p).overflowX;
           if (ox === "auto" || ox === "scroll") return true;
         }
@@ -755,24 +747,6 @@ async function main() {
     writeFileSync(`${OUT}/${name}.png`, Buffer.from(shot.data, "base64"));
 
     const events = cdp.drain();
-
-    // A bodyless response is not a failed request.
-    //
-    // Chrome reports `loadingFailed / net::ERR_ABORTED` for a HEAD request that
-    // SUCCEEDED: there is no body to read, so the inspector records the finished
-    // request as aborted. The ten count-only reads on /achievements
-    // (`{ count: "exact", head: true }`) came back this way on every run and
-    // failed the gate while the page rendered its numbers correctly.
-    //
-    // So a load only counts as a failure if it never received a response.
-    // Tracking the ids that did is STRICTER than the old rule, not looser: a
-    // request that dies before any response — DNS, refused connection, timeout —
-    // still fails, and so does a real abort of anything the app was waiting on.
-    const responded = new Set();
-    for (const e of events) {
-      if (e.method === "Network.responseReceived") responded.add(e.params.requestId);
-    }
-
     for (const e of events) {
       if (e.method === "Log.entryAdded" && e.params.entry.level === "error") {
         consoleIssues.push({ route: name, kind: "log", text: e.params.entry.text.slice(0, 200) });
@@ -792,7 +766,6 @@ async function main() {
         });
       }
       if (e.method === "Network.loadingFailed") {
-        if (responded.has(e.params.requestId)) continue;
         consoleIssues.push({
           route: name,
           kind: "request-failed",
@@ -918,11 +891,11 @@ async function main() {
 // by scrolling one tab instead of opening 19 files.
 // Drive the shortest path with money on it: a locked feature quoting a price,
 // the purchase coming up short, and the gap becoming a top-up sheet. Nothing
-// here buys anything — the review account's balance is below the Form Analysis
+// here buys anything — the review account's balance is below the Mental Gym
 // price by design, so the run lands on the shortfall branch. If that ever
 // changes, the flow says so rather than quietly spending credits.
 async function unlockFlow(cdp) {
-  await cdp.send("Page.navigate", { url: `${APP}/form` });
+  await cdp.send("Page.navigate", { url: `${APP}/mental` });
   await sleep(4500);
 
   const clicked = await cdp.evaluate(`(() => {
@@ -947,7 +920,7 @@ async function unlockFlow(cdp) {
       asksToTopUp: /more credits needed|top up to finish/i.test(text),
       // The sheet has to say what it is selling, or the athlete is looking at a
       // credit pack with no idea it is the last step of a purchase they started.
-      namesTheUnlock: /top up to finish:\\s*form analysis/i.test(text),
+      namesTheUnlock: /top up to finish:\\s*mental gym/i.test(text),
       tail: text.slice(-400).replace(/\\s+/g, " ").slice(0, 300),
     };
   })()`);

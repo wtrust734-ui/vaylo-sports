@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, Pause, SkipForward, Plus, Trash2, Check, Clock, X, Edit3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lsGet, lsSet } from "@/lib/localStore";
-import { formatDateTimeExact } from "@/i18n/format";
 
 interface Step { name: string; seconds: number; cue?: string }
 interface RoutineHistoryEntry { id: string; name: string; completed: string }
@@ -167,7 +166,7 @@ const Routines = () => {
               <span className="flex items-center gap-1.5">
                 <Check size={12} className="text-success" /> {h.name}
               </span>
-              <span className="text-muted-foreground">{formatDateTimeExact(h.completed)}</span>
+              <span className="text-muted-foreground">{new Date(h.completed).toLocaleString()}</span>
             </div>
           ))}
         </div>

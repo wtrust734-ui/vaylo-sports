@@ -15,7 +15,6 @@ import {
 } from "@/lib/cosmetics";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { formatNumber } from "@/i18n/format";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
 import { Check, Coins, Gift, Loader2, Lock } from "lucide-react";
 
@@ -98,7 +97,7 @@ export default function Collection() {
         </div>
         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Coins className="h-3.5 w-3.5 text-energy" />
-          {formatNumber(coins)} Coins · profile cosmetics are bought with Coins; badges are earned from chests and challenges.
+          {coins.toLocaleString()} Coins · profile cosmetics are bought with Coins; badges are earned from chests and challenges.
         </p>
       </div>
 
@@ -179,7 +178,7 @@ export default function Collection() {
                     {busy === d.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <><Coins className="mr-1 h-3.5 w-3.5" />{formatNumber(price)}</>
+                      <><Coins className="mr-1 h-3.5 w-3.5" />{price.toLocaleString()}</>
                     )}
                   </Button>
                 ) : (

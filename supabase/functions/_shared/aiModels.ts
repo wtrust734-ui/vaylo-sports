@@ -50,6 +50,21 @@ export const GEMINI_MODELS = {
   FLASH: "gemini-3.8-flash",
   /** Higher-capability tier — premium video analysis only. */
   PRO: "gemini-3.1-pro-preview",
+  /**
+   * Veo 3.1 — AD VIDEO GENERATION ONLY, not analysis, and it is the most
+   * expensive thing in the project by an order of magnitude: roughly $0.15 per
+   * second of video on Fast and $0.40 on Standard, so a single eight-second
+   * clip costs more than every image this app has ever generated combined.
+   * `ad-video` therefore never generates without an explicit `confirm`, and
+   * quotes the estimate first.
+   *
+   * LITE is the default. A `veo-4.1-lite` was requested, but no 4.x model
+   * resolves on this key (every variant returns 404 from predictLongRunning),
+   * so the newest lite tier that actually exists is used.
+   */
+  VEO_LITE: "veo-3.1-lite-generate-preview",
+  VEO_FAST: "veo-3.1-fast-generate-preview",
+  VEO_STANDARD: "veo-3.1-generate-preview",
   // Deliberately NOT `as const`: video-form-analysis declares
   // `let model = FLASH_MODEL` and reassigns it to PRO_MODEL for premium
   // analyses, which a literal union rejects. Nothing reads these members in a
@@ -133,20 +148,6 @@ const INJECTION_GUARD =
 
 const base = (body: string) => `${COACH_VOICE}\n${AUDIENCE}\n${SAFETY}\n${INJECTION_GUARD}\n\n${body}\n\n${OUTPUT_SAFETY}`;
 
-// ---------------------------------------------------------------------------
-// The same contract, for the functions that write their own system message.
-// ---------------------------------------------------------------------------
-// generate-plan and edit-plan speak the Chat Completions protocol directly
-// rather than going through generateAIResponse(), so they cannot use `base()` —
-// and each of them needs the safety contract in full, because both are the
-// places where the app tells an athlete what to physically do. Copying the
-// wording into those files is how the copies drift, so the pieces are exported
-// here instead and the registry's own prompts keep using them through `base()`.
-//
-export const SAFETY_PREAMBLE = `${COACH_VOICE}\n${AUDIENCE}\n${SAFETY}\n${INJECTION_GUARD}`;
-
-export const OUTPUT_SAFETY_CONTRACT = OUTPUT_SAFETY;
-
 /**
  * Feature registry. Key = feature name passed to generateAIResponse().
  * Luna ($0.10/$0.50 per 1M) is the default for every feature; Sol
@@ -156,22 +157,6 @@ export const OUTPUT_SAFETY_CONTRACT = OUTPUT_SAFETY;
  */
 export const AI_FEATURES: Record<string, FeatureConfig> = {
   // ---------------------------------------------------------------- PRIMARY
-  // Editing part of a plan the athlete already owns. Registered here for the
-  // same reason every feature is: the model tier, the label and the safety
-  // contract live in one place (the live call is made by the edit-plan
-  // function, which builds its own request from these same exports).
-  edit_plan: {
-    label: "AI plan edit",
-    model: MODELS.MINI,
-    system: base(
-      "TASK: Edit part of an existing training plan on the athlete's instruction, changing nothing else.\n" +
-        "Return only the weeks you were given, in the same schema and order, with every untouched session identical to the input.\n" +
-        "If the request is unsafe, impossible with the stated equipment, or outside a coach's remit, return the weeks unchanged.",
-    ),
-    maxOutputTokens: 6000,
-    reasoningEffort: "medium",
-  },
-
   connection_test: {
     label: "Connection test",
     model: MODELS.MINI,
@@ -206,21 +191,6 @@ Give daily calorie and macro targets (g and g/kg), meal-by-meal foods with porti
 End with: "Estimates only — not a substitute for advice from a registered dietitian."`),
     maxOutputTokens: 5000,
     reasoningEffort: "low",
-  },
-
-  // The week-by-week nutrition plan the Nutrition screen sells per week. It is
-  // registered here for the same reason every other feature is: the model tier,
-  // the label and the guard rails live in one place. The live call lives in
-  // supabase/functions/generate-nutrition-plan and reads this tier rather than
-  // naming a model of its own.
-  nutrition_plan: {
-    label: "Nutrition plan (week by week, 18+)",
-    model: MODELS.MINI,
-    system: base(`TASK: Write a week-by-week meal plan for an adult (18+) athlete.
-Days run Monday to Sunday. For every day give 3-6 meals with real, shop-able foods and estimated portions, and make that day's meals add up to the calorie target you were given with the protein target hit. Put the carbohydrate around the training the athlete actually does.
-End with: "Estimates only — not a substitute for advice from a registered dietitian."`),
-    maxOutputTokens: 8000,
-    reasoningEffort: "medium",
   },
 
   ai_coach: {

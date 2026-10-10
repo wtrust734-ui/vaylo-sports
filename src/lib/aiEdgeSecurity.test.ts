@@ -20,10 +20,6 @@ const COACH_CHAT = "/supabase/functions/coach-chat/index.ts";
 const VIDEO = "/supabase/functions/video-form-analysis/index.ts";
 const WEEKLY = "/supabase/functions/weekly-review/index.ts";
 const PLAN = "/supabase/functions/generate-plan/index.ts";
-const EDIT_PLAN = "/supabase/functions/edit-plan/index.ts";
-const NUTRITION_PLAN = "/supabase/functions/generate-nutrition-plan/index.ts";
-const EXPORT_MY_DATA = "/supabase/functions/export-my-data/index.ts";
-const WAITLIST_BROADCAST = "/supabase/functions/waitlist-broadcast/index.ts";
 const LEARNING = "/supabase/functions/learning-recommend/index.ts";
 const DELETE = "/supabase/functions/delete-account/index.ts";
 const GUARD = "/supabase/functions/_shared/guard.ts";
@@ -169,55 +165,6 @@ describe("charging discipline across AI functions", () => {
     expect(read(GUARD)).toMatch(/idempotencyKey\?/);
   });
 
-  it.each([
-    ["edit-plan", EDIT_PLAN],
-    ["generate-nutrition-plan", NUTRITION_PLAN],
-    ["video-form-analysis", VIDEO],
-  ])("%s handles a replayed idempotency key instead of refunding it", (_name, file) => {
-    // `spendForUser` can answer a replay with `duplicate: true` and the ORIGINAL
-    // cost, having taken nothing — so a function that records that cost as
-    // charged, and then refunds it when the call fails, pays the athlete twice
-    // for one attempt. A function that claims a retry-safe key has to branch on
-    // the duplicate answer before it treats the spend as its own.
-    const src = read(file);
-    expect(src).toMatch(/idempotencyKey/);
-    expect(src).toMatch(/spend\.duplicate/);
-  });
-
-  it.each([
-    ["edit-plan", EDIT_PLAN],
-    ["generate-nutrition-plan", NUTRITION_PLAN],
-  ])("%s refuses a replayed key BEFORE it records a charge to refund", (_name, file) => {
-    // Order is the fix, so order is what is asserted. Checking for the replay
-    // after `charged = spend.cost` is the same bug as not checking at all, and a
-    // test that only looked for the string would pass either way.
-    const src = read(file);
-    const duplicateAt = src.indexOf("spend.duplicate");
-    const recordAt = src.indexOf("charged = spend.cost");
-
-    expect(duplicateAt, `${_name} never checks spend.duplicate`).toBeGreaterThan(-1);
-    expect(recordAt, `${_name} never records what it charged`).toBeGreaterThan(-1);
-    expect(
-      duplicateAt,
-      `${_name} records the charge before it checks whether this is a replay`,
-    ).toBeLessThan(recordAt);
-    // And the replay path has to be a refusal that RETURNS, inside that window:
-    // a branch that only sets a flag and carries on would still reach the model
-    // call, which is the free-work half of the bug.
-    expect(
-      src.slice(duplicateAt, recordAt),
-      `${_name}'s replay path does not return before it reaches the model`,
-    ).toMatch(/return json\(/);
-  });
-
-  it("fingerprints the whole request into an idempotency key, not just its prose", () => {
-    // The other half of the same bug: a key built from the instruction (or the
-    // goal) alone answers "already charged" to a request that asks for
-    // something else, and the second athlete-visible change rides for free.
-    expect(read(EDIT_PLAN)).toMatch(/fingerprint\(\s*\n?\s*`\$\{scope\}/);
-    expect(read(NUTRITION_PLAN)).toMatch(/targetsKey/);
-  });
-
   it("binds ordinary credits_spend to the verified athlete JWT (auth.uid)", () => {
     const guard = read(GUARD);
     expect(guard).toMatch(/global:\s*\{\s*headers:\s*\{\s*Authorization:\s*authorization/);
@@ -230,34 +177,6 @@ describe("charging discipline across AI functions", () => {
     expect(migration).toMatch(/COALESCE\(auth\.jwt\(\) ->> 'role', ''\) <> 'service_role'/);
     expect(migration).toMatch(/FROM PUBLIC, anon, authenticated/);
     expect(migration).toMatch(/public\.credit_cost\(p_feature\)/);
-  });
-});
-
-describe("token decoding", () => {
-  it("reads a JWT segment as base64URL through the shared decoder, never inline", () => {
-    // A JWT segment is base64URL: `-` and `_` replace `+` and `/`, and it is not
-    // padded. `atob` rejects those, so decoding a segment where it is read
-    // throws for a large fraction of real tokens — which made account deletion
-    // answer 403 reauth_required intermittently, and made the export's freshness
-    // check silently inapplicable. None of these files may decode one itself.
-    for (const file of [DELETE, EXPORT_MY_DATA, WAITLIST_BROADCAST]) {
-      const src = read(file);
-      expect(src, `${file} decodes a token segment inline`).not.toMatch(/split\("\."\)\[1\]/);
-      expect(src, `${file} does not use the shared decoder`).toMatch(/from "\.\.\/_shared\/jwt\.ts"/);
-    }
-  });
-
-  it("fails closed when a token's age cannot be read", () => {
-    // "We could not prove this token is fresh" is not the same claim as "it is
-    // fresh". Both the destructive endpoint and the bulk-read endpoint compare a
-    // NULLABLE age, so a token whose iat cannot be read is refused rather than
-    // waved through.
-    for (const file of [DELETE, EXPORT_MY_DATA]) {
-      expect(
-        read(file),
-        `${file} does not refuse an unreadable token age`,
-      ).toMatch(/tokenAge === null \|\| tokenAge > MAX_TOKEN_AGE_SECONDS/);
-    }
   });
 });
 

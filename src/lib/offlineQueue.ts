@@ -11,15 +11,6 @@
 // error the athlete must see, because retrying it forever would silently
 // discard data that can never succeed.
 //
-// Dead letters. A write that can never succeed — refused by the server, or with
-// no row left to update, or evicted because the queue hit its cap — leaves the
-// queue (it would otherwise block every write behind it) but does NOT leave
-// without a word: it is recorded in `pendingFailures()`, which is what lets
-// OfflineBanner say "one change could not be saved" instead of quietly shipping
-// a session the athlete logged and never got. Recording happens at the moment
-// the write is given up on, in the same storage the queue uses, so it survives
-// the WebView being killed exactly as the queue does.
-//
 // The queue lives in localStorage, deliberately:
 //   - it survives the WebView being killed, which is the normal case when an
 //     Android app is backgrounded during a set and then swiped away;
@@ -99,45 +90,6 @@ type Listener = (queue: QueuedWrite[]) => void;
 const listeners = new Set<Listener>();
 let cache: QueuedWrite[] | null = null;
 
-/**
- * A write this device gave up on, kept so the athlete can be told.
- *
- * The queue can only hold what it might still send. Everything else has to be
- * surfaced somewhere, and a console line is not surfaced: the athlete has to
- * know that the session they logged at the bottom of a hill did not land, and
- * why, while they still remember logging it.
- */
-export type QueuedFailureReason =
-  /** The server answered and refused it (a bad value, a constraint, RLS). */
-  | "rejected"
-  /** An update whose row was deleted before it could be sent. */
-  | "row_missing"
-  /** The queue hit its cap and this was the oldest entry. */
-  | "overflow";
-
-export interface QueuedFailure {
-  /** The id of the write that was given up on. */
-  id: string;
-  table: string;
-  /** When the athlete made the change, so the notice can be ordered honestly. */
-  queuedAt: number;
-  failedAt: number;
-  reason: QueuedFailureReason;
-  /**
-   * The server's own words where there are any, empty where the reason speaks
-   * for itself. Passed through rather than paraphrased: a Postgres constraint
-   * message is the thing support will ask for.
-   */
-  message: string;
-  /** PostgREST error code, when the server sent one (23514, 42501…). */
-  code?: string;
-}
-
-/** Bounded like the queue: enough to explain, not an unbounded log. */
-const FAILURE_KEY = "vaylo.offlineQueue.failures.v1";
-const MAX_FAILURES = 20;
-let failureCache: QueuedFailure[] | null = null;
-
 function read(): QueuedWrite[] {
   if (cache) return cache;
   try {
@@ -157,16 +109,6 @@ function read(): QueuedWrite[] {
   return cache;
 }
 
-function notify(queue: QueuedWrite[]) {
-  listeners.forEach((fn) => {
-    try {
-      fn([...queue]);
-    } catch {
-      /* a listener must not break the queue */
-    }
-  });
-}
-
 function write(queue: QueuedWrite[]) {
   cache = queue;
   try {
@@ -175,53 +117,13 @@ function write(queue: QueuedWrite[]) {
     // Private mode / quota exhausted. The in-memory copy still serves this
     // session; the write is simply not durable.
   }
-  notify(queue);
-}
-
-/** The dead-letter list, oldest first. Validated on read, like the queue. */
-function readFailures(): QueuedFailure[] {
-  if (failureCache) return failureCache;
-  try {
-    const raw = localStorage.getItem(FAILURE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    failureCache = Array.isArray(parsed)
-      ? parsed.filter(
-          (f): f is QueuedFailure =>
-            !!f && typeof f.id === "string" && typeof f.table === "string" && typeof f.reason === "string",
-        )
-      : [];
-  } catch {
-    failureCache = [];
-  }
-  return failureCache;
-}
-
-function writeFailures(list: QueuedFailure[]) {
-  failureCache = list;
-  try {
-    localStorage.setItem(FAILURE_KEY, JSON.stringify(list));
-  } catch {
-    // Not durable; still reported for this session, which is better than the
-    // silence this list exists to end.
-  }
-  // The same listeners: a refusal changes what the athlete needs to be told,
-  // and the banner already subscribes here for the queue's own count.
-  notify(read());
-}
-
-/** Records a write that was given up on. Never throws, never blocks a replay. */
-function recordFailure(entry: {
-  id: string;
-  table: string;
-  queuedAt: number;
-  reason: QueuedFailureReason;
-  message: string;
-  code?: string;
-}) {
-  const list = readFailures();
-  list.push({ ...entry, failedAt: Date.now() });
-  while (list.length > MAX_FAILURES) list.shift();
-  writeFailures(list);
+  listeners.forEach((fn) => {
+    try {
+      fn([...queue]);
+    } catch {
+      /* a listener must not break the queue */
+    }
+  });
 }
 
 /** The current queue, oldest first. */
@@ -234,39 +136,15 @@ export function subscribeToQueue(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
-/**
- * Test helper — clears the queue, the dead-letter list and both caches.
- *
- * It clears BOTH stores on purpose: a helper that resets half the state a test
- * depends on is a trap, and the dead letters are state this module now owns.
- */
+/** Test helper — clears both the store and the in-memory cache. */
 export function clearQueue() {
   cache = null;
-  failureCache = null;
   try {
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(FAILURE_KEY);
   } catch {
     /* nothing to clear */
   }
-  notify([]);
-}
-
-/**
- * Writes the app could not save, newest first — the ones the athlete should be
- * told about. Empty is the normal state.
- */
-export const pendingFailures = (): QueuedFailure[] => [...readFailures()].reverse();
-
-/**
- * Acknowledges them, which is the only way they leave the list.
- *
- * Deliberately not automatic: a notice that clears itself on the next render is
- * a notice nobody had to read, and this one is the only record that a logged
- * session did not reach the account.
- */
-export function dismissFailures(): void {
-  writeFailures([]);
+  listeners.forEach((fn) => fn([]));
 }
 
 /**
@@ -384,20 +262,8 @@ export async function insertOrQueue(
   if (!queue.some((w) => w.id === id)) {
     queue.push({ id, table, values: payload, queuedAt: Date.now() });
     // Drop the oldest rather than refuse a new write: a training session
-    // happening now matters more than one from a month ago. Dropping it is a
-    // decision that costs the athlete a session, so it is recorded as one.
-    while (queue.length > MAX_QUEUED) {
-      const evicted = queue.shift();
-      if (evicted) {
-        recordFailure({
-          id: evicted.id,
-          table: evicted.table,
-          queuedAt: evicted.queuedAt,
-          reason: "overflow",
-          message: "",
-        });
-      }
-    }
+    // happening now matters more than one from a month ago.
+    while (queue.length > MAX_QUEUED) queue.shift();
     write(queue);
   }
 
@@ -441,18 +307,7 @@ export async function updateOrQueue(
     queuedAt: Date.now(),
     op: "update",
   });
-  while (queue.length > MAX_QUEUED) {
-    const evicted = queue.shift();
-    if (evicted) {
-      recordFailure({
-        id: evicted.id,
-        table: evicted.table,
-        queuedAt: evicted.queuedAt,
-        reason: "overflow",
-        message: "",
-      });
-    }
-  }
+  while (queue.length > MAX_QUEUED) queue.shift();
   write(queue);
   return { ok: true, queued: true };
 }
@@ -637,9 +492,7 @@ let flushing = false;
  *
  * A write that fails for a *network* reason stops the run and stays queued.
  * A write the server rejects is dropped: it can never succeed, and leaving it
- * in place would block every write behind it forever. Dropping it is recorded
- * in the dead-letter list first, so "the server refused this" reaches the
- * athlete instead of disappearing with the entry.
+ * in place would block every write behind it forever.
  *
  * @returns how many writes were successfully sent.
  */
@@ -682,16 +535,7 @@ export async function flushQueue(): Promise<number> {
       if (isNetworkError(error)) {
         // Still offline. Everything after this is very likely to fail too, but
         // ordering matters more than saving a round trip — stop here.
-        //
-        // APPEND, do not replace. `keep` already holds the conflicts collected
-        // earlier in this pass, and entries that were deliberately left queued;
-        // assigning a fresh array here discarded every one of them, so a conflict
-        // found a moment before the signal dropped vanished — the queued edit
-        // deleted with no trace and nothing left for the athlete to resolve,
-        // which is the exact opposite of the promise in ConflictInfo. The queue
-        // is oldest-first, so appending the current entry and its successors
-        // keeps everything that still has work to do, in order.
-        keep = [...keep, item, ...queue.slice(queue.indexOf(item) + 1)];
+        keep = [item, ...queue.slice(queue.indexOf(item) + 1)];
         break;
       }
       // 23505 = duplicate key: a previous replay got through before the app
@@ -705,28 +549,9 @@ export async function flushQueue(): Promise<number> {
       // than blocking every write behind it — the same treatment as a refusal.
       // PostgREST reports a missing match for a single-row update as PGRST116.
       if ((error as { code?: string }).code === "PGRST116") {
-        recordFailure({
-          id: item.id,
-          table: item.table,
-          queuedAt: item.queuedAt,
-          reason: "row_missing",
-          message: error.message,
-          code: "PGRST116",
-        });
         continue;
       }
       // Genuinely rejected — unrecoverable, so it goes rather than blocks.
-      // Recorded first: an entry that vanishes without a word is the silent
-      // data loss this queue exists to prevent, and the server's reason is the
-      // part the athlete (or support) can act on.
-      recordFailure({
-        id: item.id,
-        table: item.table,
-        queuedAt: item.queuedAt,
-        reason: "rejected",
-        message: error.message,
-        code: (error as { code?: string }).code,
-      });
     }
 
     write(keep);

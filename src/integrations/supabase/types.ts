@@ -3747,54 +3747,6 @@ export type Database = {
         }
         Relationships: []
       }
-      app_error_reports: {
-        Row: {
-          app_version: string
-          fingerprint: string
-          first_seen_at: string
-          id: string
-          last_seen_at: string
-          message: string
-          name: string
-          occurrences: number
-          platform: string
-          screen: string | null
-          stack: string | null
-          status: string
-          user_agent: string | null
-        }
-        Insert: {
-          app_version: string
-          fingerprint: string
-          first_seen_at?: string
-          id?: string
-          last_seen_at?: string
-          message: string
-          name: string
-          occurrences?: number
-          platform?: string
-          screen?: string | null
-          stack?: string | null
-          status?: string
-          user_agent?: string | null
-        }
-        Update: {
-          app_version?: string
-          fingerprint?: string
-          first_seen_at?: string
-          id?: string
-          last_seen_at?: string
-          message?: string
-          name?: string
-          occurrences?: number
-          platform?: string
-          screen?: string | null
-          stack?: string | null
-          status?: string
-          user_agent?: string | null
-        }
-        Relationships: []
-      }
       support_requests: {
         Row: {
           account_ref: string | null

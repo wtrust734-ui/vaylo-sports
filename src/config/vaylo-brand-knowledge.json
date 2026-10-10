@@ -1,0 +1,515 @@
+{
+  "meta": {
+    "app": "Vaylo Ad Studio",
+    "owner": "Vaylo Sports",
+    "purpose": "Persistent brand, product, business and advertising knowledge base for the Vaylo Ad Studio AI strategist and campaign tools.",
+    "updated": "2026-10-10",
+    "status": "editable source of truth — not a temporary prompt"
+  },
+
+  "company": {
+    "name": "Vaylo Sports",
+    "category": "All-sports training, performance improvement and athlete development application",
+    "product_type": "Digital sports technology product, primarily a mobile application, with a web application version also being developed",
+    "core_purpose": "Help athletes understand their performance, train more intelligently, improve their sporting ability, and make better training decisions",
+    "slogan": "Learn smarter. Train better. Perform better.",
+    "long_term_vision": "Build a recognised sports technology brand that helps athletes improve across different sports and disciplines",
+    "positioning": "Premium, modern, ambitious sports technology platform"
+  },
+
+  "brand_positioning": {
+    "identity": "Serious sports technology company operating in the sports industry",
+    "notes": [
+      "Improvement through smarter training",
+      "Personalisation rather than generic advice",
+      "Athletic ambition and progression",
+      "Practical usefulness",
+      "Intelligent sports technology",
+      "Better training decisions",
+      "A broad, multi-sport identity",
+      "A professional and credible athlete experience"
+    ],
+    "avoid": [
+      "Cheap fitness template",
+      "Supplement company",
+      "Generic AI startup",
+      "Influencer merchandise brand",
+      "Vague claims about innovation or artificial intelligence"
+    ]
+  },
+
+  "visual_brand_identity": {
+    "primary_logo": {
+      "status": "SUPPLIED — this is the official Vaylo Sports logo. Use this artwork. Never generate, re-trace or approximate a stand-in.",
+      "mark": "A stylised brain drawn as a single continuous outline, with a short stem descending from its base. No wordmark, no lettering and no tagline inside the artwork.",
+      "appearance": "A blue-to-purple gradient outline on a solid black background.",
+      "colours": {
+        "background": "#000000",
+        "gradient_start_blue": "#0057FF",
+        "gradient_end_purple": "#8505D5",
+        "direction": "Blue at the upper left graduating to purple at the lower right"
+      },
+      "assets": [
+        {
+          "path": "src/assets/logo.jpg",
+          "role": "source of truth for the artwork — in-app brand mark (sidebar and header)",
+          "format": "JPEG",
+          "dimensions": "500x500",
+          "bytes": 14319,
+          "md5": "cb8b76404406401f685e4a3f8e66e977"
+        },
+        {
+          "path": "public/logo.png",
+          "role": "app icon — browser favicon, apple-touch-icon and social preview in the app shell",
+          "format": "PNG (RGBA)",
+          "dimensions": "256x256",
+          "bytes": 44785,
+          "md5": "d4e6966e04233d9f42121180503212b2",
+          "note": "Extracted from the 256px PNG payload already inside public/favicon.ico, so it is the same official artwork, just in a size and format browsers and iOS accept directly"
+        },
+        {
+          "path": "website/assets/logo.png",
+          "role": "marketing site favicon, apple-touch-icon, Organization schema logo, header and footer mark",
+          "format": "PNG",
+          "dimensions": "128x128",
+          "md5": "b7e70bd62f4fb3aae743955187f75129"
+        }
+      ],
+      "usage_rules": [
+        "Never redraw, re-trace, recolour, re-gradient, add glow, add outline or add effects to the mark",
+        "Never place the mark on a light or mid-tone background — the supplied artwork is drawn to sit on dark navy/black only",
+        "Never stretch, squash or crop the mark; scale it proportionally and keep it square",
+        "Keep clear space of at least 25% of the mark's height on every side",
+        "Minimum legible sizes: 16px favicon, 24px in-app, 48px on video and picture-ad end cards",
+        "Do not combine the mark with a wordmark, drop shadow, stroke or frame",
+        "Do not present an AI-generated lookalike as the Vaylo logo"
+      ],
+      "creative_note": "The mark is a brain, which reads as intelligence rather than sport. Creative must not lean on AI/brain visual metaphors: the brand has to read as multi-sport athlete technology, not as a generic AI startup. The logo itself stays exactly as supplied."
+    },
+    "logo_rule": "Do not redraw, distort, recolour or replace the official logo without authorisation",
+    "palette": {
+      "foundations": ["Dark navy", "Black"],
+      "accents": ["Restrained purple"]
+    },
+    "typography": "High-contrast text, modern clean typography",
+    "styling": [
+      "Premium sports technology interface styling",
+      "Sharp compositions and clear visual hierarchy",
+      "Dynamic but controlled movement",
+      "Realistic sporting imagery",
+      "Consistent branding across every campaign"
+    ],
+    "avoid": [
+      "Excessive gradients",
+      "Excessive neon effects",
+      "Unnecessary glowing borders",
+      "Cluttered layouts",
+      "Generic AI-generated people with distorted anatomy",
+      "Fake sports app screenshots",
+      "Illegible text",
+      "Overused stock-footage montages",
+      "Inconsistent logos",
+      "Visuals that make the brand appear like a gaming or cryptocurrency company"
+    ],
+    "templates": [
+      "Logo end card",
+      "Title treatment",
+      "Caption style",
+      "CTA treatment",
+      "App demonstration layout",
+      "Picture-ad layout"
+    ]
+  },
+
+  "target_audience": {
+    "primary": "Athletes aged 18–30",
+    "description": "People who train regularly, participate in organised sport, compete recreationally or seriously, and want to improve their performance",
+    "segments": [
+      "Competitive athletes seeking structured improvement",
+      "Amateur athletes who want better training guidance",
+      "Athletes who struggle to organise their training",
+      "Athletes who want to understand their performance and progress",
+      "Athletes looking for personalised training recommendations",
+      "Athletes who use technology to support their sporting development",
+      "Athletes returning to structured training after a break",
+      "Athletes who want a more organised approach to long-term development"
+    ],
+    "segmentation_note": "These are marketing hypotheses, not proven customer segments. The strategist must test which audiences respond best.",
+    "diversity_rule": "Do not assume that all athletes have the same needs. Use different sports and audience segments across the advertising portfolio. Make every example relevant to the advertised message.",
+    "younger_users_rule": "Any advertising aimed at younger users must comply with applicable privacy, consumer protection, platform and advertising rules. The intended core market remains 18–30."
+  },
+
+  "customer_problems_and_motivations": {
+    "problems": [
+      "Athletes do not know how to structure their training",
+      "Generic plans may not reflect an individual's needs",
+      "Athletes struggle to understand whether they are progressing",
+      "Training decisions can become inconsistent",
+      "Athletes may not know how to adapt after missed sessions or interruptions",
+      "Athletes may struggle to turn goals into a practical plan",
+      "Sports information can be fragmented across different tools",
+      "Athletes may need help understanding their training history and next steps"
+    ],
+    "motivations": [
+      "Become a better athlete",
+      "Train with more purpose",
+      "Reach a specific performance goal",
+      "Understand personal strengths and weaknesses",
+      "Build consistency",
+      "Make better use of training time",
+      "Feel more confident in training decisions",
+      "Track progress over time"
+    ],
+    "truth_rule": "Never claim that Vaylo solves a problem unless its current functionality actually supports that claim."
+  },
+
+  "product_features": {
+    "verification_statuses": ["VERIFIED", "IN_DEVELOPMENT", "PLANNED"],
+    "advertising_rule": "Only VERIFIED features may be advertised as currently available",
+    "current_candidate_features": [
+      {
+        "name": "AI-assisted sports training and improvement",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Personalised training guidance",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Athlete goals and progress tracking",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Training plans and structured sessions",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Athlete profile and sporting information",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Personal bests and performance information where supported",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "AI-supported training analysis",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Cross-training personalisation where supported",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Training review and feedback",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Athlete challenges where implemented",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "Marketplace or other additional features",
+        "status": "VERIFIED only where verified"
+      }
+    ],
+    "future_directions": [
+      "Recovery-aware training adjustments",
+      "Wearable integrations",
+      "Video-based technique analysis",
+      "Training-load dashboards",
+      "Injury-risk indicators",
+      "Coach and club management tools",
+      "Family and coach oversight features",
+      "Offline functionality",
+      "Additional advanced athlete analytics"
+    ],
+    "future_label_rule": "These future directions must remain clearly marked as planned unless the current product demonstrably supports them.",
+    "integration_rule": "Do not advertise Google Fit, Garmin, COROS, Apple Health, WHOOP, Oura or other integrations as available unless the integration is implemented and working.",
+    "claims_boundary": [
+      "Do not claim that Vaylo can diagnose injuries",
+      "Do not claim that Vaylo can replace a qualified coach",
+      "Do not claim that Vaylo can guarantee performance improvements",
+      "Do not claim that Vaylo can prevent injuries"
+    ],
+    "missing_information_rule": "When product details are missing, ask for verified information or use placeholders in drafts until the claims can be checked."
+  },
+
+  "product_demonstration_rules": {
+    "priority": "Authentic product demonstrations should be a major part of Vaylo's advertising",
+    "preferred_footage": [
+      "Actual Vaylo app screen recordings",
+      "App screenshots",
+      "Navigation demonstrations",
+      "Real training-plan examples",
+      "Real feature demonstrations",
+      "Brand assets and logos",
+      "Approved athlete footage",
+      "Existing advertisements",
+      "Reference material"
+    ],
+    "analysis_rule": "When real app footage is provided, the AI should inspect it, identify its useful sections, and recommend how to incorporate them into an advert.",
+    "example_structure": [
+      "Open with relevant sporting footage",
+      "Introduce a training problem",
+      "Show a genuine Vaylo feature",
+      "Explain its practical benefit",
+      "Finish with a clear CTA"
+    ],
+    "prohibited": [
+      "Do not invent interface elements, charts, statistics or features and portray them as real Vaylo screens",
+      "AI-generated mock-ups may be used for conceptual work, but they must not be misrepresented as the current application"
+    ]
+  },
+
+  "business_objectives": {
+    "order_of_importance": [
+      "Establish clear brand awareness",
+      "Explain what Vaylo Sports does",
+      "Generate genuine interest from the target audience",
+      "Build a waitlist or other pre-launch audience if that mechanism is available",
+      "Drive qualified users to the appropriate landing page or app listing",
+      "Convert interested people into installs and registrations when the product is available",
+      "Encourage activation and ongoing use",
+      "Learn which audiences, messages and features create the strongest results",
+      "Build a repeatable and affordable acquisition system"
+    ],
+    "launch_date": {
+      "current_planned": "1 January 2027",
+      "note": "Treat this as the current intended launch date, not a guarantee. Make it editable in the campaign settings and ask for an update if the schedule changes."
+    },
+    "pre_launch_rule": "Before launch, do not use CTAs such as 'Download now' or 'Available now' unless the relevant product is actually available to the intended audience.",
+    "pre_launch_cta_examples": ["Join the waitlist", "Follow Vaylo Sports", "Discover Vaylo"],
+    "post_launch_rule": "After launch, use the actual app-store listing or supported acquisition destination."
+  },
+
+  "marketing_budget_and_constraints": {
+    "default_assumption": "The initial marketing strategy should prioritise organic distribution, reusable creative assets, free opportunities and very low-cost production.",
+    "budget_assumption": "Assume there is little or no initial advertising budget unless the setting is changed.",
+    "objective": "Maximise useful reach, qualified interest and learning per pound spent.",
+    "not_assumed": [
+      "The company has an advertising agency",
+      "The company has a paid production team",
+      "The company has professional actors",
+      "The company has an unlimited media budget"
+    ],
+    "operating_model": "Design workflows that allow one person to manage the majority of campaign production.",
+    "priorities": [
+      "Reusable templates",
+      "Authentic app demonstrations",
+      "Low-cost AI-generated footage",
+      "Short and effective voiceovers",
+      "Multiple edits from the same source assets",
+      "Picture ads where video is unnecessary",
+      "Organic social content",
+      "Partnerships and collaborations where appropriate",
+      "Referral and community strategies where appropriate",
+      "Low-cost experiments before scaling spending"
+    ],
+    "organic_rule": "Never assume that free reach is guaranteed. Organic distribution is unpredictable and requires testing.",
+    "spend_separation": "Separate production spending from paid advertising spend. The platform must track both when the relevant data is available."
+  },
+
+  "advertising_channels": {
+    "selection_rule": "The strategist should select channels based on the audience, creative format, campaign objective and available resources.",
+    "candidate_channels": [
+      "TikTok",
+      "Instagram Reels",
+      "Instagram feed and Stories",
+      "YouTube Shorts",
+      "YouTube",
+      "Relevant sports communities",
+      "Sports clubs and athlete communities",
+      "Relevant websites and newsletters",
+      "Partnerships with coaches and sporting organisations",
+      "Other channels that become appropriate as evidence develops"
+    ],
+    "channel_rule": "Do not automatically recommend every channel for every campaign.",
+    "per_channel_requirement": "For each proposed channel, identify the intended audience, format, publishing requirements, CTA and measurement method.",
+    "publish_rule": "Do not publish advertisements automatically without explicit authorisation and the required integrations."
+  },
+
+  "ad_creative_strategy": {
+    "rule": "The strategist must create advertisements that communicate one primary idea at a time.",
+    "frameworks": [
+      "Problem → solution → product demonstration → CTA",
+      "Strong hook → relatable athlete situation → benefit → CTA",
+      "Demonstration → explanation → reason to act",
+      "Myth or misconception → useful insight → relevant Vaylo feature",
+      "Athlete goal → training challenge → supported product solution",
+      "Feature reveal → real demonstration → benefit",
+      "Comparison of disorganised and structured training, without misleading claims",
+      "A day in an athlete's training routine",
+      "Educational content that provides genuine value",
+      "A short cinematic sports opening followed by an authentic product demonstration",
+      "Frequently asked questions",
+      "Objection handling",
+      "Feature-specific campaigns",
+      "Brand story and founder-led messaging where suitable"
+    ],
+    "frameworks_note": "These are creative options, not mandatory templates.",
+    "variation_rule": "Do not make every advertisement follow the same formula.",
+    "concept_rule": "For each campaign, generate three genuinely different concepts rather than three minor variations of the same video.",
+    "assessment_criteria": [
+      "Hook strength",
+      "Message clarity",
+      "Audience relevance",
+      "Product truthfulness",
+      "Visual quality",
+      "Brand consistency",
+      "Memorability",
+      "CTA relevance",
+      "Production cost",
+      "Expected ease of production",
+      "Suitability for the chosen platform"
+    ],
+    "prediction_note": "Treat predicted performance as an estimate, not a fact."
+  },
+
+  "hooks_and_execution": {
+    "goal": "The opening seconds should make the intended audience understand why the advert is relevant.",
+    "hook_approaches": [
+      "A recognisable sporting problem",
+      "An unexpected visual",
+      "A direct question",
+      "A clear demonstration",
+      "A specific training objective",
+      "A common frustration",
+      "An intriguing but truthful statement",
+      "A strong visual contrast",
+      "A useful insight that challenges a common assumption"
+    ],
+    "avoid": [
+      "Misleading clickbait",
+      "Exaggerated promises",
+      "Generic motivational slogans",
+      "Artificial urgency"
+    ],
+    "language_rule": "Use natural language that athletes would understand.",
+    "focus_rule": "Do not cram multiple product benefits into a short advert. Focus on one main benefit and one clear CTA.",
+    "caption_rule": "Use captions that remain readable on mobile screens. Keep important text and logos within the appropriate safe areas for the target platform."
+  },
+
+  "video_advertising_rules": {
+    "length_rule": "Create a variety of video lengths and formats based on the purpose of each campaign.",
+    "starting_points": [
+      "Short 6–15 second edits",
+      "Longer 15–30 second demonstrations where appropriate"
+    ],
+    "starting_points_note": "These are starting points, not universal platform requirements.",
+    "ai_video_rule": "Use AI-generated video when it adds value, but do not generate every scene automatically.",
+    "production_process": [
+      "Write the strategy and script",
+      "Select or upload appropriate source footage",
+      "Identify which scenes genuinely need generated visuals",
+      "Generate only those scenes",
+      "Add real Vaylo interface footage where appropriate",
+      "Create narration if it improves the message",
+      "Add captions, logo, music and CTA",
+      "Render and review",
+      "Correct errors before publishing"
+    ],
+    "quality_priorities": [
+      "Continuity",
+      "Realistic sporting movement",
+      "Consistent lighting",
+      "Correct human anatomy"
+    ],
+    "text_rule": "Avoid generating text inside footage when the text can be overlaid accurately during editing.",
+    "truth_rule": "Do not show invented app functionality or imply that AI-generated athletes are real Vaylo customers."
+  },
+
+  "picture_advertising_rules": {
+    "visual_hierarchy": [
+      "Main message",
+      "Relevant supporting visual",
+      "One concise supporting point if needed",
+      "Brand identity",
+      "CTA where appropriate"
+    ],
+    "screenshot_rule": "Use authentic screenshots when the purpose is to demonstrate the product.",
+    "generated_image_rule": "Use generated sports imagery when it improves the concept and does not falsely imply an endorsement or real customer experience.",
+    "variation_rule": "Create variations for different audience segments and messages, not simply different background colours.",
+    "export_check": "Check spelling, contrast, readability, logo integrity and platform dimensions before exporting."
+  },
+
+  "voice_music_and_sound": {
+    "voice_provider": "Use ElevenLabs for narration when connected and suitable.",
+    "voice_rule": "The voice should fit the audience and campaign. It should sound clear, credible and natural rather than exaggerated or artificially enthusiastic.",
+    "voice_options": [
+      "Voice style",
+      "Speaking pace",
+      "Language",
+      "Supported delivery settings"
+    ],
+    "sound_design_rule": "Use sound design selectively. Do not let music overpower narration or distract from the message.",
+    "rights_rule": "Use only music and sound effects with appropriate commercial usage rights.",
+    "alternatives": "Allow text-only and silent versions when appropriate."
+  },
+
+  "competitive_positioning": {
+    "goal": "Help differentiate Vaylo from general fitness apps, individual-sport apps, training-plan libraries, wearable dashboards and coaching products.",
+    "competitor_rule": "Do not automatically describe competitors as inferior.",
+    "differentiation_basis": [
+      "Verified capabilities",
+      "The intended multi-sport positioning",
+      "Practical usability",
+      "The actual user experience"
+    ],
+    "evidence_rule": "Competitor information must be current and evidence-based when it is used in campaigns.",
+    "competitor_database_fields": [
+      "Competitor name",
+      "Target audience",
+      "Product category",
+      "Publicly documented features",
+      "Pricing where verified",
+      "Positioning",
+      "Potential points of differentiation",
+      "Source and date of research"
+    ],
+    "ip_rule": "Do not copy competitor creative assets, slogans, proprietary content or distinctive branding."
+  },
+
+  "testing_and_measurement": {
+    "purpose": "The platform must help learn what works, not merely create attractive adverts.",
+    "per_campaign_requirement": "For every campaign, record its objective and intended KPI before launch.",
+    "candidate_metrics": [
+      "Impressions and reach",
+      "Video views",
+      "Average watch time",
+      "Completion rate",
+      "Click-through rate",
+      "Landing-page visits",
+      "Waitlist registrations",
+      "App installs",
+      "Account registrations",
+      "Cost per acquisition where paid spend exists",
+      "Conversion rate",
+      "Retention where data is available"
+    ],
+    "metric_rule": "Do not confuse views with business success.",
+    "interpretation_note": "A video that gets many views but no relevant clicks or registrations may be less useful than a smaller campaign that attracts genuine users.",
+    "testing_rule": "Recommend testing one or two meaningful variables at a time, such as the hook, audience, visual style or CTA.",
+    "record_rule": "Record the results and use them to inform future recommendations.",
+    "causation_rule": "Do not claim causation or statistical significance when the evidence does not support it."
+  },
+
+  "compliance_and_trust": {
+    "overarching_rule": "All creative must be truthful, transparent and compliant with applicable laws and platform rules.",
+    "prohibited": [
+      "Fake testimonials",
+      "Fabricated reviews",
+      "Invented statistics",
+      "Unsupported health or performance claims",
+      "Guaranteed athletic results",
+      "Misleading comparisons",
+      "Unlicensed music or footage",
+      "Unauthorised use of people's likenesses or voices",
+      "Deceptive CTAs and fake urgency"
+    ],
+    "required": [
+      "Respect relevant privacy, consent and advertising requirements",
+      "Clearly distinguish fictional demonstrations from real customer experiences where necessary"
+    ],
+    "medical_rule": "Do not imply that Vaylo diagnoses, treats or prevents medical conditions unless the product has the necessary substantiation and authorisation."
+  }
+}

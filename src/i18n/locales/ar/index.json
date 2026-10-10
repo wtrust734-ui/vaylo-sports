@@ -72,6 +72,8 @@
       "pbsDesc": "كل أرقامك في قائمة واحدة",
       "formAnalysis": "تحليل الأداء الفني",
       "formAnalysisDesc": "راجع تقنيتك",
+      "miniGames": "ألعاب مصغرة",
+      "miniGamesDesc": "ألعاب رد الفعل والذاكرة والدقة",
       "arOverlay": "طبقة الواقع المعزز",
       "arOverlayDesc": "مقاييس حية أثناء التدريب"
     },
@@ -96,7 +98,14 @@
       "goals": "الأهداف",
       "goalsDesc": "ما تعمل عليه",
       "compare": "مقارنة",
-      "compareDesc": "أنت مقابل نخبة الرياضيين"
+      "compareDesc": "أنت مقابل نخبة الرياضيين",
+      "groupTrophyRoom": "غرفة الجوائز",
+      "achievements": "الإنجازات",
+      "achievementsDesc": "ميداليات للاستمرارية والإتقان",
+      "badges": "الشارات",
+      "badgesDesc": "تُكتسب من مشتريات السوق",
+      "challenges": "التحديات",
+      "challengesDesc": "انضم وأنشئ تحديات وتحديات برعاية"
     },
     "recover": {
       "title": "استشفاء",

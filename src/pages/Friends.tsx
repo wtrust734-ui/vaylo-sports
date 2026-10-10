@@ -12,7 +12,6 @@ import {
   Share2,
   X,
 } from "lucide-react";
-import { formatDate } from "@/i18n/format";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,7 +71,7 @@ const since = (iso: string | null) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return formatDate(d, { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 };
 
 const firstLetter = (name: string) => (name.trim().charAt(0) || "A").toUpperCase();

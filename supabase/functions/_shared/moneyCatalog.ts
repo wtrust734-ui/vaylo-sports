@@ -204,10 +204,8 @@ export const LEGACY_CREDIT_PACKS: CreditPack[] = [
 export const FEATURE_PRODUCTS: Record<string, string> = {
   "archetype": "archetype_view",
   "cross_sport": "cross_sport_unlock",
-  "form_analysis": "form_analysis_unlock",
   "injury_management": "injury_management_unlock",
-  "mental_gym": "mental_gym_unlock",
-  "nutrition_pack": "nutrition_pack_unlock"
+  "mental_gym": "mental_gym_unlock"
 };
 
 /** Product id → coins granted (base + bonus), including the first-purchase bundle. */

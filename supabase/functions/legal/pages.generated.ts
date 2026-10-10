@@ -633,18 +633,6 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     not run third-party advertising or cross-app tracking SDKs, and there is no
     advertising identifier in this app.
   </p>
-  <p>
-    If something in the app fails, the app itself sends us a short diagnostic
-    report: the type of failure, its message, the screen it happened on, the app
-    version and your device's browser or app string. We use them to fix the app.
-    They contain no health or fitness data, no message contents, no photographs
-    and no sign-in tokens, and anything that looks like a token, an email address
-    or a long identifier is removed on your device before the report is sent.
-    They are not linked to your account in any way, so we cannot pick out yours —
-    there is nothing in them that identifies you. They are stored by the same
-    hosting provider as the rest of the service, are never sold or shared, and
-    are not used to build a profile about you.
-  </p>
 
   <h2 id="health">2. Health and fitness data</h2>
   <p>
@@ -2512,7 +2500,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>Vaylo Sports</span></div>
 
   <h1>Credits, Subscriptions &amp; Virtual Currency</h1>
-  <p class="meta">Version 1.4 &middot; 9 October 2026</p>
+  <p class="meta">Version 1.3 &middot; 4 October 2026</p>
   <p class="meta">Operated by Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <div class="warn">
@@ -2584,44 +2572,34 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
       <tbody>
         <tr><td>Streak shield</td><td>3</td></tr>
         <tr><td>Vaylo Sports Coach message</td><td>8</td></tr>
-        <tr><td>Nutrition plan (per week)</td><td>15</td></tr>
+        <tr><td>Nutrition plan (per week)</td><td>8</td></tr>
         <tr><td>Development trajectory</td><td>8</td></tr>
         <tr><td>Weekly coach review</td><td>10</td></tr>
         <tr><td>Athlete archetype</td><td>10</td></tr>
-        <tr><td>AI plan edit (one week)</td><td>10</td></tr>
         <tr><td>AI calorie scan</td><td>12</td></tr>
         <tr><td>Tactical analysis</td><td>12</td></tr>
+        <tr><td>VPR Elite Comparison</td><td>2</td></tr>
+        <tr><td>Training Insight (AI)</td><td>8</td></tr>
+        <tr><td>AI Plan Edit (one week)</td><td>10</td></tr>
+        <tr><td>AI Plan Edit (whole plan)</td><td>20</td></tr>
         <tr><td>Cross-sport analysis</td><td>15</td></tr>
-        <tr><td>AI Form Analysis (per photo)</td><td>15</td></tr>
+        <tr><td>AI Form Analysis (per analysis)</td><td>15</td></tr>
         <tr><td>AI training plan (per week)</td><td>20</td></tr>
-        <tr><td>AI plan edit (whole plan)</td><td>20</td></tr>
         <tr><td>Injury management unlock</td><td>25</td></tr>
         <tr><td>Learning Hub unlock</td><td>25</td></tr>
-        <tr><td>Nutrition pack unlock</td><td>30</td></tr>
         <tr><td>Mental Gym unlock</td><td>30</td></tr>
         <tr><td>AI video form analysis</td><td>45</td></tr>
-        <tr><td>Form analysis unlock (unlimited photos)</td><td>110</td></tr>
         <tr><td>Limiter fix plan</td><td>120</td></tr>
       </tbody>
     </table>
     <p>
       The items that cost the most are the ones that run a model: a coach
-      message, a weekly review, a training week, a nutrition plan (written week
-      by week from your goal and targets), a calorie scan and a tactical
+      message, a weekly review, a training week, a calorie scan and a tactical
       breakdown all call an external AI service, and a video form analysis calls
       one that returns the most data. We price those to cover what the service
       costs us and to keep the app running, which is why they are not the same
       number as the cheaper in-app features above.
     </p>
-  <p>
-    <strong>Changing a training plan you already own.</strong> Asking the AI coach to
-    rewrite part of a plan costs 10 credits for one week (or one session inside it) and
-    20 credits for the whole plan, and it is charged per edit. Editing a session's
-    title or length by hand, marking a week as a holiday, and skipping a session are
-    free and stay free &mdash; those are done on your device with no AI call behind them,
-    and nothing you can do with a tap will ever cost credits. If an AI edit fails to
-    produce a usable result, the credits are returned automatically.
-  </p>
   <p>
     The items labelled <em>unlock</em> are one-off permanent unlocks: you pay once and
     keep access to that feature. Everything else is charged each time you use it.

@@ -35,7 +35,6 @@
 // The DB glue that gathers `RecoveryFacts` lives in `recoveryPlanning.ts`.
 // ============================================================================
 
-import { formatNumber } from "@/i18n/locale";
 import type { LifeEvent } from "./lifeEvents";
 import { loadTotals } from "./sessionLoad";
 import { daysBetween as canonicalDaysBetween } from "./dates";
@@ -398,12 +397,7 @@ export function hardConstraintFor(
 
 const evidence = (text: string, source: Evidence["source"]): Evidence => ({ text, source });
 
-// This was `toLocaleString("en")`, which printed English thousands separators
-// (1,200) in all twelve languages. `formatNumber` follows the language chosen in
-// Settings — a German athlete reads 1.200 in the sentence that explains their
-// load. It comes from `src/i18n/locale`, which imports no React, so this stays a
-// pure decision module.
-const fmt = (n: number): string => formatNumber(Math.round(n));
+const fmt = (n: number): string => Math.round(n).toLocaleString("en");
 
 /**
  * What should happen to one session, and why.

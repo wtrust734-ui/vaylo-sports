@@ -72,6 +72,8 @@
       "pbsDesc": "すべての自己ベストを一覧で",
       "formAnalysis": "フォーム分析",
       "formAnalysisDesc": "自分のフォームをチェック",
+      "miniGames": "ミニゲーム",
+      "miniGamesDesc": "反応・記憶・正確性のゲーム",
       "arOverlay": "AR オーバーレイ",
       "arOverlayDesc": "トレーニング中のリアルタイム指標"
     },
@@ -96,7 +98,14 @@
       "goals": "目標",
       "goalsDesc": "取り組んでいること",
       "compare": "比較",
-      "compareDesc": "あなた vs エリートプロフィール"
+      "compareDesc": "あなた vs エリートプロフィール",
+      "groupTrophyRoom": "トロフィールーム",
+      "achievements": "実績",
+      "achievementsDesc": "継続と熟達のメダル",
+      "badges": "バッジ",
+      "badgesDesc": "マーケット購入で獲得",
+      "challenges": "チャレンジ",
+      "challengesDesc": "参加・作成・スポンサー付きチャレンジ"
     },
     "recover": {
       "title": "リカバリー",

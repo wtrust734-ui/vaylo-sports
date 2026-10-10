@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { recordHealthConsent } from "@/lib/consent";
-import { formatShortDate } from "@/i18n/format";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -383,9 +382,7 @@ const Recovery = () => {
     const logs = [...hrvHistory].reverse().filter(l => l.hrv !== null);
     const bMap = new Map(baselines.map(b => [b.date, b.hrv_7day_avg]));
     return logs.map(l => ({
-      // Was `toLocaleDateString("en", …)`: the axis was pinned to English, so a
-      // German or Arabic athlete read English month names under their own chart.
-      date: formatShortDate(l.log_date),
+      date: new Date(l.log_date).toLocaleDateString("en", { month: "short", day: "numeric" }),
       hrv: l.hrv,
       baseline: bMap.get(l.log_date) || null,
     }));

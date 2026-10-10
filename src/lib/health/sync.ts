@@ -11,15 +11,9 @@
 //
 // Privacy: no health values are logged; consent state is a version + boolean,
 // never data.
-//
-// Consent gates the read at the ENGINE, not only at the button that calls it
-// (runHealthSync refuses to pull without it). The screen was the only gate
-// before, which makes a button the whole protection for a permission the
-// athlete may have taken back.
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import {
   bridgeCheckPermissions,
   bridgeRequestPermissions,
@@ -78,13 +72,9 @@ function writeConsent(userId: string, connected: boolean, version: number) {
 
 export async function saveConnectionToServer(userId: string, connected: boolean): Promise<void> {
   try {
-    const { error } = await supabase
+    await supabase
       .from("health_sync_state")
       .upsert({ user_id: userId, connected, updated_at: new Date().toISOString() });
-    // Non-fatal (the connection itself is device-local), but not silent: a
-    // server row that never updates is how a second device keeps syncing after
-    // this one disconnected.
-    readFailed(error, "your connection status", { quiet: true });
   } catch {
     // Non-fatal: connection is device-local; server row is bookkeeping only.
   }
@@ -108,7 +98,7 @@ export async function disconnectHealthConnect(userId: string): Promise<void> {
     /* private mode */
   }
   try {
-    const { error } = await supabase
+    await supabase
       .from("health_sync_state")
       .upsert({
         user_id: userId,
@@ -118,7 +108,6 @@ export async function disconnectHealthConnect(userId: string): Promise<void> {
         synced_workout_count: 0,
         updated_at: new Date().toISOString(),
       });
-    readFailed(error, "your connection status", { quiet: true });
   } catch {
     // Local state is already cleared, which is the side that gates syncing.
   }
@@ -127,15 +116,11 @@ export async function disconnectHealthConnect(userId: string): Promise<void> {
 /** Server row backfills the last-sync label on new devices. */
 export async function fetchServerSyncState(userId: string): Promise<StoredHealthState> {
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("health_sync_state")
       .select("last_sync_at, last_incremental_cursor")
       .eq("user_id", userId)
       .maybeSingle();
-    // Quiet: this backfills a "last synced" label on a new device, and the local
-    // state below is the fallback either way. Logged so a server row that is
-    // unreadable is not mistaken for one that does not exist.
-    readFailed(error, "your sync history", { quiet: true });
     if (data) {
       return {
         lastSyncAt: data.last_sync_at ?? null,
@@ -214,80 +199,9 @@ export async function connectHealthConnect(userId: string): Promise<ConnectOutco
 
 export interface SyncOutcome {
   ok: boolean;
-  /** Rows that actually LANDED, not rows that were read out of Health Connect. */
   workouts: number;
   samples: number;
   error?: string;
-  /**
-   * Present when `error === "permission_partial"`: the Health Connect reads the
-   * athlete has not granted, so the screen can name them instead of showing one
-   * generic sentence. Empty when the plugin could not say which.
-   */
-  missing?: string[];
-}
-
-/**
- * What a thrown bridge message means.
- *
- * `permission_revoked` (exact string) is a genuine revocation: Health Connect no
- * longer grants what the athlete consented to, so stored consent is cleared and
- * the data already imported is kept.
- *
- * `permission_partial` is the different outcome the Android plugin reports when
- * it holds a strict SUBSET of the catalog. It is not a revocation — the athlete
- * said yes to most of it — so consent stays, nothing is cleared, and the reads
- * that are missing travel back to the screen. Before the plugin distinguished
- * the two, a 5-of-6 grant walked past its all-or-nothing check, threw on the
- * first ungranted read, and came back as "permissions were revoked. Reconnect to
- * resume syncing.": an athlete who had just granted five permissions was told
- * they had revoked access, and the stored consent was flipped off.
- *
- * The missing reads may arrive as JSON (`permission_partial:["steps"]`) or as a
- * plain list (`permission_partial:steps,sleep`). Both are accepted; an
- * unparseable payload still counts as partial, just without names.
- *
- * BOTH fields are read, and that is deliberate. This app's one-argument rejects
- * put the code in the message (`call.reject("permission_revoked")`), while the
- * two-argument form that the partial case needs — because it also carries the
- * list — puts the code in `code` and keeps the message for the payload. Reading
- * only `.message` looked at the human sentence and never saw the marker, so a
- * partial grant fell through to `sync_failed` and the athlete was told only that
- * a sync did not complete.
- */
-export function permissionOutcome(error: unknown): { kind: "revoked" | "partial" | null; missing: string[] } {
-  const e = (error ?? {}) as { message?: unknown; code?: unknown };
-  const message = typeof e.message === "string" ? e.message : "";
-  const code = typeof e.code === "string" ? e.code : "";
-
-  if (code === "permission_revoked" || message === "permission_revoked") {
-    return { kind: "revoked", missing: [] };
-  }
-
-  // The marker may sit in the message (the one-argument form this app used
-  // first) or in the code (the current two-argument form). The LIST, when there
-  // is one, always follows the marker in the field that carries it — parsing a
-  // field that does not contain the marker is how "Missing Health Connect
-  // permissions: steps, sleep session" became the permission name "nnect
-  // permissions: steps".
-  const MARKER = "permission_partial";
-  const marked = message.includes(MARKER) ? message : "";
-  if (!marked && !code.includes(MARKER)) return { kind: null, missing: [] };
-
-  const raw = marked.slice(marked.indexOf(MARKER) + MARKER.length).replace(/^[:=]\s*/, "").trim();
-  if (!raw) return { kind: "partial", missing: [] };
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return { kind: "partial", missing: parsed.filter((p): p is string => typeof p === "string") };
-    }
-  } catch {
-    /* not JSON — fall through to the list form */
-  }
-  return {
-    kind: "partial",
-    missing: raw.split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean),
-  };
 }
 
 /**
@@ -296,19 +210,11 @@ export function permissionOutcome(error: unknown): { kind: "revoked" | "partial"
  * unique at the DB, plus an ON CONFLICT no-op per row.
  */
 export async function runHealthSync(userId: string): Promise<SyncOutcome> {
-  // Consent is checked HERE, not only by the button that calls this. A revoked
-  // consent is a statement about what may be read, so the read has to depend on
-  // it rather than on which screen the athlete happened to reach.
-  if (!readConsent(userId).connected) {
-    return { ok: false, workouts: 0, samples: 0, error: "not_connected" };
-  }
-
   const state = readLocalState(userId);
   let totalWorkouts = 0;
   let totalSamples = 0;
   let cursor = state.cursorMs;
   let hadFailure: string | null = null;
-  let missingPermissions: string[] = [];
 
   try {
     // Paginate through everything pending before touching the cursor, so a
@@ -318,19 +224,12 @@ export async function runHealthSync(userId: string): Promise<SyncOutcome> {
       try {
         batch = await bridgeSyncPull(cursor, 200);
       } catch (e) {
-        const permission = permissionOutcome(e);
-        if (permission.kind === "revoked") {
+        const msg = (e as Error).message;
+        if (msg === "permission_revoked") {
           // Permissions were revoked between syncs: keep data, flip consent off.
           writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION);
           await saveConnectionToServer(userId, false).catch(() => undefined);
           return { ok: false, workouts: totalWorkouts, samples: totalSamples, error: "permission_revoked" };
-        }
-        if (permission.kind === "partial") {
-          // A partial grant is not a revocation: consent stays exactly as the
-          // athlete left it, and the reads that are missing are reported.
-          missingPermissions = permission.missing;
-          hadFailure = "permission_partial";
-          break;
         }
         hadFailure = "sync_failed";
         break;
@@ -371,36 +270,27 @@ export async function runHealthSync(userId: string): Promise<SyncOutcome> {
 
       // Chunked upserts; ON CONFLICT DO UPDATE keeps the freshest copy of a
       // record that changed upstream without duplicating it.
-      //
-      // Counted per CHUNK that landed, not per row that was read. The totals used
-      // to be added AFTER the loops as `rows.length`, so a chunk that failed
-      // still counted every row inside it: the screen reported sessions that were
-      // never stored, and `synced_workout_count` recorded them as synced. A count
-      // that overstates is the same defect as copy that overstates.
       for (let i = 0; i < rows.length; i += 100) {
-        const chunk = rows.slice(i, i + 100);
         const { error } = await supabase
           .from("health_workouts")
-          .upsert(chunk, { onConflict: "user_id,source,source_record_id" });
+          .upsert(rows.slice(i, i + 100), { onConflict: "user_id,source,source_record_id" });
         if (error) {
           hadFailure = "upload_failed";
-          readFailed(error, "your synced workouts", { quiet: true });
           break;
         }
-        totalWorkouts += chunk.length;
       }
       for (let i = 0; i < sampleRows.length; i += 100) {
-        const chunk = sampleRows.slice(i, i + 100);
         const { error } = await supabase
           .from("health_samples")
-          .upsert(chunk, { onConflict: "user_id,source,source_record_id" });
+          .upsert(sampleRows.slice(i, i + 100), { onConflict: "user_id,source,source_record_id" });
         if (error) {
           hadFailure = "upload_failed";
-          readFailed(error, "your synced samples", { quiet: true });
           break;
         }
-        totalSamples += chunk.length;
       }
+
+      totalWorkouts += rows.length;
+      totalSamples += sampleRows.length;
       if (batch.latestCursorMs != null && (cursor == null || batch.latestCursorMs > cursor)) {
         cursor = batch.latestCursorMs;
       }
@@ -415,7 +305,7 @@ export async function runHealthSync(userId: string): Promise<SyncOutcome> {
         cursorMs: cursor,
       };
       writeLocalState(userId, next);
-      const { error: stateError } = await supabase
+      await supabase
         .from("health_sync_state")
         .upsert({
           user_id: userId,
@@ -424,9 +314,6 @@ export async function runHealthSync(userId: string): Promise<SyncOutcome> {
           last_incremental_cursor: next.cursorMs != null ? new Date(next.cursorMs).toISOString() : null,
           synced_workout_count: totalWorkouts,
         });
-      // The local write already happened, so sync still works from this device;
-      // the server row is what a second device reads.
-      readFailed(stateError, "your sync history", { quiet: true });
     }
 
     return {
@@ -434,15 +321,8 @@ export async function runHealthSync(userId: string): Promise<SyncOutcome> {
       workouts: totalWorkouts,
       samples: totalSamples,
       error: hadFailure ?? undefined,
-      missing: missingPermissions.length ? missingPermissions : undefined,
     };
   } catch {
-    return {
-      ok: false,
-      workouts: totalWorkouts,
-      samples: totalSamples,
-      error: "sync_failed",
-      missing: missingPermissions.length ? missingPermissions : undefined,
-    };
+    return { ok: false, workouts: totalWorkouts, samples: totalSamples, error: "sync_failed" };
   }
 }

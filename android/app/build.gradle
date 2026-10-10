@@ -177,35 +177,18 @@ android {
         // permission or plugin change: the plugin set is unchanged (8 plugins,
         // same as 1.2.14), so the WebView bundle is the whole difference.
         //
-        // 21 / 1.2.17 is the plans, nutrition and market release. Training
-        // weeks are generated and edited server-side against a periodisation
-        // schema (generate-plan / edit-plan), the nutrition plan is AI-written
-        // per week and priced against its measured cost, every advertised
-        // unlock is buyable from the Market, and the price book and the
-        // credit-economy model were re-derived together. Also in this build:
-        // the published 13+ rule for holding an account is enforced at
-        // onboarding instead of living only in the legal pages. WebView-only —
-        // no manifest, permission or plugin change.
-        //
-        // 22 / 1.2.18 is the closed-test feedback release, and it exists for one
-        // reason: a closed test where failures never arrive is a test of the
-        // happy path. The app now reports its own JavaScript failures — an
-        // uncaught error, an unhandled rejection, a React render error — to this
-        // project's own backend, where they are grouped one row per failure per
-        // build and triaged at /admin/errors. It is deliberately NOT a crash SDK:
-        // the published advertising and cookie documents promise there is no
-        // analytics or error-reporting SDK, and a first-party reporter keeps that
-        // promise true. Tokens, email addresses, URL query strings, long
-        // identifier-like runs and health data are stripped on the device before
-        // a report is sent, and a report carries no athlete identifier at all.
-        // Native crashes — Kotlin, or the WebView process being killed — cannot
-        // reach JavaScript and stay with Play Console's Android vitals. The
-        // published privacy policy now describes these reports. WebView-only —
-        // no manifest, permission or plugin change.
+        // 23 / 1.2.19 is the shop-and-nutrition release. The Market has an
+        // Unlocks tab that buys every one-off unlock where it is listed (and
+        // opens the feature straight after purchase), Nutrition shows for
+        // every sport family with per-use scan/plan prices read live and a
+        // personalised meal verdict on every scan, the video-analysis quota
+        // banner quotes the real 45-credit price, and the lock screens say
+        // Unlimited instead of the retired Premium plan. No manifest,
+        // permission or plugin change — WebView-only.
         //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 22
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.18"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 23
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.19"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

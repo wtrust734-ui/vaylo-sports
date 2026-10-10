@@ -2,7 +2,6 @@
 // and handles permanent (lifetime) ownership.
 
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import {
   BUILT_IN_EVENT_PACKS,
   DESIGNED_FOR,
@@ -79,10 +78,7 @@ export async function loadEventPacks(): Promise<EventPack[]> {
   for (const p of BUILT_IN_EVENT_PACKS) byId.set(p.id, p);
 
   try {
-    const { data, error } = await supabase.from("event_packs").select("*");
-    // Admin rows override the built-in catalog. Failed and read as empty, the
-    // screen silently shows the built-in packs and prices instead.
-    readFailed(error, "the event pack catalogue", { quiet: true });
+    const { data } = await supabase.from("event_packs").select("*");
     for (const row of ((data || []) as unknown as AdminRow[])) {
       byId.set(row.pack_id, mergeRow(byId.get(row.pack_id) ?? null, row));
     }
@@ -97,15 +93,10 @@ export async function loadEventPacks(): Promise<EventPack[]> {
 export async function loadOwnedPackIds(): Promise<string[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("event_pack_ownership")
     .select("pack_id")
     .eq("user_id", user.id);
-  // Owned packs the athlete already has are what this returns; empty after a
-  // failed read re-offers them as unbought. The claim itself is guarded on the
-  // server (one ownership row per pack), so this is a display fault, not a
-  // second charge — but it is a display fault the athlete can act on.
-  readFailed(error, "the packs you own", { quiet: true });
   return (data || []).map((r) => r.pack_id);
 }
 

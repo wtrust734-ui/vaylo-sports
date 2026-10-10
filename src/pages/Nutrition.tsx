@@ -2,31 +2,12 @@ import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { localDateKey } from "@/lib/dates";
 import { motion, useInView } from "framer-motion";
-import { Droplets, Plus, Trash2, Zap, Camera, FileText, X, AlertTriangle, Upload, Loader2, Lock, Check, Sparkles, ChevronDown, ChevronRight, Wallet } from "lucide-react";
+import { Droplets, ScanLine, UtensilsCrossed, Plus, Trash2, Zap, Camera, FileText, X, AlertTriangle, Upload, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSubscription } from "@/contexts/SubscriptionContext";
-import { useUnlockFeature } from "@/hooks/useUnlockFeature";
-import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { readFailed } from "@/lib/dbRead";
-import { useNavigate } from "react-router-dom";
-import { creditCost } from "@/lib/credits";
-// The AI plan path: the server charges and refunds (see the function's own
-// header), so nothing here spends credits — what lives here is the request
-// check and the defensive read of the answer.
-import {
-  DAY_NAMES,
-  newNutritionPlanRequestId,
-  parseGeneratedPlan,
-  planHeader,
-  dayTotals,
-  planTotals,
-  validatePlanRequest,
-  type GeneratedPlan,
-  type PlanWeek,
-  type NutritionGoal,
-} from "@/lib/nutritionPlan";
+import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { dietPlanRefusalReason, isAdultDob } from "@/lib/age";
 import { DISCLAIMERS, disclaimerShort } from "@/config/disclaimers";
@@ -34,42 +15,12 @@ import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { capturePhoto } from "@/lib/camera";
 import { isNative } from "@/lib/platform";
 import { hapticImpact } from "@/lib/haptics";
-import type { Json, Tables } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 
 const Nutrition = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const { hasFeature, refresh: refreshEntitlements } = useSubscription();
-  const unlock = useUnlockFeature();
-  // The Nutrition Pack is the one unlock this screen owns: it makes the calorie
-  // scan free and removes the per-week charge from plans. It was priced in the
-  // Market's cost list and had NO purchase call anywhere in the app — this is
-  // the screen where an athlete discovers it, so this is where it is bought.
-  const hasNutritionPack = hasFeature("nutrition_pack");
-  const [unlockingPack, setUnlockingPack] = useState(false);
-  const packPrice = creditCost("nutrition_pack_unlock");
-
-  const buyNutritionPack = async () => {
-    if (!user) return;
-    setUnlockingPack(true);
-    try {
-      const res = await unlock("nutrition_pack");
-      if (res.status === "failed") {
-        hapticWarning();
-        toast({ title: "Couldn't unlock Nutrition Pack", description: res.error, variant: "destructive" });
-        return;
-      }
-      hapticSuccess();
-      await Promise.all([refreshEntitlements(), refreshProfile()]);
-      toast({
-        title: "Nutrition Pack unlocked",
-        description: "Calorie scans are free from now on, and plans no longer charge per week.",
-      });
-    } finally {
-      setUnlockingPack(false);
-    }
-  };
+  const spendWithTopUp = useSpendWithTopUp();
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(3000);
   const [showWaterGoalEdit, setShowWaterGoalEdit] = useState(false);
@@ -87,24 +38,15 @@ const Nutrition = () => {
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [plans, setPlans] = useState<Tables<"nutrition_plans">[]>([]);
   const [planTitle, setPlanTitle] = useState("");
-  const [planGoal, setPlanGoal] = useState<NutritionGoal>("Maintain");
-  // Targets start BLANK on purpose: blank means "the AI sets them from your goal
-  // and your data", which is the difference between a plan and a spreadsheet.
-  const [planCalories, setPlanCalories] = useState("");
-  const [planProtein, setPlanProtein] = useState("");
-  const [planCarbs, setPlanCarbs] = useState("");
-  const [planFat, setPlanFat] = useState("");
-  const [planNotes, setPlanNotes] = useState("");
+  const [planGoal, setPlanGoal] = useState("Maintain");
+  const [planCalories, setPlanCalories] = useState("2200");
+  const [planProtein, setPlanProtein] = useState("150");
+  const [planCarbs, setPlanCarbs] = useState("250");
+  const [planFat, setPlanFat] = useState("70");
   const [planWeeks, setPlanWeeks] = useState("4");
-  const [generating, setGenerating] = useState(false);
-  const [planError, setPlanError] = useState<{ message: string; topUp?: boolean } | null>(null);
-  const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null);
-  const [expandedPlanWeek, setExpandedPlanWeek] = useState<number | null>(null);
-  /** Which stored plan is expanded. One state for fresh and stored plans alike. */
-  const [expandedStoredPlan, setExpandedStoredPlan] = useState<string | null>(null);
 
   const [showScan, setShowScan] = useState(false);
-  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string } | null>(null);
+  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string; verdict?: "fuel" | "light" | "treat"; verdict_reason?: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   // One in-flight destructive mutation at a time; a double-tap on a meal's
@@ -135,39 +77,27 @@ const Nutrition = () => {
 
   useEffect(() => { if (user) { fetchWater(); fetchMeals(); fetchSettings(); fetchPlans(); } }, [user]);
 
-  // Every read below is a claim about the athlete once it renders: "no goal
-  // saved", "nothing drunk today", "no meals logged", "no plans". A read that
-  // failed says none of that, so each one reports the failure and leaves the
-  // number it already had rather than replacing it with a zero.
   const fetchSettings = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle();
-    // Quiet: the goal has a sane default and this refresh is not something the
-    // athlete is waiting on. Logged, not announced.
-    if (readFailed(error, "your hydration goal", { quiet: true })) return;
+    const { data } = await supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle();
     if (data?.water_goal_ml) { setWaterGoal(data.water_goal_ml); setNewWaterGoal(String(data.water_goal_ml)); }
   };
 
   const fetchWater = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
-    if (readFailed(error, "today's water log")) return;
+    const { data } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
     setWaterMl((data || []).reduce((sum, r) => sum + r.amount_ml, 0));
   };
 
   const fetchMeals = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
-    if (readFailed(error, "today's meals")) return;
+    const { data } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
     setMeals(data || []);
   };
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    // A plan can be one the athlete paid for week by week; an unreadable list
-    // must not read as "you have no plans".
-    if (readFailed(error, "your nutrition plans")) return;
+    const { data } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     setPlans(data || []);
   };
 
@@ -227,8 +157,9 @@ const Nutrition = () => {
   // AI Calorie Scan with image
   /** Shared by the web file input and the native camera. */
   const runScan = async (base64: string) => {
-    // The server verifies Nutrition Pack ownership, charges credits and refunds
-    // on failure — nothing is charged or validated from the client.
+    // Nutrition is a standard tab: every scan is charged per use. The server
+    // charges the credits and refunds on failure — nothing is charged or
+    // validated from the client.
     setScanning(true);
     setScanResult(null);
     try {
@@ -239,18 +170,11 @@ const Nutrition = () => {
       const payload = (data ?? {}) as { result?: string; cost?: number; balance?: number | null };
       try {
         const parsed = JSON.parse(payload.result ?? "");
-        setScanResult(parsed && typeof parsed === "object" ? parsed : { name: "Scanned meal", description: payload.result });
+        setScanResult(parsed);
       } catch {
-        // What came back is not JSON, so there are no numbers in it.
-        //
-        // This used to invent a meal — 300 kcal, 15g protein, 35g carbs, 12g fat
-        // — and offer it for logging. Those are not estimates, they are a meal
-        // nobody ate, and the athlete would have logged them as their own. The
-        // text is shown, the numbers are em dashes, and the athlete can type
-        // them in themselves or take another photo.
-        setScanResult({ name: "Scanned meal", description: payload.result });
+        setScanResult({ name: "Scanned Meal", calories: 300, protein: 15, carbs: 35, fat: 12, description: payload.result });
       }
-      toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Free with Nutrition Pack." });
+      toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Included with Unlimited." });
       await refreshProfile();
     } catch (err) {
       toast({ title: "Scan failed", description: err.message, variant: "destructive" });
@@ -313,18 +237,6 @@ const Nutrition = () => {
     else fileInputRef.current?.click();
   };
 
-  /**
-   * A number from a scan, or an em dash. The model answers `null` for anything
-   * it could not read, and React renders `null` as nothing at all.
-   */
-  const scanValue = (value: unknown, unit = ""): string =>
-    typeof value === "number" && Number.isFinite(value) ? `${value}${unit}` : "—";
-
-  /** True when the scan produced at least one real number to log. */
-  const hasScanNumbers = !!scanResult &&
-    [scanResult.calories, scanResult.protein, scanResult.carbs, scanResult.fat]
-      .some((v) => typeof v === "number" && Number.isFinite(v));
-
   const addScanResult = async () => {
     if (!user || !scanResult) return;
     const { error } = await supabase.from("meal_logs").insert({
@@ -339,27 +251,8 @@ const Nutrition = () => {
     toast({ title: "Scanned meal logged!" });
   };
 
-  /** A blank optional target means "you choose", not zero. */
-  const optTarget = (value: string) => {
-    const n = parseInt(value, 10);
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
-
-  const planWeeksNum = Math.max(1, Math.min(12, parseInt(planWeeks, 10) || 4));
-  const planCost = hasNutritionPack ? 0 : creditCost("nutrition_plan_week", planWeeksNum);
-
-  /**
-   * Ask the server to write the plan.
-   *
-   * The charge happens there, before the model call, and is refunded on every
-   * failure path — so this function never spends a credit itself and never has
-   * to roll one back. What it owns is the honest reporting of the three ways
-   * this can end: a plan, a refusal the athlete can act on, or a save failure
-   * that must not be silently swallowed.
-   */
-  const generateNutritionPlan = async () => {
-    if (!user || !profile || generating) return;
-
+  const createNutritionPlan = async () => {
+    if (!user || !profile) return;
     // One check, shared with every other entry point (see dietPlanRefusalReason).
     //
     // This used to allow an UNKNOWN date of birth through: `age !== null &&
@@ -372,113 +265,47 @@ const Nutrition = () => {
       toast({ title: "Nutrition plans are 18+", description: refusal, variant: "destructive" });
       return;
     }
+    const weeks = Math.max(1, Math.min(52, parseInt(planWeeks, 10) || 4));
+    // Nutrition is a standard tab, not a purchase: every plan charges per week
+    // for everyone. No pack, no free pass — the server enforces the same price.
+    const cost = creditCost("nutrition_plan_week", weeks);
 
-    const check = validatePlanRequest({ goal: planGoal, weeks: planWeeksNum });
-    if (!check.ok) {
-      toast({ title: "Check the plan settings", description: check.error, variant: "destructive" });
-      return;
+    // Create the plan FIRST, then charge. If the save fails the athlete loses
+    // nothing; if the charge fails we roll the plan back. Targets are clamped
+    // to physiological/product bounds; invalid input falls back to the
+    // product defaults rather than storing 0 or NaN.
+    const clampTarget = (v: string, min: number, max: number, fallback: number) => {
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+    };
+    const { data: created, error: insertError } = await supabase.from("nutrition_plans").insert({
+      user_id: user.id, title: planTitle || `${planGoal} Plan`, goal: planGoal,
+      calories_target: clampTarget(planCalories, 800, 6000, 2200),
+      protein_target: clampTarget(planProtein, 20, 400, 150),
+      carbs_target: clampTarget(planCarbs, 0, 1200, 250),
+      fat_target: clampTarget(planFat, 10, 300, 70),
+      weeks,
+    }).select("id").single();
+    if (insertError) { toast({ title: "Couldn't save your plan", description: insertError.message, variant: "destructive" }); return; }
+
+    if (cost > 0) {
+      // Insufficient credits open the global top-up sheet; on purchase the same
+      // spend is retried, so the plan (already saved) just completes.
+      const spend = await spendWithTopUp("nutrition_plan_week", { quantity: weeks, reason: `Nutrition plan: ${planTitle || planGoal} (${weeks} weeks)` });
+      if (!spend.success) {
+        if (created?.id) {
+          const { error: rollbackError } = await supabase.from("nutrition_plans").delete().eq("id", created.id);
+          if (rollbackError) console.error("nutrition plan rollback failed:", rollbackError.message);
+        }
+        if (spend.dismissedTopUp) toast({ title: "Not enough credits", description: spendErrorMessage("nutrition_plan_week", spend, weeks), variant: "destructive" });
+        return;
+      }
     }
 
-    setGenerating(true);
-    setPlanError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", {
-        body: {
-          goal: check.goal,
-          weeks: check.weeks,
-          sport: profile.sport ?? "",
-          level: profile.experience_level ?? "",
-          calories_target: optTarget(planCalories),
-          protein_target: optTarget(planProtein),
-          carbs_target: optTarget(planCarbs),
-          fat_target: optTarget(planFat),
-          notes: planNotes.trim().slice(0, 300),
-          userLocale: getAiLocale(),
-          request_id: newNutritionPlanRequestId(),
-        },
-      });
-
-      if (error) {
-        const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
-        const message = await edgeErrorMessage(error);
-        // A 402 carries the exact gap, which the athlete can act on; anything
-        // else is reported as it is.
-        let shortfall: number | null = null;
-        let chargedCost: number | null = null;
-        try {
-          const payload = await (error as { context: Response }).context.json();
-          if (typeof payload?.shortfall === "number") shortfall = payload.shortfall;
-          if (typeof payload?.cost === "number") chargedCost = payload.cost;
-        } catch {
-          /* body unreadable — the message is still usable */
-        }
-        if (status === 402) {
-          setPlanError({
-            message:
-              shortfall !== null
-                ? `You need ${chargedCost ?? planCost} credits for a ${check.weeks}-week plan — ${shortfall} short. Nothing was charged.`
-                : message,
-            topUp: true,
-          });
-          return;
-        }
-        setPlanError({ message });
-        return;
-      }
-
-      const parsed = parseGeneratedPlan((data as { plan?: unknown } | null)?.plan);
-      if (!parsed.plan) {
-        setPlanError({ message: parsed.error ?? "The plan came back unreadable." });
-        return;
-      }
-
-      const header = planHeader(parsed.plan);
-      const first = parsed.plan.weeks[0];
-      const { error: insertError } = await supabase.from("nutrition_plans").insert({
-        user_id: user.id,
-        title: planTitle.trim() || `${check.goal} Plan`,
-        goal: check.goal,
-        // The stored target columns mirror week 1, so an old plan list row and a
-        // new one read the same way.
-        calories_target: first?.calories || header.targets.calories || optTarget(planCalories) || null,
-        protein_target: first?.protein_g || header.targets.protein_g || optTarget(planProtein) || null,
-        carbs_target: first?.carbs_g || header.targets.carbs_g || optTarget(planCarbs) || null,
-        fat_target: first?.fat_g || header.targets.fat_g || optTarget(planFat) || null,
-        weeks: parsed.plan.weeks.length,
-        plan_data: parsed.plan.weeks as unknown as Json,
-      });
-
-      if (insertError) {
-        // The charge has already happened and the plan exists only in memory.
-        // Keeping it on screen is what stops it being lost; regenerating would
-        // charge a second time, and the client cannot refund a charge
-        // (credits_grant is service-role only) — the same contract Training.tsx
-        // holds when a plan the athlete paid for fails to save.
-        setGeneratedPlan(parsed.plan);
-        setExpandedPlanWeek(parsed.plan.weeks[0]?.week ?? null);
-        setPlanError({
-          message:
-            "Your plan was written, but it could not be saved to your account. Do not generate it again — that charges a second time. It is shown below so you keep it; contact support and it will be put right.",
-        });
-        return;
-      }
-
-      setGeneratedPlan(parsed.plan);
-      setExpandedPlanWeek(parsed.plan.weeks[0]?.week ?? null);
-      setPlanTitle("");
-      await refreshProfile();
-      fetchPlans();
-      toast({
-        title: "Nutrition plan ready 🥗",
-        description: planCost ? `${planCost} credits used for ${parsed.plan.weeks.length} weeks.` : "Free with Nutrition Pack.",
-      });
-    } catch (err) {
-      setPlanError({
-        message: `The plan could not be generated (${(err as Error)?.message ?? "unknown error"}). Check your connection and try again — a failed generation is refunded automatically.`,
-      });
-    } finally {
-      setGenerating(false);
-    }
+    await refreshProfile();
+    setShowCreatePlan(false); setPlanTitle("");
+    fetchPlans();
+    toast({ title: "Nutrition plan created! 🥗", description: `${cost} credits used.` });
   };
 
   const totalCalories = meals.reduce((s, m) => s + (m.calories || 0), 0);
@@ -496,44 +323,6 @@ const Nutrition = () => {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="px-5">
-        {/* Nutrition Pack — the paid half of this screen, stated once, at the top,
-            where the athlete meets the calorie scan that costs credits. */}
-        <div className={`mb-4 rounded-2xl border p-4 ${hasNutritionPack ? "border-energy/40 bg-energy/5" : "border-electric-purple/25 bg-gradient-card"}`}>
-          {hasNutritionPack ? (
-            <div className="flex items-start gap-3">
-              <Check size={16} className="mt-0.5 shrink-0 text-energy" />
-              <div>
-                <p className="text-sm font-semibold text-energy">Nutrition Pack active</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                  AI calorie scans are free, and nutrition plans skip the {creditCost("nutrition_plan_week")}-credit weekly charge. Yours permanently.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-start gap-3">
-                <Lock size={16} className="mt-0.5 shrink-0 text-electric-purple" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">Nutrition Pack — {packPrice} credits, once</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                    Makes the calorie scan free on every meal photo and removes the per-week charge from plans.
-                    The scan still works without it, at {creditCost("calorie_scan")} credits a photo.
-                  </p>
-                </div>
-              </div>
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={buyNutritionPack}
-                disabled={unlockingPack}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-              >
-                {unlockingPack ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
-                {unlockingPack ? "Unlocking…" : `Unlock for ${packPrice} credits`}
-              </motion.button>
-            </>
-          )}
-        </div>
-
         {/* Hydration */}
         <div className="bg-card border border-border rounded-2xl p-4 mb-4 hover:border-electric-purple/20 transition-colors duration-300">
           <div className="flex items-center justify-between mb-3">
@@ -595,23 +384,11 @@ const Nutrition = () => {
             }}
             aria-disabled={!canScanCalories}
             className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3 rounded-xl ${canScanCalories ? "bg-gradient-primary text-primary-foreground shadow-glow" : "bg-muted text-muted-foreground"}`}>
-            {/* Prices come from the credit config, not from the copy. The buttons
-                read "2" and "1" here long after the economy repriced the scan
-                to 12 and the plan to 8 — a hard-coded price goes stale silently,
-                and the athlete finds out at the coin slot. */}
-            {/* No brackets around the price.
-
-                `Scan ({cost} <Zap/>)` rendered as "Scan (12 ⚡ )": the inline
-                SVG's own box carries a couple of pixels of slack either side
-                (the glyph does not touch its viewbox), so a closing bracket
-                landed away from the number it encloses and read as a typo. With
-                the glyph between the two words instead, that slack is the gap
-                and there is no bracket to sit wrong. */}
-            <Camera size={18} /> {hasNutritionPack ? "Scan (free)" : <>Scan <Zap size={11} className="inline" />{creditCost("calorie_scan")}</>}
+            <Camera size={18} /> Scan ({creditCost("calorie_scan")} <Zap size={12} className="inline" />)
           </motion.button>
           <motion.button whileTap={{ scale: 0.98 }} onClick={() => setShowCreatePlan(!showCreatePlan)}
             className="flex-1 flex items-center justify-center gap-2 bg-card border border-border text-foreground font-semibold py-3 rounded-xl hover:border-electric-purple/20 transition-colors">
-            <FileText size={18} /> {hasNutritionPack ? "Plan (free)" : <>Plan <Zap size={11} className="inline" />{creditCost("nutrition_plan_week")}/wk</>}
+            <FileText size={18} /> Plan ({creditCost("nutrition_plan_week")} <Zap size={12} className="inline" />/wk)
           </motion.button>
         </div>
 
@@ -653,124 +430,59 @@ const Nutrition = () => {
                 className="bg-gradient-card border border-electric-purple/20 rounded-xl p-4">
                 <h4 className="font-semibold text-sm mb-1">{scanResult.name}</h4>
                 {scanResult.description && <p className="text-xs text-muted-foreground mb-2">{scanResult.description}</p>}
-                {/* Em dashes, not blanks.
-
-                    A photo the model could not read comes back with nulls, and
-                    `${null}` renders as nothing — so the row read "Cal" with no
-                    number, then "P g", "C g", "F g": a unit with nothing in
-                    front of it, which reads as a screen that broke. The one case
-                    where the app has no answer is now the one case where it says
-                    so. */}
-                <div className="grid grid-cols-2 gap-2 mb-3 sm:grid-cols-4">
-                  <div className="text-center"><p className="text-xs text-muted-foreground">Cal</p><p className="text-sm font-bold">{scanValue(scanResult.calories)}</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">P</p><p className="text-sm font-bold">{scanValue(scanResult.protein, "g")}</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">C</p><p className="text-sm font-bold">{scanValue(scanResult.carbs, "g")}</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">F</p><p className="text-sm font-bold">{scanValue(scanResult.fat, "g")}</p></div>
-                </div>
-                {!hasScanNumbers && (
-                  <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
-                    We couldn't estimate this one — nothing was written down as a number. Try a clearer photo, or
-                    log the meal with your own figures.
-                  </p>
+                {scanResult.verdict && (
+                  <div className={`mb-2 rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                    scanResult.verdict === "fuel" ? "bg-emerald-500/10 text-emerald-300"
+                    : scanResult.verdict === "light" ? "bg-amber-500/10 text-amber-300"
+                    : "bg-electric-purple/10 text-electric-purple"
+                  }`}>
+                    <span className="font-bold">
+                      {scanResult.verdict === "fuel" ? "Solid fuel for your training" : scanResult.verdict === "light" ? "A bit light for an athlete" : "A treat, not training fuel"}
+                    </span>
+                    {scanResult.verdict_reason && <span> — {scanResult.verdict_reason}</span>}
+                  </div>
                 )}
-                {/* Disabled when the scan produced no numbers at all.
-
-                    `addScanResult` writes `calories: scanResult.calories || null`
-                    and the same for every macro, so on the unreadable-photo path
-                    the button wrote a meal row called "Scanned Meal" with four
-                    nulls — a day of the log filled with a meal that has no
-                    figures in it, from a screen that had just said it could not
-                    read the photo. The manual "add meal" form below is where an
-                    athlete enters their own numbers, which is what the copy
-                    above points at. */}
-                <motion.button
-                  onClick={addScanResult}
-                  disabled={!hasScanNumbers}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2 rounded-xl text-sm disabled:opacity-50"
-                >
-                  {hasScanNumbers ? "Log This Meal" : "Nothing to log from this photo"}
-                </motion.button>
+                <div className="grid grid-cols-2 gap-2 mb-3 sm:grid-cols-4">
+                  <div className="text-center"><p className="text-xs text-muted-foreground">Cal</p><p className="text-sm font-bold">{scanResult.calories}</p></div>
+                  <div className="text-center"><p className="text-xs text-muted-foreground">P</p><p className="text-sm font-bold">{scanResult.protein}g</p></div>
+                  <div className="text-center"><p className="text-xs text-muted-foreground">C</p><p className="text-sm font-bold">{scanResult.carbs}g</p></div>
+                  <div className="text-center"><p className="text-xs text-muted-foreground">F</p><p className="text-sm font-bold">{scanResult.fat}g</p></div>
+                </div>
+                <motion.button onClick={addScanResult} whileTap={{ scale: 0.98 }} className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2 rounded-xl text-sm">Log This Meal</motion.button>
               </motion.div>
             )}
           </motion.div>
         )}
 
-        {/* Generate Nutrition Plan — written by the model, charged per week */}
+        {/* Create Nutrition Plan */}
         {showCreatePlan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">Generate Nutrition Plan</h3><button onClick={() => { setShowCreatePlan(false); setPlanError(null); }} className="text-muted-foreground" aria-label="Close plan generator"><X size={16} aria-hidden /></button></div>
+            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">Create Nutrition Plan</h3><button onClick={() => setShowCreatePlan(false)} className="text-muted-foreground"><X size={16} /></button></div>
             <p className="text-xs text-muted-foreground flex items-start gap-1"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{disclaimerShort("minor")}</span></p>
             <input type="text" placeholder="Plan name (optional)" value={planTitle} onChange={e => setPlanTitle(e.target.value)} className={inputClass} />
-            <div>
-              <label className="text-[12px] text-muted-foreground">Goal</label>
-              <div className="mt-1 flex gap-1.5">
-                {(["Cut", "Maintain", "Bulk"] as const).map(g => (
-                  <button key={g} onClick={() => setPlanGoal(g)} className={`flex-1 px-2 py-2 rounded-lg text-xs font-semibold border transition-all ${planGoal === g ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>{g}</button>
-                ))}
-              </div>
+            <div className="flex gap-1.5">
+              {["Cut", "Maintain", "Bulk"].map(g => (
+                <button key={g} onClick={() => setPlanGoal(g)} className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-all ${planGoal === g ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>{g}</button>
+              ))}
             </div>
-            <div><label className="text-[12px] text-muted-foreground">Length — {creditCost("nutrition_plan_week")} credits per week (free with Nutrition Pack)</label>
-              <input type="number" min={1} max={12} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} className={inputClass} /></div>
-            {/* Targets are hints, not the plan. Blank (the default) tells the model
-                to set them from the goal and the athlete's own training data. */}
-            <details className="rounded-xl border border-border bg-muted/20 px-3 py-2">
-              <summary className="cursor-pointer text-[12px] font-semibold text-muted-foreground">Targets (optional — leave blank and the AI sets them)</summary>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div><label className="text-[12px] text-muted-foreground">Daily calories</label><input type="number" placeholder="e.g. 2400" value={planCalories} onChange={e => setPlanCalories(e.target.value)} className={inputClass} /></div>
-                <div><label className="text-[12px] text-muted-foreground">Protein (g)</label><input type="number" placeholder="e.g. 160" value={planProtein} onChange={e => setPlanProtein(e.target.value)} className={inputClass} /></div>
-                <div><label className="text-[12px] text-muted-foreground">Carbs (g)</label><input type="number" placeholder="e.g. 280" value={planCarbs} onChange={e => setPlanCarbs(e.target.value)} className={inputClass} /></div>
-                <div><label className="text-[12px] text-muted-foreground">Fat (g)</label><input type="number" placeholder="e.g. 70" value={planFat} onChange={e => setPlanFat(e.target.value)} className={inputClass} /></div>
-              </div>
-              <div className="mt-2">
-                <label className="text-[12px] text-muted-foreground">Anything to avoid or include?</label>
-                <input type="text" placeholder="e.g. no dairy, one vegetarian day" value={planNotes} onChange={e => setPlanNotes(e.target.value)} className={inputClass} />
-              </div>
-            </details>
-
-            {generating && (
-              <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-electric-purple/20 bg-electric-purple/5 px-3 py-2.5">
-                <Loader2 size={16} className="animate-spin text-electric-purple" />
-                <span className="text-[12px] leading-relaxed">Writing your {planWeeksNum}-week plan, meal by meal… Credits are only kept if a plan arrives; a failure is refunded automatically.</span>
-              </div>
-            )}
-
-            {planError && (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-                <p className="text-[12px] font-semibold text-destructive">Plan not created</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{planError.message}</p>
-                {planError.topUp && (
-                  <button onClick={() => navigate("/market")} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-[12px] font-semibold text-primary">
-                    <Wallet size={12} /> Top up in the Market
-                  </button>
-                )}
-              </div>
-            )}
-
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-[12px] text-muted-foreground">Daily Calories</label><input type="number" value={planCalories} onChange={e => setPlanCalories(e.target.value)} className={inputClass} /></div>
+              <div><label className="text-[12px] text-muted-foreground">Protein (g)</label><input type="number" value={planProtein} onChange={e => setPlanProtein(e.target.value)} className={inputClass} /></div>
+              <div><label className="text-[12px] text-muted-foreground">Carbs (g)</label><input type="number" value={planCarbs} onChange={e => setPlanCarbs(e.target.value)} className={inputClass} /></div>
+              <div><label className="text-[12px] text-muted-foreground">Fat (g)</label><input type="number" value={planFat} onChange={e => setPlanFat(e.target.value)} className={inputClass} /></div>
+            </div>
+            <div><label className="text-[12px] text-muted-foreground">Duration (weeks) — {creditCost("nutrition_plan_week")} credits per week</label>
+              <input type="number" min={1} max={52} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} className={inputClass} /></div>
+            {/* The plan stores targets the athlete typed in themselves, so the
+                honest statement is that these are their numbers and the app is
+                not a dietitian. Not a liability clause — a description. */}
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {DISCLAIMERS.nutrition.full}
             </p>
-            <motion.button onClick={generateNutritionPlan} whileTap={{ scale: 0.98 }} disabled={generating}
-              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2 disabled:opacity-60">
-              {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {generating
-                ? "Writing your plan…"
-                : planCost === 0
-                  ? "Generate plan — free with Nutrition Pack"
-                  : `Generate plan (${planCost} credits · ${creditCost("nutrition_plan_week")}/wk)`}
+            <motion.button onClick={createNutritionPlan} whileTap={{ scale: 0.98 }}
+              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
+              Create Plan ({creditCost("nutrition_plan_week", parseInt(planWeeks) || 4)} credits · {creditCost("nutrition_plan_week")}/wk)
             </motion.button>
-            {planCost > 0 && (
-              <p className="text-center text-[12px] text-muted-foreground">{planWeeksNum} weeks × {creditCost("nutrition_plan_week")} credits. Charged only if the plan arrives.</p>
-            )}
-
-            {/* A plan that was generated but not saved stays on screen: it is the
-                only copy the athlete has. */}
-            {generatedPlan && (
-              <div className="space-y-2 pt-1">
-                <p className="text-[12px] font-semibold text-muted-foreground">Your generated plan</p>
-                <PlanBody plan={generatedPlan} expandedWeek={expandedPlanWeek} onToggleWeek={(w) => setExpandedPlanWeek((prev) => (prev === w ? null : w))} />
-              </div>
-            )}
           </motion.div>
         )}
 
@@ -816,161 +528,27 @@ const Nutrition = () => {
           {meals.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No meals logged today.</p>}
         </div>
 
-        {/* Nutrition Plans — the AI plan, and the target-only rows written
-            before it existed. One reader, so neither can be a dead card. */}
+        {/* Nutrition Plans */}
         {plans.length > 0 && (
           <div className="mb-8">
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">Your Plans</h3>
             <div className="space-y-2">
-              {plans.map((plan, i) => {
-                const parsed = parseGeneratedPlan({ weeks: plan.plan_data });
-                const open = expandedStoredPlan === plan.id;
-                return (
-                  <motion.div key={plan.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
-                    className="bg-card border border-border rounded-xl p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-semibold">{plan.title}</h4>
-                        <p className="text-[12px] text-muted-foreground">{plan.goal} · {plan.weeks}w{plan.calories_target ? ` · ${plan.calories_target} kcal` : ""}{plan.protein_target ? ` · ${plan.protein_target}g P` : ""}</p>
-                      </div>
-                      {plan.active && <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold shrink-0">Active</span>}
+              {plans.map((plan, i) => (
+                <motion.div key={plan.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
+                  className="bg-card border border-border rounded-xl p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold">{plan.title}</h4>
+                      <p className="text-[12px] text-muted-foreground">{plan.goal} · {plan.weeks}w · {plan.calories_target} kcal · {plan.protein_target}g P</p>
                     </div>
-                    {parsed.plan ? (
-                      <>
-                        <button type="button" onClick={() => setExpandedStoredPlan(open ? null : plan.id)}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-[12px] font-semibold text-foreground">
-                          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                          {open ? "Hide" : "View"} the plan ({parsed.plan.weeks.length} weeks)
-                        </button>
-                        {open && (
-                          <div className="mt-2">
-                            <PlanBody plan={parsed.plan} expandedWeek={expandedPlanWeek} onToggleWeek={(w) => setExpandedPlanWeek((prev) => (prev === w ? null : w))} />
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="mt-1 text-[12px] text-muted-foreground">Targets only — written before AI meal plans.</p>
-                    )}
-                  </motion.div>
-                );
-              })}
+                    {plan.active && <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">Active</span>}
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
         )}
       </motion.div>
-    </div>
-  );
-};
-
-/**
- * One week of a generated plan: the theme and the daily targets on the header,
- * then the days themselves. Collapsed by default — a 12-week plan expanded is
- * thousands of words, and the athlete reads one week at a time in practice.
- */
-const PlanWeekCard = ({
-  week,
-  expanded,
-  onToggle,
-}: {
-  week: PlanWeek;
-  expanded: boolean;
-  onToggle: () => void;
-}) => (
-  <div className="rounded-xl border border-border bg-card overflow-hidden">
-    <button type="button" onClick={onToggle} aria-expanded={expanded} className="w-full flex items-center gap-2 px-3 py-2.5 text-start">
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-semibold">Week {week.week} · {week.focus}</span>
-        <span className="block text-[12px] text-muted-foreground tabular-nums">
-          {week.calories} kcal · {week.protein_g}g P · {week.carbs_g}g C · {week.fat_g}g F per day
-        </span>
-      </span>
-      {expanded
-        ? <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden />
-        : <ChevronRight size={14} className="shrink-0 text-muted-foreground" aria-hidden />}
-    </button>
-    {expanded && (
-      <div className="border-t border-border divide-y divide-border">
-        {week.days.length === 0 && (
-          <p className="px-3 py-2.5 text-[12px] text-muted-foreground">This week came back without days.</p>
-        )}
-        {week.days.map((day) => {
-          const totals = dayTotals(day);
-          return (
-            <div key={day.day} className="px-3 py-2.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[12px] font-bold uppercase tracking-wider text-electric-purple">
-                  {day.dayName || DAY_NAMES[day.day - 1]}
-                </span>
-                {/* What the meals actually add up to, so the day can be checked
-                    against the week's target at a glance. */}
-                {totals.calories > 0 && (
-                  <span className="text-[12px] tabular-nums text-muted-foreground">{totals.calories} kcal · {totals.protein_g}g P</span>
-                )}
-              </div>
-              {day.meals.length === 0 ? (
-                <p className="mt-1 text-[12px] text-muted-foreground">No meals for this day.</p>
-              ) : (
-                <ul className="mt-1.5 space-y-1.5">
-                  {day.meals.map((meal, i) => (
-                    <li key={`${day.day}-${i}-${meal.name}`} className="rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2">
-                      <span className="block text-[12px] font-semibold">
-                        {meal.slot ? `${meal.slot} · ` : ""}{meal.name}
-                      </span>
-                      {meal.description && (
-                        <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">{meal.description}</span>
-                      )}
-                      <span className="mt-1 block text-[12px] tabular-nums text-muted-foreground">
-                        {meal.calories} kcal · {meal.protein_g}g P · {meal.carbs_g}g C · {meal.fat_g}g F
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {day.notes && <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">{day.notes}</p>}
-            </div>
-          );
-        })}
-      </div>
-    )}
-  </div>
-);
-
-/**
- * The whole plan: a summary the athlete can read without expanding anything,
- * then a collapsible card per week. Used for a freshly generated plan and for
- * one stored in `nutrition_plans.plan_data` — the same code, so the two can
- * never drift apart.
- */
-const PlanBody = ({
-  plan,
-  expandedWeek,
-  onToggleWeek,
-}: {
-  plan: GeneratedPlan;
-  expandedWeek: number | null;
-  onToggleWeek: (week: number) => void;
-}) => {
-  const header = planHeader(plan);
-  const firstWeek = plan.weeks[0];
-  const mealAverage = firstWeek ? planTotals(firstWeek) : null;
-  return (
-    <div className="space-y-2">
-      <div className="rounded-xl border border-electric-purple/20 bg-electric-purple/5 px-3 py-2">
-        <p className="text-[12px] font-semibold tabular-nums">
-          {header.weeks}-week plan · {header.targets.calories} kcal/day · {header.targets.protein_g}g protein/day
-        </p>
-        {plan.summary && (
-          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{plan.summary}</p>
-        )}
-        {mealAverage && mealAverage.calories > 0 && (
-          <p className="mt-1 text-[12px] tabular-nums text-muted-foreground">
-            Week 1's meals add up to ~{mealAverage.calories} kcal/day.
-          </p>
-        )}
-      </div>
-      {plan.weeks.map((w) => (
-        <PlanWeekCard key={w.week} week={w} expanded={expandedWeek === w.week} onToggle={() => onToggleWeek(w.week)} />
-      ))}
     </div>
   );
 };

@@ -72,6 +72,8 @@
       "pbsDesc": "모든 개인 기록을 한 리스트에",
       "formAnalysis": "폼 분석",
       "formAnalysisDesc": "내 기술 확인",
+      "miniGames": "미니 게임",
+      "miniGamesDesc": "반응, 기억, 정확도 게임",
       "arOverlay": "AR 오버레이",
       "arOverlayDesc": "훈련 중 실시간 지표"
     },
@@ -96,7 +98,14 @@
       "goals": "목표",
       "goalsDesc": "노력하고 있는 목표",
       "compare": "비교",
-      "compareDesc": "나 vs 엘리트 프로필"
+      "compareDesc": "나 vs 엘리트 프로필",
+      "groupTrophyRoom": "트로피 룸",
+      "achievements": "업적",
+      "achievementsDesc": "꾸준함과 숙련의 메달",
+      "badges": "뱃지",
+      "badgesDesc": "마켓 구매로 획득",
+      "challenges": "챌린지",
+      "challengesDesc": "참여, 생성 및 스폰서 챌린지"
     },
     "recover": {
       "title": "회복",

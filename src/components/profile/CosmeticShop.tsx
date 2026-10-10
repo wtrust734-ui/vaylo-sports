@@ -15,7 +15,6 @@ import {
 } from "@/lib/cosmetics";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
 import BottomSheet from "@/components/ui/bottom-sheet";
-import { formatNumber } from "@/i18n/format";
 
 interface Props {
   open: boolean;
@@ -88,7 +87,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
         subtitle="Identity only — nothing here changes your training."
         headerRight={
           <span className="flex items-center gap-1 self-center rounded-full border border-energy/30 bg-energy/10 px-2.5 py-1 text-[12px] font-bold text-energy">
-            <Coins size={11} /> {formatNumber(coins)}
+            <Coins size={11} /> {coins.toLocaleString()}
           </span>
         }
         toolbar={
@@ -179,7 +178,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                       <Loader2 size={12} className="animate-spin" />
                     ) : (
                       <>
-                        <Coins size={12} /> {price == null ? "—" : formatNumber(price)}
+                        <Coins size={12} /> {price?.toLocaleString() ?? "—"}
                       </>
                     )}
                   </button>

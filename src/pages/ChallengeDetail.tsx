@@ -7,7 +7,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge, updateChallengeProgress } from "@/lib/scoring";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
 import { toast } from "sonner";
-import { readFailed } from "@/lib/dbRead";
 import type { Tables } from "@/integrations/supabase/types";
 
 type ChallengeRow = Tables<"challenges">;
@@ -33,14 +32,7 @@ const ChallengeDetail = () => {
     // null data with no error = deleted, hidden, or closed — render that as a
     // real "not found" state instead of an eternal spinner.
     setCh(c);
-    const { data: parts, error: partsError } = await supabase.from("challenge_participants").select("user_id,progress,status,completed_at,joined_at").eq("challenge_id", id).order("progress", { ascending: false });
-    // The ranking IS this page, and an empty one has to mean "nobody has logged
-    // anything" rather than "we could not read it". Same error state as the
-    // challenge row failing, whose Try again re-runs the load.
-    if (readFailed(partsError, "the participant list")) {
-      setLoadError("We couldn't load the participant list.");
-      return;
-    }
+    const { data: parts } = await supabase.from("challenge_participants").select("user_id,progress,status,completed_at,joined_at").eq("challenge_id", id).order("progress", { ascending: false });
     const list = parts || [];
     const ids = list.map((p) => p.user_id);
     // Names come from `avatars` (the publicly-readable identity table). Reading

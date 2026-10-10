@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert } from "lucide-react";
 import { fetchAICatalog, runAIDetailed, testAIConnection, type AIFeature, type AIResult } from "@/lib/aiService";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { useAuth } from "@/contexts/AuthContext";
 
 type CatalogEntry = Awaited<ReturnType<typeof fetchAICatalog>>[number];
@@ -27,17 +26,12 @@ const AIDev = () => {
   useEffect(() => {
     if (!user) { setIsAdmin(false); return; }
     (async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("role", "admin")
         .maybeSingle();
-      // Quiet on purpose. A failed read closes this console for everybody,
-      // including the admin who could fix it, and a toast would announce an
-      // admin-only table to every athlete who opened the screen. The log is the
-      // report; the gate stays closed.
-      readFailed(error, "your permissions", { quiet: true });
       setIsAdmin(!!data);
     })();
   }, [user]);

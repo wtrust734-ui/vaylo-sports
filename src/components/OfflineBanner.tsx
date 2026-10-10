@@ -2,12 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, CloudOff, CloudUpload, Loader2, RefreshCw } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  dismissFailures,
   pendingConflicts,
-  pendingFailures,
   resolveConflict,
   subscribeToQueue,
-  type QueuedFailure,
   type QueuedWrite,
 } from "@/lib/offlineQueue";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
@@ -55,27 +52,10 @@ const TONE: Record<SyncTone, string> = {
 const humanField = (field: string) => field.replace(/_/g, " ");
 const humanTable = (table: string) => table.replace(/_/g, " ");
 
-/**
- * Why a change was given up on, in the athlete's terms.
- *
- * The server's own message is shown beside this where there is one: a
- * constraint name is what support will ask for, and paraphrasing it would only
- * lose information. `overflow` has no server message, because no server was
- * involved — the queue filled up on the device.
- */
-const FAILURE_NOTE: Record<QueuedFailure["reason"], string> = {
-  rejected: "the server refused it",
-  row_missing: "it was deleted before it could be sent",
-  overflow: "the device was offline so long that the queue filled up and this was the oldest change",
-};
-
 const OfflineBanner = () => {
   const { user } = useAuth();
   const sync = useSyncStatus(user?.id ?? null);
   const [conflicted, setConflicted] = useState<QueuedWrite[]>(() => pendingConflicts());
-  // Writes the app gave up on. Read here rather than in useSyncStatus because
-  // it is a notice about a specific change, not a state of the connection.
-  const [failed, setFailed] = useState<QueuedFailure[]>(() => pendingFailures());
   const [resolving, setResolving] = useState<string | null>(null);
   // "Synced" is a transient confirmation, not a permanent badge: a status row
   // that never changes is one people stop reading.
@@ -86,17 +66,7 @@ const OfflineBanner = () => {
   // which is the opposite of the confirmation this is for.
   const previousState = useRef<SyncState | null>(null);
 
-  useEffect(
-    () =>
-      subscribeToQueue(() => {
-        setConflicted(pendingConflicts());
-        // Dead letters live in the same module and notify through the same
-        // listener set, so one subscription keeps both counts honest — a second
-        // mechanism would be a second thing to forget to update.
-        setFailed(pendingFailures());
-      }),
-    [],
-  );
+  useEffect(() => subscribeToQueue(() => setConflicted(pendingConflicts())), []);
 
   useEffect(() => {
     const previous = previousState.current;
@@ -110,10 +80,7 @@ const OfflineBanner = () => {
   // Render when there is something to act on or know. Offline alone qualifies:
   // Phase 5 asks for an explicit offline indicator, and with a real write queue
   // and a real snapshot cache, "saved on this device" is true.
-  // A dead letter is its own reason to render: it happens while online, with an
-  // empty queue and a "synced" state, which is precisely when the athlete would
-  // otherwise never find out that a logged session did not land.
-  const visible = syncNeedsAttention(sync.state) || sync.pending > 0 || flashSynced || failed.length > 0;
+  const visible = syncNeedsAttention(sync.state) || sync.pending > 0 || flashSynced;
   if (!visible) return null;
 
   const Icon =
@@ -199,40 +166,7 @@ const OfflineBanner = () => {
           </ul>
         )}
 
-        {failed.length > 0 && (
-          <div className="mx-auto mt-2 max-w-[560px] text-left font-normal">
-            <p className="text-xs font-semibold">
-              {failed.length === 1
-                ? "One change could not be saved"
-                : `${failed.length} changes could not be saved`}
-            </p>
-            <ul className="mt-1 space-y-0.5">
-              {failed.slice(0, 3).map((item) => (
-                <li key={`${item.id}:${item.failedAt}`} className="text-[11px] opacity-90">
-                  {humanTable(item.table)} — {FAILURE_NOTE[item.reason]}
-                  {item.message ? ` (${item.message})` : ""}
-                </li>
-              ))}
-            </ul>
-            {failed.length > 3 && (
-              <p className="mt-0.5 text-[11px] opacity-80">
-                and {failed.length - 3} more
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                dismissFailures();
-                setFailed(pendingFailures());
-              }}
-              className="mt-2 rounded-md border border-current/40 px-2.5 py-1 text-[11px] font-semibold"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {sync.copy.action === "retry" && conflicted.length === 0 && failed.length === 0 && (
+        {sync.copy.action === "retry" && conflicted.length === 0 && (
           <div className="mt-1 flex justify-center">
             <button
               type="button"

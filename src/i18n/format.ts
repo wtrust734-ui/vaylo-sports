@@ -10,13 +10,33 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { activeLocale, resolveLocale } from "./locale";
+/**
+ * Resolve the Intl locale tag to format with.
+ *
+ * Rule: if the device locale's language matches the active Vaylo Sports language,
+ * keep the device's full tag (an en-GB device keeps "22 September", an en-US
+ * device keeps "September 22" — even after choosing English manually).
+ * Otherwise use the bare language code and let Intl pick the region default.
+ */
+function resolveLocale(lang: string): string {
+  try {
+    const nav = typeof navigator !== "undefined" ? navigator.language : undefined;
+    if (nav && nav.toLowerCase().split(/[-_]/)[0] === lang.toLowerCase()) return nav;
+  } catch { /* non-browser env */ }
+  return lang;
+}
 
-// The locale state itself and the number formatter live in ./locale, which
-// imports no React, so that pure decision modules can format a number in the
-// athlete's language without pulling a UI framework into a decision function.
-// Re-exported here so a UI file still needs exactly one import.
-export { formatNumber, getLocale, setFormattingLocale } from "./locale";
+let activeLocale = "en";
+
+/** Sync the formatting locale with i18next. Called by the i18n init. */
+export function setFormattingLocale(lang: string): void {
+  activeLocale = resolveLocale(lang || "en");
+}
+
+/** Current Intl locale tag used by every formatter below. */
+export function getLocale(): string {
+  return activeLocale;
+}
 
 /* ------------------------------- dates ---------------------------------- */
 
@@ -44,26 +64,6 @@ export function formatTime(date: Date | string | number): string {
 /** Date + time in one string, per locale. */
 export function formatDateTime(date: Date | string | number): string {
   return formatDate(date, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-/**
- * The full numeric date and time — the shape a bare `toLocaleString()` produced.
- *
- * The drop-in for that call, so an existing site can be routed through this
- * module without changing what an English reader sees, while gaining the
- * athlete's chosen language: a bare `toLocaleString()` follows the DEVICE
- * locale, which is how an English phone kept printing English dates in a German
- * app. `formatDateTime` above is the shorter form for new copy.
- */
-export function formatDateTimeExact(date: Date | string | number): string {
-  return formatDate(date, {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-  });
 }
 
 /** Weekday + long date for event screens: "Tuesday, 22 September 2026". */
@@ -103,7 +103,10 @@ export function formatRelativeTime(date: Date | string | number, granularity: "d
 /* ------------------------------ numbers --------------------------------- */
 
 /** Locale-aware number: 12,345 / 12.345 per locale. */
-// `formatNumber` is defined in ./locale and re-exported above.
+export function formatNumber(value: number, opts?: Intl.NumberFormatOptions): string {
+  if (!isFinite(value)) return "—";
+  return new Intl.NumberFormat(activeLocale, opts).format(value);
+}
 
 /** Compact form for large counts: 12.3K / 12,3 k per locale. */
 export function formatCompactNumber(value: number): string {

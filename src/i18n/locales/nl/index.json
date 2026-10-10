@@ -72,6 +72,8 @@
       "pbsDesc": "Al je records in één lijst",
       "formAnalysis": "Techniekanalyse",
       "formAnalysisDesc": "Controleer je techniek",
+      "miniGames": "Minigames",
+      "miniGamesDesc": "Reactie-, geheugen- en precisiespellen",
       "arOverlay": "AR-overlay",
       "arOverlayDesc": "Live metrics tijdens het trainen"
     },
@@ -96,7 +98,14 @@
       "goals": "Doelen",
       "goalsDesc": "Waar je naartoe werkt",
       "compare": "Vergelijken",
-      "compareDesc": "Jij vs elite-profielen"
+      "compareDesc": "Jij vs elite-profielen",
+      "groupTrophyRoom": "Trofeekamer",
+      "achievements": "Prestaties",
+      "achievementsDesc": "Medailles voor consistentie en meesterschap",
+      "badges": "Badges",
+      "badgesDesc": "Verdiend met Markt-aankopen",
+      "challenges": "Uitdagingen",
+      "challengesDesc": "Uitdagingen om mee te doen, te maken en gesponsorde"
     },
     "recover": {
       "title": "Herstellen",

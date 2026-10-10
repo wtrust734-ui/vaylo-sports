@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Dumbbell, Timer, Flame, ScanLine, Shuffle, Zap, CalendarRange, ClipboardList } from "lucide-react";
+import { Dumbbell, Timer, Flame, ScanLine, Shuffle, Zap, CalendarRange, ClipboardList, Gamepad2 } from "lucide-react";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
 
@@ -32,6 +32,10 @@ const Train = () => {
       links: [
         { icon: Flame, label: t("hub.train.pbs"), description: t("hub.train.pbsDesc"), path: "/pbs", feature: "training.pbs" },
         { icon: ScanLine, label: t("hub.train.formAnalysis"), description: t("hub.train.formAnalysisDesc"), path: "/form", feature: "training.form" },
+        // The reaction-time, memory and accuracy mini games. They train the
+        // mental side of performance (reaction, peripheral vision, timing),
+        // so they sit with training rather than only under Compete.
+        { icon: Gamepad2, label: t("hub.train.miniGames"), description: t("hub.train.miniGamesDesc"), path: "/arcade", feature: "compete.arcade" },
       ],
     },
   ]);

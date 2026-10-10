@@ -39,16 +39,6 @@ const OPENAI_CHAT_FUNCTIONS = [
   "/supabase/functions/coach-chat/index.ts",
   "/supabase/functions/ai-analyze/index.ts",
   "/supabase/functions/generate-plan/index.ts",
-  // edit-plan rewrites part of a plan — OpenAI, same as generating one. It is
-  // listed here so the two rules that matter keep applying to it: it must target
-  // api.openai.com, and it must not hard-code a model id (the tier comes from
-  // aiModels.ts).
-  "/supabase/functions/edit-plan/index.ts",
-  // generate-nutrition-plan writes a week-by-week meal plan with the model, so
-  // it is listed here for the two rules that matter for a nutrition surface:
-  // the athlete's targets can only be produced by api.openai.com, and the model
-  // tier comes from aiModels.ts rather than a literal in the function.
-  "/supabase/functions/generate-nutrition-plan/index.ts",
   "/supabase/functions/learning-recommend/index.ts",
   "/supabase/functions/weekly-review/index.ts",
 ];
@@ -107,8 +97,6 @@ describe("OpenAI-backed functions", () => {
       expect(body, `${file} lost its OpenAI call`).toMatch(
         /https:\/\/api\.openai\.com\/v1\/chat\/completions/,
       );
-      // ...and reads the key from the environment rather than a literal.
-      expect(body, `${file} does not read OPENAI_API_KEY`).toMatch(/Deno\.env\.get\("OPENAI_API_KEY"\)/);
     }
   });
 

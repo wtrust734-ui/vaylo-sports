@@ -1,29 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, X, Trophy, HeartPulse, Pencil, Apple, Gamepad2 } from "lucide-react";
+import { Plus, X, Trophy, HeartPulse, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import type { FeatureKey } from "@/lib/personalization/features";
 
-// Nutrition and the Arcade are listed here for a reachability reason, not a
-// convenience one.
-//
-// Both live inside a HUB (/recover, /compete), and on a phone the only
-// navigation is the bottom bar plus this sheet — the sidebar that links those
-// hubs is desktop-only. So the two surfaces were unreachable on the platform
-// the app actually ships on: an athlete could not open the calorie scan or the
-// mini-games at all, which is exactly what was reported. This sheet is on every
-// screen, so it is the honest place to put them back.
-//
-// The labels reuse the hub's own keys (hub.recover.nutrition,
-// hub.compete.arcade) rather than adding four new ones, because those exist in
-// every locale already and i18nParity.test.ts holds the files in step.
 const ACTIONS = [
   { icon: Trophy, labelKey: "quickActions.logResult", descKey: "quickActions.logResultDesc", path: "/events", feature: "compete.events" as FeatureKey },
   { icon: HeartPulse, labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery", feature: "recover.recovery" as FeatureKey },
-  { icon: Apple, labelKey: "hub.recover.nutrition", descKey: "hub.recover.nutritionDesc", path: "/nutrition", feature: "recover.nutrition" as FeatureKey },
-  { icon: Gamepad2, labelKey: "hub.compete.arcade", descKey: "hub.compete.arcadeDesc", path: "/arcade", feature: "compete.arcade" as FeatureKey },
   { icon: Pencil, labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr", feature: "perform.vpr" as FeatureKey },
 ] as const;
 
@@ -33,29 +18,6 @@ const QuickActionSheet = () => {
   const [open, setOpen] = useState(false);
   const personalization = usePersonalization();
   const actions = personalization.visible([...ACTIONS]);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const fabRef = useRef<HTMLButtonElement | null>(null);
-
-  // The sheet declares itself a dialog, so it takes on the dialog contract:
-  // Escape closes it, focus lands on the panel when it opens and returns to the
-  // button that opened it. Without that, a keyboard or screen-reader athlete
-  // opened it and was left tabbing through the page underneath.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    panelRef.current?.focus();
-    // Captured now rather than read in the cleanup: by then React may have
-    // re-pointed the ref (the rule exists because that is the normal case), and
-    // focus has to go back to the button that actually opened the sheet.
-    const fab = fabRef.current;
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      fab?.focus();
-    };
-  }, [open]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };
 
@@ -82,16 +44,13 @@ const QuickActionSheet = () => {
 
       <motion.div
         role="dialog"
-        aria-modal={open}
-        tabIndex={-1}
-        ref={panelRef}
         aria-label={t("navigation.quickActions")}
         aria-hidden={!open}
         initial={{ y: 24, opacity: 0 }}
         animate={{ y: open ? 0 : 24, opacity: open ? 1 : 0 }}
         transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
         style={{ pointerEvents: open ? "auto" : "none" }}
-        className={`fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card shadow-card overflow-y-auto max-h-[65vh] sm:bg-card/80 sm:backdrop-blur-2xl p-2 ${open ? "will-transform" : ""}`}
+        className={`fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card shadow-card overflow-hidden sm:bg-card/80 sm:backdrop-blur-2xl p-2 ${open ? "will-transform" : ""}`}
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.07] via-transparent to-transparent" />
         <div className="relative">
@@ -141,7 +100,6 @@ const QuickActionSheet = () => {
         type="button"
         aria-label={open ? t("navigation.closeQuickActions") : t("navigation.openQuickActions")}
         aria-expanded={open}
-        ref={fabRef}
         whileTap={{ scale: 0.97 }}
         onClick={() => setOpen((o) => !o)}
         className="press relative z-20 -mt-2 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary border border-white/15"

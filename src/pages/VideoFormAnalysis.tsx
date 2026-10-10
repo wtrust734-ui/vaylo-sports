@@ -8,12 +8,11 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
-import { formatDate } from "@/i18n/format";
+import { creditCost } from "@/lib/credits";
 
 interface AnalysisResult {
   overall_score: number;
@@ -80,22 +79,18 @@ const VideoFormAnalysis = () => {
   const [lastId, setLastId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [tab, setTab] = useState<"analyse" | "history">("analyse");
-  // "No saved analyses yet" is a claim about the athlete's history; a failed
-  // read must not make it for them.
-  const [historyFailed, setHistoryFailed] = useState(false);
   const [openHistory, setOpenHistory] = useState<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("video_form_analyses")
       .select("id, sport_type, video_name, overall_score, model_used, created_at, result")
       .eq("user_id", user.id)
       .eq("saved", true)
       .order("created_at", { ascending: false })
       .limit(30);
-    setHistoryFailed(readFailed(error, "your saved analyses"));
     setHistory((data || []) as unknown as HistoryRow[]);
   }, [user]);
 
@@ -197,15 +192,6 @@ const VideoFormAnalysis = () => {
 
   return (
     <div className="min-h-screen bg-background pb-10">
-      {historyFailed && (
-        <p
-          role="alert"
-          className="mx-5 mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-[12px] leading-relaxed text-foreground"
-        >
-          We could not load your saved analyses, so History may look empty. This is a loading problem —
-          nothing has been deleted.
-        </p>
-      )}
       {/* Header */}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2">
@@ -237,8 +223,8 @@ const VideoFormAnalysis = () => {
             {isPremium ? <Crown size={14} className="text-amber-400" /> : <Sparkles size={14} className="text-electric-blue" />}
             <span className="text-muted-foreground">
               {isPremium
-                ? "Up to 10 highest-accuracy analyses per month; further analyses cost 12 credits."
-                : "1 Flash analysis per week, then 12 credits per analysis."}
+                ? `Up to 10 highest-accuracy analyses per month; further analyses cost ${creditCost("video_form_analysis")} credits.`
+                : `1 Flash analysis per week, then ${creditCost("video_form_analysis")} credits per analysis.`}
             </span>
             {!isPremium && (
               <button onClick={() => navigate("/market")} className="ml-auto font-semibold text-electric-purple">Upgrade</button>
@@ -394,7 +380,7 @@ const VideoFormAnalysis = () => {
                 <div className="flex-1">
                   <p className="text-sm font-semibold capitalize">{row.sport_type} analysis</p>
                   <p className="text-[12px] text-muted-foreground">
-                    {formatDate(row.created_at)} {row.video_name ? `· ${row.video_name}` : ""}
+                    {new Date(row.created_at).toLocaleDateString()} {row.video_name ? `· ${row.video_name}` : ""}
                   </p>
                 </div>
                 <motion.div animate={{ rotate: openHistory === row.id ? 90 : 0 }}>

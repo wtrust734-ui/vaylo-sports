@@ -239,7 +239,7 @@ export async function spendForUser(
   };
 }
 
-/** True when the user holds a one-off purchase product (e.g. "nutrition_pack"). */
+/** True when the user holds a one-off purchase product (e.g. "injury_management"). */
 export async function userOwnsProduct(userId: string, product: string): Promise<boolean> {
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);

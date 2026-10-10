@@ -115,13 +115,17 @@ const DEPRECATED_PRODUCT_IDS = parseStringArray(monetisationSrc, "DEPRECATED_PRO
 // drifted from economy_config (form_analysis 44 vs 54). The map below is the
 // single place a purchasable entitlement is named; the PRICE always comes from
 // the database (public.credit_cost).
+// Form analysis is per-analysis and nutrition is a standard tab with per-use
+// charges — neither is a one-off entitlement, so neither has a product here.
+// (Flat rates on metered AI calls lose money; the catalogue refuses to sell
+// them. Old `nutrition_pack` / `form_analysis` rows already written stay valid
+// history but grant nothing new: the product ids below are the only ones the
+// server will price.)
 const FEATURE_PRODUCT_ALIASES = {
   archetype: "archetype_view",
   cross_sport: "cross_sport_unlock",
-  form_analysis: "form_analysis_unlock",
   injury_management: "injury_management_unlock",
   mental_gym: "mental_gym_unlock",
-  nutrition_pack: "nutrition_pack_unlock",
 };
 const FEATURE_PRODUCTS = Object.fromEntries(
   Object.entries(FEATURE_PRODUCT_ALIASES).map(([product, key]) => [product, key])

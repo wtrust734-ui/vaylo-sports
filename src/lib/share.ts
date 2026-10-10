@@ -18,7 +18,6 @@
 
 import { isNativeShell, loadPlugin } from "@/lib/platform";
 import { appHref } from "@/lib/routerBase";
-import { readFailed } from "@/lib/dbRead";
 import { supabase } from "@/integrations/supabase/client";
 
 export type ShareResult = "shared" | "copied" | "unsupported";
@@ -243,10 +242,7 @@ export async function myInviteLink(): Promise<string | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
     if (cachedReferralCode) return inviteUrl(cachedReferralCode, user.id);
-    const { data, error } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
-    // Null means "no code yet"; a failed read means the invite link is missing
-    // from a share the athlete has already started.
-    readFailed(error, "your referral code", { quiet: true });
+    const { data } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
     if (!data?.code) return null;
     cachedReferralCode = data.code;
     return inviteUrl(data.code, user.id);

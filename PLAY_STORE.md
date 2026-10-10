@@ -245,18 +245,6 @@ repository:
 | Messages | In-app messages (coach chat, community, DMs) | App functionality |
 | Photos and videos | Photos (profile, avatar), videos (form analysis uploads) | App functionality |
 | App activity | App interactions, other user-generated content | App functionality, analytics? → **no**, there is no analytics SDK |
-| App info and performance | Crash logs, diagnostics (failure reports the app sends about itself) | App functionality |
-
-**The crash-log row is not optional.** Since the closed-testing build, the app
-reports its own JavaScript failures to this project's own backend — the failure
-name and message, the screen, the app version, and the device's user-agent
-string, with tokens, addresses and long identifiers stripped on the device. No
-third-party crash SDK is involved and the published Privacy Policy says so, but
-Play's Data safety form asks about the *data*, not about the vendor, so "Crash
-logs" and "Diagnostics" must be declared. Leaving the declaration out is a
-submission that contradicts the build — see
-`docs/internal-compliance/33-processor-register.md` (P8) and
-the "Technical data" section of `legal/privacy.html`.
 
 **Not collected:**
 

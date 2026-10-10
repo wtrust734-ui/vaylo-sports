@@ -15,11 +15,14 @@ import { hapticSuccess, hapticWarning } from "@/lib/haptics";
  *
  * This screen exists because of one specific complaint, and it is worth writing
  * down so it is not undone: the Market listed a price for every one-off unlock
- * ("Form Analysis 110", "Nutrition Pack 30", "Cross-Sport Analysis 15") in a
- * passive reference list, and there was nothing to press. Some of those unlocks
- * had a purchase button buried inside their own feature; two of them had no
- * purchase call in the app at all. Either way the shop's own list was a page of
+ * ("Mental Gym 30", "Cross-Sport Analysis 15") in a passive reference list,
+ * and there was nothing to press. Either way the shop's own list was a page of
  * prices an athlete could not act on.
+ *
+ * Only permanent one-off entitlements are sold here. Form analysis is per
+ * analysis and nutrition is a standard tab with per-use charges — neither is
+ * an unlock, so neither is listed, and the catalogue refuses to sell flat
+ * rates on metered AI calls.
  *
  * So the rule here is narrow and absolute: every row in this section is
  * buyable from this section. The purchase goes through the same call the feature
@@ -159,8 +162,14 @@ export default function UnlocksSection() {
       await Promise.all([refreshEntitlements(), refreshProfile()]);
       toast({
         title: `${entry.label} unlocked`,
-        description: "Yours permanently — open it whenever you like, on any device you sign in to.",
+        description: "Yours permanently — opening it now.",
       });
+      // Open it straight away: buying something and landing back on the price
+      // list is what made unlocks feel like they had not stuck. The entry
+      // stays in the sidebar and hub under its own tab from here on, and the
+      // entitlement behind it is the user_purchases row, so it restores on
+      // every device and every visit.
+      navigate(entry.route);
     } finally {
       setBuying(null);
     }

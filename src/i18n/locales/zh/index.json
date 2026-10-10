@@ -72,6 +72,8 @@
       "pbsDesc": "所有 PB 一览",
       "formAnalysis": "技术分析",
       "formAnalysisDesc": "检查你的技术",
+      "miniGames": "小游戏",
+      "miniGamesDesc": "反应、记忆与精准度游戏",
       "arOverlay": "AR 叠加层",
       "arOverlayDesc": "训练时的实时指标"
     },
@@ -96,7 +98,14 @@
       "goals": "目标",
       "goalsDesc": "你正在努力的方向",
       "compare": "对比",
-      "compareDesc": "你与精英档案对比"
+      "compareDesc": "你与精英档案对比",
+      "groupTrophyRoom": "奖杯室",
+      "achievements": "成就",
+      "achievementsDesc": "坚持与精通的奖牌",
+      "badges": "徽章",
+      "badgesDesc": "通过市场购买获得",
+      "challenges": "挑战",
+      "challengesDesc": "参与、创建和赞助挑战"
     },
     "recover": {
       "title": "恢复",

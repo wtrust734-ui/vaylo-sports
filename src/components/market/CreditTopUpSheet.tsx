@@ -15,7 +15,6 @@ import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { formatLocalPrice } from "@/lib/creditEconomy";
 import { useToast } from "@/hooks/use-toast";
 import { planCreditTopUp, type CreditPackOffer } from "@/lib/creditTopUp";
-import { formatNumber } from "@/i18n/format";
 import {
   completeTopUp,
   dismissTopUp,
@@ -89,7 +88,7 @@ const CreditTopUpSheet = () => {
     await refreshProfile();
     const wasFree = result.data?.free === true;
     toast({
-      title: `+${formatNumber(offer.total)} credits${wasFree ? " — free" : ""}`,
+      title: `+${offer.total.toLocaleString()} credits${wasFree ? " — free" : ""}`,
       description: wasFree
         ? `Nothing was charged — ${CLOSED_TESTING.label.toLowerCase()}. Pick up right where you left off.`
         : request.reasonLabel ? "Pick up right where you left off." : undefined,
@@ -113,7 +112,7 @@ const CreditTopUpSheet = () => {
       <div className="flex items-center gap-2">
         <Zap size={15} className="shrink-0 text-primary" />
         <span className="font-display text-sm font-bold">
-          {formatNumber(offer.total)} credits
+          {offer.total.toLocaleString()} credits
         </span>
         {offer.bonus > 0 && (
           <span className="rounded-full bg-energy/15 px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-energy">
@@ -133,8 +132,8 @@ const CreditTopUpSheet = () => {
       </div>
       <p className="mt-1.5 text-[12px] text-muted-foreground">
         {kind === "cheapest"
-          ? `Covers your ${formatNumber(request.shortfall)} credit gap${offer.leftover > 0 ? ` with ${formatNumber(offer.leftover)} left over` : ""}.`
-          : `${formatNumber(offer.total)} credits to spend — more credits per dollar.`}
+          ? `Covers your ${request.shortfall.toLocaleString()} credit gap${offer.leftover > 0 ? ` with ${offer.leftover.toLocaleString()} left over` : ""}.`
+          : `${offer.total.toLocaleString()} credits to spend — more credits per dollar.`}
       </p>
     </motion.button>
   );
@@ -165,7 +164,7 @@ const CreditTopUpSheet = () => {
               </div>
               <div>
                 <h3 className="font-display text-base font-bold">
-                  {formatNumber(request.shortfall)} more credits needed
+                  {request.shortfall.toLocaleString()} more credits needed
                 </h3>
                 <p className="text-[12px] leading-relaxed text-muted-foreground">
                   {request.reasonLabel

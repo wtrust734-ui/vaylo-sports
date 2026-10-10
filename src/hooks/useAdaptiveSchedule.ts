@@ -20,8 +20,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { readFailed } from "@/lib/dbRead";
-
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -133,14 +131,8 @@ export function useAdaptiveSchedule(plan: TrainingPlanLike | null | undefined): 
 
       const ids = [...new Set(list.map((r) => r.life_event_id).filter((id): id is string => !!id))];
       if (ids.length) {
-        const { data: lifeRows, error: lifeError } = await supabase.from("life_events").select("*").in("id", ids);
-        if (alive) {
-          // The marks themselves loaded; only the breaks behind them did not.
-          // Left unsaid this reads as the app forgetting why a date changed, so
-          // the failure is reported and the marks are still shown.
-          readFailed(lifeError, "the breaks behind your plan");
-          setEvents((lifeRows ?? []) as LifeEvent[]);
-        }
+        const { data: lifeRows } = await supabase.from("life_events").select("*").in("id", ids);
+        if (alive) setEvents((lifeRows ?? []) as LifeEvent[]);
       } else {
         setEvents([]);
       }

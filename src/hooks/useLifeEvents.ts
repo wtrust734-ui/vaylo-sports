@@ -45,7 +45,6 @@ import {
 } from "@/lib/lifeEvents";
 import { insertOrQueue, pendingWrites, updateOrQueue } from "@/lib/offlineQueue";
 import { flattenPlan, type DatedSession, type TrainingPlanLike } from "@/lib/planSchedule";
-import { readFailed } from "@/lib/dbRead";
 
 /** What the form collects. `user_id` is added by this hook. */
 export interface LifeEventInput {
@@ -225,7 +224,7 @@ export function useLifeEvents(): UseLifeEvents {
       // behave differently from the first.
       let planRow: TrainingPlanLike | null = null;
       if (event.allow_training === "no") {
-        const { data, error: planReadError } = await supabase
+        const { data } = await supabase
           .from("training_plans")
           .select("id, created_at, week_current, duration_weeks, plan_data, plan_adjustments")
           .eq("user_id", user.id)
@@ -233,14 +232,6 @@ export function useLifeEvents(): UseLifeEvents {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        // A failed read is not "no plan". With `planRow` null the projection
-        // below matches no sessions and the athlete is told their break changed
-        // nothing — a false statement about their own calendar. The event itself
-        // is saved by this point, so the tidy-up half is abandoned loudly rather
-        // than reported wrongly.
-        if (readFailed(planReadError, "your training plan")) {
-          return { marked: 0, explanation: null, rebuild: null };
-        }
         planRow = (data as TrainingPlanLike | null) ?? null;
       }
 
@@ -260,20 +251,12 @@ export function useLifeEvents(): UseLifeEvents {
       // `life_event_id` is deliberately not read: the database guarantees a
       // row carrying one is never still `planned`, so the status alone already
       // answers "has this session been claimed by an event?".
-      const { data: existingRows, error: recordedReadError } = await supabase
+      const { data: existingRows } = await supabase
         .from("plan_events")
         .select("id, scheduled_date, title, status")
         .eq("user_id", user.id)
         .gte("scheduled_date", event.start_date)
         .lte("scheduled_date", event.end_date);
-
-      // Without this read the de-duplication below is blind: every session the
-      // plan covers would look unrecorded, and a break applied twice — on the
-      // train, then again at home — would write a second row for one day instead
-      // of updating the first. Abandoned rather than risk the duplicates.
-      if (readFailed(recordedReadError, "the sessions this break already changed")) {
-        return { marked: 0, explanation: null, rebuild: null };
-      }
 
       for (const row of existingRows ?? []) {
         recorded.set(keyOf(row), { id: row.id, status: row.status as SessionStatus });

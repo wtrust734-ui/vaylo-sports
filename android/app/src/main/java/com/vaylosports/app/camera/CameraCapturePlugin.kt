@@ -58,14 +58,6 @@ class CameraCapturePlugin : Plugin() {
     /** Where the in-flight camera URI lives between launch and result. */
     private var captureUri: Uri? = null
 
-    /**
-     * The file behind `captureUri`.
-     *
-     * Kept alongside the URI so cleanup never has to go through the provider —
-     * see deleteCaptureFile.
-     */
-    private var captureFile: File? = null
-
     /** Take a new photo with the device camera. */
     @PluginMethod
     fun capture(call: PluginCall) {
@@ -75,17 +67,12 @@ class CameraCapturePlugin : Plugin() {
             return
         }
 
-        val target = try {
-            newCaptureFile(activity)
+        val uri = try {
+            createCaptureUri(activity)
         } catch (e: Exception) {
             call.reject("Couldn't prepare the camera: ${e.message}", e)
             return
         }
-        val uri = FileProvider.getUriForFile(
-            activity,
-            activity.packageName + ".fileprovider",
-            target
-        )
 
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         // Without EXTRA_OUTPUT the camera app returns a 160x160 thumbnail,
@@ -97,13 +84,11 @@ class CameraCapturePlugin : Plugin() {
         if (intent.resolveActivity(activity.packageManager) == null) {
             // No camera on this device. Report it as a cancel so the caller
             // falls back to the picker rather than showing an error.
-            deleteCaptureFile(target)
             call.resolve(cancelled())
             return
         }
 
         captureUri = uri
-        captureFile = target
         startActivityForResult(call, intent, "onCaptureResult")
     }
 
@@ -129,33 +114,22 @@ class CameraCapturePlugin : Plugin() {
     @ActivityCallback
     private fun onCaptureResult(call: PluginCall?, result: ActivityResult) {
         val uri = captureUri
-        val file = captureFile
         captureUri = null
-        captureFile = null
-        if (call == null) {
-            deleteCaptureFile(file)
-            return
-        }
+        if (call == null) return
 
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             // RESULT_CANCELED — the athlete backed out of the camera.
-            deleteCaptureFile(file)
             call.resolve(cancelled())
             return
         }
         try {
             val bytes = readDownscaled(uri, MAX_EDGE)
             call.resolve(payload(bytes, mimeFor(uri)))
-        } catch (e: Throwable) {
-            // Throwable, not Exception: decoding a full-size photo on a
-            // low-memory device raises OutOfMemoryError, which is an Error, so it
-            // escaped this handler and took the whole process down — losing
-            // whatever the athlete had open. A rejected call is recoverable; a
-            // crash is not.
-            call.reject("Couldn't read the photo: ${e.message}", asException(e))
+        } catch (e: Exception) {
+            call.reject("Couldn't read the photo: ${e.message}", e)
         } finally {
             // The temporary file has served its purpose either way.
-            deleteCaptureFile(file)
+            runCatching { this.context?.contentResolver?.delete(uri, null, null) }
         }
     }
 
@@ -174,52 +148,26 @@ class CameraCapturePlugin : Plugin() {
                 return
             }
             call.resolve(payload(bytes, mimeFor(uri)))
-        } catch (e: Throwable) {
-            // See onCaptureResult: on a big image this is an Error, not an
-            // Exception, and a pick must not crash the app either.
-            call.reject("Couldn't read the photo: ${e.message}", asException(e))
+        } catch (e: Exception) {
+            call.reject("Couldn't read the photo: ${e.message}", e)
         }
     }
 
     /**
-     * A Throwable that can be handed to `PluginCall.reject`.
-     *
-     * Both catches above are deliberately `Throwable`: decoding a full-size
-     * photo on a low-memory device raises `OutOfMemoryError`, which is an Error
-     * and not an Exception, and an uncaught one takes the whole process down.
-     * But `PluginCall.reject` has no Throwable overload — it takes an
-     * Exception, a String or a JSONObject — so passing the caught value straight
-     * through does not compile, which is a build failure that only appears when
-     * the Kotlin is actually compiled. Wrapping keeps the original as the cause,
-     * so logcat still shows what really threw.
+     * A FileProvider URI inside our own cache directory. Cache is right: these
+     * are throwaway full-size JPEGs the app immediately base64s and never needs
+     * to keep, and Android is free to reclaim the space.
      */
-    private fun asException(e: Throwable): Exception =
-        if (e is Exception) e else Exception(e)
-
-    /**
-     * The temporary file the camera app writes into, inside our own cache
-     * directory. Cache is right: these are throwaway full-size JPEGs the app
-     * immediately base64s and never needs to keep, and Android is free to
-     * reclaim the space.
-     *
-     * The File is kept as well as its URI, because deleting the capture used to
-     * go through `ContentResolver.delete` on a FileProvider URI — which is a
-     * no-op unless the provider implements delete, and the failure was swallowed
-     * by `runCatching`. Full-size JPEGs could therefore sit in the cache for the
-     * life of the install.
-     */
-    private fun newCaptureFile(activity: Activity): File {
+    private fun createCaptureUri(activity: Activity): Uri {
         val dir = File(activity.cacheDir, "vaylo-capture")
         if (!dir.exists() && !dir.mkdirs()) {
             throw IllegalStateException("cache directory unavailable")
         }
-        return File(dir, "capture-${System.currentTimeMillis()}.jpg")
-    }
-
-    /** Delete the capture file. We created it, so we can remove it directly. */
-    private fun deleteCaptureFile(file: File?) {
-        if (file == null) return
-        runCatching { if (file.exists()) file.delete() }
+        return FileProvider.getUriForFile(
+            activity,
+            activity.packageName + ".fileprovider",
+            File(dir, "capture-${System.currentTimeMillis()}.jpg")
+        )
     }
 
     private fun mimeFor(uri: Uri): String {
@@ -242,8 +190,7 @@ class CameraCapturePlugin : Plugin() {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         try {
             resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        } catch (e: Throwable) {
-            // Throwable: a decode can raise OutOfMemoryError on a large image.
+        } catch (e: Exception) {
             return null
         }
         val longEdge = maxOf(bounds.outWidth, bounds.outHeight)
@@ -256,7 +203,7 @@ class CameraCapturePlugin : Plugin() {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val decoded = try {
             resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             null
         } ?: return null
 
@@ -285,7 +232,7 @@ class CameraCapturePlugin : Plugin() {
                     ExifInterface.ORIENTATION_NORMAL
                 )
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             // No EXIF, or unreadable — the normal case for a camera app that
             // already baked rotation into the pixels.
             return bitmap
@@ -302,7 +249,7 @@ class CameraCapturePlugin : Plugin() {
         }
         return try {
             Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             bitmap
         }
     }

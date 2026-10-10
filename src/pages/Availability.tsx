@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { useLifeEvents, type LifeEventInput } from "@/hooks/useLifeEvents";
 import { useToast } from "@/hooks/use-toast";
 import { ageBand } from "@/lib/age";
@@ -103,14 +102,9 @@ const Availability = () => {
   // A function rather than an inline effect because saving a break can rebuild
   // the plan, and the per-break summary below has to read the rebuild it just
   // caused rather than the one from before it.
-  //
-  // `planFailed` exists because a failed read here is NOT "no active plan". The
-  // panel below is built entirely from this row, so an outage that left `plan`
-  // null used to read as the athlete having no plan at all.
-  const [planFailed, setPlanFailed] = useState(false);
   const loadPlan = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("training_plans")
       .select("id, created_at, week_current, duration_weeks, plan_data, plan_adjustments")
       .eq("user_id", user.id)
@@ -118,7 +112,6 @@ const Availability = () => {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    setPlanFailed(readFailed(error, "your active plan"));
     setPlan((data as TrainingPlanLike | null) ?? null);
   }, [user]);
 
@@ -298,15 +291,6 @@ const Availability = () => {
 
   return (
     <div className="min-h-screen app-mesh bg-background pb-32">
-      {planFailed && (
-        <p
-          role="alert"
-          className="mx-5 mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-[12px] leading-relaxed text-foreground"
-        >
-          We could not load your active plan, so the schedule below may be incomplete. This is a loading
-          problem, not an empty plan — try again in a moment.
-        </p>
-      )}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <p className="text-[12px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5">
           <CalendarRange size={12} /> Availability

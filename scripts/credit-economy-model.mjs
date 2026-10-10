@@ -49,16 +49,14 @@ const CALLS = {
   vaylo_coach_message: { model: "luna", outCap: 4000, util: 0.30, inTok: 6000 },
   weekly_coach_review: { model: "luna", outCap: 2000, util: 0.60, inTok: 6000 },
   training_plan_week: { model: "luna", outCap: 6000, util: 0.67, inTok: 8000 },
-  // Same shape as a training week, and the same reason: the plan is written in
-  // parallel chunks of weeks, so `outCap` here is one call's worth and the
-  // figure the price is measured against is the per-week ceiling below.
-  nutrition_plan_week: { model: "luna", outCap: 16000, util: 0.50, inTok: 6000 },
-  // Editing a plan the athlete already owns. `plan_edit` rewrites one week,
-  // `plan_edit_full` rewrites every week in parallel, two weeks a call.
-  plan_edit: { model: "luna", outCap: 2500, util: 0.60, inTok: 5000 },
-  plan_edit_full: { model: "luna", outCap: 16000, util: 0.45, inTok: 8000 },
+  // AI plan edits: one Luna call per two weeks of plan (see the plan-edit
+  // migration). Week and whole-plan edits share the per-call cost model; the
+  // prices differ (10 vs 20) because the value does, not the provider.
+  plan_edit: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
+  plan_edit_full: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
   calorie_scan: { model: "luna", outCap: 2000, util: 0.45, inTok: 2500 },
   tactical_prep: { model: "luna", outCap: 2500, util: 0.60, inTok: 7000 },
+  training_insight: { model: "luna", outCap: 2000, util: 0.60, inTok: 6000 },
   development_trajectory: { model: "luna", outCap: 2000, util: 0.45, inTok: 4000 },
   archetype_view: { model: "luna", outCap: 3000, util: 0.40, inTok: 5000 },
   // Video runs on Gemini Flash for ordinary clips (GEMINI_MODELS.FLASH is the
@@ -83,10 +81,6 @@ const FEATURE_COSTS = {
   vaylo_coach_message: 8,
   weekly_coach_review: 10,
   training_plan_week: 20,
-  // Editing a plan the athlete already owns: a week (or one session, the same
-  // call asked more narrowly) for 10, the whole plan rewritten for 20. Both are
-  // far cheaper than the plan itself on purpose — an athlete who cannot afford
-  // to change a plan they paid for abandons it.
   plan_edit: 10,
   plan_edit_full: 20,
   calorie_scan: 12,
@@ -96,14 +90,13 @@ const FEATURE_COSTS = {
   video_form_analysis: 45,
   form_analysis: 15,
   limiter_fix_plan: 120,
-  // Flat-rate product: one payment, unlimited photo analyses.
-  form_analysis_unlock: 110,
-  // AI-WRITTEN per week since 2026-10-09 (generate-nutrition-plan). Re-priced
-  // 8 -> 15 with the ceiling, and still deliberately under a training week's
-  // 20: the nutrition plan is the smaller output, and the pack below (30, once)
-  // undercuts two weeks of it, which is what makes the unlock the obvious buy.
-  nutrition_plan_week: 15,
-  nutrition_pack_unlock: 30,
+  // No flat-rate products: one payment against unlimited metered AI calls
+  // loses money to exactly the heavy users it attracts. Every analysis and
+  // every scan carries its own price instead.
+  // No provider call — priced for value, not to cover a cost.
+  nutrition_plan_week: 8,
+  training_insight: 8,
+  vpr_compare: 2,
   mental_gym_unlock: 30,
   injury_management_unlock: 25,
   learning_unlock: 25,
@@ -111,27 +104,9 @@ const FEATURE_COSTS = {
   streak_shield: 3,
 };
 
-/**
- * Features whose ceiling is stated per WEEK, not derived from one call.
- *
- * A 12-week nutrition plan is six 2-week calls in flight at once, and an edit
- * may rewrite every week at once, so "the cost of one call" is not the number a
- * per-credit price is measured against — the per-week figure is. These mirror
- * API_COST_CEILING_USD in src/config/credits.ts exactly; the derived table
- * above cannot express a per-week bound, which is why they are stated.
- */
-const CEILING_OVERRIDES = {
-  nutrition_plan_week: 0.006, // ~6k in / ~8k out a week on Luna, doubled
-  plan_edit: 0.003, // 5k in / 2.5k out — one week rewritten
-  plan_edit_full: 0.006, // every week rewritten, 2 weeks per call
-};
-
-const CEILINGS = {
-  ...Object.fromEntries(
-    Object.entries(CALLS).map(([k, c]) => [k, +(callCost(c) * CEIL_SAFETY).toFixed(6)]),
-  ),
-  ...CEILING_OVERRIDES,
-};
+const CEILINGS = Object.fromEntries(
+  Object.entries(CALLS).map(([k, c]) => [k, +(callCost(c) * CEIL_SAFETY).toFixed(6)]),
+);
 
 /** Credits granted to a brand-new account. */
 const STARTING_CREDITS = 260;
@@ -314,13 +289,13 @@ check(
   `bonus rises with pack size (${PACKS.map((p) => p.bonus).join(" < ")})`,
 );
 
-// 4. flat-rate unlock: breaks even far beyond realistic use, still beats per-call
-const unlockRev = FEATURE_COSTS.form_analysis_unlock * WORST_NET;
-const perCall = CALLS.form_analysis;
-const breakEven = unlockRev / callCost(perCall);
-check(breakEven > 75, `form_analysis_unlock breaks even after ${breakEven.toFixed(0)} analyses (> 75)`);
-const analysesToWin = Math.ceil(FEATURE_COSTS.form_analysis_unlock / FEATURE_COSTS.form_analysis);
-check(analysesToWin <= 8, `unlock beats per-call after ${analysesToWin} analyses (<= 8)`);
+// 4. no flat-rate products on metered calls: every analysis and scan has its
+// own price, and each one clears the floor on its own (checked in the metered
+// loop above). This step asserts the absence rather than a number — adding a
+// flat-rate key back must fail here first.
+for (const retired of ["form_analysis_unlock", "nutrition_pack_unlock"]) {
+  check(!(retired in FEATURE_COSTS), `${retired} stays retired (no flat rate on metered calls)`);
+}
 
 // 5. the coin ladder must not fight credit conversion
 const convertPerCoin = grossPerCredit(tierA[4], PACKS[4]) / COINS_PER_CREDIT;
@@ -337,18 +312,12 @@ check(
 
 // 6. THE REQUIREMENT: a new athlete can build an 8-week plan and do more with it
 const planCost = FEATURE_COSTS.training_plan_week * PLAN_WEEKS;
-// One week of the nutrition plan, not four. The grant's job is to answer "can a
-// new athlete get going and see something work?", and the plan is a weekly
-// decision the athlete renews — a four-week commitment is a later purchase, not
-// part of the first basket. (It was four weeks at 8 credits a week, when the
-// nutrition plan cost nothing to produce; it is now an AI plan at 15, and four
-// weeks of it would be a quarter of the grant on its own.)
 const extras = {
   calorie_scan: FEATURE_COSTS.calorie_scan,
   "3x coach message": FEATURE_COSTS.vaylo_coach_message * 3,
   form_analysis: FEATURE_COSTS.form_analysis,
   weekly_coach_review: FEATURE_COSTS.weekly_coach_review,
-  "1wk nutrition": FEATURE_COSTS.nutrition_plan_week,
+  "4wk nutrition": FEATURE_COSTS.nutrition_plan_week * 4,
 };
 const extrasTotal = Object.values(extras).reduce((a, b) => a + b, 0);
 check(

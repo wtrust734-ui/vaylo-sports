@@ -72,6 +72,8 @@
       "pbsDesc": "Alle Bestleistungen in einer Liste",
       "formAnalysis": "Technikanalyse",
       "formAnalysisDesc": "Prüfe deine Technik",
+      "miniGames": "Minispiele",
+      "miniGamesDesc": "Reaktions-, Gedächtnis- und Präzisionsspiele",
       "arOverlay": "AR-Overlay",
       "arOverlayDesc": "Live-Messwerte beim Training"
     },
@@ -96,7 +98,14 @@
       "goals": "Ziele",
       "goalsDesc": "Worauf du hinarbeitest",
       "compare": "Vergleichen",
-      "compareDesc": "Du vs. Elite-Profile"
+      "compareDesc": "Du vs. Elite-Profile",
+      "groupTrophyRoom": "Trophäenraum",
+      "achievements": "Erfolge",
+      "achievementsDesc": "Medaillen für Konstanz und Meisterschaft",
+      "badges": "Abzeichen",
+      "badgesDesc": "Durch Markt-Käufe verdient",
+      "challenges": "Challenges",
+      "challengesDesc": "Challenges beitreten, erstellen und gesponserte"
     },
     "recover": {
       "title": "Erholen",

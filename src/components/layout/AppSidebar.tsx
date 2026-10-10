@@ -438,10 +438,7 @@ const AppSidebar = () => {
           through openAppNav(). */}
 
       {/* Desktop sidebar */}
-      {/* The width is the shared token, not a literal: AppLayout pads the
-          content by the same value, and when the two were written separately
-          the sidebar's last 32px sat over every screen. */}
-      <aside className="fixed inset-y-0 start-0 z-30 hidden w-[var(--vaylo-sidebar-w)] flex-col border-e border-white/[0.06] bg-card/60 backdrop-blur-2xl lg:flex">
+      <aside className="fixed inset-y-0 start-0 z-30 hidden w-[272px] flex-col border-e border-white/[0.06] bg-card/60 backdrop-blur-2xl lg:flex">
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-white/[0.04] via-transparent to-transparent pointer-events-none" />
         <div className="flex items-center gap-3 px-5 pb-4 pt-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow overflow-hidden">

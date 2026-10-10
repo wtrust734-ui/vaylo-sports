@@ -26,7 +26,6 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { insertOrQueue, isNetworkError, newId, updateOrQueue } from "../offlineQueue";
 import { ageFromDob } from "../age";
 import { localDateKey } from "../dates";
@@ -153,34 +152,25 @@ async function readStaged(userId: string, source: string): Promise<StagedActivit
  * a year of manual rows would be fetched to answer a question about last month.
  */
 async function readManualSessions(userId: string, fromIso: string): Promise<ExistingWorkout[]> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workouts")
     .select("id, started_at, completed_at, duration_minutes, sport, type, source")
     .eq("user_id", userId)
     .gte("started_at", fromIso)
     .limit(2000);
-  // A failed read here is "unknown", not "no history" — and read as empty it
-  // makes every session the athlete already has look new, so the import writes
-  // it a second time and the load and streak counts take it twice. Same
-  // treatment as readStaged above: stop the run.
-  if (readFailed(error, "the sessions you already have", { quiet: true })) throw error;
   const rows = (data ?? []) as ExistingWorkout[];
   return rows.filter((r) => !r.source || r.source === "manual");
 }
 
 /** External ids already stored for a source, so "new" and "refreshed" can be told apart. */
 async function readKnownExternalIds(userId: string, source: string): Promise<Set<string>> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workouts")
     .select("external_id")
     .eq("user_id", userId)
     .eq("source", source)
     .not("external_id", "is", null)
     .limit(10000);
-  // This read is the whole of "new" versus "refreshed". Failed and treated as
-  // empty, every activity already imported from this source is imported again as
-  // new. Stop the run rather than duplicate the athlete's history.
-  if (readFailed(error, "the activities already imported from this source", { quiet: true })) throw error;
   return new Set(
     ((data ?? []) as { external_id: string | null }[])
       .map((r) => r.external_id)
@@ -263,7 +253,7 @@ export async function mirrorImportedWorkouts(
  */
 export async function readAnalysisSessions(userId: string): Promise<AnalysisSession[]> {
   const since = new Date(Date.now() - ANALYSIS_LOOKBACK_DAYS * 86_400_000).toISOString();
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workouts")
     .select("started_at, completed_at, sport, type, title, duration_minutes, distance_km, session_load, source")
     .eq("user_id", userId)
@@ -271,11 +261,6 @@ export async function readAnalysisSessions(userId: string): Promise<AnalysisSess
     .gte("started_at", since)
     .order("started_at", { ascending: false })
     .limit(1000);
-  // Reported, not thrown: this feeds the starting analysis and the insights
-  // screen, where an error page is worse than a quiet one. But "0 sessions in the
-  // last 28 days" must not be the app's answer to a failed read, so the console
-  // records which of the two it was.
-  readFailed(error, "your training sessions", { quiet: true });
 
   return ((data ?? []) as {
     started_at: string | null;
@@ -308,27 +293,21 @@ export async function readAnalysisSessions(userId: string): Promise<AnalysisSess
 }
 
 async function readGoals(userId: string): Promise<AnalysisGoal[]> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("outcome_goals")
     .select("title, category, metric_unit, current_value, target_value, deadline")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(5);
-  readFailed(error, "your goals", { quiet: true });
   return (data ?? []) as AnalysisGoal[];
 }
 
 async function readAge(userId: string): Promise<number | null> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("profiles")
     .select("date_of_birth, sport")
     .eq("user_id", userId)
     .maybeSingle();
-  // Null already means "date of birth unknown", which the age caps read as the
-  // conservative default. A failed read must not be mistaken for a missing date
-  // of birth without at least leaving a trace: the server recomputes its own age
-  // from the profile, but this copy decides what the athlete is shown.
-  readFailed(error, "your profile", { quiet: true });
   return ageFromDob((data?.date_of_birth as string | null) ?? null);
 }
 
@@ -387,7 +366,7 @@ interface EdgeHistoryResponse {
 
 /** An open (queued or running) run for a source, so jobs cannot stack. */
 async function findOpenRun(userId: string, source: string): Promise<ImportRun | null> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workout_imports")
     .select("id, source, status, imported_count, updated_count, skipped_count, note, window_start, created_at, completed_at")
     .eq("user_id", userId)
@@ -396,9 +375,6 @@ async function findOpenRun(userId: string, source: string): Promise<ImportRun | 
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  // A failed read reads as "no run open", which is exactly the answer that lets
-  // a second job for the same source start on top of the first.
-  readFailed(error, "your import history", { quiet: true });
   return data ? toRun(data) : null;
 }
 
@@ -416,15 +392,12 @@ const toRun = (row: Record<string, unknown>): ImportRun => ({
 });
 
 export async function loadImportRuns(userId: string, limit = 5): Promise<ImportRun[]> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workout_imports")
     .select("id, source, status, imported_count, updated_count, skipped_count, note, window_start, created_at, completed_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(limit);
-  // The Health screen renders this list as "what has been imported", so an empty
-  // list after a failed read tells the athlete their history was never imported.
-  readFailed(error, "your import history", { quiet: true });
   return ((data ?? []) as Record<string, unknown>[]).map(toRun);
 }
 
@@ -432,7 +405,7 @@ export async function loadImportRuns(userId: string, limit = 5): Promise<ImportR
 export async function loadStoredAnalysis(
   userId: string,
 ): Promise<{ run: ImportRun; analysis: StartingAnalysis } | null> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workout_imports")
     .select("id, source, status, imported_count, updated_count, skipped_count, note, window_start, created_at, completed_at, analysis")
     .eq("user_id", userId)
@@ -440,10 +413,6 @@ export async function loadStoredAnalysis(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  // Null means "no stored analysis yet", which the screen renders as "import
-  // your history and we will describe how you train". A failed read must not be
-  // presented as that invitation.
-  readFailed(error, "your stored analysis", { quiet: true });
   if (!data?.analysis) return null;
   return {
     run: toRun(data as unknown as Record<string, unknown>),
@@ -550,7 +519,7 @@ async function executeRun(
   const capped = !!response.capped;
   const total = mirrored.imported + mirrored.updated;
 
-  const { data: span, error: spanError } = await supabase
+  const { data: span } = await supabase
     .from("workouts")
     .select("started_at")
     .eq("user_id", userId)
@@ -558,10 +527,6 @@ async function executeRun(
     .order("started_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  // The span dates the analysis. Null spans the window to "now", so a failed
-  // read here quietly changes what every caveat in that analysis is measured
-  // against — worth a trace even though the run continues.
-  readFailed(spanError, "the span of your imported sessions", { quiet: true });
 
   const summary = importSummaryLine(
     total,
@@ -647,16 +612,13 @@ export async function requestHistoryImport(
  * actually chose — by finding the preset that produced it.
  */
 export async function runQueuedImports(userId: string): Promise<number> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("workout_imports")
     .select("id, window_start")
     .eq("user_id", userId)
     .eq("status", "queued")
     .order("created_at", { ascending: true })
     .limit(5);
-  // A failed read means queued imports do not run this time round, which the
-  // athlete experiences as nothing happening at all.
-  readFailed(error, "your queued imports", { quiet: true });
 
   const rows = (data ?? []) as { id: string; window_start: string | null }[];
   let done = 0;

@@ -26,13 +26,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { fetchCoachRoster, openCoachSignup, type CoachRosterEntry } from "@/lib/coachMarketplace";
 import { COACH_COMMISSION_PERCENT, formatMinorUnits } from "@/config/coachMarketplace";
-import { formatDate } from "@/i18n/format";
 
 const joined = (iso: string | null): string | null => {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return formatDate(date, { month: "long", year: "numeric" });
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 };
 
 function CoachCard({

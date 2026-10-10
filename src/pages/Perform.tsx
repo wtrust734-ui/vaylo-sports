@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb } from "lucide-react";
+import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb, Trophy, Medal, Flag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
@@ -21,6 +21,19 @@ const Perform = () => {
         { icon: Lightbulb, label: t("hub.perform.insights"), description: t("hub.perform.insightsDesc"), path: "/insights", feature: "perform.insights" },
         { icon: Target, label: t("hub.perform.skills"), description: t("hub.perform.skillsDesc"), path: "/skills", feature: "perform.skills" },
         { icon: TrendingUp, label: t("hub.perform.development"), description: t("hub.perform.developmentDesc"), path: "/development", feature: "perform.development" },
+      ],
+    },
+    {
+      // The Trophy Room: achievements, purchase badges and challenges live
+      // here in Perform — not in Profile — because they are earned by
+      // performing, and this is where an athlete comes to see how good they
+      // are. The Challenges page behind the tile carries creating, personal
+      // suggestions and sponsored challenges.
+      title: t("hub.perform.groupTrophyRoom"),
+      links: [
+        { icon: Trophy, label: t("hub.perform.achievements"), description: t("hub.perform.achievementsDesc"), path: "/achievements", feature: "perform.achievements" },
+        { icon: Medal, label: t("hub.perform.badges"), description: t("hub.perform.badgesDesc"), path: "/achievements?tab=badges", feature: "perform.achievements" },
+        { icon: Flag, label: t("hub.perform.challenges"), description: t("hub.perform.challengesDesc"), path: "/challenges", feature: "perform.challenges" },
       ],
     },
     {

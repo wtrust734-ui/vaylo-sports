@@ -7,7 +7,6 @@ import { appHref } from "@/lib/routerBase";
 import { joinChallenge } from "@/lib/scoring";
 import { stashPendingJoin } from "@/hooks/usePendingJoin";
 import { fetchDisplayNames, UNKNOWN_ATHLETE } from "@/lib/publicIdentity";
-import { readFailed } from "@/lib/dbRead";
 
 type InviteChallenge = {
   title: string;
@@ -36,32 +35,25 @@ const ChallengeInvite = () => {
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [ranks, setRanks] = useState<{ name: string; progress: number }[]>([]);
-  // "Challenge not found" is a claim about the invite, and a failed read cannot
-  // support it: this is the landing surface for a shared link.
-  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("challenges")
         .select("title, description, sport, type, target_value, target_unit, end_date, participant_count, icon")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
-      // Telling a visitor their shared invite has expired when the connection
-      // dropped is the worst answer available on this page.
-      setLoadFailed(readFailed(error, "this challenge invite"));
       setCh(data);
 
-      const { data: parts, error: partsError } = await supabase
+      const { data: parts } = await supabase
         .from("challenge_participants")
         .select("user_id, progress")
         .eq("challenge_id", id)
         .order("progress", { ascending: false })
         .limit(10);
-      readFailed(partsError, "the leaderboard");
       if (cancelled) return;
       const list = parts || [];
       const names = list.length ? await fetchDisplayNames(list.map((p) => p.user_id)) : {};
@@ -69,15 +61,12 @@ const ChallengeInvite = () => {
       setRanks(list.map((p) => ({ name: names[p.user_id] ?? UNKNOWN_ATHLETE, progress: Number(p.progress) || 0 })));
 
       if (user) {
-        const { data: mine, error: mineError } = await supabase
+        const { data: mine } = await supabase
           .from("challenge_participants")
           .select("id")
           .eq("challenge_id", id)
           .eq("user_id", user.id)
           .maybeSingle();
-        // A failed read here makes the page offer "Join" to somebody who is
-        // already in it, so it is reported rather than read as "not joined".
-        readFailed(mineError, "your entry");
         if (!cancelled && mine) setJoined(true);
       }
       setLoading(false);
@@ -105,18 +94,6 @@ const ChallengeInvite = () => {
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>;
-  }
-
-  if (!ch && loadFailed) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <Trophy className="text-muted-foreground" size={40} />
-        <p className="text-lg font-semibold">We couldn't load this invite</p>
-        <p className="text-sm text-muted-foreground">
-          This looks like a connection problem rather than a challenge that has gone away. Reload to try again.
-        </p>
-      </div>
-    );
   }
 
   if (!ch) {

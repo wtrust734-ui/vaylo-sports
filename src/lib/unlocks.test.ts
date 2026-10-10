@@ -17,7 +17,9 @@
 //      priced above what those calls cost us, at the worst case credit value any
 //      real buyer produces. `enables` names the ceiling; if a new entry omits it
 //      for a feature that does call a provider, the margin is unasserted and
-//      this test says so.
+//      this test says so. (No current entry enables a metered call — the
+//      remaining unlocks are access to local features, which is why the margin
+//      test below only asks each one to raise real revenue.)
 //
 // The margin maths is deliberately the same as pricing.test.ts: revenue is
 // measured NET of the store's cut (WORST_CASE_USD_PER_CREDIT is already net),
@@ -144,23 +146,20 @@ describe("unlock catalogue — every entry is a real, reachable purchase", () =>
 });
 
 describe("unlock catalogue — every entry clears its cost", () => {
-  it("pays for the metered calls it makes free", () => {
-    const metered = UNLOCK_CATALOG.filter((e) => e.enables);
-    // Not a formality: if a future entry drops `enables`, its margin stops being
-    // checked here, so the list having entries at all is asserted.
-    expect(metered.length).toBeGreaterThan(0);
-    for (const entry of metered) {
-      // The DEAREST charge it removes, not the first one it happens to name.
-      // An unlock can cover several metered features, and the margin is only
-      // real if it clears the worst of them.
-      const enabled = enablesOf(entry);
-      const ceiling = Math.max(...enabled.map((k) => API_COST_CEILING_USD[k]));
-      const price = FEATURE_COSTS[entry.costKey];
-      const revenue = revenueFor(price);
-      expect(
-        revenue,
-        `${entry.product}: ${price} credits = $${revenue.toFixed(4)} net vs $${ceiling} ceiling (${enabled.join(", ")})`,
-      ).toBeGreaterThanOrEqual(ceiling * MIN_MARGIN_MULTIPLE);
+  it("names a ceiling for every metered call it makes free", () => {
+    // No current entry makes a metered call free, so this asserts the rule
+    // rather than a number: any future entry that adds `enables` must name a
+    // real ceiling, and the revenue check below still applies to its price.
+    for (const entry of UNLOCK_CATALOG) {
+      for (const key of enablesOf(entry)) {
+        expect(API_COST_CEILING_USD[key], `${entry.product} names ${key}, which has no ceiling`)
+          .toBeGreaterThan(0);
+        const revenue = revenueFor(FEATURE_COSTS[entry.costKey]);
+        expect(
+          revenue,
+          `${entry.product}: ${FEATURE_COSTS[entry.costKey]} credits = $${revenue.toFixed(4)} net vs $${API_COST_CEILING_USD[key]} ceiling (${key})`,
+        ).toBeGreaterThanOrEqual(API_COST_CEILING_USD[key] * MIN_MARGIN_MULTIPLE);
+      }
     }
   });
 
@@ -175,15 +174,6 @@ describe("unlock catalogue — every entry clears its cost", () => {
     }
   });
 
-  it("never prices an unlock below the per-call price it replaces", () => {
-    // An unlock that costs less than a handful of the per-use calls packed into
-    // it is a loss leader for a flat-rate product. form_analysis_unlock is
-    // checked against its own per-call key.
-    const unlock = FEATURE_COSTS.form_analysis_unlock;
-    const perCall = FEATURE_COSTS.form_analysis;
-    expect(Math.ceil(unlock / perCall)).toBeLessThanOrEqual(8);
-    expect(perCall).toBeGreaterThan(0);
-  });
 });
 
 describe("per-use reference — a price always leads somewhere", () => {

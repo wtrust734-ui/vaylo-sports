@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { localDateKey } from "@/lib/dates";
 import { motion } from "framer-motion";
 import { Trophy, Target, Users, Plus, Clock, Filter, CheckCircle2, Sparkles, Medal } from "lucide-react";
@@ -7,7 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge } from "@/lib/scoring";
 import { toast } from "sonner";
-import { readFailed } from "@/lib/dbRead";
 import SponsoredSlot from "@/components/sponsor/SponsoredSlot";
 import { orderByFamily } from "@/lib/personalization/challengeSuggestions";
 
@@ -51,17 +50,7 @@ const Challenges = () => {
     }
     setItems(ch || []);
     if (user) {
-      const { data: parts, error: partsError } = await supabase.from("challenge_participants").select("*").eq("user_id", user.id);
-      // Which challenges the athlete has joined decides both the "My Challenges"
-      // tab and every join/leave button on the screen. Reading a failure as an
-      // empty set would tell them they are in nothing — and invite them to join
-      // and spend again. So it takes the screen's existing error state, whose
-      // Try again re-runs this whole load.
-      if (readFailed(partsError, "the challenges you have joined")) {
-        setLoadError("We couldn't load the challenges you have joined.");
-        setLoading(false);
-        return;
-      }
+      const { data: parts } = await supabase.from("challenge_participants").select("*").eq("user_id", user.id);
       const map: Record<string, Participant> = {};
       (parts || []).forEach((p) => { map[p.challenge_id] = p; });
       setMine(map);
@@ -389,28 +378,6 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
   const [target, setTarget] = useState(prefill?.target_value ? String(prefill.target_value) : "25");
   const [unit, setUnit] = useState(prefill?.target_unit ?? "km");
   const [saving, setSaving] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  // This sheet was a div stack with a backdrop click and nothing else: no role,
-  // no Escape, no way in for a keyboard. Escape now closes it and focus starts
-  // on the panel (the first field is "Title"), returning to wherever it was.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      previous?.focus?.();
-    };
-    // Runs once, on mount: the sheet is only rendered while it is open, so the
-    // close handler and the focus restore are a mount/unmount pair. Depending on
-    // `onClose` (a new arrow on every parent render) would re-run this mid-typing
-    // and pull focus back to the panel.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const save = async () => {
     if (saving) return;
@@ -441,16 +408,8 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
     // z-[59] clears the floating tab bar (see the ladder in BottomNav) and
     // the bottom padding keeps the Cancel/Create row above the home indicator.
     <div className="fixed inset-0 bg-black/60 z-[59] flex items-end sm:items-center justify-center p-4 pb-[max(1rem,var(--vaylo-inset-bottom))]" onClick={onClose}>
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-challenge-title"
-        className="bg-card w-full max-w-md rounded-2xl border border-border p-5"
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 id="new-challenge-title" className="font-display font-bold mb-3">New challenge</h3>
+      <div className="bg-card w-full max-w-md rounded-2xl border border-border p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="font-display font-bold mb-3">New challenge</h3>
         <div className="space-y-2 text-sm">
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" className="w-full bg-muted rounded-lg px-3 py-2" />
           <div className="grid grid-cols-2 gap-2">

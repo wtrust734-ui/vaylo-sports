@@ -491,13 +491,17 @@ describe("native camera — registration", () => {
 });
 
 describe("native camera — capture surfaces", () => {
-  it("FormAnalysis drives capture and the picker, not only a file input", () => {
+  it("FormAnalysis is video-only: no photo capture, no photo picker", () => {
+    // Form analysis takes movement videos, not stills — so this screen must
+    // not offer a photo capture or a photo picker, and must point at the
+    // video analysis screen (which keeps the file input, since the still
+    // plugin cannot record clips — see the test below).
     const page = read("/src/pages/FormAnalysis.tsx");
-    expect(page).toMatch(/capturePhoto\(/);
-    expect(page).toMatch(/pickPhoto\(/);
-    expect(page).toMatch(/aria-label="Choose an existing photo"/);
-    // The web input must still exist — only Android skips it.
-    expect(page).toMatch(/type="file"/);
+    expect(page).not.toMatch(/capturePhoto\(/);
+    expect(page).not.toMatch(/pickPhoto\(/);
+    expect(page).not.toMatch(/type="file"/);
+    expect(page).toMatch(/navigate\("\/form\/video"\)/);
+    expect(page).toMatch(/video_form_analysis/);
   });
 
   it("Nutrition re-checks the calorie-scan entitlement on the camera path", () => {

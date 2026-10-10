@@ -25,23 +25,6 @@
 
 export const ADULT_AGE = 18;
 
-/**
- * The floor for holding an account at all.
- *
- * `legal/terms.html` and `legal/child-safety.html` publish the same rule: you
- * must be at least 13 to hold a Vaylo account, and the app is not directed at
- * children under 13. Until now that rule lived only in the legal pages — the
- * account form never asked for a date of birth, so no code could refuse one.
- * This constant and the helpers below are where the published floor becomes a
- * real refusal.
- *
- * Same enforcement model as every other age rule in the app and the database:
- * it acts on the date of birth the account DECLARES. It is not age verification
- * — the legal pages say so plainly — and a determined minor can still declare a
- * false date. Keep it next to ADULT_AGE so the two boundaries cannot drift.
- */
-export const MIN_AGE = 13;
-
 /** Lower bound of the market this app is built for. Matches ADULT_AGE. */
 export const TARGET_AGE_MIN = 18;
 
@@ -80,30 +63,6 @@ export function ageFromDob(dob: string | null | undefined, at: Date = new Date()
 export function isAdultDob(dob: string | null | undefined, at: Date = new Date()): boolean {
   const age = ageFromDob(dob, at);
   return age !== null && age >= ADULT_AGE;
-}
-
-/** True when the declared date of birth is known to be under MIN_AGE. */
-export function isUnderMinimumAge(dob: string | null | undefined, at: Date = new Date()): boolean {
-  const age = ageFromDob(dob, at);
-  return age !== null && age < MIN_AGE;
-}
-
-/**
- * Why the athlete may not hold an account, or null when they may.
- *
- * One sentence, returned from here so onboarding, Profile and any future caller
- * cannot word the refusal differently. A missing or invalid date of birth is
- * NOT refused here: that is the separate "we do not know, so we assume the
- * safest thing" state, reported by `validateDob`, and the app already turns its
- * protections on for it rather than treating an unknown age as an adult.
- */
-export function registrationAgeRefusalReason(
-  dob: string | null | undefined,
-  at: Date = new Date(),
-): string | null {
-  const age = ageFromDob(dob, at);
-  if (age === null || age >= MIN_AGE) return null;
-  return `Vaylo Sports is for athletes aged ${MIN_AGE} and over, so we can't set up an account yet. If you're about to turn ${MIN_AGE}, please come back then — and if you think this is wrong, a parent or guardian can contact us.`;
 }
 
 /** Earliest date of birth we accept — guards against typos like 1901. */

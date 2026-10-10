@@ -1,7 +1,6 @@
 // Vaylo Sports scoring engine
 // Client-side mirror of the DB-side scoring so previews & analytics stay in sync.
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 
 export interface ScoringInputs {
   durationMinutes?: number;
@@ -112,15 +111,10 @@ export async function updateChallengeProgress(id: string, delta: number) {
 
 // Achievement auto-award helper (streaks / distance milestones)
 export async function checkAndAwardMilestones(userId: string) {
-  const { data: existing, error: existingError } = await supabase.from("achievements").select("title").eq("user_id", userId);
+  const { data: existing } = await supabase.from("achievements").select("title").eq("user_id", userId);
   const owned = new Set((existing || []).map((e) => e.title));
-  const { data: pts, error: ptsError } = await supabase.from("points_events").select("points").eq("user_id", userId);
+  const { data: pts } = await supabase.from("points_events").select("points").eq("user_id", userId);
   const total = (pts || []).reduce((s, r) => s + (r.points || 0), 0);
-  // Both are what decides which achievements look earned and what the points
-  // total says. Read as empty, an athlete's medals appear unearned and their
-  // total reads zero — and the unlock below would try to re-award them.
-  readFailed(existingError, "your achievements", { quiet: true });
-  readFailed(ptsError, "your points", { quiet: true });
   const tiers: [number, string, string][] = [
     [500, "Rising Star", "Earned 500 points"],
     [2500, "Contender", "Earned 2,500 points"],

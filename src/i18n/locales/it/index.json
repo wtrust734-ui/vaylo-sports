@@ -72,6 +72,8 @@
       "pbsDesc": "Tutti i tuoi record in un'unica lista",
       "formAnalysis": "Analisi della tecnica",
       "formAnalysisDesc": "Controlla la tua tecnica",
+      "miniGames": "Minigiochi",
+      "miniGamesDesc": "Giochi di reazione, memoria e precisione",
       "arOverlay": "Overlay AR",
       "arOverlayDesc": "Metriche in tempo reale durante l'allenamento"
     },
@@ -96,7 +98,14 @@
       "goals": "Obiettivi",
       "goalsDesc": "Ciò su cui stai lavorando",
       "compare": "Confronta",
-      "compareDesc": "Tu vs profili elite"
+      "compareDesc": "Tu vs profili elite",
+      "groupTrophyRoom": "Sala dei trofei",
+      "achievements": "Traguardi",
+      "achievementsDesc": "Medaglie per costanza e maestria",
+      "badges": "Distintivi",
+      "badgesDesc": "Guadagnati con gli acquisti del Mercato",
+      "challenges": "Sfide",
+      "challengesDesc": "Sfide a cui unirti, da creare e sponsorizzate"
     },
     "recover": {
       "title": "Recupera",

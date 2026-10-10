@@ -24,12 +24,11 @@
 // ============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import TermsChangeNotice from "@/components/legal/TermsChangeNotice";
 import { TERMS_VERSION, recordTermsAcceptance } from "@/lib/consent";
-import { COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION, rememberCookieConsent } from "@/lib/cookieNotice";
 import { useAuth } from "@/contexts/AuthContext";
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -47,19 +46,9 @@ const LocationProbe = () => <span data-testid="where">{useLocation().pathname}</
 
 function renderNotice(profile: { terms_version: string | null } | null) {
   const refreshProfile = vi.fn().mockResolvedValue(undefined);
-  // `null` means NO profile — signed out, or the row has not loaded — and that is
-  // a different state from a profile whose version was never recorded. The
-  // helper used to collapse them (`profile?.terms_version ?? null`), so the
-  // "no profile" case was really "a profile with a null version" and asserted
-  // the opposite of what its name says: nothing is known → stay silent, versus
-  // nothing was recorded → behind by definition, ask.
-  // Typed by what the component actually reads off the hook, rather than cast to
-  // `any`: the mocked useAuth only has to answer with a profile and a refresh.
-  const authMock = useAuth as unknown as { mockReturnValue: (value: unknown) => void };
-  authMock.mockReturnValue({
-    profile: profile === null ? null : { terms_version: profile.terms_version },
-    refreshProfile,
-  });
+  // Force the mock to return a profile with the given terms_version, so the
+  // banner renders when the athlete is behind and hides when they are not.
+  (useAuth as any).mockReturnValue({ profile: { terms_version: profile?.terms_version ?? null }, refreshProfile });
 
   render(
     <MemoryRouter initialEntries={["/"]}>
@@ -82,12 +71,6 @@ function renderNotice(profile: { terms_version: string | null } | null) {
 
 beforeEach(() => {
   vi.mocked(recordTermsAcceptance).mockResolvedValue(true);
-  // The fixture settles the storage notice. The two bottom cards are shown one
-  // at a time and the storage notice goes first, so an unacknowledged notice
-  // would (correctly) keep this banner off screen and every test below would be
-  // asserting against an empty document. The priority rule itself is asserted
-  // in its own test under "when there is nothing to ask".
-  localStorage.setItem(COOKIE_NOTICE_KEY, COOKIE_NOTICE_VERSION);
 });
 
 afterEach(() => {
@@ -126,38 +109,6 @@ describe("when there is nothing to ask", () => {
   it("stays away when there is no profile to judge", () => {
     renderNotice(null);
     expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
-  });
-
-  it("waits its turn while the storage notice is still owed", () => {
-    // One card at a time, at the same corner of a 390x844 screen: stacked, the
-    // storage notice's text showed through this banner's translucent card.
-    // The storage notice is the one that cannot be remembered, so it goes first
-    // and this banner returns once it has been answered.
-    localStorage.removeItem(COOKIE_NOTICE_KEY);
-
-    renderNotice({ terms_version: "1.0" });
-
-    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
-  });
-
-  it("comes forward the moment the storage notice is answered", async () => {
-    // The other half of "one at a time", and the half that was missing. This
-    // banner is second in the queue, so the read that decides it has to react to
-    // the storage notice being answered — a plain read per render left the
-    // corner empty until something unrelated re-rendered the banner (a
-    // navigation, or a profile refresh), which is a long wait to be told the
-    // Terms changed.
-    localStorage.removeItem(COOKIE_NOTICE_KEY);
-
-    renderNotice({ terms_version: "1.0" });
-    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
-
-    // Exactly what the storage notice's Accept button does.
-    await act(async () => {
-      rememberCookieConsent();
-    });
-
-    await waitFor(() => expect(screen.getByText(HEADING)).toBeInTheDocument());
   });
 });
 

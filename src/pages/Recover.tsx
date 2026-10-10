@@ -6,8 +6,7 @@ import { useHubGroups } from "@/hooks/useHubPersonalization";
 
 /**
  * RECOVER hub — adaptation lives here: readiness, fuel, mind, and injury.
- * Filtered per athlete: e.g. nutrition is hidden for pure-skill athletes who
- * told us it doesn't apply.
+ * Filtered per athlete by sport family; nutrition shows for every family.
  */
 const Recover = () => {
   const navigate = useNavigate();

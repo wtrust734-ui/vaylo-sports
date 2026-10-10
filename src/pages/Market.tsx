@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Zap, Coins, X, Infinity as InfinityIcon, Gift, Flame, Clock, KeyRound } from "lucide-react";
+import { ShoppingCart, Zap, Coins, X, Infinity as InfinityIcon, Gift, Flame, Clock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { readFailed } from "@/lib/dbRead";
 import { useToast } from "@/hooks/use-toast";
 import {
   purchaseItems,
@@ -25,7 +24,6 @@ import {
   type SpecialOffer,
 } from "@/lib/creditEconomy";
 import MarketSectionNav, { MARKET_SECTIONS, type MarketSection } from "@/components/market/MarketSectionNav";
-import { claimedOfferSlugs, filterUnclaimedOffers } from "@/lib/offerVisibility";
 import { isFlagOn } from "@/config/featureFlags";
 import { ageBand } from "@/lib/age";
 import CreditPacksSection from "@/components/market/CreditPacksSection";
@@ -97,23 +95,16 @@ const Market = () => {
   const [basket, setBasket] = useState<BasketRow[]>([]);
   const [showBasket, setShowBasket] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [claimedOffers, setClaimedOffers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
       const cfg = await loadEconomyConfig();
       setPacks(cfg.packs);
       setOffers(cfg.offers);
-      // Which of those offers this account has already bought. Read after the
-      // config so the catalogue renders without waiting on a second query.
-      if (user) setClaimedOffers(await claimedOfferSlugs(user.id));
       let regionValue = cfg.region;
       if (user) {
-        const { data: settings, error: settingsError } = await supabase
+        const { data: settings } = await supabase
           .from("user_settings").select("currency").eq("user_id", user.id).maybeSingle();
-        // Quiet: the region default is a correct answer to fall back to, so this
-        // never misstates a price — it just may not be the athlete's own currency.
-        readFailed(settingsError, "your currency", { quiet: true });
         if (settings?.currency) regionValue = { ...regionValue, currency: settings.currency };
       }
       setRegion(regionValue);
@@ -122,16 +113,16 @@ const Market = () => {
     })();
     if (user) {
       supabase.from("basket_items").select("*").eq("user_id", user.id)
-        .then(({ data, error }) => {
-          // An empty basket is what the athlete sees if this read fails, and the
-          // basket is where a purchase they already started is sitting.
-          readFailed(error, "your basket");
-          setBasket(data || []);
-        });
+        .then(({ data }) => setBasket(data || []));
     }
   }, [user]);
 
   // Coin bundles dispatch through the same unified basket → process-purchase path.
+  // Subscribed once: the handler reads the basket through a ref so it never
+  // closes over a stale copy (re-subscribing on every basket change meant a
+  // burst of bundle events could add the same row twice).
+  const basketRef = useRef(basket);
+  basketRef.current = basket;
   useEffect(() => {
     const handler = (e: Event) => {
       const b = (e as CustomEvent).detail as { id: string; coins: number; bonus?: number; price_cents: number };
@@ -148,20 +139,14 @@ const Market = () => {
     };
     window.addEventListener("vaylo:add-coin-bundle", handler);
     return () => window.removeEventListener("vaylo:add-coin-bundle", handler);
-  }, [basket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // One-time offers the athlete has already redeemed are dropped before they
-  // are ever priced or rendered. Every offer type is one-per-account on the
-  // server (process-purchase answers 409 for a second `offer_<slug>`), so the
-  // only thing this can prevent is advertising something unbuyable — see
-  // `@/lib/offerVisibility`.
-  const availableOffers = useMemo(() => filterUnclaimedOffers(offers, claimedOffers), [offers, claimedOffers]);
-
-  const doubleOffer = useMemo(() => getDoubleCreditsOffer(availableOffers), [availableOffers]);
+  const doubleOffer = useMemo(() => getDoubleCreditsOffer(offers), [offers]);
   // Starter offers must be live rows: an expired row is hidden, not shown.
   const starterOffer = useMemo(
-    () => availableOffers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
-    [availableOffers]
+    () => offers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
+    [offers]
   );
 
   const enhancedPacks = useMemo(
@@ -187,7 +172,9 @@ const Market = () => {
     id: string; name: string; price_cents: number; type: string; credits?: number; bonus?: number;
   }) => {
     if (!user) return;
-    if (basket.some((b) => b.product_id === item.id)) {
+    // Read through the ref: event-driven callers (coin bundles) run outside
+    // the render cycle and would otherwise see the basket from first mount.
+    if (basketRef.current.some((b) => b.product_id === item.id)) {
       toast({ title: "Already in basket" });
       setShowBasket(true);
       return;
@@ -312,10 +299,6 @@ const Market = () => {
     }
     setBasket([]);
     setShowBasket(false);
-    // A redeemed one-time offer has to disappear in this session, not after the
-    // next reload: otherwise the athlete buys the Welcome Bundle and is offered
-    // it again two seconds later.
-    if (user) setClaimedOffers(await claimedOfferSlugs(user.id));
     await refreshProfile();
     toast({
       title: wasFree ? "Added — free during closed testing" : "Purchase complete! 🎉",
@@ -326,13 +309,15 @@ const Market = () => {
   };
 
   const basketTotal = basket.reduce((s, b) => s + b.price_cents, 0);
-  const activeSection = MARKET_SECTIONS.find((s) => s.key === section)!;
+  const activeSection = MARKET_SECTIONS.find((s) => s.key === section) ?? MARKET_SECTIONS[0];
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Hero */}
+      {/* Hero — plain page background, deliberately. The body already paints
+          the app-wide mesh gradient, and an extra purple wash here made the
+          top of the Market read as a different surface from every other tab
+          (a visible band where the wash faded out). No local gradient. */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-electric-purple/15 via-primary/5 to-transparent" />
         <div className="relative px-5 pb-5 pt-[var(--vaylo-screen-top)]">
           <div className="mb-4 flex items-start justify-between">
             <div>
@@ -506,14 +491,14 @@ const Market = () => {
       )}
 
       {/* Picked for you — one unlock recommendation per sport family */}
-      {isAdult && section === "packs" && <FamilyPickBanner currency={region.currency} />}
+      {isAdult && (section === "packs" || section === "unlocks") && <FamilyPickBanner currency={region.currency} />}
 
       {/* No age block on these sections any more: purchasing is open to every
           age, and the under-18 case is handled by an informational note inside
           each section (GuardianNote) rather than by hiding the shop. Sponsored
           brand content is still gated to 18+ in the DATABASE, which is the
           control that actually matters for advertising. */}
-      {!isAdult && (section === "coins" || section === "subscriptions" || section === "lifetime" || section === "coaching") && (
+      {!isAdult && (section === "unlocks" || section === "coins" || section === "subscriptions" || section === "lifetime" || section === "coaching") && (
         <div className="px-5 pt-4"><GuardianNote /></div>
       )}
 
@@ -528,31 +513,13 @@ const Market = () => {
         >
           {section === "packs" && (
             <>
+              {/* What credits cost and what they unlock stays visible to
+                  everyone — the economy should never be a mystery. */}
               <CreditPacksSection packs={enhancedPacks} currency={region.currency} loading={loading} onAdd={addPack} />
               {!isAdult && <div className="px-5 pt-4"><GuardianNote /></div>}
-              {/* The way from "here are credits" to "here is what they buy".
-                  The reference list is no longer a dead end: everything it
-                  prices is one tap away, either in the Unlocks tab or on the
-                  feature's own screen. */}
-              <div className="px-5 pt-3">
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSection("unlocks")}
-                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 to-card p-4 text-start"
-                >
-                  <span className="min-w-0">
-                    <span className="block font-display text-sm font-bold">Spend them on an unlock</span>
-                    <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                      Permanent unlocks — Form Analysis, Nutrition Pack, Cross-Sport Analysis and more.
-                    </span>
-                  </span>
-                  <KeyRound size={18} className="shrink-0 text-primary" />
-                </motion.button>
-              </div>
-              <div className="px-5 pt-3"><CreditCostsList onOpenUnlocks={() => setSection("unlocks")} /></div>
+              <div className="px-5 pt-3"><CreditCostsList /></div>
             </>
           )}
-          {/* Every advertised unlock is buyable here — see UnlocksSection. */}
           {section === "unlocks" && <UnlocksSection />}
           {section === "coins" && <CoinBundlesSection currency={region.currency} />}
           {section === "subscriptions" && <SubscriptionsSection />}
