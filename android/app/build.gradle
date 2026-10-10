@@ -186,9 +186,17 @@ android {
         // Unlimited instead of the retired Premium plan. No manifest,
         // permission or plugin change — WebView-only.
         //
+        // 24 / 1.2.20 is the Trophy Room release. Achievements move out of
+        // Profile into a Trophy Room group in the Perform hub (achievements,
+        // purchase badges and challenges), the Achievements screen grows the
+        // tabs to match (including the challenges list and create form that
+        // its state already fetched but never rendered), and the Train hub
+        // gains the Mini Games tile back to the arcade. No manifest,
+        // permission or plugin change — WebView-only.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 23
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.19"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 24
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.20"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
