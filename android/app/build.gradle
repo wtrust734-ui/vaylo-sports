@@ -205,8 +205,13 @@ android {
         // No manifest, permission or plugin change — WebView-only.
         //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 26
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.22"
+        // Refresh: current tree re-verified (hub unlocks, holiday shaping,
+        // nutrition pricing) after other agents' landings. No manifest,
+        // permission or plugin change — WebView-only.
+        //
+        // Always increase the code for a Play upload.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 27
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.23"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
