@@ -3,6 +3,7 @@ import { HeartPulse, Apple, Brain, ShieldAlert, Moon, Watch } from "lucide-react
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 /**
  * RECOVER hub — adaptation lives here: readiness, fuel, mind, and injury.
@@ -11,6 +12,9 @@ import { useHubGroups } from "@/hooks/useHubPersonalization";
 const Recover = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // Same lock preview as the Train hub: bought unlocks show a lock until
+  // owned, and the pages themselves enforce it.
+  const { hasFeature } = useSubscription();
 
   const groups = useHubGroups([
     {
@@ -18,8 +22,8 @@ const Recover = () => {
       links: [
         { icon: HeartPulse, label: t("hub.recover.recovery"), description: t("hub.recover.recoveryDesc"), path: "/recovery", feature: "recover.recovery" },
         { icon: Watch, label: t("hub.recover.wearables"), description: t("hub.recover.wearablesDesc"), path: "/health-sync", feature: "recover.wearables" },
-        { icon: Brain, label: t("hub.recover.mental"), description: t("hub.recover.mentalDesc"), path: "/mental", feature: "recover.mental" },
-        { icon: ShieldAlert, label: t("hub.recover.injury"), description: t("hub.recover.injuryDesc"), path: "/injury", feature: "recover.injury" },
+        { icon: Brain, label: t("hub.recover.mental"), description: t("hub.recover.mentalDesc"), path: "/mental", feature: "recover.mental", locked: !hasFeature("mental_gym") },
+        { icon: ShieldAlert, label: t("hub.recover.injury"), description: t("hub.recover.injuryDesc"), path: "/injury", feature: "recover.injury", locked: !hasFeature("injury_management") },
       ],
     },
     {

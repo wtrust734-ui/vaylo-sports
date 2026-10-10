@@ -2,13 +2,21 @@ import { type CSSProperties, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, Lock, type LucideIcon } from "lucide-react";
 
 export interface HubLink {
   icon: LucideIcon;
   label: string;
   description: string;
   path: string;
+  /**
+   * True when the destination is a purchased unlock the athlete does not own
+   * yet (Mental Gym, Injury Management). The tile still navigates — the page
+   * itself carries the paywall and the purchase call — but it wears a lock so
+   * "bought" and "open" visibly match. Icon only, so no new strings are
+   * needed in any locale.
+   */
+  locked?: boolean;
 }
 
 export const HubHeader = ({ title, subtitle, icon: Icon }: { title: string; subtitle: string; icon: LucideIcon }) => {
@@ -25,7 +33,7 @@ export const HubHeader = ({ title, subtitle, icon: Icon }: { title: string; subt
   );
 };
 
-export const HubTile = ({ icon: Icon, label, description, path }: HubLink) => {
+export const HubTile = ({ icon: Icon, label, description, path, locked }: HubLink) => {
   const navigate = useNavigate();
   return (
     <motion.button
@@ -58,7 +66,11 @@ export const HubTile = ({ icon: Icon, label, description, path }: HubLink) => {
         <span className="block text-[14px] font-semibold leading-tight">{label}</span>
         <span className="block truncate text-xs leading-relaxed text-muted-foreground">{description}</span>
       </span>
-      <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden />
+      {locked ? (
+        <Lock size={16} className="shrink-0 text-muted-foreground" aria-hidden />
+      ) : (
+        <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden />
+      )}
     </motion.button>
   );
 };

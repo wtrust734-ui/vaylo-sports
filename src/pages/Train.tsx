@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { Dumbbell, Flame, ScanLine, Zap, CalendarRange, ClipboardList, Gamepad2 } from "lucide-react";
+import { Dumbbell, Flame, ScanLine, Zap, CalendarRange, ClipboardList, Gamepad2, Apple, Brain, ShieldAlert } from "lucide-react";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 /**
  * TRAIN hub — every destination here is the existing page; nothing was rewritten
@@ -10,6 +11,11 @@ import { useHubGroups } from "@/hooks/useHubPersonalization";
  */
 const Train = () => {
   const { t } = useTranslation();
+  // Bought unlocks open from here, not from the Market: the tile is always
+  // listed and wears a lock until hasFeature() says it is owned (Unlimited
+  // counts, same as the pages themselves check). Nutrition is a standard tab
+  // with per-use charges, so it is never locked.
+  const { hasFeature } = useSubscription();
 
   const groups = useHubGroups([
     {
@@ -23,6 +29,15 @@ const Train = () => {
         // normal part of training, and an athlete who cannot find it will just
         // train through the holiday.
         { icon: CalendarRange, label: t("hub.train.availability"), description: t("hub.train.availabilityDesc"), path: "/availability", feature: "training.availability" },
+        // Fuel is daily work, so nutrition lives here as well as under
+        // Recover: one entry point from the bottom bar, no purchase ever.
+        // The page unifies the nutrition plan builder and the AI calorie
+        // scan in a single tab.
+        { icon: Apple, label: t("hub.recover.nutrition"), description: t("hub.recover.nutritionDesc"), path: "/nutrition", feature: "recover.nutrition" },
+        // Bought unlocks, openable the moment they are owned. The pages
+        // carry their own paywalls; the lock here is the honest preview.
+        { icon: Brain, label: t("hub.recover.mental"), description: t("hub.recover.mentalDesc"), path: "/mental", feature: "recover.mental", locked: !hasFeature("mental_gym") },
+        { icon: ShieldAlert, label: t("hub.recover.injury"), description: t("hub.recover.injuryDesc"), path: "/injury", feature: "recover.injury", locked: !hasFeature("injury_management") },
       ],
     },
     {
