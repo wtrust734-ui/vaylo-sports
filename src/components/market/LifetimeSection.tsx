@@ -18,7 +18,7 @@ export default function LifetimeSection() {
 
   return (
     <div className="px-5 space-y-3">
-      <div className="rounded-2xl border border-electric-purple/30 bg-gradient-to-r from-electric-purple/10 to-primary/10 p-4">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
           <Crown size={16} className="text-electric-purple" />
           <h4 className="font-display text-sm font-bold">Lifetime Access</h4>
@@ -32,20 +32,18 @@ export default function LifetimeSection() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.04 + i * 0.06, type: "spring", stiffness: 200, damping: 24 }}
-          className={`overflow-hidden rounded-3xl ${
-            plan.plan_key === "unlimited"
-              ? "p-[1.5px] bg-gradient-to-br from-electric-purple via-primary to-energy shadow-glow"
-              : "p-[1px] bg-border"
+          className={`overflow-hidden rounded-3xl border ${
+            plan.plan_key === "unlimited" ? "border-primary/40" : "border-border"
           }`}
         >
-          <div className="rounded-[22px] bg-card p-5">
+          <div className="bg-card p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="font-display text-lg font-bold">Lifetime {plan.name}</h3>
                 <p className="text-[12px] text-muted-foreground">{plan.tagline}</p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="font-display text-2xl font-bold text-gradient-electric">
+                <p className="font-display text-2xl font-bold text-foreground">
                   {formatPence(option!.price_pence)}
                 </p>
                 <p className="text-[12px] text-muted-foreground">one payment</p>
@@ -82,7 +80,7 @@ export default function LifetimeSection() {
               onClick={() => navigate("/subscription")}
               className={`mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3 font-bold ${
                 plan.plan_key === "unlimited"
-                  ? "bg-gradient-primary text-primary-foreground shadow-glow"
+                  ? "bg-primary text-primary-foreground"
                   : "border border-border bg-muted/30 text-foreground"
               }`}
             >
@@ -99,7 +97,7 @@ export default function LifetimeSection() {
         className="w-full rounded-3xl border border-border bg-card p-5 text-start"
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-energy/25 to-primary/15">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
             <Ticket size={22} className="text-energy" />
           </div>
           <div className="min-w-0 flex-1">

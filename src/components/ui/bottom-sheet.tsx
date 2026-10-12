@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -91,7 +92,7 @@ export default function BottomSheet({
     };
   }, [open, onClose]);
 
-  return (
+  const sheet = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -162,4 +163,29 @@ export default function BottomSheet({
       )}
     </AnimatePresence>
   );
+
+  /* Portalled into <body>. Not a style preference — it is the fix for a real
+     stacking fault.
+
+     The ladder documented in BottomNav puts in-page sheets at z-[59] and the
+     floating bar at z-50, so a sheet should always win. It does not win when
+     the sheet is rendered inside a page's *stacking context*: a z-index is only
+     compared against its siblings inside one context, and the caller's panel
+     then paints at its own (auto) level, under the bar's 50. The app has such a
+     panel: TabShell gives every bottom-navigation root (Home, Train, Perform,
+     Profile) a `.nav-fade` opacity animation with `animation-fill-mode: both`
+     while it is the shown tab. An element with a running or filled animation is
+     composited, and a composited element is a stacking context — so the
+     Wearables sheet opened from Profile, and every other in-page sheet on a tab
+     root, was clamped to that panel and painted under the tab bar, which then
+     covered the sheet's own footer and stole its taps.
+
+     Portalling to <body> puts the overlay back at the root of the stack, where
+     the ladder in BottomNav actually applies, and it fixes every caller at once
+     instead of asking each screen to remember where it renders. It keeps the
+     panel out of any ancestor's `overflow` and out of that page's paint order
+     too. Focus restore and the Escape listener are document-level already, so
+     they are unaffected. */
+  if (typeof document === "undefined") return sheet;
+  return createPortal(sheet, document.body);
 }

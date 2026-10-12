@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchFriends, unfriend, type Friend } from "@/lib/friends";
+import { formatDate } from "@/i18n/format";
 import {
   fetchConversation,
   markConversationRead,
@@ -47,7 +48,10 @@ import ReportMenu from "@/components/safety/ReportMenu";
 const clock = (iso: string) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // Same fields as before — day, month, hour and minute, with no year, which is
+  // the right frame for a chat thread — but resolved against the language the
+  // athlete chose rather than the device default.
+  return formatDate(d, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
 const FriendChat = () => {

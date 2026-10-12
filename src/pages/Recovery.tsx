@@ -9,7 +9,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { recordHealthConsent } from "@/lib/consent";
-import { adaptDailyPlanForReadiness } from "@/lib/dailyReadinessAdaptation";
+import {
+  adaptDailyPlanForReadiness,
+  restoreDailyPlanForReadiness,
+} from "@/lib/dailyReadinessAdaptation";
+import { currentWeekOf } from "@/lib/planSchedule";
+import { formatDate } from "@/i18n/format";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -305,41 +310,76 @@ const Recovery = () => {
     // A low morning check-in is written back into the training plan, not just
     // shown beside it. A hard day can trade places with an easy tomorrow, so
     // both days still add up to the week the coach intended.
+    //
+    // Two things had to change for that promise to hold on a real plan:
+    //
+    //   • The week. This used to adapt `training_plans.week_current`, which is a
+    //     display cursor the generator writes once and nothing ever advances —
+    //     so on any plan more than a week old the change landed on week 1, a
+    //     week that is already behind the athlete, and their current week looked
+    //     exactly as it had before the check-in. The week the athlete is in is a
+    //     fact about today's date and the plan's own anchor, so it is derived
+    //     from those, the same projection the plan screen uses to date a
+    //     session.
+    //
+    //   • Yesterday's decision. A good check-in puts back what a bad one moved,
+    //     which happens before today's adaptation rather than after it, so the
+    //     two cannot fight over the same two days.
     let planNotice: string | null = null;
-    if (zone.label === "CAUTION" || zone.label === "RED") {
+    {
       const { data: activePlan } = await supabase
         .from("training_plans")
-        .select("id, week_current, plan_data")
+        .select("id, created_at, week_current, duration_weeks, plan_data")
         .eq("user_id", user.id)
         .eq("active", true)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (activePlan?.plan_data && Array.isArray(activePlan.plan_data)) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const adaptation = adaptDailyPlanForReadiness({
-          weeks: activePlan.plan_data as unknown as PlanWeek[],
-          week: activePlan.week_current,
-          day: new Date().getDay() || 7,
-          zone: zone.label,
-          logDate: today,
-          todayDate: today,
-          tomorrowDate: localDateKey(tomorrow),
-        });
-        if (adaptation.changed) {
-          const { error: planError } = await supabase
-            .from("training_plans")
-            .update({ plan_data: adaptation.weeks as unknown as never })
-            .eq("id", activePlan.id)
-            .eq("user_id", user.id);
-          if (planError) {
-            planNotice = "Saved your check-in, but the training plan could not be updated.";
-          } else {
-            const updatedToday = adaptation.weeks
-              .find((week) => week.week === adaptation.todayWeek)
-              ?.sessions?.find((session) => session.day === adaptation.todayDay);
-            if (updatedToday) setTodaySession(updatedToday as PlanSession);
-            planNotice = adaptation.summary;
+        const planWeek = currentWeekOf(activePlan, new Date());
+        if (planWeek === null) {
+          // Before the plan starts, or after its last week ends. Saying so is
+          // better than editing a week the athlete is not training in.
+          planNotice = "This plan is not inside your current training week, so nothing was changed.";
+        } else {
+          const restored = restoreDailyPlanForReadiness({
+            weeks: activePlan.plan_data,
+            logDate: today,
+          });
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const adaptation = adaptDailyPlanForReadiness({
+            weeks: restored.weeks as unknown as PlanWeek[],
+            week: planWeek,
+            day: new Date().getDay() || 7,
+            zone: zone.label,
+            logDate: today,
+            todayDate: today,
+            tomorrowDate: localDateKey(tomorrow),
+          });
+
+          // One write, whether the plan changed because an earlier check-in was
+          // put back, because today's was applied, or both — the stored row
+          // should reflect both edits, not just the last one made.
+          if (restored.changed || adaptation.changed) {
+            const { error: planError } = await supabase
+              .from("training_plans")
+              .update({ plan_data: adaptation.weeks as unknown as never })
+              .eq("id", activePlan.id)
+              .eq("user_id", user.id);
+            if (planError) {
+              planNotice = "Saved your check-in, but the training plan could not be updated.";
+            } else {
+              const updatedToday = adaptation.weeks
+                .find((week) => week.week === adaptation.todayWeek)
+                ?.sessions?.find((session) => session.day === adaptation.todayDay);
+              if (updatedToday) setTodaySession(updatedToday as PlanSession);
+              planNotice =
+                adaptation.summary ??
+                (restored.changed
+                  ? "Your last check-in's change has been put back — today is the session your plan intended."
+                  : null);
+            }
           }
         }
       }
@@ -431,7 +471,9 @@ const Recovery = () => {
     const logs = [...hrvHistory].reverse().filter(l => l.hrv !== null);
     const bMap = new Map(baselines.map(b => [b.date, b.hrv_7day_avg]));
     return logs.map(l => ({
-      date: new Date(l.log_date).toLocaleDateString("en", { month: "short", day: "numeric" }),
+      // Local midnight, not UTC: `l.log_date` is a bare day key, and parsing it
+      // directly dates a morning check-in to the previous day west of UTC.
+      date: formatDate(`${l.log_date}T00:00:00`, { month: "short", day: "numeric" }),
       hrv: l.hrv,
       baseline: bMap.get(l.log_date) || null,
     }));

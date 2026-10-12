@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Check, Coins, Loader2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BottomSheet from "@/components/ui/bottom-sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber } from "@/i18n/format";
+import { formatLocalPrice, loadEconomyConfig } from "@/lib/creditEconomy";
 import {
   purchaseItems,
   isPaymentsUnavailable,
@@ -28,7 +30,40 @@ interface Props {
   firstPurchaseAvailable?: boolean;
 }
 
-const price = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+/**
+ * A bundle price in the athlete's own currency.
+ *
+ * This used to be a hand-rolled `$${(cents / 100).toFixed(2)}`, which showed
+ * dollars to everyone — including the athlete who had just seen the same bundle
+ * in pounds on the Market tab. The currency is resolved the same way the Market
+ * resolves it: the configured region, overridden by the athlete's own setting.
+ */
+const usePrice = (userId: string | undefined) => {
+  const [currency, setCurrency] = useState("USD");
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      let value = await loadEconomyConfig()
+        .then((cfg) => cfg.region.currency)
+        .catch(() => "USD");
+      if (userId) {
+        const { data } = await supabase
+          .from("user_settings")
+          .select("currency")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (data?.currency) value = data.currency;
+      }
+      if (alive) setCurrency(value);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  return (cents: number) => formatLocalPrice(cents, currency);
+};
 
 /**
  * Shown at the moment an athlete cannot afford a cosmetic. Sells the cheapest
@@ -42,10 +77,11 @@ export default function CoinTopUpSheet({
   itemName,
   firstPurchaseAvailable = false,
 }: Props) {
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [busy, setBusy] = useState<string | null>(null);
+  const price = usePrice(user?.id);
 
   const credits = profile?.credits ?? 0;
   const plan = useMemo(
@@ -89,7 +125,7 @@ export default function CoinTopUpSheet({
     await refreshProfile();
     const wasFree = result.data?.free === true;
     toast({
-      title: `${offer.total.toLocaleString()} Coins added${wasFree ? " — free" : ""}`,
+      title: `${formatNumber(offer.total)} Coins added${wasFree ? " — free" : ""}`,
       description: wasFree
         ? `Nothing was charged — ${CLOSED_TESTING.label.toLowerCase()}.`
         : itemName ? `You can afford ${itemName} now.` : undefined,
@@ -113,7 +149,7 @@ export default function CoinTopUpSheet({
     const awarded = (data as { awarded?: number } | null)?.awarded ?? gap;
     hapticSuccess();
     await refreshProfile();
-    toast({ title: `Converted ${plan.convertCredits} credits → ${awarded.toLocaleString()} Coins` });
+    toast({ title: `Converted ${plan.convertCredits} credits → ${formatNumber(awarded)} Coins` });
     onClose();
   };
 
@@ -132,11 +168,11 @@ export default function CoinTopUpSheet({
       <div className="flex items-center gap-2">
         <Coins size={15} className="text-energy shrink-0" />
         <span className="font-display text-sm font-bold">
-          {offer.total.toLocaleString()} Coins
+          {formatNumber(offer.total)} Coins
         </span>
         {offer.bonus > 0 && (
           <span className="text-[12px] font-bold uppercase tracking-wider text-energy">
-            incl. {offer.bonus.toLocaleString()} bonus
+            incl. {formatNumber(offer.bonus)} bonus
           </span>
         )}
         {offer.first_purchase_only && (
@@ -152,10 +188,10 @@ export default function CoinTopUpSheet({
       </div>
       <p className="mt-1.5 text-[12px] text-muted-foreground">
         {highlight === "cheapest"
-          ? `Closes your ${gap.toLocaleString()} Coin gap${
-              offer.leftover > 0 ? ` with ${offer.leftover.toLocaleString()} left over` : ""
+          ? `Closes your ${formatNumber(gap)} Coin gap${
+              offer.leftover > 0 ? ` with ${formatNumber(offer.leftover)} left over` : ""
             }.`
-          : `Better value per Coin, and ${offer.total.toLocaleString()} Coins to spend.`}
+          : `Better value per Coin, and ${formatNumber(offer.total)} Coins to spend.`}
       </p>
     </button>
   );
@@ -170,7 +206,7 @@ export default function CoinTopUpSheet({
           <Coins size={17} className="text-energy" />
         </div>
       }
-      title={`${gap.toLocaleString()} more Coins needed`}
+      title={`${formatNumber(gap)} more Coins needed`}
       subtitle={itemName ? `${itemName} costs more Coins than you have.` : "Top up to unlock it now."}
     >
             <div className="space-y-2">
@@ -197,7 +233,7 @@ export default function CoinTopUpSheet({
                     Or convert {plan.convertCredits} credits
                   </p>
                   <p className="text-[12px] text-muted-foreground">
-                    Instant — you have {credits.toLocaleString()} credits (1 credit = {COINS_PER_CREDIT} Coins).
+                    Instant — you have {formatNumber(credits)} credits (1 credit = {COINS_PER_CREDIT} Coins).
                   </p>
                 </div>
                 {busy === "convert" ? (

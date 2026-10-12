@@ -4,6 +4,7 @@ import { TrendingUp, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { projectTrajectory } from "@/lib/performance";
+import { formatShortDate } from "@/i18n/format";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 
 const Development = () => {
@@ -24,7 +25,7 @@ const Development = () => {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   const proj = projectTrajectory(snaps, age);
-  const data = snaps.map((s) => ({ d: new Date(s.created_at).toLocaleDateString(), VPR: s.overall_vpr, Speed: s.speed_index, Power: s.power_index, Endurance: s.endurance_capacity }));
+  const data = snaps.map((s) => ({ d: formatShortDate(s.created_at), VPR: s.overall_vpr, Speed: s.speed_index, Power: s.power_index, Endurance: s.endurance_capacity }));
   const flag = proj.slope > 1 ? "Late bloomer trajectory" : proj.slope > 0.3 ? "Steady upward trend" : proj.slope < -0.3 ? "Stagnation — change stimulus" : "Plateau";
 
   return (

@@ -10,7 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useLifeEvents, type LifeEventInput } from "@/hooks/useLifeEvents";
 import { useToast } from "@/hooks/use-toast";
 import { ageBand } from "@/lib/age";
-import { activeAdjustments, classifyBreak, returnProgression, type PlanAdjustmentRecord } from "@/lib/adaptivePlan";
+import {
+  activeAdjustments,
+  classifyBreak,
+  rebuildRefusalNote,
+  returnProgression,
+  type PlanAdjustmentRecord,
+} from "@/lib/adaptivePlan";
 import { ageFromDateOfBirth } from "@/lib/adaptivePlanning";
 import { localDateKey } from "@/lib/dates";
 import { flattenPlan, type DatedSession, type TrainingPlanLike } from "@/lib/planSchedule";
@@ -257,6 +263,16 @@ const Availability = () => {
     // per-break panel below still carries the second one.
     const rebuilt = applied.rebuild?.applied ? applied.rebuild.explanation : null;
 
+    // A rebuild the engine declined is an answer too, and a different one from
+    // "your break changed nothing": it says whether the break was too short to
+    // need a rebuild or whether the plan had nothing left inside it to rebuild.
+    // Reported alongside the session count, never instead of it.
+    const declined =
+      applied.rebuild && !applied.rebuild.applied && !applied.rebuild.error && applied.rebuild.reason
+        ? rebuildRefusalNote(applied.rebuild.reason)
+        : null;
+    const summary = rebuilt ?? [applied.explanation, declined].filter((part): part is string => !!part).join(" ");
+
     toast({
       title: editingId ? "Break updated" : "Break added",
       // The explanation is the "what changed?" answer, so it is the description
@@ -264,7 +280,7 @@ const Availability = () => {
       // nothing was moved and nothing counts against the athlete.
       description: outcome.queued
         ? "Saved on your device — it will sync when you're back online."
-        : rebuilt ?? applied.explanation ?? "Nothing needed changing on your plan.",
+        : summary || "Nothing needed changing on your plan.",
       duration: 8000,
     });
 

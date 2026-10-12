@@ -8,6 +8,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { formatLocalPrice, loadEconomyConfig } from "@/lib/creditEconomy";
+import { formatNumber } from "@/i18n/format";
 import { useToast } from "@/hooks/use-toast";
 import {
   loadEventPacks, loadOwnedPackIds, claimEventPack, relatedPacks, SECTION_LABELS,
@@ -118,7 +119,7 @@ function PackCard({
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="font-display text-base font-bold text-primary">
-              {pack.creditPrice.toLocaleString()}<span className="text-[12px] font-semibold"> credits</span>
+              {formatNumber(pack.creditPrice)}<span className="text-[12px] font-semibold"> credits</span>
             </p>
             <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(pack.priceCents, currency)} · v{pack.version}</p>
           </div>
@@ -310,7 +311,7 @@ const EventPacks = () => {
           if (!result.ok) {
             toast({
               title: "Still short of credits",
-              description: `${pack.name} needs ${result.required.toLocaleString()} credits.`,
+              description: `${pack.name} needs ${formatNumber(result.required)} credits.`,
               variant: "destructive",
             });
             return;
@@ -327,7 +328,7 @@ const EventPacks = () => {
       toast({
         title: pending.length === 1 ? "Event Pack unlocked 🎉" : `${pending.length} Event Packs unlocked 🎉`,
         description: spent > 0
-          ? `${spent.toLocaleString()} credits spent · lifetime access, restored on any device you sign in to.`
+          ? `${formatNumber(spent)} credits spent · lifetime access, restored on any device you sign in to.`
           : "Lifetime access — they'll restore on any device you sign in to.",
       });
     } catch (e) {
@@ -391,7 +392,7 @@ const EventPacks = () => {
                 <Trophy size={14} className="mx-auto mb-1 text-primary" />
                 <p className="text-[12px] text-muted-foreground">Price</p>
                 <p className="text-xs font-display font-bold text-primary">
-                  {detail.creditPrice.toLocaleString()} credits
+                  {formatNumber(detail.creditPrice)} credits
                 </p>
                 <p className="text-[12px] text-muted-foreground">or {formatLocalPrice(detail.priceCents, currency)}</p>
               </div>
@@ -456,7 +457,7 @@ const EventPacks = () => {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold">{r.name}</span>
                     <span className="block text-[12px] text-muted-foreground">
-                      {r.sport} · {r.weeks}w · {r.creditPrice.toLocaleString()} credits
+                      {r.sport} · {r.weeks}w · {formatNumber(r.creditPrice)} credits
                     </span>
                   </span>
                   <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
@@ -488,7 +489,7 @@ const EventPacks = () => {
                 inBasket ? "border border-border bg-muted/40 text-muted-foreground" : "bg-gradient-primary text-primary-foreground shadow-glow"
               }`}
             >
-              {inBasket ? "In basket" : `Add to basket · ${detail.creditPrice.toLocaleString()} credits`}
+              {inBasket ? "In basket" : `Add to basket · ${formatNumber(detail.creditPrice)} credits`}
             </motion.button>
           )}
           </div>
@@ -509,7 +510,7 @@ const EventPacks = () => {
             </p>
             {profile && typeof profile.credits === "number" && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary">
-                <Sparkles size={11} /> {profile.credits.toLocaleString()} credits available
+                <Sparkles size={11} /> {formatNumber(profile.credits)} credits available
               </p>
             )}
           </div>
@@ -737,7 +738,7 @@ const EventPacks = () => {
                           <p className="truncate text-xs font-bold">{b.name}</p>
                           <p className="text-[12px] text-muted-foreground">{b.sport} · {b.weeks}w · lifetime access</p>
                         </div>
-                        <p className="text-xs font-bold text-primary">{b.creditPrice.toLocaleString()} cr</p>
+                        <p className="text-xs font-bold text-primary">{formatNumber(b.creditPrice)} cr</p>
                         <button onClick={() => setBasket(basket.filter((x) => x.id !== b.id))}>
                           <X size={14} className="text-muted-foreground" />
                         </button>
@@ -747,11 +748,14 @@ const EventPacks = () => {
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Total (one-time)</span>
                     <span className="font-display text-lg font-bold text-primary">
-                      {basketCredits.toLocaleString()} credits
+                      {formatNumber(basketCredits)} credits
                     </span>
                   </div>
                   <p className="mb-3 text-end text-[12px] text-muted-foreground">
-                    or ${(basketTotal / 100).toFixed(2)} once store billing is live
+                    {/* The athlete's own currency, not a hand-rolled "$": this
+                        line showed dollars to everyone, next to the same packs
+                        priced in pounds on the Market tab. */}
+                    or {formatLocalPrice(basketTotal, currency)} once store billing is live
                   </p>
                   <motion.button
                     whileTap={{ scale: 0.97 }} onClick={checkout}

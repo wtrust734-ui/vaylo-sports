@@ -1,11 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, useInView } from "framer-motion";
-import { Gamepad2, Zap, Eye, Brain, Timer, Target, Hand, ArrowUp, Trophy } from "lucide-react";
+import { Gamepad2, Zap, Eye, Brain, Timer, Target, Hand, ArrowUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { claimCreditReward, promoBonus } from "@/lib/credits";
-
 
 const games = [
   { id: "reaction", icon: Zap, title: "Reaction Speed", desc: "Tap when the screen turns green", color: "text-energy", bg: "bg-energy/10" },
@@ -303,7 +301,10 @@ const CoordinationGame = ({ onBack }: { onBack: (score?: number) => void }) => {
   );
 };
 
-// World records per game — beat this to earn the configured arcade credit reward
+// World-record thresholds per game. Beating one sets a record and nothing else:
+// the games are free to play and replayable, so paying a credit reward per
+// record was an open-ended credit leak. The threshold survives as the bar to
+// chase, not as a payout.
 const WORLD_RECORDS: Record<string, { threshold: number; betterIfLower: boolean; label: string }> = {
   reaction: { threshold: 150, betterIfLower: true, label: "≤150ms" },
   sequence: { threshold: 15, betterIfLower: false, label: "≥15 rounds" },
@@ -316,7 +317,7 @@ const WORLD_RECORDS: Record<string, { threshold: number; betterIfLower: boolean;
 const BEST_KEY = (uid: string, gameId: string) => `vaylo_arcade_best_${uid}_${gameId}`;
 
 const Arcade = () => {
-  const { user, refreshProfile } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [activeGame, setActiveGame] = useState<string | null>(null);
   const [bests, setBests] = useState<Record<string, number>>({});
@@ -333,7 +334,7 @@ const Arcade = () => {
     setBests(loaded);
   }, [user]);
 
-  const checkWorldRecord = useCallback(async (gameId: string, score: number) => {
+  const checkWorldRecord = useCallback((gameId: string, score: number) => {
     if (!user) return;
     const record = WORLD_RECORDS[gameId];
     if (!record) return;
@@ -348,17 +349,11 @@ const Arcade = () => {
 
     localStorage.setItem(BEST_KEY(user.id, gameId), String(score));
     setBests(b => ({ ...b, [gameId]: score }));
-    try {
-      const res = await claimCreditReward("arcade_record", {
-        reason: `Arcade record: ${gameId} (${score})`,
-        idempotencyKey: `arcade:${gameId}:${score}`,
-      });
-      await refreshProfile();
-      toast({ title: "🏆 New Record!", description: `+${res.granted || promoBonus("arcade_record")} credits — beat it again to earn more.` });
-    } catch (e) {
-      toast({ title: "Record set", description: "Couldn't award credits right now." });
-    }
-  }, [user, bests, refreshProfile, toast]);
+    // A record is a record — there is no credit claim here, and adding one back
+    // is what this comment exists to prevent. Six free games, each replayable,
+    // each paying a bonus per improvement, is an unlimited credit tap.
+    toast({ title: "🏆 New Record!", description: "New personal best saved on this device." });
+  }, [user, bests, toast]);
 
   const backWithScore = (gameId: string) => (score?: number) => {
     if (score !== undefined) checkWorldRecord(gameId, score);
@@ -380,16 +375,6 @@ const Arcade = () => {
         </motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Train your brain, sharpen your game.</motion.p>
       </div>
-
-      {/* World Record Info */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-        className="mx-5 mb-4 bg-gradient-card border border-energy/20 rounded-xl p-3 flex items-center gap-3">
-        <Trophy size={20} className="text-energy flex-shrink-0" />
-        <div>
-          <p className="text-xs font-semibold text-energy">Every record = {promoBonus("arcade_record")} credits</p>
-          <p className="text-[12px] text-muted-foreground">Beat the threshold and improve on it — a new personal best awards +{promoBonus("arcade_record")} credits each time.</p>
-        </div>
-      </motion.div>
 
       <div ref={gamesRef} className="px-5">
         <div className="grid grid-cols-2 gap-3 mb-8">

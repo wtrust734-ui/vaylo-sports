@@ -115,11 +115,13 @@ export const UNLOCK_CATALOG: UnlockCatalogEntry[] = [
       "Which of your strengths carry over, and which gaps do not close",
       "Cross-training blocks ordered by transfer, not by habit",
     ],
-    // Was /cross-training: that standalone tab is gone, and cross-training now
-    // lives inside the plan itself (equipment answered at setup), so the plan
-    // is the honest home for this price.
-    route: "/training",
-    routeLabel: "Open Training Plans",
+    // Was /training, then /cross-training before that. Neither was honest: the
+    // plan screen sells nothing of this and the standalone tab was deleted, so
+    // "Owned" pointed at a page that had no idea the athlete had paid. The
+    // analysis has its own screen now, and buying it is what puts that screen
+    // in the Train hub (see ROUTE_UNLOCKS in src/lib/personalization/nav.ts).
+    route: "/cross-sport",
+    routeLabel: "Open Cross-Sport Analysis",
     pairsWith: ["injury_management"],
   },
 ];

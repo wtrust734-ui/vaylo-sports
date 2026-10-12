@@ -127,8 +127,16 @@ describe("Google AI form-analysis path (ai-analyze photos + video-form-analysis)
       /https:\/\/generativelanguage\.googleapis\.com\/v1beta\/models\/\$\{call\.model\}:generateContent/,
     );
     expect(src).toMatch(/Deno\.env\.get|call\.apiKey/);
-    // The URL appears exactly once in the repo — inside this adapter.
-    expect(src.match(/generativelanguage/g)?.length).toBe(1);
+    // This adapter owns EVERY Generative Language URL — generateContent, the
+    // Files API upload and the file delete. It was "exactly once" until
+    // 2026-10-12, when video clips moved off the JSON body and onto the Files
+    // API (so they are no longer capped at 6 MB); the invariant that matters is
+    // that the host lives here and nowhere else, which is asserted below.
+    expect(src).toMatch(/const UPLOAD_URL = "https:\/\/generativelanguage\.googleapis\.com\/upload\/v1beta\/files"/);
+    expect(src).toMatch(/const FILES_URL = "https:\/\/generativelanguage\.googleapis\.com\/v1beta\/files"/);
+    expect(src.match(/generativelanguage/g)?.length ?? 0).toBe(3);
+    // ...and the caller that used to hold a second copy of the host does not.
+    expect(read("/supabase/functions/video-form-analysis/index.ts")).not.toMatch(/generativelanguage/);
   });
 
   it("both form-analysis functions call the adapter and read GOOGLE_API", () => {

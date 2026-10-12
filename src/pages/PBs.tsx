@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Flame, Plus, Trash2, TrendingUp } from "lucide-react";
 import { lsGet, lsSet } from "@/lib/localStore";
 import { triggerMilestone } from "@/components/MilestoneCelebration";
+import { formatShortDate } from "@/i18n/format";
 
 interface PB {
   id: string;
@@ -92,7 +93,11 @@ const PBs = () => {
                 <div>
                   <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{p.metric}</p>
                   <p className="text-3xl font-display font-bold text-primary mt-1">{p.value}<span className="text-sm text-muted-foreground ml-1">{p.unit}</span></p>
-                  <p className="text-[12px] text-muted-foreground mt-1">{new Date(p.date).toLocaleDateString()}</p>
+                  {/* `p.date` is a bare day key, and `new Date("2026-10-05")`
+                      parses as UTC midnight — which west of UTC renders as the
+                      previous day. A personal best is dated the day it happened
+                      where it happened, so the local-midnight form is used. */}
+                  <p className="text-[12px] text-muted-foreground mt-1">{formatShortDate(`${p.date}T00:00:00`)}</p>
                 </div>
                 <button onClick={() => remove(p.id)} className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 size={14} /></button>
               </div>

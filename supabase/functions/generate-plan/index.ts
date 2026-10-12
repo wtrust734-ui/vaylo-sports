@@ -6,6 +6,14 @@ import { refundCredits } from "../_shared/refund.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 import { equipmentDirective, normaliseEquipment, type EquipmentId } from "../_shared/equipment.ts";
+import {
+  buildWeekSkeleton,
+  chunkSkeleton,
+  planChunkWeeks,
+  skeletonContinuityNote,
+  skeletonTargetLines,
+  type WeekSkeleton,
+} from "../_shared/planPeriodisation.ts";
 
 // Prompt-stuffing caps — this function spends real AI budget.
 const MAX_PB_ITEMS = 20;
@@ -286,60 +294,135 @@ Availability Quiz (already capped to age-safe limits): ${JSON.stringify(safeQuiz
 Equipment available to this athlete: ${equipment.length ? equipment.join(", ") : "none recorded — bodyweight and space only"}
 ${dossierText ? `Athlete dossier already in system prompt — do not ask for it again.` : ""}`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODELS.CHAT.MINI,
-        messages: [
-          { role: "system", content: system + (langDirective ? "\n\n" + langDirective : "") },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
-        // Output budget scales with plan length. Measured need is ~1.9k
-        // completion tokens per week; 3k/week leaves room for verbosity while
-        // still bounding a runaway generation instead of letting it bill up to
-        // the model's 128k ceiling.
-        max_completion_tokens: Math.min(128000, duration * 3000 + 3000),
-      }),
+    // ---- Periodisation is the app's, and the weeks are written in parallel ----
+    //
+    // This used to be one call for the whole plan: a 12-week plan asked the
+    // model for roughly 23k completion tokens in a single response, which is why
+    // an athlete waited minutes. Wall-clock time for one call is the plan's own
+    // text (measured: ~27s for a one-week response, ~55s for a two-week one), so
+    // the fix is many small calls in flight rather than one long one — the total
+    // is then the slowest call, not the sum.
+    //
+    // The shape of the plan is NOT left to those calls. `buildWeekSkeleton`
+    // decides here which weeks are deloads, what each block is for and how
+    // volume and intensity progress (pure, unit-tested in
+    // src/lib/planPeriodisation.test.ts), every chunk is shown the whole
+    // progression and told which slice is its own, and the merged plan comes
+    // back with `isDeload` stamped from the skeleton — so a plan cannot ramp for
+    // three weeks and then flatten because the model forgot what it wrote.
+    const skeleton = buildWeekSkeleton({
+      duration,
+      deloadEvery: effectiveCaps.deloadEvery,
+      level,
+      // The athlete's own answer, already clamped to the age caps above.
+      sessionsPerWeek: whole((safeQuiz as Record<string, unknown>).daysPerWeek, 7) || 4,
     });
+    const chunks = chunkSkeleton(skeleton, planChunkWeeks(duration));
 
-    if (!response.ok) {
-      // Status + marker only — never the raw provider body.
-      console.error("AI gateway error:", response.status, "upstream_error");
-      // Charged but nothing delivered — refund before reporting the failure.
-      if (chargedUserId) {
-        await refundCredits({
-          supabaseUrl: Deno.env.get("SUPABASE_URL")!,
-          serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-          userId: chargedUserId,
-          amount: charged,
-          reason: "Training plan failed — AI error (auto refund)",
-        });
-        chargedUserId = null;
+    /**
+     * One chunk's weeks, from one provider call.
+     *
+     * Throws on a provider error, a rate limit or unparseable JSON so the caller
+     * can refund once and report the same failure it always reported — the
+     * charge/refund bookkeeping above is deliberately untouched by this change.
+     */
+    const writeChunk = async (own: WeekSkeleton[]): Promise<Record<string, unknown>[]> => {
+      const first = own[0].week;
+      const last = own[own.length - 1].week;
+      const chunkSystem = `${system}
+
+YOUR SLICE OF THIS REQUEST: write ONLY weeks ${first} to ${last} of the plan — ${own.length} week${own.length === 1 ? "" : "s"}. The sentence above saying "exactly ${duration} weeks" describes the whole plan; the JSON you return carries only your own weeks in its \`weeks\` array, and writing any other week is an error. Position your weeks against the targets and the continuity note below rather than against the weeks you did not write.
+
+WEEK TARGETS FOR THE WHOLE PLAN (computed by the app, not by you):
+${skeletonTargetLines(skeleton, own)}
+
+${skeletonContinuityNote(own, skeleton)}`;
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODELS.CHAT.MINI,
+          messages: [
+            { role: "system", content: chunkSystem + (langDirective ? "\n\n" + langDirective : "") },
+            // `user` first (the athlete, quiz and equipment), then the week range
+            // and the targets, so the request ends on what to write.
+            { role: "user", content: `${user}\n\nWrite exactly weeks ${first} to ${last} (${own.length} week${own.length === 1 ? "" : "s"}), in the schema above, and nothing else.` },
+          ],
+          response_format: { type: "json_object" },
+          // Output budget scales with the CHUNK, not the plan: measured need is
+          // ~1.9k completion tokens per week, and 3k/week bounds one runaway
+          // response instead of letting a whole-plan call bill to 128k.
+          max_completion_tokens: Math.min(16000, own.length * 3000 + 1500),
+        }),
+      });
+
+      if (!response.ok) {
+        // Status + marker only — never the raw provider body.
+        console.error("AI gateway error:", response.status, "upstream_error");
+        const err = new Error(response.status === 429 ? "rate_limited" : response.status === 402 ? "ai_credits" : "provider_error") as Error & { status?: number };
+        err.status = response.status;
+        throw err;
       }
-      if (response.status === 429) return json({ error: "Rate limited. Try again shortly." }, 429);
-      if (response.status === 402) return json({ error: "AI credits exhausted." }, 402);
+
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content ?? "{}";
+      let parsed: { weeks?: unknown } | null = null;
+      try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
+      catch {
+        throw new Error("invalid_json");
+      }
+      const chunkWeeksParsed = Array.isArray(parsed?.weeks) ? (parsed.weeks as unknown[]) : [];
+      if (chunkWeeksParsed.length === 0) throw new Error("empty_plan");
+      return chunkWeeksParsed.filter((w): w is Record<string, unknown> => !!w && typeof w === "object" && !Array.isArray(w));
+    };
+
+    // Every chunk at once. `allSettled` rather than `all`, so one failed chunk
+    // still lets the others finish before the refund — abandoning a request in
+    // flight would not stop the provider billing for it.
+    const settled = await Promise.allSettled(chunks.map(writeChunk));
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) {
+      const status = (failed.reason as { status?: number })?.status ?? 0;
+      const reason = (failed.reason as Error)?.message ?? "provider_error";
+      await refundAndReset();
+      if (status === 429 || reason === "rate_limited") {
+        return json({ error: "Rate limited. Try again shortly." }, 429);
+      }
+      if (status === 402 || reason === "ai_credits") {
+        return json({ error: "AI credits exhausted." }, 402);
+      }
+      if (reason === "invalid_json") return json({ error: "AI returned invalid JSON" }, 502);
+      if (reason === "empty_plan") return json({ error: "AI returned an empty plan" }, 502);
       return json({ error: "AI generation failed" }, 500);
     }
 
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content ?? "{}";
-    let parsed: { weeks?: unknown } | null = null;
-    try { parsed = typeof content === "string" ? JSON.parse(content) : content; }
-    catch {
+    // Merged in skeleton order, so the plan reads week 1..N no matter which call
+    // answered first, and each week carries the app's own deload decision.
+    const skeletonByWeek = new Map(skeleton.map((w) => [w.week, w]));
+    const weeks: unknown[] = [];
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      for (const week of result.value) {
+        const planWeek = skeletonByWeek.get(Number(week.week));
+        weeks.push(planWeek ? { ...week, isDeload: planWeek.isDeload } : week);
+      }
+    }
+    // The merged plan must cover the whole skeleton: a chunk that quietly
+    // returned four of its six weeks is a plan with a hole in it, and the
+    // athlete paid for all of it.
+    const covered = new Set(weeks.map((w) => Number((w as Record<string, unknown>).week)));
+    const missing = skeleton.filter((w) => !covered.has(w.week)).map((w) => w.week);
+    if (missing.length > 0) {
+      console.error("generate-plan incomplete:", missing.join(","));
       await refundAndReset();
-      return json({ error: "AI returned invalid JSON" }, 502);
+      return json({ error: "AI returned an incomplete plan" }, 502);
     }
 
-    const weeks = Array.isArray(parsed?.weeks) ? (parsed.weeks as unknown[]) : [];
-    if (weeks.length === 0) {
-      await refundAndReset();
-      return json({ error: "AI returned an empty plan" }, 502);
-    }
+    const parsed = { weeks };
 
     // Plan-structure validation before the plan is returned (and before the
     // client can save it): every week must carry exactly 7 day objects with a

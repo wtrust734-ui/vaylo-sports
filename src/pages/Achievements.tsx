@@ -273,6 +273,18 @@ const TAB_LABELS: Record<TabType, string> = {
   challenges: "Challenges",
 };
 
+/**
+ * The screen's own heading, per section. It used to say "Achievements" while the
+ * athlete was looking at Badges or Challenges — the title of a screen is the one
+ * label a reader trusts, so a heading naming a section that is not on display
+ * undoes the point of splitting them.
+ */
+const TAB_HEADINGS: Record<TabType, { title: string; blurb: string }> = {
+  achievements: { title: "Achievements", blurb: "Medals you earn by training. Nothing here is bought." },
+  badges: { title: "Badges", blurb: "Earned from Market purchases — proof of what you own." },
+  challenges: { title: "Challenges", blurb: "Standing challenges to take on." },
+};
+
 const isTabType = (value: string | null): value is TabType =>
   value === "achievements" || value === "badges" || value === "challenges";
 
@@ -390,35 +402,72 @@ const Achievements = () => {
   };
 
   const earnedIds = new Set(earnedAchievements.map(a => a.type));
-  const earnedCount = earnedAchievements.length;
-  const totalAch = builtInAchievements.length;
+
+  // The three sections are disjoint, and that is the point of them. Every badge
+  // is also a row in `builtInAchievements`, so the eight purchase medals used to
+  // sit on the Achievements shelf as well as the Badges one — which made Badges
+  // a filter of Achievements rather than a section of its own, and left a reader
+  // on the Achievements tab looking at things they buy. Badges out of
+  // Achievements is what stops the two tabs showing the same medals.
+  const achievementShelf = builtInAchievements.filter((ach) => !BADGE_IDS.has(ach.id));
+  const badgeShelf = builtInAchievements.filter((ach) => BADGE_IDS.has(ach.id));
+  const earnedIn = (shelf: typeof builtInAchievements) =>
+    shelf.filter((ach) => earnedIds.has(ach.id)).length;
+  const percentEarned = (earned: number, total: number) =>
+    total > 0 ? Math.round((earned / total) * 100) : 0;
+
+  const achievementCells = [
+    { value: earnedIn(achievementShelf), label: "Earned", tone: "text-primary" },
+    { value: achievementShelf.length, label: "Total", tone: "text-energy" },
+    { value: `${percentEarned(earnedIn(achievementShelf), achievementShelf.length)}%`, label: "Complete", tone: "text-electric-purple" },
+  ];
+  const badgeCells = [
+    { value: earnedIn(badgeShelf), label: "Owned", tone: "text-primary" },
+    { value: badgeShelf.length, label: "Total", tone: "text-energy" },
+    { value: `${percentEarned(earnedIn(badgeShelf), badgeShelf.length)}%`, label: "Complete", tone: "text-electric-purple" },
+  ];
+
+  // One stats strip for the whole screen, reading whichever section is open.
+  // It used to count achievements only, so Badges and Challenges carried three
+  // numbers about a collection that was not on screen. The standing challenges
+  // are a fixed catalogue rather than a personal tally, so their tab gets the
+  // two counts that are actually about the athlete: the shelf and what they
+  // wrote themselves.
+  const cells: { value: string | number; label: string; tone: string }[] =
+    tab === "badges" ? badgeCells
+    : tab === "challenges" ? [
+        { value: builtInChallenges.length, label: "Standing", tone: "text-primary" },
+        { value: stats.createdChallenges, label: "Created", tone: "text-energy" },
+      ]
+    : achievementCells;
 
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Achievements</motion.h1>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Earn medals for consistency, milestones and mastery.</motion.p>
+        <motion.h1
+          key={tab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl font-display font-bold"
+        >
+          {TAB_HEADINGS[tab].title}
+        </motion.h1>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">
+          {TAB_HEADINGS[tab].blurb}
+        </motion.p>
       </div>
 
-      {/* Stats */}
+      {/* Stats for the open section. */}
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-5 shadow-card">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3, type: "spring" }}
-              className="text-2xl font-display font-bold text-primary block">{earnedCount}</motion.span>
-            <p className="text-[12px] text-muted-foreground mt-0.5">Earned</p>
-          </div>
-          <div className="border-x border-border">
-            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4, type: "spring" }}
-              className="text-2xl font-display font-bold text-energy block">{totalAch}</motion.span>
-            <p className="text-[12px] text-muted-foreground mt-0.5">Total</p>
-          </div>
-          <div>
-            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5, type: "spring" }}
-              className="text-2xl font-display font-bold text-electric-purple block">{Math.round((earnedCount / totalAch) * 100)}%</motion.span>
-            <p className="text-[12px] text-muted-foreground mt-0.5">Complete</p>
-          </div>
+        <div className={`grid gap-3 text-center ${cells.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+          {cells.map((cell, i) => (
+            <div key={cell.label} className={i > 0 ? "border-s border-border" : undefined}>
+              <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3 + i * 0.1, type: "spring" }}
+                className={`text-2xl font-display font-bold block ${cell.tone}`}>{cell.value}</motion.span>
+              <p className="text-[12px] text-muted-foreground mt-0.5">{cell.label}</p>
+            </div>
+          ))}
         </div>
       </motion.div>
 
@@ -442,9 +491,6 @@ const Achievements = () => {
       </div>
 
       <div className="px-5">
-        {tab === "badges" && (
-          <p className="text-sm text-muted-foreground mb-3">Badges you earned from Market purchases — proof of what you own.</p>
-        )}
         {tab === "challenges" && (
           <div className="mb-3 rounded-xl border border-border bg-card p-3">
             <p className="text-sm text-muted-foreground">
@@ -477,7 +523,7 @@ const Achievements = () => {
           </div>
         ) : (
         <div className="grid grid-cols-2 gap-3 mb-8">
-          {builtInAchievements.filter((ach) => tab === "achievements" || BADGE_IDS.has(ach.id)).map((ach, i) => {
+          {(tab === "badges" ? badgeShelf : achievementShelf).map((ach, i) => {
             const earned = earnedIds.has(ach.id);
             const Icon = iconMap[ach.icon] || Trophy;
             return (

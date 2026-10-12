@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatNumber } from "@/i18n/format";
 import { RARITY_META, RARITY_ORDER, type Rarity } from "@/lib/rewards";
 import {
   SELLABLE_TYPES,
@@ -97,7 +98,7 @@ export default function Collection() {
         </div>
         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Coins className="h-3.5 w-3.5 text-energy" />
-          {coins.toLocaleString()} Coins · profile cosmetics are bought with Coins; badges are earned from chests and challenges.
+          {formatNumber(coins)} Coins · profile cosmetics are bought with Coins; badges are earned from chests and challenges.
         </p>
       </div>
 
@@ -178,7 +179,7 @@ export default function Collection() {
                     {busy === d.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <><Coins className="mr-1 h-3.5 w-3.5" />{price.toLocaleString()}</>
+                      <><Coins className="mr-1 h-3.5 w-3.5" />{formatNumber(price)}</>
                     )}
                   </Button>
                 ) : (

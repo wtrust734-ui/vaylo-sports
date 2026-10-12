@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Dumbbell, Flame, ScanLine, Zap, CalendarRange, ClipboardList, Gamepad2, Apple, Brain, ShieldAlert } from "lucide-react";
+import { Dumbbell, Flame, ScanLine, Zap, CalendarRange, ClipboardList, Gamepad2, Apple, Brain, ShieldAlert, ArrowLeftRight } from "lucide-react";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -45,6 +45,14 @@ const Train = () => {
       links: [
         { icon: Flame, label: t("hub.train.pbs"), description: t("hub.train.pbsDesc"), path: "/pbs", feature: "training.pbs" },
         { icon: ScanLine, label: t("hub.train.formAnalysis"), description: t("hub.train.formAnalysisDesc"), path: "/form", feature: "training.form" },
+        // A bought unlock, listed here and NOT only in the Market. The athlete
+        // who paid for Cross-Sport Analysis used to find nothing anywhere: the
+        // hub had no tile and /cross-sport redirected to the plan screen. The
+        // lock is what the tile wears until the entitlement exists — HubGroup
+        // drops it entirely until then (the route is in ROUTE_UNLOCKS), so an
+        // athlete who has not bought it never sees a row that only leads to a
+        // paywall. Buying it, or being on Unlimited, makes the row appear.
+        { icon: ArrowLeftRight, label: t("hub.train.crossSport"), description: t("hub.train.crossSportDesc"), path: "/cross-sport", feature: "training.plans", locked: !hasFeature("cross_sport") },
         // The reaction-time, memory and accuracy mini games. They train the
         // mental side of performance (reaction, peripheral vision, timing),
         // so they sit with training rather than only under Compete.

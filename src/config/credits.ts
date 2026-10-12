@@ -461,16 +461,19 @@ export const MONTHLY_ALLOWANCE = {
 // ---------------------------------------------------------------------------
 // Promotional / reward credit values (all grants go through credits_grant)
 // ---------------------------------------------------------------------------
+// The arcade used to pay 10 credits for every record beaten. That was an
+// unbounded credit leak — a good player generated credits faster than any pack
+// could sell them — so records now pay nothing and the key is deleted rather
+// than set to 0, which would leave a decoy for the next person to wire up.
+// Best scores are still kept on the device (src/pages/Arcade.tsx).
 export type PromoBonusKey =
   | "referral_referrer"
   | "referral_referee"
-  | "arcade_record"
   | "winback";
 
 export const PROMO_BONUSES: Record<PromoBonusKey, number> = {
   referral_referrer: 50,
   referral_referee: 25,
-  arcade_record: 10,
   winback: 20,
 };
 
@@ -484,6 +487,12 @@ export const CREDIT_SOURCES = [
   "starter",
   "subscription_refill",
   "credit_pack",
+  // "arcade" is LEGACY and must stay in this list. It is the source written on
+  // historical credit rows, and `CreditSource` is what those rows are typed
+  // against — dropping the value would make every old row unrepresentable
+  // rather than clear anything. Nothing grants it any more: the mini-game record
+  // payout was removed on 2026-10-12 (see PROMO_BONUSES below), so no new row
+  // can carry it. If you are here to wire the arcade back up, don't.
   "arcade",
   "referral",
   "promo",

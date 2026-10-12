@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatDateTimeExact } from "@/i18n/format";
 
 interface Coach { user_id: string; display_name: string; bio?: string; specialties?: string[]; verified?: boolean; }
 
@@ -66,7 +67,7 @@ export default function HumanCoaches() {
             {bookings.map((b) => (
               <div key={b.id} className="p-4 rounded-2xl border border-border bg-card flex items-center justify-between">
                 <div>
-                  <p className="font-medium">{new Date(b.starts_at).toLocaleString()}</p>
+                  <p className="font-medium">{formatDateTimeExact(new Date(b.starts_at))}</p>
                   <p className="text-xs text-muted-foreground">{b.duration_minutes} min · {b.status}</p>
                 </div>
                 {b.video_link && (

@@ -94,10 +94,19 @@ export type UnlimitedPackConfig = {
   label: string; best_value?: boolean;
 };
 
+/**
+ * The legacy `infinite_*` unlimited products, kept priced in step with the live
+ * plan catalogue (src/config/subscriptionPlans.ts). They predate the two-plan
+ * phase and are no longer rendered anywhere, but process-purchase still lists
+ * them in PRODUCT_PRICES and will accept them as money products, so leaving the
+ * old numbers here would leave a second, cheaper way to buy unlimited credit.
+ * Repriced 2026-10-12 with the live plans: £2.99/$49.99 could not cover a
+ * subscriber who actually uses the AI features the plan makes free.
+ */
 export const UNLIMITED_PACKS: UnlimitedPackConfig[] = [
-  { id: "infinite_lifetime", price_cents: 4999, period: "lifetime", label: "Lifetime" },
-  { id: "infinite_monthly",  price_cents: 299,  period: "month",    label: "Monthly" },
-  { id: "infinite_yearly",   price_cents: 2499, period: "year",     label: "Yearly", best_value: true },
+  { id: "infinite_lifetime", price_cents: 59999, period: "lifetime", label: "Lifetime" },
+  { id: "infinite_monthly",  price_cents: 1999,  period: "month",    label: "Monthly" },
+  { id: "infinite_yearly",   price_cents: 17999, period: "year",     label: "Yearly", best_value: true },
 ];
 
 

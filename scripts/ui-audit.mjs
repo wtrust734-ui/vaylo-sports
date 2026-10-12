@@ -175,6 +175,11 @@ const ROUTES = [
   ["availability", "/availability"],
   ["nutrition", "/nutrition"],
   ["form", "/form"],
+  // The Cross-Sport screen is behind a one-off unlock, so the review account
+  // may well land on its paywall rather than the report. Either state is worth
+  // measuring: the paywall is what most athletes see first.
+  ["cross-sport", "/cross-sport"],
+  ["video-form", "/form/video"],
   ["mental", "/mental"],
   ["coach", "/coach"],
   ["arcade", "/arcade"],

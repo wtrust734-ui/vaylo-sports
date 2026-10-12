@@ -12,6 +12,7 @@ import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { shortfallFromEdgeError } from "@/lib/shortfall";
 import { requestCreditTopUp } from "@/lib/topUpStore";
+import { formatShortDate } from "@/i18n/format";
 
 const Tactics = () => {
   const { user, profile, refreshProfile } = useAuth();
@@ -156,7 +157,7 @@ const Tactics = () => {
         {plans.map((p, i) => (
           <motion.div key={p.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
             className="bg-card/60 backdrop-blur border border-border rounded-2xl p-5">
-            <div className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</div>
+            <div className="text-xs text-muted-foreground">{formatShortDate(p.created_at)}</div>
             <div className="font-semibold mt-1 text-sm whitespace-pre-wrap">{p.opponent_style || "General prep"}</div>
             <ul className="mt-3 space-y-1.5 text-sm">
               {(p.generated_priorities ?? []).map((pr: string, j: number) => (

@@ -1,8 +1,9 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Zap, Calendar, Target, CheckCircle2, ArrowLeft } from "lucide-react";
 import { BUILT_IN_EVENT_PACKS } from "@/config/eventPacks";
-import { formatLocalPrice } from "@/lib/creditEconomy";
+import { detectRegion, formatLocalPrice } from "@/lib/creditEconomy";
 import { useAuth } from "@/contexts/AuthContext";
 import { publicAppUrl } from "@/lib/share";
 
@@ -27,6 +28,22 @@ const EventPackLanding = () => {
 
   const pack = BUILT_IN_EVENT_PACKS.find((p) => p.id === packId);
 
+  // USD is the currency the built-in packs are priced in — the region only
+  // changes how that price is displayed. Declared above the early return
+  // because hooks cannot follow a conditional one.
+  const [currency, setCurrency] = useState("USD");
+  useEffect(() => {
+    let alive = true;
+    void detectRegion()
+      .then((region) => {
+        if (alive) setCurrency(region.currency);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   if (!pack) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3 px-6 text-center">
@@ -45,7 +62,11 @@ const EventPackLanding = () => {
     );
   }
 
-  const price = formatLocalPrice(pack.priceCents, "GBP");
+  // The athlete's own currency, detected the way every other price surface in
+  // the app detects it. This used to be pinned to "GBP", which converted the
+  // pack's dollar-denominated price with the pound's rate and showed an
+  // American visitor a sterling figure.
+  const price = formatLocalPrice(pack.priceCents, currency);
   const weeksPerDay = Math.max(2, Math.round(pack.weeks / 4));
 
   const cta = () => {

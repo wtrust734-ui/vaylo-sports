@@ -79,7 +79,16 @@ export const CREDIT_PLAN: PlanDefinition = {
   options: [
     { product_id: "credit_monthly", period: "month", price_pence: 549 },
     { product_id: "credit_yearly", period: "year", price_pence: 5999, best_value: true },
-    { product_id: "credit_lifetime", period: "lifetime", price_pence: 12999 },
+    // Repriced 2026-10-12, from £129.99. This option is not metered — it pays
+    // out 100 credits every month for as long as the account exists — so it has
+    // to be priced against the credits it will ever hand over, not against the
+    // first month. At the pack rate (about £0.06 a credit, see credits.ts) it
+    // was promising roughly £6 of credits a month, which it recovered in under
+    // two years and then paid out of our pocket for the rest of the athlete's
+    // life. 12999 → 34999 is about 58 months of that promise: beyond the point
+    // where almost every buyer has stopped training on it, and still the
+    // cheapest way to buy credits in bulk for anyone who does keep going.
+    { product_id: "credit_lifetime", period: "lifetime", price_pence: 34999 },
   ],
 };
 
@@ -97,10 +106,26 @@ export const UNLIMITED_PLAN: PlanDefinition = {
     "Priority AI processing (rolling out)",
     "Future premium AI features included automatically",
   ],
+  // Repriced 2026-10-12, from £8.99 / £79.99 / £349.99.
+  //
+  // Unlimited is the one product whose cost is set by how hard the athlete
+  // uses it rather than by what we sell: nothing is deducted, so every AI call
+  // — a video analysis, a plan, a nutrition week — is paid for by us instead
+  // of by credits. A subscriber who runs twenty video analyses a month was
+  // costing more in provider fees than £8.99 cleared after store commission,
+  // and the lifetime option made that exposure permanent for a single payment.
+  //
+  // The rates below are set so the worst-case athlete still pays for themselves
+  // with room to spare: £19.99 a month is roughly £14 net of Google Play's 30%,
+  // and the fair-usage ceiling on this plan (400 AI calls a day, enforced in
+  // the database) is what keeps the tail of usage from running away. Lifetime
+  // is 30 months of the monthly price, paid once, which is past the horizon a
+  // one-off purchase should be financing and still a real discount for someone
+  // who means to train for years.
   options: [
-    { product_id: "unlimited_monthly", period: "month", price_pence: 899 },
-    { product_id: "unlimited_yearly", period: "year", price_pence: 7999, best_value: true },
-    { product_id: "unlimited_lifetime", period: "lifetime", price_pence: 34999 },
+    { product_id: "unlimited_monthly", period: "month", price_pence: 1999 },
+    { product_id: "unlimited_yearly", period: "year", price_pence: 17999, best_value: true },
+    { product_id: "unlimited_lifetime", period: "lifetime", price_pence: 59999 },
   ],
 };
 

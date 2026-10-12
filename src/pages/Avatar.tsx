@@ -21,6 +21,7 @@ import {
   type AvatarItem, type Category, type Rarity,
 } from "@/lib/avatarCatalog";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/i18n/format";
 import type { LucideIcon } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -286,7 +287,7 @@ const Avatar = () => {
           <div className="absolute left-3 top-3 flex items-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur border border-energy/40">
               <Coins size={14} className="text-energy" />
-              <span className="text-sm font-display font-bold tabular-nums text-white">{coins.toLocaleString()}</span>
+              <span className="text-sm font-display font-bold tabular-nums text-white">{formatNumber(coins)}</span>
             </div>
             <button onClick={() => navigate("/market")}
               className="text-[12px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">

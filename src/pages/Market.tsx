@@ -154,6 +154,16 @@ const Market = () => {
     [packs, doubleOffer],
   );
 
+  // The pack the starter offer is built on, resolved once. The row below used
+  // to call `packs.find` four times inside its own markup, which meant four
+  // lookups and four chances for the displayed total to disagree with the
+  // credits actually granted on tap.
+  const starterPack = useMemo(
+    () => (starterOffer ? packs.find((p) => p.id === starterOffer.pack_id) ?? null : null),
+    [packs, starterOffer],
+  );
+  const starterCredits = (starterPack?.credits ?? 0) + (starterPack?.bonus ?? 0);
+
   /**
    * Add to basket — optimistically.
    *
@@ -321,8 +331,11 @@ const Market = () => {
         <div className="relative px-5 pb-5 pt-[var(--vaylo-screen-top)]">
           <div className="mb-4 flex items-start justify-between">
             <div>
+              {/* The same heading scale as every other tab. At text-3xl with an
+                  animated entrance it read as a landing page rather than a
+                  screen the athlete had opened on purpose. */}
               <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="font-display text-3xl font-bold">Market</motion.h1>
+                className="font-display text-2xl font-bold">Market</motion.h1>
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
                 className="mt-1 text-sm text-muted-foreground">{/* The shop's own blurb must not advertise a section the flag hides:
                     promising "coaching" on a screen with no Coaches tab is the
@@ -334,7 +347,7 @@ const Market = () => {
               <ShoppingCart size={20} />
               {basket.length > 0 && (
                 <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-primary text-[12px] font-bold text-primary-foreground shadow-glow">
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
                   {basket.length}
                 </motion.span>
               )}
@@ -359,7 +372,7 @@ const Market = () => {
       <AnimatePresence>
         {showBasket && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-            className="mx-5 mb-5 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-card p-4">
+            className="mx-5 mb-5 overflow-hidden rounded-2xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display font-bold">Basket</h3>
               <button onClick={() => setShowBasket(false)} className="text-muted-foreground"><X size={18} /></button>
@@ -399,7 +412,7 @@ const Market = () => {
                       </span>
                     </span>
                   ) : (
-                    <span className="font-display text-lg font-bold text-gradient-electric">
+                    <span className="font-display text-lg font-bold text-foreground">
                       {formatLocalPrice(basketTotal, region.currency)}
                     </span>
                   )}
@@ -410,7 +423,7 @@ const Market = () => {
                   </p>
                 )}
                 <motion.button whileTap={{ scale: 0.97 }} onClick={checkout}
-                  className="w-full rounded-xl bg-gradient-primary py-3 font-bold text-primary-foreground shadow-glow">
+                  className="w-full rounded-xl bg-primary py-3 font-bold text-primary-foreground">
                   {freeCreditsActive() ? "Add to my account — free" : "Checkout"}
                 </motion.button>
                 {freeCreditsActive() && (
@@ -443,51 +456,46 @@ const Market = () => {
       <MarketSectionNav active={section} onChange={setSection} />
       <p className="px-5 pb-4 pt-2 text-xs text-muted-foreground">{activeSection.blurb}</p>
 
-      {/* Starter offer (packs only) — totals derived from the linked pack, never hard-coded */}
+      {/* Starter offer (packs only) — one quiet row. It used to be a full-width
+          card carrying a purple "one-time offer" pill, an XL title, a display
+          price and a per-account note, stacked under a promo line and a
+          "picked for you" banner: three advertisements before the first
+          product. Same offer, same totals, no shouting. */}
       {isAdult && starterOffer && section === "packs" && (
         <div className="mb-4 px-5">
           <motion.button
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} whileTap={{ scale: 0.99 }}
             onClick={() => addToBasket({
               id: `offer_${starterOffer.slug}`,
               name: starterOffer.title,
               price_cents: starterOffer.price_cents ?? 0,
               type: "offer",
-              credits: (packs.find((p) => p.id === starterOffer.pack_id)?.credits ?? 0) + (packs.find((p) => p.id === starterOffer.pack_id)?.bonus ?? 0),
+              credits: starterCredits,
               bonus: starterOffer.bonus_flat,
             })}
-            className="w-full overflow-hidden rounded-2xl border border-border bg-card text-start transition-colors hover:border-primary/40">
-            <div className="p-5">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="rounded-full bg-electric-purple/15 px-2 py-1 text-[12px] font-bold text-electric-purple">
-                  <Gift size={10} className="mr-1 inline" /> ONE-TIME OFFER
-                </span>
-                <span className="text-[12px] text-muted-foreground">Available once per account</span>
-              </div>
-              <h3 className="font-display text-xl font-bold">{starterOffer.title}</h3>
-              <p className="mb-3 text-xs text-muted-foreground">{starterOffer.description}</p>
-              <div className="flex items-end justify-between">
-                <div className="flex items-baseline gap-2">
-                  <Zap size={18} className="text-primary" />
-                  <span className="font-display text-2xl font-bold">
-                    {(packs.find((p) => p.id === starterOffer.pack_id)?.credits ?? 0) + (packs.find((p) => p.id === starterOffer.pack_id)?.bonus ?? 0)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">credits</span>
-                  {starterOffer.bonus_flat > 0 && (
-                    <span className="ml-1 text-sm font-bold text-energy">+{starterOffer.bonus_flat} bonus</span>
-                  )}
-                </div>
-                <span className="font-display text-xl font-bold text-gradient-electric">
-                  {formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}
-                </span>
-              </div>
-            </div>
+            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-start transition-colors hover:border-primary/40">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Gift size={15} className="text-primary" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{starterOffer.title}</span>
+              <span className="block truncate text-[12px] text-muted-foreground">
+                <Zap size={10} className="mr-1 inline text-primary" />
+                {starterCredits} credits{starterOffer.bonus_flat > 0 ? ` + ${starterOffer.bonus_flat} bonus` : ""} · once per account
+              </span>
+            </span>
+            <span className="shrink-0 text-sm font-bold">{formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}</span>
           </motion.button>
         </div>
       )}
 
-      {/* Picked for you — one unlock recommendation per sport family */}
-      {isAdult && (section === "packs" || section === "unlocks") && <FamilyPickBanner currency={region.currency} />}
+      {/* Picked for you — one unlock recommendation per sport family.
+
+          Shown only where it can be acted on. On the packs tab it was pure
+          merchandising above the thing being sold, which is what made arriving
+          here feel like walking into an advert; on the Unlocks tab it points at
+          a purchase the athlete is already looking at. */}
+      {isAdult && section === "unlocks" && <FamilyPickBanner />}
 
       {/* No age block on these sections any more: purchasing is open to every
           age, and the under-18 case is handled by an informational note inside

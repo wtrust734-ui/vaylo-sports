@@ -53,6 +53,23 @@ const Goals = () => {
   // the (already-confirmed) delete fired two DELETEs and the second reloaded
   // against rows that no longer existed.
   const [deleting, setDeleting] = useState(false);
+  // The page used to render everything it owns at once — a metrics hero, three
+  // numbered sections, a roadmap open inside every goal and the paid review —
+  // which is what made it read as a wall rather than a plan. Each block below
+  // is folded until it is asked for, and the composer opens by itself for an
+  // athlete who has nothing yet.
+  const [showComposer, setShowComposer] = useState(false);
+  const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
+  const [expandedProcess, setExpandedProcess] = useState<string | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+
+  // A first-time athlete has nothing to read, so the composer *is* the page for
+  // them: opening it unprompted is the difference between "add your first goal"
+  // and an empty screen with a button on it.
+  useEffect(() => {
+    if (!loading && outcomes.length === 0 && processes.length === 0) setShowComposer(true);
+  }, [loading, outcomes.length, processes.length]);
 
   const load = async () => {
     if (!user) return;
@@ -191,93 +208,185 @@ const Goals = () => {
   };
 
   const goalCost = FEATURE_COSTS.weekly_coach_review;
+  const activeGoalCount = outcomes.filter(g => g.status !== "completed").length;
+  // One line of state instead of a hero card: what is left to do today, and how
+  // the goals are going.
+  const summaryLine = actions.length
+    ? `${todayDone} of ${actions.length} done today · ${streak}-day streak`
+    : outcomes.length
+      ? `${activeGoalCount} goal${activeGoalCount === 1 ? "" : "s"} in progress · no daily actions yet`
+      : "No goals yet — add one and the week builds itself around it.";
 
   return (
     <div className="min-h-screen pb-32 px-5 pt-[var(--vaylo-screen-top)] max-w-3xl mx-auto space-y-5">
-      {/* One simple entry point — natural language is the primary way to add a goal */}
-      <div className="flex items-center gap-2 text-[12px] uppercase tracking-widest text-muted-foreground">
-        <HelpCircle size={12} /> How goals work: <span className="text-foreground normal-case font-medium">Set a long-term target → add a weekly habit → tick daily actions.</span>
+      {/* The header carries the page's single primary action. Nothing the page
+          could do before is gone; it is just not all on screen at once. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-display font-bold text-gradient-electric">Goals</h1>
+          <p className="text-sm text-muted-foreground mt-1">{summaryLine}</p>
+        </div>
+        <Button size="sm" className="shrink-0" aria-expanded={showComposer} onClick={() => setShowComposer(v => !v)}>
+          <Plus size={14} className="mr-1" /> New goal
+        </Button>
       </div>
-      <NaturalLanguageGoalInput onCreated={load} />
-      {/* Hero */}
-      <Reveal>
-        <Card className="p-5 bg-gradient-to-br from-primary/15 via-card to-card border-primary/30">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[12px] uppercase tracking-[0.2em] text-muted-foreground">Accountability</p>
-              <h1 className="text-2xl font-display font-bold text-gradient-electric">Goals & Pressure</h1>
-            </div>
-            <Target className="text-primary" size={28} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Stat label="Reliability" value={reliability} suffix="%" className={reliabilityColor} />
-            <Stat label="Streak" value={streak} suffix="d" icon={<Flame size={14} className="text-energy" />} />
-            <Stat label="Today" value={todayPct} suffix="%" className={todayPct === 100 ? "text-success" : todayPct === 0 ? "text-destructive" : "text-warning"} />
-          </div>
+
+      {/* Natural language is still the first way to add a goal, with the manual
+          form one tap behind it — both inside the composer, which is where the
+          "how goals work" line belongs, right before you add one. */}
+      {showComposer && (
+        <Reveal>
+          <Card className="p-4 space-y-3">
+            <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+              <HelpCircle size={12} aria-hidden />
+              Set a long-term target, add a weekly habit, then tick the daily actions it takes.
+            </p>
+            <NaturalLanguageGoalInput onCreated={load} />
+            <button
+              type="button"
+              onClick={() => setShowOutcome(true)}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Or set the target up by hand
+            </button>
+          </Card>
+        </Reveal>
+      )}
+      {/* Today first: ticking today's actions is what this page is opened to do,
+          and it is the one next action the athlete has. */}
+      <Reveal delay={0.05}>
+        <section className="space-y-3">
+          <SectionHeading title="Today" hint={actions.length ? `${todayDone} of ${actions.length} done` : undefined} />
           {streakAtRisk && (
-            <div className="mt-4 p-3 rounded-lg bg-destructive/15 border border-destructive/40 flex items-center gap-2 text-sm text-destructive font-medium">
-              <AlertTriangle size={16} /> You are about to lose your {streak}-day streak. Close it out today.
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm font-medium text-destructive">
+              <AlertTriangle size={16} aria-hidden /> You are about to lose your {streak}-day streak. Close it out today.
             </div>
           )}
-          {reliability < 60 && actions.length > 0 && (
-            <div className="mt-3 p-3 rounded-lg bg-warning/10 border border-warning/40 flex items-center gap-2 text-sm text-warning font-medium">
-              <TrendingUp size={16} /> Consistency below target. This will cost you results.
-            </div>
-          )}
-        </Card>
+          <Card className="p-2">
+            {actions.length === 0 ? (
+              <EmptyHint text="No daily actions yet — open a habit below and add one." />
+            ) : (
+              <div className="divide-y divide-border">
+                {actions.map(a => {
+                  const done = !!todayMap[a.id];
+                  // A <button> may not contain another <button> (invalid HTML;
+                  // screen readers skipped the delete control entirely). The row
+                  // is now a div: the toggle is a real checkbox-flavoured button
+                  // and the delete control is its sibling.
+                  return (
+                    <div
+                      key={a.id}
+                      className={`w-full flex items-center gap-3 px-3 py-3 text-start transition ${
+                        done ? "bg-success/5" : ""
+                      }`}>
+                      <button
+                        role="checkbox"
+                        aria-checked={done}
+                        aria-label={`Mark "${a.title}" as ${done ? "not done" : "done"} today`}
+                        onClick={() => handleToggle(a)}
+                        className="flex flex-1 items-center gap-3 text-start min-w-0">
+                        <span className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition shrink-0 ${
+                          done ? "bg-success border-success text-success-foreground" : "border-destructive/60 text-destructive"
+                        }`} aria-hidden>
+                          {done ? <Check size={16} /> : <X size={14} />}
+                        </span>
+                        <span className={`text-sm font-medium min-w-0 ${done ? "line-through text-muted-foreground" : ""}`}>{a.title}</span>
+                      </button>
+                      <button
+                        aria-label={`Stop tracking action: ${a.title}`}
+                        disabled={deleting}
+                        onClick={async () => {
+                          if (deleting) return;
+                          const confirmed = window.confirm(
+                            `Stop tracking "${a.title}"? It disappears from today's checklist; your logged history stays in your stats. You can add a new action to the same habit later.`
+                          );
+                          if (!confirmed) return;
+                          setDeleting(true);
+                          try {
+                            const { error } = await supabase.from("daily_actions").update({ active: false }).eq("id", a.id);
+                            if (error) { toast.error(error.message); return; }
+                            load();
+                          } finally {
+                            setDeleting(false);
+                          }
+                        }}
+                        className="text-muted-foreground hover:text-destructive shrink-0">
+                        <Trash2 size={14} aria-hidden />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </section>
       </Reveal>
 
-      {/* 1 · Outcome goals — the destination */}
+      {/* Your goals. A card shows how far along it is and folds the rest —
+          description, roadmap, milestone inputs, status and delete — away until
+          it is opened, so a long list stays readable at a glance. */}
       <Reveal delay={0.05}>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm uppercase tracking-[0.2em] font-semibold text-muted-foreground">1 · Outcome — where you want to get to</h2>
-          <Button size="sm" variant="ghost" onClick={() => setShowOutcome(true)}><Plus size={14} className="mr-1" /> New</Button>
-        </div>
-        <div className="space-y-3">
-          {outcomes.length === 0 && <EmptyHint text="Set your first long-term target." />}
+        <section className="space-y-3">
+          <SectionHeading title="Your goals" hint={outcomes.length ? `${activeGoalCount} in progress` : undefined} />
+          {outcomes.length === 0 && <EmptyHint text="Set your first long-term target — the New goal button above." />}
           {outcomes.map(g => {
             const pct = outcomeProgress(g);
             const linkedProcs = processes.filter(p => p.outcome_goal_id === g.id);
+            const open = expandedGoal === g.id;
+            const roadmap = roadmapById.get(g.id);
             return (
               <Card key={g.id} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">{g.title}</h3>
-                    {g.description && <p className="text-xs text-muted-foreground mt-0.5">{g.description}</p>}
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-label={`${open ? "Hide" : "Show"} details for ${g.title}`}
+                  onClick={() => setExpandedGoal(open ? null : g.id)}
+                  className="w-full text-start"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate">{g.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {Number(g.current_value ?? 0)} / {Number(g.target_value ?? 0)} {g.metric_unit}
+                        {g.deadline ? ` · by ${g.deadline}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0">{g.category}</Badge>
+                    <ChevronDown size={16} className={`shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} aria-hidden />
                   </div>
-                  <Badge variant="outline" className="text-xs">{g.category}</Badge>
-                </div>
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-muted-foreground">{Number(g.current_value ?? 0)} / {Number(g.target_value ?? 0)} {g.metric_unit}</span>
-                    <span className="font-semibold">{pct}%</span>
+                  <div className="mt-3 flex items-center gap-3">
+                    <Progress value={pct} className="h-2 flex-1" />
+                    <span className="text-xs font-semibold shrink-0">{pct}%</span>
                   </div>
-                  <Progress value={pct} className="h-2" />
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <Mini label="Deadline" value={g.deadline ?? "—"} />
-                  {/* `requiredRate` assumes a bigger-is-better metric, so a
-                      target time prints an em dash. The roadmap knows both
-                      directions, and two different answers on one card is a
-                      contradiction the athlete can see. */}
-                  <Mini
-                    label="Required"
-                    value={
-                      roadmapById.get(g.id)?.progress.requiredRate && roadmapById.get(g.id)!.progress.requiredRate !== "—"
-                        ? roadmapById.get(g.id)!.progress.requiredRate
-                        : requiredRate(g)
-                    }
-                  />
-                  <Mini label="Process goals" value={String(linkedProcs.length)} />
-                </div>
-                {roadmapById.get(g.id) && (
-                  <GoalRoadmapPanel goal={g} roadmap={roadmapById.get(g.id)!} onSaved={load} />
-                )}
-                <div className="mt-3 flex flex-wrap justify-between items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setShowProcess(g.id)}>
-                    <Plus size={12} className="mr-1" /> Process goal
-                  </Button>
-                  <div className="flex items-center gap-1">
+                </button>
+
+                {open && (
+                  <div className="mt-3 space-y-3">
+                    {g.description && <p className="text-xs text-muted-foreground">{g.description}</p>}
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <Mini label="Deadline" value={g.deadline ?? "—"} />
+                      {/* `requiredRate` assumes a bigger-is-better metric, so a
+                          target time prints an em dash. The roadmap knows both
+                          directions, and two different answers on one card is a
+                          contradiction the athlete can see. */}
+                      <Mini
+                        label="Required"
+                        value={
+                          roadmap?.progress.requiredRate && roadmap.progress.requiredRate !== "—"
+                            ? roadmap.progress.requiredRate
+                            : requiredRate(g)
+                        }
+                      />
+                      <Mini label="Habits" value={String(linkedProcs.length)} />
+                    </div>
+                    {roadmap && (
+                      <GoalRoadmapPanel goal={g} roadmap={roadmap} onSaved={load} />
+                    )}
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setShowProcess(g.id)}>
+                        <Plus size={12} className="mr-1" /> Weekly habit
+                      </Button>
+                      <div className="flex items-center gap-1">
                     {g.status !== "completed" && (
                       <>
                         <Button size="sm" variant="ghost" className="text-success hover:text-success"
@@ -331,132 +440,134 @@ const Goals = () => {
                     </button>
                   </div>
                 </div>
+                  </div>
+                )}
               </Card>
             );
           })}
-        </div>
+        </section>
       </Reveal>
 
-      {/* 2 · Weekly process goals — the habit that gets you there */}
+      {/* This week's habits, folded to the one number that matters — how much of
+          the week's target is done — with the actions it is made of inside. */}
       <Reveal delay={0.1}>
-        <h2 className="text-sm uppercase tracking-[0.2em] font-semibold text-muted-foreground mb-2">2 · Weekly habits — what you'll do each week</h2>
-        <div className="space-y-3">
-          {processes.length === 0 && <EmptyHint text="No weekly process goals yet." />}
+        <section className="space-y-3">
+          <SectionHeading title="This week's habits" />
+          {processes.length === 0 && <EmptyHint text="No weekly habits yet — open a goal above and add one." />}
           {processes.map(pg => {
             const w = weeklyCompletionForProcess(pg, actions, logs);
             const linkedActions = actions.filter(a => a.process_goal_id === pg.id);
+            const open = expandedProcess === pg.id;
             return (
               <Card key={pg.id} className="p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold">{pg.title}</h3>
-                    <p className="text-xs text-muted-foreground">{w.done}/{w.target} this week</p>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setExpandedProcess(open ? null : pg.id)}
+                  className="w-full text-start"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold truncate">{pg.title}</h3>
+                      <p className="text-xs text-muted-foreground">{w.done}/{w.target} this week</p>
+                    </div>
+                    <span className={`text-lg font-bold shrink-0 ${w.pct === 100 ? "text-success" : w.pct < 50 ? "text-destructive" : "text-foreground"}`}>{w.pct}%</span>
+                    <ChevronDown size={16} className={`shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} aria-hidden />
                   </div>
-                  <span className={`text-lg font-bold ${w.pct === 100 ? "text-success" : w.pct < 50 ? "text-destructive" : "text-foreground"}`}>{w.pct}%</span>
-                </div>
-                <Progress value={w.pct} className="h-1.5 mt-2" />
-                <div className="mt-3 flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">{linkedActions.length} daily action{linkedActions.length !== 1 ? "s" : ""}</p>
-                  <Button size="sm" variant="ghost" onClick={() => setShowAction(pg.id)}>
-                    <Plus size={12} className="mr-1" /> Action
-                  </Button>
-                </div>
+                  <Progress value={w.pct} className="h-1.5 mt-2" />
+                </button>
+                {open && (
+                  <div className="mt-3 space-y-2">
+                    {linkedActions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No daily actions yet.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {linkedActions.map(a => (
+                          <li key={a.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Circle size={8} className="shrink-0" aria-hidden />
+                            {a.title}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => setShowAction(pg.id)}>
+                      <Plus size={12} className="mr-1" /> Daily action
+                    </Button>
+                  </div>
+                )}
               </Card>
             );
           })}
-        </div>
+        </section>
       </Reveal>
 
-      {/* 3 · Daily actions — today's checklist */}
-      <Reveal delay={0.15}>
-        <h2 className="text-sm uppercase tracking-[0.2em] font-semibold text-muted-foreground mb-2">3 · Today — tick what you did</h2>
-        <Card className="p-2">
-          {actions.length === 0 ? (
-            <EmptyHint text="Add a daily action to a process goal." />
-          ) : (
-            <div className="divide-y divide-border">
-              {actions.map(a => {
-                const done = !!todayMap[a.id];
-                // A <button> may not contain another <button> (invalid HTML;
-                // screen readers skipped the delete control entirely). The row
-                // is now a div: the toggle is a real checkbox-flavoured button
-                // and the delete control is its sibling.
-                return (
-                  <div
-                    key={a.id}
-                    className={`w-full flex items-center gap-3 px-3 py-3 text-start transition ${
-                      done ? "bg-success/5" : ""
-                    }`}>
-                    <button
-                      role="checkbox"
-                      aria-checked={done}
-                      aria-label={`Mark "${a.title}" as ${done ? "not done" : "done"} today`}
-                      onClick={() => handleToggle(a)}
-                      className="flex flex-1 items-center gap-3 text-start min-w-0">
-                      <span className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition shrink-0 ${
-                        done ? "bg-success border-success text-success-foreground" : "border-destructive/60 text-destructive"
-                      }`} aria-hidden>
-                        {done ? <Check size={16} /> : <X size={14} />}
-                      </span>
-                      <span className={`text-sm font-medium min-w-0 ${done ? "line-through text-muted-foreground" : ""}`}>{a.title}</span>
-                    </button>
-                    <button
-                      aria-label={`Stop tracking action: ${a.title}`}
-                      disabled={deleting}
-                      onClick={async () => {
-                        if (deleting) return;
-                        const confirmed = window.confirm(
-                          `Stop tracking "${a.title}"? It disappears from today's checklist; your logged history stays in your stats. You can add a new action to the same habit later.`
-                        );
-                        if (!confirmed) return;
-                        setDeleting(true);
-                        try {
-                          const { error } = await supabase.from("daily_actions").update({ active: false }).eq("id", a.id);
-                          if (error) { toast.error(error.message); return; }
-                          load();
-                        } finally {
-                          setDeleting(false);
-                        }
-                      }}
-                      className="text-muted-foreground hover:text-destructive shrink-0">
-                      <Trash2 size={14} aria-hidden />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      </Reveal>
-
-      {/* AI Coach — 3 credits per review */}
+      {/* Consistency used to be a hero card at the top. It is three numbers the
+          athlete checks occasionally, not the point of the screen, so it folds
+          away with the arithmetic that explains it. */}
       <Reveal delay={0.2}>
+        <section className="space-y-2">
+          <button
+            type="button"
+            aria-expanded={showStats}
+            onClick={() => setShowStats(v => !v)}
+            className="w-full flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-start"
+          >
+            <Target size={16} className="shrink-0 text-primary" aria-hidden />
+            <span className="text-sm font-semibold">Consistency</span>
+            <span className="ms-auto truncate text-xs text-muted-foreground">{reliability}% reliable · {streak}-day streak</span>
+            <ChevronDown size={16} className={`shrink-0 text-muted-foreground transition ${showStats ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+          {showStats && (
+            <Card className="p-4 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <Stat label="Reliability" value={reliability} suffix="%" className={reliabilityColor} />
+                <Stat label="Streak" value={streak} suffix="d" icon={<Flame size={14} className="text-energy" />} />
+                <Stat label="Today" value={todayPct} suffix="%" className={todayPct === 100 ? "text-success" : todayPct === 0 ? "text-destructive" : "text-warning"} />
+              </div>
+              {reliability < 60 && actions.length > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning">
+                  <TrendingUp size={16} aria-hidden /> Consistency below target. This will cost you results.
+                </div>
+              )}
+              <p className="text-[12px] text-muted-foreground">
+                Reliability is the share of your daily actions completed over the last 30 days. The streak counts consecutive days with every action ticked.
+              </p>
+            </Card>
+          )}
+        </section>
+      </Reveal>
+
+      {/* The review is a paid call and a wall of prose, so it is the last thing
+          on the page and it stays closed until it is asked for. The run button
+          now has its own line — the row it used to share clipped on a 320px
+          screen (see ui-audit on /goals). */}
+      <Reveal delay={0.25}>
         <Card className="p-4 border-primary/30 bg-gradient-to-br from-primary/10 to-card">
-          {/* Wraps rather than shrinks: the title, the credit badge and the
-              "Run Review · 10 cr" button together need ~400px, and the card's
-              content box on a 320px phone is 256px. As one non-wrapping row the
-              button was pushed past the card's edge and the label cut in half
-              (reported by ui-audit as `button.inline-flex.items-center` clipped
-              on /goals). Both groups wrap, so the badge and then the button drop
-              to their own lines on a narrow screen and nothing moves on a wide
-              one, where the row still fits. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-              <Sparkles size={18} className="shrink-0 text-primary" />
-              <h3 className="font-semibold">Weekly Coach Review</h3>
-              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} /> {goalCost} credits</span>
+          <button
+            type="button"
+            aria-expanded={showReview}
+            onClick={() => setShowReview(v => !v)}
+            className="w-full flex flex-wrap items-center gap-x-2 gap-y-1.5 text-start"
+          >
+            <Sparkles size={18} className="shrink-0 text-primary" aria-hidden />
+            <h3 className="font-semibold">Weekly Coach Review</h3>
+            <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} aria-hidden /> {goalCost} credits</span>
+            <ChevronDown size={16} className={`ms-auto shrink-0 text-muted-foreground transition ${showReview ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+          {showReview && (
+            <div className="mt-3 space-y-2">
+              <p className="text-[12px] text-muted-foreground">Each review costs {goalCost} credits. Your goals, streak and today's completion are analysed — PBs and recovery are included when available.</p>
+              <Button size="sm" onClick={runAiReview} disabled={aiLoading}>
+                {aiLoading ? "Analyzing…" : `Run Review · ${goalCost} cr`}
+              </Button>
+              {aiFeedback ? (
+                <div className="prose prose-sm prose-invert max-w-none text-sm">
+                  <ReactMarkdown>{aiFeedback}</ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Direct, honest feedback on your consistency and goals.</p>
+              )}
             </div>
-            <Button size="sm" className="shrink-0" onClick={runAiReview} disabled={aiLoading}>
-              {aiLoading ? "Analyzing…" : `Run Review · ${goalCost} cr`}
-            </Button>
-          </div>
-          <p className="text-[12px] text-muted-foreground mb-2">Each review costs {goalCost} credits. Your goals, streak and today’s completion are analysed — PBs and recovery are included when available.</p>
-          {aiFeedback ? (
-            <div className="prose prose-sm prose-invert max-w-none text-sm">
-              <ReactMarkdown>{aiFeedback}</ReactMarkdown>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Direct, honest feedback on your consistency and goals.</p>
           )}
         </Card>
       </Reveal>
@@ -696,6 +807,17 @@ const GoalRoadmapPanel = ({ goal, roadmap, onSaved }: {
     </div>
   );
 };
+
+/* Section headings. The page used to number its blocks ("1 · Outcome", "2 ·
+ * Weekly habits", "3 · Today"), which made three ordinary things to look at
+ * read like a form to fill in. The order is visible on screen; it does not need
+ * a legend. */
+const SectionHeading = ({ title, hint }: { title: string; hint?: string }) => (
+  <div className="flex items-baseline justify-between gap-2">
+    <h2 className="text-sm uppercase tracking-[0.2em] font-semibold text-muted-foreground">{title}</h2>
+    {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+  </div>
+);
 
 const Stat = ({ label, value, suffix, className, icon }: { label: string; value: number; suffix?: string; className?: string; icon?: React.ReactNode }) => (
   <div className="text-center">

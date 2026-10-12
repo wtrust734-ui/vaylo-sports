@@ -41,18 +41,21 @@ export default function SubscriptionsSection() {
         transition={{ delay: 0.04 + i * 0.06, type: "spring", stiffness: 200, damping: 24 }}
         className={`relative overflow-hidden rounded-3xl ${
           meta?.recommended
-            ? "p-[1.5px] bg-gradient-to-br from-electric-purple via-primary to-energy shadow-glow"
+            ? "border border-primary/40"
             : "p-[1px] bg-border"
         }`}
       >
         {meta?.recommended && (
-          <span className="absolute right-4 top-4 z-10 rounded-full bg-gradient-to-r from-electric-purple to-primary px-2.5 py-1 text-[12px] font-bold text-primary-foreground">
+          <span className="absolute right-4 top-4 z-10 rounded-full border border-border bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary">
             RECOMMENDED
           </span>
         )}
-        <div className="rounded-[22px] bg-card p-5">
+        {/* The recommended plan's ring is a real 1px border; the others keep the
+            hairline, so the inner radius only applies where there is a hairline
+            to sit inside. */}
+        <div className={`bg-card p-5 ${meta?.recommended ? "" : "rounded-[22px]"}`}>
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-electric-purple/25 to-primary/15">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
               <Icon size={22} className="text-electric-purple" />
             </div>
             <div className="min-w-0">
@@ -73,7 +76,7 @@ export default function SubscriptionsSection() {
                 <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   {PERIOD_LABEL[opt.period]}
                 </p>
-                <p className="font-display text-xl font-bold text-gradient-electric">{formatPence(opt.price_pence)}</p>
+                <p className="font-display text-xl font-bold text-foreground">{formatPence(opt.price_pence)}</p>
                 <p className="text-[12px] text-muted-foreground">
                   {opt.period === "month" ? "billed monthly" : "billed yearly"}
                 </p>
@@ -105,7 +108,7 @@ export default function SubscriptionsSection() {
             onClick={() => navigate("/subscription")}
             className={`mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3 font-bold ${
               meta?.recommended
-                ? "bg-gradient-primary text-primary-foreground shadow-glow"
+                ? "bg-primary text-primary-foreground"
                 : "border border-border bg-muted/30 text-foreground"
             }`}
           >
@@ -119,7 +122,7 @@ export default function SubscriptionsSection() {
   return (
     <div className="px-5 space-y-3">
       {/* Difference explainer */}
-      <div className="rounded-2xl border border-border bg-gradient-card p-4">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Which one is right?</h4>
         <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-foreground/85">
           <p>

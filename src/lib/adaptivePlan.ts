@@ -101,8 +101,16 @@ export interface ProgressionStep {
  * undoes the whole return.
  */
 const BASE_PROGRESSION: Record<Exclude<BreakCategory, "none">, ProgressionStep[]> = {
-  // 4–7 days.
-  week: [{ back: 1, volumePct: 70, intensityPct: 80, focus: "rebuild" }],
+  // 4–7 days. Two weeks, not one: the athlete comes back at 70%, climbs to 85%,
+  // and only then resumes their normal programming. A single rebuild week
+  // followed by a full-volume week is a step down and straight back in, which
+  // is the shape of a return that goes well on Tuesday and hurts by Sunday.
+  // Every other band already climbs; this one is the shortest and still needs
+  // to arrive rather than land.
+  week: [
+    { back: 1, volumePct: 70, intensityPct: 80, focus: "rebuild" },
+    { back: 2, volumePct: 85, intensityPct: 90, focus: "resume" },
+  ],
   // 8–14 days.
   fortnight: [
     { back: 1, volumePct: 55, intensityPct: 65, focus: "rebuild" },
@@ -350,6 +358,32 @@ export interface RebuildOutcome {
   weeks: PlanWeekLike[];
 }
 
+/**
+ * Why a rebuild did not happen, in the athlete's words, or null when it did.
+ *
+ * `planRebuild` refuses for four different reasons and they mean quite
+ * different things to the person reading them: a long weekend needs no rebuild
+ * at all, while a break with nothing left ahead of it is a fact about the plan
+ * the athlete should be told. Every caller used to answer each of them with
+ * "Nothing needed changing on your plan.", which is how four days off gets read
+ * as the app ignoring the athlete.
+ */
+export function rebuildRefusalNote(reason: RebuildReason): string {
+  switch (reason) {
+    case "break-too-short":
+      return "Three days or less is a long weekend rather than an interruption, so your plan stays as it is.";
+    case "no-remaining-weeks":
+      return "There are no plan weeks left after that break, so there was nothing to rebuild.";
+    case "nothing-planned":
+      return "Nothing was still ahead of you inside that break, so there was nothing to rebuild.";
+    case "already-applied":
+      return "That break is already built into your plan, so nothing changed a second time.";
+    case "applied":
+    default:
+      return "Nothing needed changing on your plan.";
+  }
+}
+
 export interface RebuildInput {
   /** Every week of the plan, in order. */
   weeks: readonly PlanWeekLike[];
@@ -513,11 +547,17 @@ const round5 = (n: number): number => Math.max(0, Math.round(n / 5) * 5);
  */
 export function rebuildWeek(
   week: PlanWeekLike,
-  step: ProgressionStep & { weekNumber: number; fromDay?: number },
+  step: ProgressionStep & { weekNumber: number; fromDay?: number; toDay?: number },
   lifeEventId: string,
   locked?: Iterable<string>,
 ): { week: PlanWeekLike; snapshot: SessionSnapshot[]; droppedTitles: string[] } {
   const from = clamp(Math.trunc(step.fromDay ?? 1), 1, 7);
+  // The other end of the window, used by the loading week before a break: the
+  // days of the pre-week that fall *after* the break has begun are not days the
+  // athlete can bank anything on. Before it existed, a holiday starting on a
+  // Wednesday had its own Wednesday-to-Sunday sessions loaded 10% harder by the
+  // loading step, on top of being cancelled for the holiday.
+  const to = clamp(Math.trunc(step.toDay ?? 7), 1, 7);
   const lockedKeys = locked ? new Set(locked) : null;
   const playable = week.sessions.filter((s) => !isRestDay(s));
 
@@ -526,7 +566,7 @@ export function rebuildWeek(
   // adaptive record, which is where completion actually lives.
   const isLocked = (s: PlanSessionLike) =>
     !!s.skipped || !!lockedKeys?.has(weekDayKey(week.week, s.day));
-  const touchable = playable.filter((s) => !isLocked(s) && s.day >= from);
+  const touchable = playable.filter((s) => !isLocked(s) && s.day >= from && s.day <= to);
 
   // The budget is a share of the whole week rather than of the touchable
   // sessions, so a locked session still counts against it: a week that keeps a
@@ -544,7 +584,7 @@ export function rebuildWeek(
     // Locked and already-passed sessions are excluded from the reversal record
     // too: nothing about them changes, so copying them would be noise that has
     // to be reasoned about later.
-    if (isRestDay(session) || isLocked(session) || session.day < from) return session;
+    if (isRestDay(session) || isLocked(session) || session.day < from || session.day > to) return session;
 
     snapshot.push({ week: week.week, session: { ...session } });
 
@@ -852,9 +892,40 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
     if (preWeek !== null) {
       const week = weeks.find((w) => w.week === preWeek);
       const startKey = weekStart(preWeek);
-      if (week && startKey >= today && playableCount(week) > 0 && !rebuilt.has(preWeek)) {
-        const fromDay = today > startKey && today <= addDays(startKey, 6) ? dayOfWeek(today) : 1;
-        const step = { back: 0, volumePct: 110, intensityPct: 100, focus: "preload" as ReturnFocus, weekNumber: preWeek, fromDay };
+      // The loading week has to still have days ahead of the athlete, not start
+      // in the future. Requiring `startKey >= today` meant the loading week
+      // could only ever fire when the break was recorded exactly on the Monday
+      // a week out — a holiday entered on any other day got the eased (or
+      // cancelled) holiday week and no loading week at all, which is the
+      // "before it, you should probably get some hard work" half of the plan
+      // silently never happening. `fromDay` below already limits the loading to
+      // the days of that week that are still ahead, so a partly-elapsed week is
+      // loaded only from today onwards. A week that has finished entirely is
+      // still history and is still left alone.
+      // Where the loading stops. When the break starts inside this same week
+      // (a holiday beginning on the Wednesday, say), only the days before it
+      // can be loaded — the ones after it belong to the break, and loading them
+      // would be the app asking for harder training on a day it has just been
+      // told the athlete is away.
+      const breakWeek = weekContaining(weeks, weekStart, facts.startDate);
+      const toDay = breakWeek === preWeek ? dayOfWeek(facts.startDate) - 1 : 7;
+      const fromDay = today > startKey && today <= addDays(startKey, 6) ? dayOfWeek(today) : 1;
+      if (
+        week &&
+        addDays(startKey, 6) >= today &&
+        toDay >= fromDay &&
+        playableCount(week) > 0 &&
+        !rebuilt.has(preWeek)
+      ) {
+        const step = {
+          back: 0,
+          volumePct: 110,
+          intensityPct: 100,
+          focus: "preload" as ReturnFocus,
+          weekNumber: preWeek,
+          fromDay,
+          toDay,
+        };
         const result = rebuildWeek(week, step, facts.eventId, locked);
         if (result.snapshot.length) recordStep(week, step, result);
       }
@@ -908,11 +979,29 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
     ? weekContaining(weeks, weekStart, windowCompetitions[0].date)
     : null;
 
-  steps.forEach((step, index) => {
-    const weekNumber = startWeek + index;
-    const week = weeks.find((w) => w.week === weekNumber);
-    if (!week) return;
-    if (week.sessions.filter((s) => !isRestDay(s)).length === 0) return;
+  // The steps are consumed one per week, but only by a week that can take one.
+  //
+  // A 4-day break ending on a Saturday returns the athlete on the Sunday — the
+  // last day of that plan week — so the week it "returns into" has nothing
+  // ahead of them to rebuild, and every session in it is either behind them or
+  // a rest day. The older code dropped the step along with that week, which
+  // quietly turned the entire return progression into nothing: no rebuild week,
+  // no ramp, straight back to full volume the following Monday. Carrying the
+  // step forward to the first week with room is what makes the ramp exist.
+  let nextStep = 0;
+  for (const weekNumber of pending) {
+    if (nextStep >= steps.length) break;
+    const step = steps[nextStep];
+    const original = weeks.find((w) => w.week === weekNumber);
+    if (!original) continue;
+    // A week the loading step above already rebuilt is the base here, so the
+    // ramp composes with it rather than overwriting it. It can be the same
+    // week: a break that both starts and ends mid-week has its pre-break days
+    // loaded and its post-return days rebuilt inside one plan week. The record
+    // still names the original week as what it replaced, because that is what
+    // undo has to restore.
+    const week = rebuilt.get(weekNumber) ?? original;
+    if (playableCount(week) === 0) continue;
 
     // A break that ends on, say, Wednesday returns the athlete into that same
     // week. Monday to Wednesday are already behind them — some of them
@@ -922,6 +1011,7 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
     const weekEndKey = addDays(weekStartKey, 6);
     const fromDay =
       firstDayBack > weekStartKey && firstDayBack <= weekEndKey ? dayOfWeek(firstDayBack) : 1;
+
 
     const isCompetitionWeek = weekNumber === competitionWeek;
     const effectiveStep = {
@@ -936,10 +1026,12 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
     // still ahead of the athlete is locked, or already behind them — is not
     // recorded. Writing a note that says "about 70% of your usual volume" onto
     // a week nothing was scaled in would be the app describing a change it did
-    // not make.
-    if (!result.snapshot.length) return;
-    recordStep(week, effectiveStep, result);
-  });
+    // not make. The step is not spent either: it moves to the next week that
+    // can take it.
+    if (!result.snapshot.length) continue;
+    recordStep(original, effectiveStep, result);
+    nextStep += 1;
+  }
 
   // Pre-break and in-break steps are recorded before the return progression
   // above; chronological order is what every reader expects.

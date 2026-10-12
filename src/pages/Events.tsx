@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
+import { formatShortDate, formatWeekdayDate } from "@/i18n/format";
 
 type Tab = "events" | "rivals";
 
@@ -226,7 +227,10 @@ const Events = () => {
             {getCountdown(selectedEvent.event_date)}
           </motion.p>
           <p className="text-sm text-muted-foreground mt-2">
-            {new Date(selectedEvent.event_date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {/* Pinned to "en-US" before this, so an athlete reading the app in
+                French or German got an English date on the one screen a "race
+                in 12 days" is about. */}
+            {formatWeekdayDate(`${selectedEvent.event_date}T00:00:00`)}
           </p>
           {selectedEvent.location && <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1"><MapPin size={12} />{selectedEvent.location}</p>}
           {selectedEvent.distance_km && <p className="text-xs text-muted-foreground mt-1">{Number(selectedEvent.distance_km)} km · {selectedEvent.sport}</p>}
@@ -559,7 +563,7 @@ const Events = () => {
                   <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-full">{getCountdown(evt.event_date)}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Calendar size={12} />{new Date(evt.event_date).toLocaleDateString()}</span>
+                  <span className="flex items-center gap-1"><Calendar size={12} />{formatShortDate(`${evt.event_date}T00:00:00`)}</span>
                   {evt.location && <span className="flex items-center gap-1"><MapPin size={12} />{evt.location}</span>}
                   {evt.distance_km && <span>{Number(evt.distance_km)} km</span>}
                 </div>
@@ -611,7 +615,7 @@ const Events = () => {
                 <div>
                   <h4 className="font-semibold text-sm">{evt.title}</h4>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(evt.event_date).toLocaleDateString()}
+                    {formatShortDate(`${evt.event_date}T00:00:00`)}
                     {evt.actual_time && ` · ${evt.actual_time}`}
                     {evt.actual_position && ` · #${evt.actual_position}`}
                   </p>

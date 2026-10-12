@@ -108,10 +108,46 @@ describe("video-form-analysis: entitlement + retention", () => {
     expect(src).toMatch(/AI video form analysis failed — auto refund/);
   });
 
-  it("caps both client and server video payloads below the shared Edge body limit", () => {
-    expect(src).toMatch(/const MAX_BYTES = 6 \* 1024 \* 1024/);
-    expect(read("/src/pages/VideoFormAnalysis.tsx")).toMatch(/const MAX_BYTES = 6 \* 1024 \* 1024/);
+  it("keeps one video cap on both sides, and re-measures it after download", () => {
+    // Rewritten 2026-10-12. This used to assert `MAX_BYTES = 6 * 1024 * 1024` in
+    // the function AND the page, because the clip was base64'd into the request
+    // body and the shared Edge body limit was therefore what sized a video. The
+    // clip now goes to the private `form-videos` bucket and the function
+    // downloads it, so the contract is different and, deliberately, stronger:
+    // the caps live in ONE module, the server does not take the client's word
+    // for the size, and no video bytes ride in a JSON body at all.
+    const limits = read("/src/lib/formVideo.ts");
+    expect(limits).toMatch(/export const MAX_FORM_VIDEO_BYTES = 25 \* 1024 \* 1024/);
+    expect(limits).toMatch(/export const MAX_FORM_VIDEO_SECONDS = 60/);
+    expect(src).toMatch(/const MAX_BYTES = 25 \* 1024 \* 1024/);
+    expect(src).toMatch(/const MAX_SECONDS = 60/);
+    // The refusal is decided on the bytes that were actually downloaded, not on
+    // a length the caller supplied.
+    expect(src).toMatch(/videoBytes\.byteLength > MAX_BYTES/);
+    // The guard still caps JSON bodies, and video is no longer one of them.
     expect(read(GUARD)).toMatch(/MAX_BODY_BYTES = 10 \* 1024 \* 1024/);
+    expect(src).not.toMatch(/video_base64/);
+  });
+
+  it("only ever reads a clip stored under the caller's own id, from a private bucket", () => {
+    // The path is the authorisation. A forged path is rejected before the
+    // service-role download, and the bucket denies URL access to everyone —
+    // including the athlete, whose own row of `storage.objects` is the only
+    // thing the policies grant.
+    expect(src).toMatch(/storage_path\.startsWith\(`\$\{userId\}\//);
+    expect(src).toMatch(/!storage_path\.includes\("\.\."\)/);
+    const migration = read("/supabase/migrations/20261012120000_form_video_upload.sql");
+    expect(migration).toMatch(/storage\.buckets/);
+    expect(migration).toMatch(/on conflict \(id\) do update set public = false/);
+    expect(migration).toMatch(/auth\.uid\(\)::text = \(storage\.foldername\(name\)\)\[1\]/);
+  });
+
+  it("deletes the clip from Gemini and from storage on every exit path", () => {
+    // "Your video is never stored" is a promise about all four outcomes: an
+    // answer, a refund, a rejection and a throw.
+    expect(src).toMatch(/finally \{[\s\S]{0,200}discardVideo\(\)/);
+    expect(src).toMatch(/geminiDeleteFile/);
+    expect(src).toMatch(/storage\s*\n?\s*\.from\(VIDEO_BUCKET\)|service\.storage/);
   });
 });
 

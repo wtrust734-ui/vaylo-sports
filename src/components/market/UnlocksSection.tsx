@@ -60,7 +60,7 @@ const UnlockCard = ({
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`overflow-hidden rounded-2xl border bg-gradient-card p-4 ${
+      className={`overflow-hidden rounded-2xl border bg-card p-4 ${
         owned ? "border-energy/40" : "border-border"
       }`}
     >
@@ -70,11 +70,11 @@ const UnlockCard = ({
           <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{entry.tagline}</p>
         </div>
         {owned ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-energy/40 bg-energy/10 px-2 py-1 text-[12px] font-bold text-energy">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-1 text-[12px] font-bold text-muted-foreground">
             <Check size={11} /> Owned
           </span>
         ) : (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[12px] font-bold text-primary">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-primary/10 px-2 py-1 text-[12px] font-bold text-primary">
             <Zap size={11} /> {price}
           </span>
         )}
@@ -94,7 +94,7 @@ const UnlockCard = ({
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={onOpen}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-bold text-primary-foreground shadow-glow"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
           >
             {entry.routeLabel} <ArrowRight size={14} />
           </motion.button>
@@ -103,7 +103,7 @@ const UnlockCard = ({
             whileTap={{ scale: 0.97 }}
             onClick={onBuy}
             disabled={buying}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-sm font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-60"
           >
             {buying ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
             {buying ? "Unlocking…" : `Unlock for ${price} credits`}
@@ -177,7 +177,7 @@ export default function UnlocksSection() {
 
   return (
     <div className="space-y-3 px-5">
-      <div className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-card to-card p-4">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
           <InfinityIcon size={16} className="text-primary" />
           <h4 className="font-display text-sm font-bold">Unlock once, keep it forever</h4>
@@ -222,7 +222,7 @@ export default function UnlocksSection() {
       <motion.button
         whileTap={{ scale: 0.98 }}
         onClick={() => navigate("/event-packs")}
-        className="w-full rounded-2xl border border-energy/30 bg-gradient-to-br from-energy/10 via-card to-card p-4 text-start"
+        className="w-full rounded-2xl border border-border bg-card p-4 text-start"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-energy/15">

@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { GEMINI_MODELS } from "../_shared/aiModels.ts";
-import { geminiGenerate } from "../_shared/google.ts";
+import { geminiDeleteFile, geminiGenerate, geminiUploadFile } from "../_shared/google.ts";
 import { aiCallAllowed, authenticate, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { refundCredits } from "../_shared/refund.ts";
 
@@ -24,13 +24,68 @@ interface VideoQuotaSlot {
   reservation_id?: number;
 }
 
-// Keep the base64 JSON body below the shared 10 MiB Edge Function guard cap.
-// A 6 MiB video expands to ~8 MiB plus JSON framing.
-const MAX_BYTES = 6 * 1024 * 1024;
+// THE LIMITS, mirrored from the client's single source in src/lib/formVideo.ts.
+// An edge function cannot import from src/, and the numbers have to be checked
+// on both sides anyway — the client so the athlete is told before a long upload,
+// the server because a client check is a convenience, not a control.
+//
+// Why they moved: the clip used to travel as base64 inside the request body,
+// which capped it at 6 MiB — roughly five to fifteen seconds. That is not enough
+// footage to review a movement: no approach, no follow-through, and often not a
+// single complete rep. The clip now goes to a private Storage bucket
+// (form_videos, owner-scoped) and this function streams it to the Gemini Files
+// API, which is what allows a full minute.
+const MAX_BYTES = 25 * 1024 * 1024;
+const MAX_SECONDS = 60;
+/** Bucket the client uploads to. Private: see the migration that creates it. */
+const VIDEO_BUCKET = "form-videos";
 const ALLOWED_MIME = ["video/mp4", "video/quicktime", "video/webm"];
 
-const ANALYSIS_PROMPT =
-  "Analyse this athlete movement video like an elite sports coach. Evaluate visible technique, efficiency, posture, movement patterns, strengths, weaknesses, and improvements. Provide practical drills and recommendations. Tailor feedback to the athlete's dossier (sport, level, injuries, PBs) — avoid prescribing movements that aggravate listed injuries. Do not diagnose injuries.";
+/**
+ * What the coach is asked for, and why it reads the way it does.
+ *
+ * The old prompt asked for "strengths, weaknesses and improvements" over a clip
+ * that could only ever be a few seconds long, and the answers came back as
+ * praise with no evidence in it: the athlete could not tell which part of their
+ * movement was being described, or check it. Two changes fix that, and neither
+ * is about the file size.
+ *
+ *   1. The report is built from the clip's own timeline. A minute of footage
+ *      contains a movement rather than a snapshot, so the coach works through
+ *      it in order and cites timestamps the athlete can scrub to. A timestamp
+ *      turns an opinion into something checkable, which is the difference
+ *      between coaching and commentary.
+ *   2. Invention is named as the failure mode. Video invites confident detail
+ *      nobody could actually see — a knee angle at a camera position that never
+ *      had it — and an invented fault is worse than an admitted gap, because
+ *      the athlete goes away and drills it. "Not visible from this angle" is
+ *      an acceptable answer, and the prompt says so twice.
+ */
+const ANALYSIS_PROMPT = [
+  "You are an elite technique coach reviewing one clip an athlete uploaded of themselves. Write a report they can act on, not a description of the clip.",
+  "",
+  "HOW TO WATCH IT:",
+  "- Work through the clip in order and split it into the phases it actually has (approach, the key action, the follow-through or the landing). Name the timestamps you see — mm:ss exactly as the video player shows them.",
+  "- For each phase, say what the body is doing: the segment and joint positions that matter for this movement, the timing of the key contacts or transitions, trunk-to-hip and shoulder relationships, rhythm and tempo, and where control is gained or lost.",
+  "- If the clip shows repetition, compare the earliest reps with the last ones and say what changes: which quality holds up as the athlete tires, and which is the first to go.",
+  "- Cite a timestamp for every observation, and make it a moment the athlete can scrub to.",
+  "",
+  "HONESTY RULES — these matter more than sounding impressive:",
+  "- Describe only what is visible in the footage. If the feet are out of frame, the camera is side-on only, the light or distance hides a joint, or the clip cuts before the landing, say exactly that in the field where it matters instead of guessing.",
+  "- An invented detail sends the athlete away to drill a fault they do not have. 'This cannot be judged from this angle — film a side-on clip of the same rep' is a better answer than a confident one.",
+  "- Never diagnose an injury, never name a tissue, never prescribe medication. Describe movement only.",
+  "- Use the athlete dossier to tailor everything: never build a recommendation on a movement that aggravates a listed injury, and scale drills to their sport and level.",
+  "",
+  "WHAT TO RETURN:",
+  "- moments: 5 to 8 entries in clip order. Each one is a timestamp, what happens there, and why it does or does not matter. These are the evidence for the whole report — every claim in strengths, areas_to_improve and technical_analysis must trace back to one of them.",
+  "- strengths: what genuinely works, each with the timestamp that shows it.",
+  "- areas_to_improve: the two or three changes with the most effect on performance, not every imperfection you can find. Say where each appears in the clip.",
+  "- technical_analysis: one or two sentences per field, drawn from what you saw rather than from general principles.",
+  "- recommended_drills: 3 to 5 drills for THIS athlete, each with sets, reps or time, and what they should feel or check while doing it, so the drill is testable.",
+  "- focus_next_session: the single change to make next session, in one sentence.",
+  "- coach_summary: two or three sentences the athlete will actually read — what the clip shows them doing, and what to do about it.",
+  "- overall_score: 0-100 for the movement in THIS clip, judged against a competent athlete of this sport and level. Use the whole scale; 90+ has to mean exceptional.",
+].join("\n");
 
 const RESPONSE_SCHEMA = {
   type: "object",
@@ -50,6 +105,22 @@ const RESPONSE_SCHEMA = {
       required: ["posture", "movement_efficiency", "arm_mechanics", "leg_mechanics", "balance_and_control"],
     },
     recommended_drills: { type: "array", items: { type: "string" } },
+    // The evidence trail. Required, not optional: a report without moments is a
+    // report whose claims nobody can check, which is the complaint this schema
+    // answers. The page renders these as a timeline in clip order.
+    moments: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          t: { type: "string" },
+          what: { type: "string" },
+          why: { type: "string" },
+        },
+        required: ["t", "what", "why"],
+      },
+    },
+    focus_next_session: { type: "string" },
     coach_summary: { type: "string" },
   },
   required: [
@@ -58,6 +129,8 @@ const RESPONSE_SCHEMA = {
     "areas_to_improve",
     "technical_analysis",
     "recommended_drills",
+    "moments",
+    "focus_next_session",
     "coach_summary",
   ],
 };
@@ -71,6 +144,12 @@ Deno.serve(async (req) => {
   let premiumSlotId: number | null = null;
   let requestClaimUserId: string | null = null;
   let requestClaimId: string | null = null;
+  // The clip's two copies: the object in Storage the client uploaded, and the
+  // file this function uploads to Gemini. Both are deleted on every exit path
+  // (see discardVideo), because "your video is never stored" is a promise about
+  // failures too — the refund path is exactly when an orphan would be left.
+  let uploadedPath: string | null = null;
+  let geminiFileName: string | null = null;
   // Dynamic RPCs/tables in the deployed schema aren't part of the generated
   // web Database type; all access uses this service-role Supabase client.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- these migrations are not in generated Database types.
@@ -115,6 +194,29 @@ Deno.serve(async (req) => {
     await Promise.all([refundCharge(), releasePremiumSlot(), releaseRequestClaim()]);
   };
 
+  /**
+   * Delete the athlete's clip from Storage and the copy sent to the provider.
+   *
+   * Runs in a finally, so it covers delivered reports, refunded failures and
+   * thrown errors alike. Nothing here may throw: a cleanup problem must never
+   * turn a completed analysis into an error response.
+   */
+  const discardVideo = async () => {
+    const apiKey = Deno.env.get("GOOGLE_API");
+    if (geminiFileName && apiKey) {
+      await geminiDeleteFile({ apiKey, name: geminiFileName });
+      geminiFileName = null;
+    }
+    if (uploadedPath) {
+      const path = uploadedPath;
+      uploadedPath = null;
+      if (admin) {
+        const { error } = await admin.storage.from(VIDEO_BUCKET).remove([path]);
+        if (error) console.error("Uploaded clip cleanup failed", error.message);
+      }
+    }
+  };
+
   try {
     const userId = await authenticate(req);
     if (!userId) return json({ error: "Unauthorized" }, 401);
@@ -129,8 +231,9 @@ Deno.serve(async (req) => {
     const body = await readJsonBody(req);
     if (!body) return json({ error: "Invalid request body or request too large" }, 400);
 
-    const { video_base64, mime_type, sport_type, video_name, save, pbs, userLocale, request_id } = body as {
-      video_base64?: unknown;
+    const { storage_path, duration_seconds, mime_type, sport_type, video_name, save, pbs, userLocale, request_id } = body as {
+      storage_path?: unknown;
+      duration_seconds?: unknown;
       mime_type?: unknown;
       sport_type?: unknown;
       video_name?: unknown;
@@ -141,20 +244,58 @@ Deno.serve(async (req) => {
     };
     const langDirective = languageDirective(typeof userLocale === "string" ? userLocale : undefined);
 
-    if (typeof video_base64 !== "string" || video_base64.length < 100)
-      return json({ error: "No video received. Please upload an MP4 or MOV file." }, 400);
+    // The service client comes up before validation on purpose. By the time this
+    // function is called the clip is already in Storage, so every exit path —
+    // including a rejected request — has to be able to delete it.
+    admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const service = admin;
+
+    // Owner-scoped path only. The client always writes under its own auth id, so
+    // anything else is malformed or forged, and the service-role download below
+    // must never be able to reach another athlete's object.
+    const uploadedByThisAthlete =
+      typeof storage_path === "string" &&
+      storage_path.length > 0 &&
+      storage_path.length <= 200 &&
+      !storage_path.startsWith("/") &&
+      !storage_path.includes("..") &&
+      storage_path.startsWith(`${userId}/`);
+    if (uploadedByThisAthlete) uploadedPath = storage_path as string;
+    if (!uploadedByThisAthlete) return json({ error: "No video received. Please upload an MP4 or MOV file." }, 400);
     if (typeof mime_type !== "string" || !ALLOWED_MIME.includes(mime_type))
       return json({ error: "Unsupported video format. Please upload an MP4, MOV or WebM file." }, 400);
 
-    const base64 = video_base64.includes(",") ? video_base64.split(",")[1] : video_base64;
-    const approxBytes = Math.floor((base64.length * 3) / 4);
-    if (approxBytes > MAX_BYTES)
-      return json({ error: "Video is too large. Please upload a clip under 6MB (5–15 seconds is ideal)." }, 413);
+    // Duration comes from the clip's own metadata, read on the client. A longer
+    // clip is refused rather than trimmed: the provider bills by the second of
+    // video, so an unbounded upload is an unbounded cost, and a silently cut
+    // clip would produce a report about footage the athlete cannot see.
+    const durationSeconds =
+      typeof duration_seconds === "number" && Number.isFinite(duration_seconds) ? duration_seconds : null;
+    if (durationSeconds !== null && durationSeconds > MAX_SECONDS + 1)
+      return json({
+        error: `That clip is ${Math.round(durationSeconds)} seconds long. Please upload a clip of up to ${MAX_SECONDS} seconds.`,
+      }, 413);
 
     const sport = typeof sport_type === "string" && sport_type.length <= 40 ? sport_type : "general";
 
-    admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const service = admin;
+    // ---- Fetch the uploaded clip (server-side, owner-scoped) ----
+    // Downloading before the quota check and before the charge means a missing,
+    // empty or oversized object fails without spending anything, and the size
+    // is measured from the bytes themselves rather than from a client's claim.
+    const { data: blob, error: downloadError } = await service.storage
+      .from(VIDEO_BUCKET)
+      .download(uploadedPath as string);
+    if (downloadError || !blob) {
+      console.error("Uploaded clip download failed", "storage_error");
+      return json({ error: "The uploaded clip could not be read. Please try again." }, 400);
+    }
+    const videoBytes = new Uint8Array(await blob.arrayBuffer());
+    if (videoBytes.byteLength === 0)
+      return json({ error: "That file is empty. Please upload the clip again." }, 400);
+    if (videoBytes.byteLength > MAX_BYTES)
+      return json({
+        error: `That clip is over ${Math.round(MAX_BYTES / (1024 * 1024))}MB. Please trim it and upload again.`,
+      }, 413);
 
     // Subscription entitlement is still checked server-side. Expired or
     // cancelled rows never unlock the high-cost Pro model.
@@ -209,9 +350,12 @@ Deno.serve(async (req) => {
     const clientRequestId = typeof request_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request_id)
       ? request_id
       : crypto.randomUUID();
+    // The object path stands in for the bytes here: it is unique per upload and
+    // the client makes a fresh one for each intentional analysis, so the token
+    // still cannot be replayed against a different clip.
     const fingerprint = await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(`${userId}:${clientRequestId}:${base64}`),
+      new TextEncoder().encode(`${userId}:${clientRequestId}:${uploadedPath}`),
     );
     const requestId = Array.from(new Uint8Array(fingerprint), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const { data: previousRequest, error: replayError } = await service
@@ -370,12 +514,34 @@ Deno.serve(async (req) => {
 
     const dossierBlock = dossierText ? `\n\nAthlete dossier (use to tailor feedback — do not contradict injuries/level):\n${dossierText}` : "";
 
+    // ---- Upload the clip to the provider, then analyse it by reference ----
+    // A minute of video is far too large to inline in a request, so it goes
+    // through the Files API once and the call references the resulting URI. The
+    // file is registered here and deleted in the finally block, so the provider
+    // holds it only for the length of this request.
+    const uploaded = await geminiUploadFile({
+      apiKey: GOOGLE_API,
+      bytes: videoBytes,
+      mimeType: mime_type,
+      displayName: "form-clip",
+    });
+    if (!uploaded.ok) {
+      console.error("Gemini video upload failed", uploaded.status, "upstream_error");
+      await cleanupFailedCall();
+      if (uploaded.status === 429)
+        return json({ error: "Analysis service is busy. Please try again in a moment." }, 429);
+      if (uploaded.status === 413 || uploaded.status === 400)
+        return json({ error: "That video couldn't be uploaded for analysis. Try a shorter or clearer clip." }, 400);
+      return json({ error: "Video analysis failed. Please try again.", status: uploaded.status }, 502);
+    }
+    geminiFileName = uploaded.file.name;
+
     const gemini = await geminiGenerate({
       model,
       apiKey: GOOGLE_API,
       parts: [
         { text: `${ANALYSIS_PROMPT}\n\n${sportContext}${dossierBlock}${langDirective ? "\n\n" + langDirective : ""}` },
-        { inlineData: { mimeType: mime_type, data: base64 } },
+        { fileData: { fileUri: uploaded.file.uri, mimeType: mime_type } },
       ],
       generationConfig: {
         responseMimeType: "application/json",
@@ -391,12 +557,13 @@ Deno.serve(async (req) => {
       if (gemini.status === 429)
         return json({ error: "Analysis service is busy. Please try again in a moment." }, 429);
       if (gemini.status === 400)
-        return json({ error: "That video couldn't be analysed. Try a shorter, clearer clip." }, 400);
+        return json({ error: "That video couldn't be analysed. Try a clearer clip, filmed closer." }, 400);
       return json({ error: "Video analysis failed. Please try again.", status: gemini.status }, 502);
     }
 
     const text = gemini.text;
     let result: Record<string, unknown>;
+
     try {
       result = JSON.parse(text);
     } catch {
@@ -465,5 +632,8 @@ Deno.serve(async (req) => {
     await cleanupFailedCall();
     console.error("video-form-analysis error", err instanceof Error ? err.name : err);
     return json({ error: "Video analysis could not run. Please try again." }, 500);
+  } finally {
+    // The clip is gone whatever happened above: analysed, refunded or thrown.
+    await discardVideo();
   }
 });

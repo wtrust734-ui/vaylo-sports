@@ -28,6 +28,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowLeft, BadgePoundSterling, PoundSterling, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { formatShortDate } from "@/i18n/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -424,7 +425,7 @@ export default function CoachStudio() {
                       {formatMinorUnits(order.gross_cents, order.currency)}
                     </p>
                     <p className="text-[12px] text-muted-foreground">
-                      Bought {new Date(order.created_at).toLocaleDateString()}
+                      Bought {formatShortDate(new Date(order.created_at))}
                     </p>
 
                     {draftFor === order.id ? (

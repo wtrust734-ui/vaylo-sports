@@ -48,8 +48,10 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
           >
             {highlight && (
               <span
-                className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold ${
-                  pack.popular ? "bg-primary text-primary-foreground" : "bg-energy text-background"
+                className={`absolute right-4 top-4 z-10 rounded-full border px-2.5 py-1 text-[12px] font-bold ${
+                  pack.popular
+                    ? "border-border bg-primary/10 text-primary"
+                    : "border-border bg-muted text-muted-foreground"
                 }`}
               >
                 {pack.popular ? (
@@ -81,7 +83,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="font-display text-2xl font-bold text-gradient-electric">
+                  <p className="font-display text-2xl font-bold text-foreground">
                     {formatLocalPrice(pack.price_cents, currency)}
                   </p>
                   <p className="text-[12px] text-muted-foreground">

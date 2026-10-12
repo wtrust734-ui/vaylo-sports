@@ -26,7 +26,7 @@ export default function CreditCostsList({ costs }: { costs?: Partial<Record<Feat
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="rounded-2xl border border-border bg-gradient-card p-4"
+      className="rounded-2xl border border-border bg-card p-4"
     >
       <div className="flex items-center gap-2">
         <Sparkles size={16} className="text-primary" />

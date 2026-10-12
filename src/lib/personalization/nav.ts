@@ -50,6 +50,11 @@ export const NAV_CATALOG: NavGroupSpec[] = [
       { feature: "training.availability", labelKey: "sidebar.availability", path: "/availability" },
       { feature: "training.pbs", labelKey: "sidebar.pbs", path: "/pbs", establishedFirst: true },
       { feature: "training.form", labelKey: "sidebar.formAnalysis", path: "/form" },
+      // Cross-Sport Analysis: a one-off unlock, so it is absent from the
+      // navigation until it is owned. It lives beside the other reads of the
+      // athlete's own numbers rather than with the plan, because that is what it
+      // analyses — the six indices, not the sessions.
+      { feature: "training.plans", labelKey: "sidebar.crossSport", path: "/cross-sport", unlock: "cross_sport" },
     ],
   },
   {
@@ -139,13 +144,17 @@ export const QUICK_ACTIONS: (NavItemSpec & { descKey: string; icon: string })[] 
 // values are the entitlement keys `hasFeature()` answers for (see
 // src/config/unlocks.ts, which owns the purchase side).
 //
-// The Cross-Sport unlock is deliberately NOT here: its route in the catalogue is
-// /training, which is the free training-plan screen — the analysis it sells now
-// lives inside the plan, so gating /training would hide a standard tab.
+// Cross-Sport Analysis IS here, and it is the reason this map exists. It used to
+// point at /training — the free plan screen — so the athlete who bought it could
+// not be shown where to go and its tile could not be hidden. Its own route is a
+// real screen now (src/pages/CrossSportAnalysis.tsx), so the purchase and the
+// route are the same fact: own it and the Train hub lists it, do not and a row
+// that only leads to a paywall is never rendered.
 //
 export const ROUTE_UNLOCKS: Record<string, string> = {
   "/mental": "mental_gym",
   "/injury": "injury_management",
+  "/cross-sport": "cross_sport",
 };
 
 /** The entitlement a route needs, or null when the route is free. */

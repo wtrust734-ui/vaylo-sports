@@ -4,6 +4,7 @@ import { TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { formatDate } from "@/i18n/format";
 
 const MentalProgress = () => {
   const { user } = useAuth();
@@ -16,7 +17,7 @@ const MentalProgress = () => {
       .then(({ data: rows }) => {
         if (!rows) return;
         setData(rows.map(r => ({
-          date: new Date(r.created_at).toLocaleDateString("en", { month: "short", day: "numeric" }),
+          date: formatDate(new Date(r.created_at), { month: "short", day: "numeric" }),
           readiness: r.readiness_score,
           confidence: r.confidence,
         })));

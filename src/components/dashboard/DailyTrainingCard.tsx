@@ -1,6 +1,7 @@
 interface PlanWeek { week: number; sessions?: DaySession[]; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
+import { currentWeekOf } from "@/lib/planSchedule";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Play, Clock, Zap, Dumbbell, Sun, Moon, Flame, StretchHorizontal, ChevronDown, ChevronUp, Edit3, Droplets, Apple, Calendar, Heart } from "lucide-react";
@@ -32,8 +33,23 @@ type PlanRow = {
   plan_data: unknown;
   week_current: number | null;
   duration_weeks: number | null;
+  /** Declared rather than left to the index signature: the projection needs a
+   *  date, and the anchor for every plan week is the day the plan was created. */
+  created_at: string | null;
   [key: string]: unknown;
 };
+
+/**
+ * The plan week the athlete is genuinely in.
+ *
+ * Same rule as the plan screen: `week_current` is written once by the generator
+ * and never advanced, so reading it here pinned the dashboard's "Today's
+ * Schedule" to week 1 for the life of the plan — a session the athlete had
+ * already done being presented as today's training, and last night's check-in
+ * appearing to change nothing. The week is derived from the plan's anchor and
+ * today instead.
+ */
+const planWeekOf = (plan: PlanRow): number => currentWeekOf(plan) ?? plan.week_current ?? 1;
 
 type EventRow = {
   id: string;
@@ -95,7 +111,7 @@ const DailyTrainingCard = () => {
         const plan = planRes.data[0];
         setActivePlan(plan);
         if (plan.plan_data && Array.isArray(plan.plan_data)) {
-          const weekData = (plan.plan_data as PlanWeek[]).find((w) => w.week === plan.week_current);
+          const weekData = (plan.plan_data as PlanWeek[]).find((w) => w.week === planWeekOf(plan));
           if (weekData?.sessions) {
             const dayOfWeek = new Date().getDay() || 7;
             if (hasAdjusted) {
@@ -158,7 +174,7 @@ const DailyTrainingCard = () => {
               </span>
             )}
           </div>
-          {activePlan && <span className="text-[12px] font-medium tabular-nums text-muted-foreground">Week {activePlan.week_current}/{activePlan.duration_weeks}</span>}
+          {activePlan && <span className="text-[12px] font-medium tabular-nums text-muted-foreground">Week {planWeekOf(activePlan)}/{activePlan.duration_weeks}</span>}
         </div>
 
         {activeBreak && (

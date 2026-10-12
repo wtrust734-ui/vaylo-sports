@@ -217,9 +217,19 @@ android {
         // permissions or disconnect. Refresh of the current tree otherwise. No
         // manifest, permission or plugin change — WebView-only.
         //
+        // Recovery check-ins and breaks now actually rewrite the plan they say
+        // they changed: the adaptation targets the calendar week the athlete is
+        // in rather than the stale `week_current` cursor, a good check-in puts
+        // the session it replaced back, and a break's loading week and return
+        // ramp both happen (the loading week used to require being logged on
+        // exactly the right Monday, and the ramp was dropped when a break ended
+        // mid-week). The Market tab is de-shouted, and user-facing dates,
+        // numbers and prices go through the locale formatters. WebView-only —
+        // no manifest, permission or plugin change.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 28
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.24"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 29
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.25"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

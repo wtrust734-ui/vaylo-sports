@@ -25,12 +25,33 @@ import type { AdjustmentDecision } from "@/lib/recoveryAdjust";
 import { explainDecision, explainWeek } from "@/lib/explanations";
 import { WhyBody } from "@/components/insights/WhyDisclosure";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
-import { sessionDate, weekOneMonday, type ReturnSessionMeta, type ReturnWeekMeta } from "@/lib/planSchedule";
+import {
+  currentWeekOf,
+  sessionDate,
+  weekOneMonday,
+  type ReturnSessionMeta,
+  type ReturnWeekMeta,
+} from "@/lib/planSchedule";
 import { useLifeEvents } from "@/hooks/useLifeEvents";
 import PlanEditChat from "@/components/training/PlanEditChat";
 import { editCost, type PlanEditScope, type PlanWeekLike } from "@/lib/planEdit";
+import { formatShortDate } from "@/i18n/format";
 
 type TrainingPlan = Tables<"training_plans">;
+
+/**
+ * The plan week the athlete is genuinely in.
+ *
+ * `week_current` is written once by the generator and advanced by nothing, so
+ * on a plan more than a week old it still says 1 — which meant the "Current"
+ * chip sat on the first week forever and the header progress bar never moved,
+ * while the athlete's real week sat unmarked further down the list. The week
+ * they are in is a fact about today's date and the plan's own anchor, so it is
+ * derived from those, through the same projection the adaptive record uses to
+ * put sessions on calendar days. A plan that has not started, or has finished,
+ * keeps the stored cursor rather than being told it is in week one.
+ */
+const planWeekOf = (plan: TrainingPlan): number => currentWeekOf(plan) ?? plan.week_current ?? 1;
 
 // Multi-goal: chips toggle on/off; the DB `goal` column stays a plain string,
 // so selections are comma-joined (generate-plan accepts ≤300 chars).
@@ -1544,7 +1565,7 @@ const Training = () => {
                 {log.calories_burned && <span className="text-[12px] text-muted-foreground">{log.calories_burned} kcal</span>}
               </div>
               {log.notes && <p className="text-xs text-muted-foreground mt-1">{log.notes}</p>}
-              <p className="text-[12px] text-muted-foreground mt-1">{new Date(log.created_at).toLocaleDateString()}</p>
+              <p className="text-[12px] text-muted-foreground mt-1">{formatShortDate(log.created_at)}</p>
             </motion.div>
           ))}
         </div>
@@ -1555,6 +1576,7 @@ const Training = () => {
   // === PLAN DETAIL VIEW ===
   if (activeView === "planDetail" && selectedPlan) {
     const planData = selectedPlan.plan_data as PlanData | null;
+    const currentWeek = planWeekOf(selectedPlan);
     return (
       <div className="min-h-screen bg-background">
         <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
@@ -1562,14 +1584,14 @@ const Training = () => {
           <h1 className="text-lg font-display font-bold flex-1">{selectedPlan.title}</h1>
         </div>
         <div className="px-5 mb-3">
-          <p className="text-sm text-muted-foreground">{selectedPlan.sport} · {selectedPlan.level} · Week {selectedPlan.week_current}/{selectedPlan.duration_weeks}</p>
+          <p className="text-sm text-muted-foreground">{selectedPlan.sport} · {selectedPlan.level} · Week {currentWeek}/{selectedPlan.duration_weeks}</p>
           {adaptive.adjustments.length > 0 && (
             <span className="inline-flex items-center gap-1 mt-1.5 text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
               <TrendingUp size={11} /> Rebuilt for a break
             </span>
           )}
           <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(selectedPlan.week_current / selectedPlan.duration_weeks) * 100}%` }} className="h-full bg-primary rounded-full" />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${(currentWeek / selectedPlan.duration_weeks) * 100}%` }} className="h-full bg-primary rounded-full" />
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => setExpandedWeek(-1)}
@@ -1693,7 +1715,7 @@ const Training = () => {
                       {change.sessions.map((s) => (
                         <div key={`${s.scheduled_date}-${s.title}`} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
                           <span className="min-w-0 truncate">
-                            {new Date(`${s.scheduled_date}T00:00:00`).toLocaleDateString()} · {s.title}
+                            {formatShortDate(`${s.scheduled_date}T00:00:00`)} · {s.title}
                             {s.important && <span className="text-info"> · key session</span>}
                           </span>
                           <span className="shrink-0">{sessionStatusMeta(s.status).label}</span>
@@ -1711,12 +1733,12 @@ const Training = () => {
         )}
 
         <div className="px-5 space-y-3 mb-8">
-          {planData?.map((week) => (              <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === selectedPlan.week_current ? "border-primary/30" : holidayForWeek(selectedPlan, week.week) ? "border-energy/30" : "border-border"}`}>
+          {planData?.map((week) => (              <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === currentWeek ? "border-primary/30" : holidayForWeek(selectedPlan, week.week) ? "border-energy/30" : "border-border"}`}>
               <button onClick={() => setExpandedWeek(expandedWeek === week.week ? null : week.week)}
                 className="w-full flex items-center justify-between p-4">
                 <div className="flex items-center gap-2">
                   <h4 className="font-display font-bold text-sm">Week {week.week}{week.isDeload ? " (Deload)" : ""}</h4>
-                  {week.week === selectedPlan.week_current && <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Current</span>}
+                  {week.week === currentWeek && <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Current</span>}
                   {holidayForWeek(selectedPlan, week.week) && <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">🏖️ Holiday</span>}
                   {/* The week-level tag: this week is not what the generator
                       wrote, and the athlete can see that from the outside. */}
@@ -1873,7 +1895,7 @@ const Training = () => {
           // The stored weeks, and the week the sheet opens on: whatever the
           // athlete has expanded, falling back to the week they are in.
           weeks={planData ?? []}
-          defaultWeek={expandedWeek && expandedWeek > 0 ? expandedWeek : selectedPlan.week_current ?? 1}
+          defaultWeek={expandedWeek && expandedWeek > 0 ? expandedWeek : currentWeek}
           sport={selectedPlan.sport ?? undefined}
           level={selectedPlan.level ?? undefined}
           durationWeeks={selectedPlan.duration_weeks ?? undefined}
@@ -1919,16 +1941,16 @@ const Training = () => {
           className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-4 shadow-card hover:border-primary/20 transition-colors duration-500">
           <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" /><span className="text-[12px] font-semibold uppercase tracking-wider text-primary">Active Plan</span></div>
           <h3 className="font-display font-bold text-lg">{plan.title}</h3>
-          <p className="text-sm text-muted-foreground mt-1">Week {plan.week_current} of {plan.duration_weeks} · {plan.sport} · {plan.level}</p>
+          <p className="text-sm text-muted-foreground mt-1">Week {planWeekOf(plan)} of {plan.duration_weeks} · {plan.sport} · {plan.level}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Includes strength, plyometrics & cross-training</p>
           <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(plan.week_current / plan.duration_weeks) * 100}%` }} transition={{ delay: 0.3, duration: 0.8 }} className="h-full bg-primary rounded-full" />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${(planWeekOf(plan) / plan.duration_weeks) * 100}%` }} transition={{ delay: 0.3, duration: 0.8 }} className="h-full bg-primary rounded-full" />
           </div>
           {/* The "Start workout" CTA used to open the workout logger, which is
               gone. This card is the plan summary; opening the plan is the only
               action it still owns, so the eye button now fills the row. */}
           <div className="flex gap-2 mt-4">
-            <motion.button onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }} whileTap={{ scale: 0.98 }}
+            <motion.button onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(planWeekOf(plan)); }} whileTap={{ scale: 0.98 }}
               className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
               <Eye size={18} /> Open plan
             </motion.button>
@@ -2145,7 +2167,7 @@ const Training = () => {
               <motion.div key={plan.id} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
                 className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}>
+                  <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(planWeekOf(plan)); }}>
                     <div className="p-2 rounded-lg bg-primary/10"><Dumbbell size={18} className="text-primary" /></div>
                     <div><h4 className="font-semibold text-sm">{plan.title}</h4><p className="text-xs text-muted-foreground">{plan.duration_weeks}w · {plan.sport} · {plan.level}</p></div>
                   </div>

@@ -56,7 +56,7 @@ export default function CoachingSection() {
 
   return (
     <div className="space-y-4 px-5">
-      <div className="rounded-2xl border border-border bg-gradient-card p-4">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
           <UserRound size={16} className="text-primary" />
           <h4 className="font-display text-sm font-bold">Human Coaching</h4>

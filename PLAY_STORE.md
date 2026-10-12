@@ -17,7 +17,7 @@ provide" is the list of things that will stop you.
 | Application ID | `com.vaylosports.app` |
 | App name (target) | `VAYLO Sports` |
 | minSdk / targetSdk | 26 (Android 8.0) / 36 |
-| Version code / name | `5` / `1.2.1`, both overridable at build time |
+| Version code / name | `29` / `1.2.25` (default in `android/app/build.gradle`), both overridable at build time |
 | Release signing | Configured. Upload key `upload` in `android/upload-keystore.jks` |
 | Upload key SHA-256 | Local upload key; verify fingerprint with `apksigner verify --print-certs` |
 | Upload key valid until | 2054-02-13 (Play requires validity past 2033) |
@@ -148,7 +148,10 @@ each document and it cannot drift from what Play reviewed.
 ## 2. Build the signed bundle
 
 Every upload needs a `versionCode` Play has never seen. The committed default is
-`5` / `1.2.1`; bump it for each subsequent upload.
+`29` / `1.2.25`; bump it for each subsequent upload. (Read the real default out
+of `android/app/build.gradle` rather than trusting this line — it said `5` /
+`1.2.1` for twenty-three releases, and a versionCode copied from a stale doc is
+an upload Play rejects outright.)
 
 **Locally** (needs `android/keystore.properties`, which is git-ignored alongside
 the keystore):

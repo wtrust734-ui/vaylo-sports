@@ -65,6 +65,7 @@ const Recovery = lazy(() => import("./pages/Recovery"));
 const Market = lazy(() => import("./pages/Market"));
 const FormAnalysis = lazy(() => import("./pages/FormAnalysis"));
 const VideoFormAnalysis = lazy(() => import("./pages/VideoFormAnalysis"));
+const CrossSportAnalysis = lazy(() => import("./pages/CrossSportAnalysis"));
 const Arcade = lazy(() => import("./pages/Arcade"));
 const Events = lazy(() => import("./pages/Events"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -460,7 +461,13 @@ const App = () => (
                 <Route path="/workouts" element={<Workouts />} />
                 <Route path="/stats" element={<Navigate to="/metrics" replace />} />
                 <Route path="/load" element={<Navigate to="/metrics" replace />} />
-                <Route path="/cross-sport" element={<Navigate to="/training" replace />} />
+                {/* Cross-Sport Analysis is a real screen as of 2026-10-12. It
+                    was a redirect to /training while the unlock it sold had no
+                    page behind it — the price was in the Market and the tab the
+                    athlete had bought never appeared. The route is gated in
+                    ROUTE_UNLOCKS, so it is paid-for and reachable only by an
+                    athlete who owns it or is on Unlimited. */}
+                <Route path="/cross-sport" element={<CrossSportAnalysis />} />
                 <Route path="/competition" element={<Navigate to="/events" replace />} />
                 {/* Removed 2026-10-08: surfaces that were broken, empty or
                     pointless in a closed test. Redirects rather than 404s, so an

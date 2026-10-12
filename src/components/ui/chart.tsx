@@ -2,6 +2,7 @@ import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/i18n/format";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -209,7 +210,10 @@ const ChartTooltipContent = React.forwardRef<
                       </div>
                       {item.value && (
                         <span className="font-mono font-medium tabular-nums text-foreground">
-                          {item.value.toLocaleString()}
+                          {/* A numeric value is formatted for the athlete's chosen
+                              language; anything else is rendered as it came, which
+                              is what `toLocaleString()` did with it. */}
+                          {typeof item.value === "number" ? formatNumber(item.value) : String(item.value)}
                         </span>
                       )}
                     </div>

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Video, Upload, Loader2, Sparkles, TrendingUp, AlertTriangle, Target,
-  ChevronRight, History, Trash2, Crown, Save, X,
+  ChevronRight, History, Trash2, Crown, Save, X, Clock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -11,8 +11,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { formatShortDate } from "@/i18n/format";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 import { creditCost } from "@/lib/credits";
+import {
+  FORM_VIDEO_BUCKET,
+  FORM_VIDEO_LIMITS_COPY,
+  checkFormVideo,
+  formVideoPath,
+  readVideoDuration,
+} from "@/lib/formVideo";
 
 interface AnalysisResult {
   overall_score: number;
@@ -26,6 +34,13 @@ interface AnalysisResult {
     balance_and_control: string;
   };
   recommended_drills: string[];
+  /**
+   * The clip's timeline: what the coach saw, in order, at timestamps the
+   * athlete can scrub to. Every other line in the report traces back to one of
+   * these, which is what makes the feedback checkable rather than confident.
+   */
+  moments?: { t: string; what: string; why: string }[];
+  focus_next_session?: string;
   coach_summary: string;
 }
 
@@ -44,11 +59,6 @@ const SPORTS = [
   { id: "sprint", label: "Sprint" },
   { id: "general", label: "General movement" },
 ];
-
-const ALLOWED = ["video/mp4", "video/quicktime", "video/webm"];
-// The shared Edge Function JSON guard caps request bodies at 10 MiB. Base64
-// adds ~33%, so keep raw videos to 6 MiB for headroom below that ceiling.
-const MAX_BYTES = 6 * 1024 * 1024;
 
 const scoreColor = (s: number) =>
   s >= 80 ? "text-emerald-400" : s >= 60 ? "text-electric-blue" : s >= 40 ? "text-amber-400" : "text-destructive";
@@ -102,42 +112,55 @@ const VideoFormAnalysis = () => {
     activeRequestId.current = null;
   };
 
+  /**
+   * Choose → check → upload → analyse.
+   *
+   * The clip never passes through this JavaScript function's request body: it
+   * goes to a private Storage bucket under the athlete's own id, and the edge
+   * function is told the path. That is what lifted the old six-megabyte ceiling
+   * (base64 inside a JSON body) and allows a clip long enough to show a whole
+   * rep. The limits themselves live in src/lib/formVideo.ts, the same rules the
+   * server applies, so the athlete is told before a 25MB upload rather than
+   * after a refusal.
+   */
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!user) { toast({ title: "Sign in to analyse videos", variant: "destructive" }); return; }
 
-    if (!ALLOWED.includes(file.type)) {
-      toast({ title: "Unsupported file", description: "Upload an MP4, MOV or WebM video.", variant: "destructive" });
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast({ title: "Video too large", description: "Keep clips under 6MB (5–15 seconds works best).", variant: "destructive" });
-      return;
-    }
-
     reset();
-    activeRequestId.current = crypto.randomUUID();
     setFileName(file.name);
     setVideoUrl(URL.createObjectURL(file));
     setStage("uploading");
-    setProgress(0);
+    setProgress(10);
+
+    // Read the clip's own length before uploading anything: a two-minute file
+    // is rejected here rather than moved and then refused by the server.
+    const seconds = await readVideoDuration(file);
+    const check = checkFormVideo({ mimeType: file.type, bytes: file.size, seconds });
+    if (!check.ok) {
+      toast({ title: "Cannot analyse this clip", description: check.message, variant: "destructive" });
+      reset();
+      return;
+    }
+
+    activeRequestId.current = crypto.randomUUID();
+    const path = formVideoPath(user.id, file.type, activeRequestId.current);
+    let uploaded = false;
 
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onprogress = (ev) => { if (ev.lengthComputable) setProgress(Math.round((ev.loaded / ev.total) * 70)); };
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Could not read the video file."));
-        reader.readAsDataURL(file);
-      });
-
-      setProgress(80);
+      const { error: uploadError } = await supabase.storage
+        .from(FORM_VIDEO_BUCKET)
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw new Error("The clip could not be uploaded. Check your connection and try again.");
+      uploaded = true;
+      setProgress(55);
       setStage("analysing");
+      setProgress(80);
 
       const { data, error } = await supabase.functions.invoke("video-form-analysis", {
-        body: { request_id: activeRequestId.current, video_base64: base64, mime_type: file.type, sport_type: sport, video_name: file.name, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+        body: { request_id: activeRequestId.current, storage_path: path, mime_type: file.type, duration_seconds: seconds, sport_type: sport, video_name: file.name, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
       });
 
       if (error) {
@@ -160,6 +183,10 @@ const VideoFormAnalysis = () => {
         description: (payload.cost ?? 0) > 0 ? `${payload.cost} credits used.` : undefined,
       });
     } catch (err) {
+      // Nothing was analysed, so the upload is removed here instead of being
+      // left for a retention sweep. If the call did reach the function, it has
+      // already deleted the object itself and this is a no-op.
+      if (uploaded) await supabase.storage.from(FORM_VIDEO_BUCKET).remove([path]);
       setStage("idle");
       setProgress(0);
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
@@ -168,7 +195,8 @@ const VideoFormAnalysis = () => {
 
   // Discarding unsaves the row (saved=false), which also takes it out of the
   // free-tier weekly window and puts it on the 30-day retention sweep. The
-  // video itself was never stored — only the structured result row.
+  // clip itself is already gone — it is deleted when the analysis returns, and
+  // only the structured report row is kept.
   const discardAnalysis = async () => {
     if (lastId) {
       const { error } = await supabase
@@ -200,7 +228,8 @@ const VideoFormAnalysis = () => {
         </motion.div>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
           className="text-sm text-muted-foreground mt-1">
-          Upload a short clip and get an elite-coach breakdown of your technique.
+          Upload a clip and get an elite-coach breakdown of what your body actually does — with the
+          timestamps to check it.
         </motion.p>
       </div>
 
@@ -264,6 +293,10 @@ const VideoFormAnalysis = () => {
                     {stage === "uploading" ? "Uploading video…" : "Coach is analysing your movement…"}
                   </span>
                   <span className="ml-auto font-mono text-xs">{progress}%</span>
+                  {/* The clip is uploaded in one piece — Storage reports no
+                      per-chunk progress to the browser — so the bar is staged
+                      rather than measured, and the stage text carries the
+                      meaning. */}
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <motion.div className="h-full bg-gradient-primary" animate={{ width: `${progress}%` }} transition={{ ease: "easeOut" }} />
@@ -272,9 +305,7 @@ const VideoFormAnalysis = () => {
             ) : (
               <>
                 <h3 className="font-display font-bold text-lg mb-1">Upload your clip</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  MP4, MOV or WebM · under 6MB · 5–15 seconds, full body in frame, side-on view works best.
-                </p>
+                <p className="text-sm text-muted-foreground mb-3">{FORM_VIDEO_LIMITS_COPY}</p>
                 <div className="flex gap-2">
                   <motion.button whileTap={{ scale: 0.98 }} onClick={() => fileRef.current?.click()}
                     className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
@@ -319,6 +350,42 @@ const VideoFormAnalysis = () => {
                   <p className="text-sm leading-relaxed">{result.coach_summary}</p>
                 </div>
 
+                {/* What happens in the clip — the timeline the rest of the
+                    report is built from. It sits directly under the summary
+                    because it is the part the athlete can check: every row is a
+                    timestamp they can scrub to, and the coach was asked to make
+                    every other claim traceable to one of them. */}
+                {!!result.moments?.length && (
+                  <div className="bg-card border border-border rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Clock size={14} className="text-electric-blue" />
+                      <span className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">What happens in the clip</span>
+                    </div>
+                    <ol className="space-y-3">
+                      {result.moments.map((m, i) => (
+                        <li key={`${m.t}-${i}`} className="flex gap-3">
+                          <span className="mt-0.5 h-fit shrink-0 rounded-md bg-electric-blue/10 px-2 py-0.5 font-mono text-[12px] font-bold text-electric-blue">
+                            {m.t}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm leading-relaxed">{m.what}</span>
+                            <span className="block text-[12px] leading-relaxed text-muted-foreground">{m.why}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {/* One change, chosen for them. A report with eight
+                    improvements is a report nobody acts on. */}
+                {!!result.focus_next_session && (
+                  <div className="rounded-2xl border border-primary/25 bg-gradient-card p-4 shadow-card">
+                    <p className="text-[12px] font-bold uppercase tracking-wider text-primary">Focus next session</p>
+                    <p className="mt-1 text-sm leading-relaxed">{result.focus_next_session}</p>
+                  </div>
+                )}
+
                 {/* Strengths */}
                 <Section title="Strengths" icon={<TrendingUp size={14} className="text-emerald-400" />} accent="emerald">
                   {result.strengths?.map((s, i) => <Bullet key={i} text={s} tone="emerald" />)}
@@ -356,7 +423,8 @@ const VideoFormAnalysis = () => {
 
                 <div className="flex items-center gap-2 text-[12px] text-muted-foreground bg-muted/40 border border-border rounded-xl p-3">
                   <Save size={14} className="text-emerald-400 flex-shrink-0" />
-                  Saved to your athlete profile. Your video is never stored — only the report.
+                  Saved to your athlete profile. The clip is deleted from our servers the moment the
+                  report is written — only the report is kept.
                 </div>
               </motion.div>
             )}
@@ -380,7 +448,7 @@ const VideoFormAnalysis = () => {
                 <div className="flex-1">
                   <p className="text-sm font-semibold capitalize">{row.sport_type} analysis</p>
                   <p className="text-[12px] text-muted-foreground">
-                    {new Date(row.created_at).toLocaleDateString()} {row.video_name ? `· ${row.video_name}` : ""}
+                    {formatShortDate(row.created_at)} {row.video_name ? `· ${row.video_name}` : ""}
                   </p>
                 </div>
                 <motion.div animate={{ rotate: openHistory === row.id ? 90 : 0 }}>
@@ -390,6 +458,9 @@ const VideoFormAnalysis = () => {
               {openHistory === row.id && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="px-3 pb-3 space-y-2">
                   <p className="text-sm border-t border-border pt-2 leading-relaxed">{row.result?.coach_summary}</p>
+                  {!!row.result?.focus_next_session && (
+                    <p className="text-[12px] leading-relaxed text-primary">Focus: {row.result.focus_next_session}</p>
+                  )}
                   {!!row.result?.areas_to_improve?.length && (
                     <div>
                       <p className="text-[12px] font-bold uppercase tracking-wider text-amber-400 mb-1">Improve</p>

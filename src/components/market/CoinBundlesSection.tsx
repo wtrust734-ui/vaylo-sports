@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalPrice } from "@/lib/creditEconomy";
+import { formatNumber } from "@/i18n/format";
 import { COIN_BUNDLES, COINS_PER_CREDIT, FIRST_PURCHASE_BUNDLE, creditsToCoins } from "@/config/coins";
 import ProductFacts from "./ProductFacts";
 
@@ -69,18 +70,18 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
       <div className="flex gap-2">
         <div className="flex-1 rounded-2xl border border-border bg-card/60 px-3 py-2.5 flex items-center gap-2">
           <Coins size={14} className="text-energy" />
-          <span className="text-sm font-bold tabular-nums">{coins.toLocaleString()}</span>
+          <span className="text-sm font-bold tabular-nums">{formatNumber(coins)}</span>
           <span className="text-xs text-muted-foreground">Coins</span>
         </div>
         <div className="flex-1 rounded-2xl border border-border bg-card/60 px-3 py-2.5 flex items-center gap-2">
           <Sparkles size={14} className="text-primary" />
-          <span className="text-sm font-bold tabular-nums text-primary">{credits.toLocaleString()}</span>
+          <span className="text-sm font-bold tabular-nums text-primary">{formatNumber(credits)}</span>
           <span className="text-xs text-muted-foreground">credits</span>
         </div>
       </div>
 
       {/* Convert credits → coins */}
-      <div className="rounded-2xl border border-border bg-gradient-card p-4">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-2">
           <ArrowRightLeft size={14} className="text-energy" />
           <h4 className="font-display text-sm font-bold">Convert credits → Coins</h4>
@@ -101,7 +102,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
           />
           <span className="text-muted-foreground text-sm">→</span>
           <div className="flex-1 rounded-xl border border-energy/30 bg-energy/10 px-3 py-2.5 text-sm font-bold tabular-nums flex items-center gap-1.5">
-            <Coins size={13} className="text-energy" /> {previewCoins.toLocaleString()} Coins
+            <Coins size={13} className="text-energy" /> {formatNumber(previewCoins)} Coins
           </div>
         </div>
         <div className="mt-2 flex gap-1.5">
@@ -131,9 +132,11 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-br from-primary via-energy to-electric-purple"
+          className="relative overflow-hidden rounded-3xl border border-primary/40"
         >
-          <div className="rounded-[22px] bg-card p-5">
+          {/* No inner radius: the outer ring is a real 1px border now, not the
+              old 1.5px gradient frame the inner padding compensated for. */}
+          <div className="bg-card p-5">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 shrink-0 rounded-2xl border border-primary/30 bg-primary/15 flex items-center justify-center">
                 <Coins size={22} className="text-primary" />
@@ -141,13 +144,13 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
               <div className="min-w-0 flex-1">
                 <p className="text-[12px] font-bold uppercase tracking-wider text-primary">{FIRST_PURCHASE_BUNDLE.label}</p>
                 <p className="font-display text-xl font-bold">
-                  {FIRST_PURCHASE_BUNDLE.coins.toLocaleString()} Coins
+                  {formatNumber(FIRST_PURCHASE_BUNDLE.coins)} Coins
                 </p>
                 <p className="text-[12px] text-muted-foreground">
                   Best Coin rate in the app — available once per account.
                 </p>
               </div>
-              <p className="shrink-0 font-display text-xl font-bold text-gradient-electric">
+              <p className="shrink-0 font-display text-xl font-bold text-foreground">
                 {formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency)}
               </p>
             </div>
@@ -158,7 +161,7 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                   new CustomEvent("vaylo:add-coin-bundle", { detail: FIRST_PURCHASE_BUNDLE })
                 )
               }
-              className="mt-3 w-full rounded-2xl bg-gradient-electric py-3 font-bold text-white"
+              className="mt-3 w-full rounded-2xl bg-primary py-3 font-bold text-primary-foreground"
             >
               Claim once · {formatLocalPrice(FIRST_PURCHASE_BUNDLE.price_cents, currency)}
             </motion.button>
@@ -179,14 +182,14 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.02 + i * 0.04 }}
-              className={`relative overflow-hidden rounded-3xl ${highlight ? "p-[1.5px] bg-gradient-to-br from-energy via-primary to-electric-purple" : "p-[1px] bg-border"}`}
+              className={`relative overflow-hidden rounded-3xl border ${highlight ? "border-primary/40" : "border-border"}`}
             >
               {highlight && (
-                <span className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold text-background ${b.popular ? "bg-energy" : "bg-gradient-to-r from-energy to-primary text-background"}`}>
+                <span className={`absolute right-4 top-4 z-10 rounded-full border px-2.5 py-1 text-[12px] font-bold ${b.popular ? "border-border bg-primary/10 text-primary" : "border-border bg-muted text-muted-foreground"}`}>
                   {b.popular ? <><Star size={9} className="mr-1 inline" /> MOST POPULAR</> : <><Flame size={9} className="mr-1 inline" /> BEST VALUE</>}
                 </span>
               )}
-              <div className="rounded-[22px] bg-card p-5">
+              <div className="bg-card p-5">
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 rounded-2xl bg-energy/15 border border-energy/20 flex items-center justify-center">
                     <Coins size={26} className="text-energy" />
@@ -202,15 +205,15 @@ export default function CoinBundlesSection({ currency = "USD" }: { currency?: st
                         <span className="text-[12px] font-bold text-energy">+{b.bonus} bonus</span>
                       </span>
                     )}
-                    {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {total.toLocaleString()} total</p>}
+                    {b.label && <p className="mt-1 text-[12px] uppercase tracking-wider text-muted-foreground">{b.label} · {formatNumber(total)} total</p>}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-display text-2xl font-bold text-gradient-electric">{formatLocalPrice(b.price_cents, currency)}</p>
+                    <p className="font-display text-2xl font-bold text-foreground">{formatLocalPrice(b.price_cents, currency)}</p>
                     <p className="text-[12px] text-muted-foreground">{formatLocalPrice(Math.round(perCoin * 100) / 100, currency)} / Coin</p>
                   </div>
                 </div>
                 <ProductFacts
-                  receive={`${total.toLocaleString()} Coins added instantly${b.bonus > 0 ? ` (${b.coins} + ${b.bonus} bonus)` : ""} — avatar cosmetics only`}
+                  receive={`${formatNumber(total)} Coins added instantly${b.bonus > 0 ? ` (${b.coins} + ${b.bonus} bonus)` : ""} — avatar cosmetics only`}
                   expires="Never expires"
                   renews="One-off purchase — nothing renews"
                   lifetime="Coins stay until you spend them on avatar items"

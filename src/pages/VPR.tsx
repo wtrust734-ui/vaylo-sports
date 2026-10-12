@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { formatShortDate } from "@/i18n/format";
 
 const METRIC_OPTIONS = [
   { v: "sprint_40m", l: "40m sprint (s)" },
@@ -156,7 +157,7 @@ const VPRPage = () => {
           <h2 className="font-semibold mb-3">Progression</h2>
           <div className="h-48">
             <ResponsiveContainer>
-              <LineChart data={snapshots.map((s) => ({ date: new Date(s.created_at).toLocaleDateString(), VPR: s.overall_vpr }))}>
+              <LineChart data={snapshots.map((s) => ({ date: formatShortDate(s.created_at), VPR: s.overall_vpr }))}>
                 <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                 <YAxis domain={[0, 100]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />

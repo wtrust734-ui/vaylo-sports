@@ -19,12 +19,13 @@
 //
 //   wearableSync — /health-sync and every entry point to it. ON, because the
 //   Health Connect path is complete and shipping: the native plugin, the six
-//   read permissions and the incremental pull. Cloud providers do NOT appear on
-//   the screen: the section was trimmed to the on-device watch path (see
-//   src/pages/HealthSync.tsx, CLOUD_SECTION), so the screen never shows a
-//   "coming soon" card again. The OAuth/import plumbing is all still there and
-//   inert until a vendor is reconnected; re-enabling the cloud section is a one
-//   line change in src/pages/HealthSync.tsx.
+//   read permissions and the incremental pull. Every other provider stays
+//   declared in src/lib/health/providers.ts as structure for later, but only
+//   entries with `available: true` are ever rendered (see
+//   APP_WEARABLE_PROVIDERS), so the screen shows Health Connect alone and never
+//   a "coming soon" card. Switching one on is `available: true` plus its OAuth
+//   secret; the OAuth and import plumbing is all still there and inert until
+//   then.
 //
 //   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
 //   default. The Android manifest declares no location permission, so

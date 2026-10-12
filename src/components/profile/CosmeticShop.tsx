@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, Coins, Loader2, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber } from "@/i18n/format";
 import { RARITY_META } from "@/lib/rewards";
 import {
   SELLABLE_TYPES,
@@ -87,7 +88,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
         subtitle="Identity only — nothing here changes your training."
         headerRight={
           <span className="flex items-center gap-1 self-center rounded-full border border-energy/30 bg-energy/10 px-2.5 py-1 text-[12px] font-bold text-energy">
-            <Coins size={11} /> {coins.toLocaleString()}
+            <Coins size={11} /> {formatNumber(coins)}
           </span>
         }
         toolbar={
@@ -178,7 +179,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                       <Loader2 size={12} className="animate-spin" />
                     ) : (
                       <>
-                        <Coins size={12} /> {price?.toLocaleString() ?? "—"}
+                        <Coins size={12} /> {price != null ? formatNumber(price) : "—"}
                       </>
                     )}
                   </button>

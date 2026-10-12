@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import { creditCost } from "@/lib/credits";
 import { runWorkoutReview, type WorkoutReviewResult } from "@/lib/runWorkoutReview";
+import { formatDate } from "@/i18n/format";
 
 // ============================================================================
 // WORKOUTS — the log, and only the log
@@ -149,7 +150,7 @@ const defaultType = (sport: string | null | undefined): SessionType => {
 const fmtDate = (iso: string | null) => {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return "Undated";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(d, { day: "numeric", month: "short", year: "numeric" });
 };
 
 const Workouts = () => {

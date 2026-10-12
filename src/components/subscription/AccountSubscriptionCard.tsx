@@ -6,9 +6,10 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { isStoreBilling, restorePurchases } from "@/lib/billing";
+import { formatDate } from "@/i18n/format";
 
 const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
+  iso ? formatDate(new Date(iso), { day: "numeric", month: "short", year: "numeric" }) : "—";
 
 const STATUS_LABEL: Record<string, string> = {
   free: "Free",

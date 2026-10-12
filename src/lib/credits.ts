@@ -150,8 +150,13 @@ export function spendErrorMessage(feature: FeatureCostKey, res: SpendResult, qua
 
 // --- Grants / refills -----------------------------------------------------
 /**
- * Claims a configured reward (arcade record, referral, promo). Amount comes
- * from `economy_config.promo_bonuses` server-side — never from the client.
+ * Claims a configured reward (referral, winback). Amount comes from
+ * `economy_config.promo_bonuses` server-side — never from the client.
+ *
+ * The arcade record payout used to be claimable through here and is gone: the
+ * key is out of `PromoBonusKey` and out of the live config (see the
+ * 20261012140000 migration), so a client cannot ask for it and the database
+ * would refuse it if one did.
  */
 export async function claimCreditReward(
   kind: PromoBonusKey,

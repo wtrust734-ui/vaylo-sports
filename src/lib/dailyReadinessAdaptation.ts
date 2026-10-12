@@ -45,6 +45,18 @@ export interface DailyPlanSession {
   _zone?: string;
   _reason?: string;
   _adaptedFor?: string;
+  /**
+   * The session exactly as it stood before this check-in adapted it.
+   *
+   * The adjustment is a decision about one morning, and it has to be a
+   * reversible one: an athlete who sleeps badly, takes the easy day the app
+   * offers, and then wakes up fresh should get the hard session their plan
+   * intended back. Without this the adaptation was permanent — the reduced
+   * duration, the swapped days and the replacement recovery session could all
+   * be seen on screen but could not be taken back, because nothing recorded
+   * what they replaced.
+   */
+  _originalSession?: DailyPlanSession;
   _movedFromWeek?: number;
   _movedFromDay?: number;
   _movedToWeek?: number;
@@ -158,6 +170,7 @@ const reduceExercises = (
 
 const stampAdapted = (
   session: DailyPlanSession,
+  original: DailyPlanSession,
   input: {
     originalTitle?: string | null;
     zone: DailyReadinessZone;
@@ -169,6 +182,10 @@ const stampAdapted = (
     toDay?: number;
   },
 ): void => {
+  // The pre-adaptation session, kept whole. `_originalTitle` alone was enough
+  // for the copy and not enough for the athlete: a session that lost a quarter
+  // of its duration and half its sets cannot be put back from its title.
+  session._originalSession = cloneSession(original);
   session._originalTitle = input.originalTitle ?? null;
   session._zone = input.zone;
   session._reason = input.reason;
@@ -188,7 +205,7 @@ const reducedSession = (
   next.title = `${session.title ?? "Session"} (Reduced)`;
   next.exercises = reduceExercises(asSessionList(session.exercises));
   next.duration_minutes = Math.round((session.duration_minutes || 30) * 0.75);
-  stampAdapted(next, {
+  stampAdapted(next, session, {
     originalTitle: session.title ?? null,
     zone,
     reason: "Reduced after a low morning check-in.",
@@ -217,7 +234,7 @@ const recoveryReplacement = (
   ];
   next.warmup = [];
   next.cooldown = [{ name: "Deep breathing", sets: "2 min — box breathing (4-4-4-4)" }];
-  stampAdapted(next, {
+  stampAdapted(next, session, {
     originalTitle: session.title ?? null,
     zone,
     reason: "Replaced with recovery after a very low morning check-in.",
@@ -241,6 +258,66 @@ const unchanged = (
   summary: null,
   events: [],
 });
+
+export interface RestoreDailyPlanInput {
+  weeks: unknown;
+  /** The check-in being logged now. A stamp for this date is never undone. */
+  logDate: string;
+}
+
+export interface DailyPlanRestore {
+  weeks: DailyPlanWeek[];
+  changed: boolean;
+  /** How many sessions were put back where their plan had them. */
+  restored: number;
+  /** The plan weeks that had a session put back, oldest first. */
+  weeksTouched: number[];
+}
+
+/**
+ * Put back the sessions an earlier check-in moved or reduced.
+ *
+ * A low morning check-in is a decision about one day, so it has to be revisited
+ * the next day rather than standing forever. This restores every session whose
+ * stamp belongs to an earlier log date — from the record each adapted session
+ * carries of the session it replaced, not by re-deriving anything, because the
+ * reduced and replaced sessions are not recoverable by arithmetic.
+ *
+ * Its place in the flow is deliberate: it runs *before* today's adaptation, on
+ * the fresh plan, so today's check-in decides today and yesterday's no longer
+ * outranks it. Stamps from the current log date are left exactly as they are,
+ * which makes the pair idempotent when the same day is saved twice.
+ */
+export function restoreDailyPlanForReadiness(input: RestoreDailyPlanInput): DailyPlanRestore {
+  const cloned = Array.isArray(input.weeks)
+    ? (JSON.parse(JSON.stringify(input.weeks)) as DailyPlanWeek[])
+    : [];
+
+  const touched = new Set<number>();
+  let restored = 0;
+
+  for (const week of cloned) {
+    if (!Array.isArray(week?.sessions)) continue;
+    week.sessions = week.sessions.map((session) => {
+      const stamp = session?._adaptedFor;
+      if (!stamp || stamp === input.logDate) return session;
+      const original = session._originalSession;
+      if (!original) return session;
+      restored += 1;
+      touched.add(Number(week.week));
+      // The stored copy is the session as it stood, including its own day and
+      // day name — which is what puts a swapped day back on its original day.
+      return cloneSession(original);
+    });
+  }
+
+  return {
+    weeks: cloned,
+    changed: restored > 0,
+    restored,
+    weeksTouched: [...touched].sort((a, b) => a - b),
+  };
+}
 
 export function adaptDailyPlanForReadiness(input: AdaptDailyPlanInput): DailyPlanAdaptation {
   const zone = String(input.zone ?? "").toUpperCase() as DailyReadinessZone;
@@ -289,7 +366,10 @@ export function adaptDailyPlanForReadiness(input: AdaptDailyPlanInput): DailyPla
     const easyToday = cloneSession(next);
     easyToday.day = dayNumber;
     easyToday.dayName = today.dayName ?? easyToday.dayName;
-    stampAdapted(easyToday, {
+    // The copy is the session this *cell* held before the swap — the hard one
+    // that used to be today — because putting the plan back means putting each
+    // cell's own session back where it was.
+    stampAdapted(easyToday, today, {
       originalTitle: today.title ?? null,
       zone,
       reason: `Moved here from tomorrow after a low morning check-in; the hard session moved to tomorrow.`,
@@ -303,7 +383,7 @@ export function adaptDailyPlanForReadiness(input: AdaptDailyPlanInput): DailyPla
     const hardTomorrow = cloneSession(today);
     hardTomorrow.day = nextDay;
     hardTomorrow.dayName = next.dayName ?? hardTomorrow.dayName;
-    stampAdapted(hardTomorrow, {
+    stampAdapted(hardTomorrow, next, {
       originalTitle: next.title ?? null,
       zone,
       reason: `Moved here from today after a low morning check-in; today became the easy session.`,

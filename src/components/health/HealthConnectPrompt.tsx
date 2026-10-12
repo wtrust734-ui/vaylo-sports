@@ -17,6 +17,7 @@ import { useHealthConnect } from "@/hooks/useHealthConnect";
 import { HEALTH_PERMISSION_LIST } from "@/lib/health/permissions";
 import { isAndroid } from "@/lib/platform";
 import { isFlagOn } from "@/config/featureFlags";
+import { formatDateTimeExact } from "@/i18n/format";
 
 // ============================================================================
 // The "connect your watch" pop-up
@@ -192,7 +193,7 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
           <StatusLine ok>Connected. Vaylo reads only the six types below, and never writes.</StatusLine>
           <p className="text-[12px] leading-relaxed text-muted-foreground">
             {hc.syncState.lastSyncAt
-              ? `Last sync ${new Date(hc.syncState.lastSyncAt).toLocaleString()}.`
+              ? `Last sync ${formatDateTimeExact(new Date(hc.syncState.lastSyncAt))}.`
               : "No sync yet — the first one imports your recent sessions."}
           </p>
           {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}

@@ -105,19 +105,19 @@ export const FIRST_PURCHASE_BUNDLE: CoinBundle = {
 export const UNLIMITED_PACKS: UnlimitedPack[] = [
   {
     "id": "infinite_lifetime",
-    "price_cents": 4999,
+    "price_cents": 59999,
     "period": "lifetime",
     "label": "Lifetime"
   },
   {
     "id": "infinite_monthly",
-    "price_cents": 299,
+    "price_cents": 1999,
     "period": "month",
     "label": "Monthly"
   },
   {
     "id": "infinite_yearly",
-    "price_cents": 2499,
+    "price_cents": 17999,
     "period": "year",
     "label": "Yearly"
   }
@@ -248,9 +248,9 @@ export const PRODUCT_PRICES: Record<string, number> = {
   "coins_2000": 2499,
   "coins_5000": 3749,
   "coins_first": 199,
-  "infinite_lifetime": 4999,
-  "infinite_monthly": 299,
-  "infinite_yearly": 2499
+  "infinite_lifetime": 59999,
+  "infinite_monthly": 1999,
+  "infinite_yearly": 17999
 };
 
 /** Products that may only ever be granted once per account. */

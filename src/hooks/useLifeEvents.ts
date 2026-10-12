@@ -33,6 +33,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ageFromDateOfBirth, rebuildPlanForBreak } from "@/lib/adaptivePlanning";
+import type { RebuildReason } from "@/lib/adaptivePlan";
 import {
   asPlannedSession,
   assessAvailability,
@@ -73,6 +74,15 @@ export interface RebuildSummary {
   explanation: string | null;
   /** The plan weeks that were rebuilt. */
   weeks: number[];
+  /**
+   * Present when the engine was asked and declined.
+   *
+   * Carried out of `planRebuild` rather than flattened into "nothing changed":
+   * "your break is a long weekend" and "nothing was still ahead of you" are
+   * different facts about the athlete's plan, and only one of them means the
+   * app ignored four days off.
+   */
+  reason?: RebuildReason;
   /** Present when the rebuild was attempted and did not land. */
   error?: string;
 }
@@ -351,6 +361,15 @@ export function useLifeEvents(): UseLifeEvents {
             applied: true,
             explanation: result.outcome.adjustment.explanation,
             weeks: result.outcome.adjustment.steps.map((s) => s.week),
+          };
+        } else if (result.ok && result.outcome) {
+          // The engine looked at the plan and declined. That is a real answer,
+          // and it is reported as one rather than as a silent no-op.
+          rebuild = {
+            applied: false,
+            explanation: null,
+            weeks: [],
+            reason: result.outcome.reason,
           };
         } else if (!result.ok) {
           rebuild = {

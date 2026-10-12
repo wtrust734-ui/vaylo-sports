@@ -58,7 +58,12 @@ const PROBES = [
   ["generate-plan", { goal: "5k", sport: "running", weeks: 1 }],
   ["weekly-review", { stats: { workouts: 1, totalKm: 5 } }],
   ["learning-recommend", { topic: "threshold running" }],
-  ["video-form-analysis", { video_base64: "", mime_type: "video/mp4", video_name: "probe.mp4", sport_type: "running" }],
+  // The video probe needs a real clip: since 2026-10-12 the function takes a
+  // `storage_path` in the private form-videos bucket and downloads it, so an
+  // empty base64 string is not a request it can even parse. Point
+  // FORM_PROBE_VIDEO at a short mp4/mov to exercise it; without one the probe is
+  // reported as skipped rather than as a broken feature.
+  ["video-form-analysis", { probe: "video" }],
   [
     "ad-agent",
     {
@@ -81,6 +86,11 @@ const FREE_FEATURES = new Set(["ad-agent"]);
 
 const OFF = /(API key not configured|API_KEY|is not configured)/i;
 
+// The video probe's own payload: an object that is not under the caller's id is
+// refused before the provider is reached, which is the function working, not the
+// feature being off.
+const VIDEO_PATH_REFUSED = /(upload a clip|storage_path|no video)/i;
+
 // A 400 caused by THIS script's own payload proves nothing about the provider:
 // the request never got that far. Calling it ALIVE is how a stale probe hides a
 // genuinely broken feature, so these are reported separately.
@@ -92,8 +102,40 @@ const off = [];
 
 console.log(`review account credits: ${before}\n`);
 
-for (const [fn, body] of PROBES) {
+const PROBE_VIDEO = process.env.FORM_PROBE_VIDEO ?? "";
+
+/** Uploads the probe clip and returns the body the function now expects. */
+const videoProbeBody = async () => {
+  if (!PROBE_VIDEO) return null;
+  let bytes;
+  try {
+    bytes = readFileSync(PROBE_VIDEO);
+  } catch {
+    console.error(`FORM_PROBE_VIDEO=${PROBE_VIDEO} could not be read.`);
+    return null;
+  }
+  const path = `${sess.user.id}/probe-${Date.now()}.mp4`;
+  const { error } = await supabase.storage
+    .from("form-videos")
+    .upload(path, bytes, { contentType: "video/mp4", upsert: true });
+  if (error) {
+    console.error("Could not upload the probe clip:", error.message);
+    return null;
+  }
+  return { storage_path: path, duration_seconds: 5, mime_type: "video/mp4", video_name: "probe.mp4", sport_type: "running" };
+};
+
+for (const [fn, body0] of PROBES) {
   const started = Date.now();
+  let body = body0;
+  if (body0 && body0.probe === "video") {
+    body = await videoProbeBody();
+    if (!body) {
+      inconclusive++;
+      console.log(`  ...    ${fn.padEnd(21)} skipped — set FORM_PROBE_VIDEO to a short clip to test it`);
+      continue;
+    }
+  }
   // Balance immediately before THIS call. Comparing every probe against the
   // balance from before the first probe made each later feature look like it
   // charged the whole session's spend, which reported a phantom REFUND MISSING.
@@ -110,6 +152,13 @@ for (const [fn, body] of PROBES) {
   if (OFF.test(text)) {
     off.push(fn);
     console.log(`  OFF    ${fn.padEnd(21)} ${r.status} ${text.slice(0, 60)}`);
+    continue;
+  }
+
+  if (r.status === 413 || (fn === "video-form-analysis" && r.status === 400 && VIDEO_PATH_REFUSED.test(text))) {
+    inconclusive++;
+    console.log(`  ???    ${fn.padEnd(21)} ${r.status} ${text.slice(0, 60)}`);
+    console.log("         ^ the probe's clip was refused before the provider was reached.");
     continue;
   }
 

@@ -4,7 +4,7 @@ import {
   HeartPulse, Loader2, RefreshCw, Smartphone, Check, Info,
   AlertTriangle, ShieldCheck, ExternalLink, Clock, X,
   Activity, Footprints, Flame, Timer, Moon, Watch, Unlink,
-  Zap, Link2, Sparkles, ChevronRight,
+  Zap, Link2, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { isFlagOn } from "@/config/featureFlags";
@@ -14,9 +14,10 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useHealthConnect } from "@/hooks/useHealthConnect";
 import { HEALTH_PERMISSION_LIST } from "@/lib/health/permissions";
-import { WEARABLE_PROVIDERS } from "@/lib/health/providers";
+import { APP_WEARABLE_PROVIDERS, WEARABLE_PROVIDERS, isWearableAvailable } from "@/lib/health/providers";
 import type { WearableProviderId } from "@/lib/health/providers";
 import { isAndroid, isIOS, openExternal } from "@/lib/platform";
+import { formatDateTimeExact, formatShortDate } from "@/i18n/format";
 import { oauthStart, oauthDisconnect, parseWearableRedirect, stripWearableRedirect } from "@/lib/health/oauth";
 import { fetchWearableConnections, type WearableConnectionMap } from "@/lib/health/connections";
 import { correctedSportColumns, loadColumnsFor } from "@/lib/recoveryPlanning";
@@ -36,13 +37,16 @@ import {
 import { updateOrQueue } from "@/lib/offlineQueue";
 
 // ──────────────────────────────────────────────────────────────────────────
-// Wearables — unified hub for every watch Vaylo Sports supports.
-// Native hubs (Health Connect on Android, HealthKit on iOS) are on-device:
-// every requested watch already writes into one of them (Samsung, Google,
-// Fitbit, Garmin, Polar, COROS, WHOOP, Oura all bridge into Health Connect
-// on Android; Apple Watch into HealthKit on iOS). Cloud OAuth (Garmin,
-// Fitbit, Polar, COROS, WHOOP, Oura, Strava, Suunto, Withings …) gives a
-// direct path and is additive — same normalized rows, same dedup.
+// Wearables — the hub for every watch Vaylo Sports will support.
+//
+// Health Connect is the ONE path this build ships: on Android every watch the
+// catalog lists already writes into it, so it covers them without a second
+// account or a second consent screen. The rest of the catalog stays declared in
+// src/lib/health/providers.ts with `available: false`, and every list on this
+// screen renders from APP_WEARABLE_PROVIDERS — the available ones — so a provider
+// that is not switched on yet cannot appear as a card, a heading or a count.
+// Switching one on later is `available: true` there (plus its OAuth secret),
+// which is the whole point of keeping the structure while shipping one.
 // ──────────────────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<string, { label: string; dot: string; text: string }> = {
@@ -71,13 +75,9 @@ const PROVIDER_ICON: Record<WearableProviderId, typeof Watch> = {
   huawei: Watch,
 };
 
-// Cloud providers are hidden after the decision to keep Health Connect as the
-// only sync path: `CLOUD_SECTION` is unused elsewhere, and each card costs a
-// human reviewer a "coming soon" pass on an unfinished surface. Re-enable by
-// turning this list back into the full catalog.
-const CLOUD_SECTION: WearableProviderId[] = [];
-const RECOVERY_SECTION: WearableProviderId[] = ["whoop", "oura", "withings"];
-const SOCIAL_SECTION: WearableProviderId[] = ["strava", "suunto"];
+// Which providers render is the catalog's decision, not this screen's, so the
+// groupings that used to live here (a cloud list, a recovery list, a social
+// list) are gone with them: every card below maps over APP_WEARABLE_PROVIDERS.
 
 const ACTIVITY_LABELS: Record<string, string> = { "56": "Running", "1": "Biking", "8": "Walking", "9": "Hiking" };
 const fmtDuration = (s: number | null) => {
@@ -407,22 +407,19 @@ const HealthSync = () => {
   const [recentSamples, setRecentSamples] = useState<HealthSampleRow[]>([]);
   const [loadingLive, setLoadingLive] = useState(false);
   const [cloudMap, setCloudMap] = useState<WearableConnectionMap>({} as WearableConnectionMap);
-  const [cloudLoading, setCloudLoading] = useState(true);
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
   const onAndroid = isAndroid();
   const onIOS = isIOS();
 
+  // Read even though no cloud provider ships: this map is what the cards are
+  // driven from, and switching a cloud provider on later must not need a second
+  // change here. A failure leaves the map as it already was.
   const refreshCloud = useCallback(async () => {
     if (!user) return;
-    setCloudLoading(true);
-    try {
-      const m = await fetchWearableConnections(user.id);
-      setCloudMap(m);
-    } finally {
-      setCloudLoading(false);
-    }
+    const m = await fetchWearableConnections(user.id);
+    setCloudMap(m);
   }, [user]);
 
   useEffect(() => { if (user) void refreshCloud(); }, [user, refreshCloud]);
@@ -611,10 +608,15 @@ const HealthSync = () => {
     }
   };
 
-  const connectedCount = useMemo(() => {
-    const cloudConnected = Object.values(cloudMap).filter((c) => c?.connected).length;
-    return (hcConnected ? 1 : 0) + cloudConnected;
-  }, [hcConnected, cloudMap]);
+  const cloudConnectedCount = useMemo(
+    () => Object.values(cloudMap).filter((c) => c?.connected).length,
+    [cloudMap],
+  );
+
+  const connectedCount = useMemo(
+    () => (hcConnected ? 1 : 0) + cloudConnectedCount,
+    [hcConnected, cloudConnectedCount],
+  );
 
   const anyConnected = connectedCount > 0;
 
@@ -671,7 +673,7 @@ const HealthSync = () => {
           )}
           {lastSync && (
             <p className="mt-2 text-[12px] text-muted-foreground flex items-center gap-1">
-              <Clock size={10} /> Last sync {new Date(lastSync).toLocaleString()}
+              <Clock size={10} /> Last sync {formatDateTimeExact(lastSync)}
             </p>
           )}
 
@@ -747,12 +749,15 @@ const HealthSync = () => {
           <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">watches</span>
         </h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Connect once, sync when you tap. COROS, Garmin, Polar, Fitbit, Samsung{isFlagOn("iphone") ? ", Apple" : ""}, Google, WHOOP, Oura and more — workouts, heart rate, distance, steps, sleep and calories land as one normalized log.
+          Connect once, sync when you tap. Everything a watch already records lands here through Health Connect — Samsung{isFlagOn("iphone") ? ", Apple" : ""} and the rest — as workouts, heart rate, distance, steps, sleep and calories in one normalized log.
         </p>
         {anyConnected && (
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
             <Check size={12} /> {connectedCount} {connectedCount === 1 ? "wearable" : "wearables"} connected
-            <button type="button" onClick={() => void handleCloudSync()} disabled={syncingAll || hc.syncing} className="ml-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[12px] font-bold hover:bg-white/15">
+            {/* "Sync all" over the sources that are actually connected. With no
+                cloud provider shipped that is Health Connect itself, so the
+                button no longer fires an OAuth sync at nothing. */}
+            <button type="button" onClick={() => (cloudConnectedCount > 0 ? void handleCloudSync() : void hc.sync())} disabled={syncingAll || hc.syncing} className="ml-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[12px] font-bold hover:bg-white/15">
               {syncingAll ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Sync all
             </button>
           </div>
@@ -772,7 +777,12 @@ const HealthSync = () => {
           <Smartphone size={12} /> On your phone
         </h2>
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-          <ProviderCard id="health_connect" />
+          {/* From the catalog, never from a hand-written id here: this build
+              ships Health Connect only (APP_WEARABLE_PROVIDERS), so the grid is
+              one card today and a new provider is an entry over there. */}
+          {APP_WEARABLE_PROVIDERS.map((id) => (
+            <ProviderCard key={id} id={id} />
+          ))}
           {isFlagOn("iphone") && <ProviderCard id="healthkit" />}
         </div>
         {/* Platform gate for Health Connect */}
@@ -780,7 +790,7 @@ const HealthSync = () => {
           <div className="mt-3 flex items-start gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur px-3 py-3">
             <Info size={14} className="text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Health Connect is Android-only. Open Vaylo Sports on your Android device to connect watches that way.{isFlagOn("iphone") ? " — on iPhone, Apple Watch syncs via HealthKit automatically." : ""} Cloud links below work everywhere.
+              Health Connect is Android-only. Open Vaylo Sports on your Android device to connect watches that way.{isFlagOn("iphone") ? " — on iPhone, Apple Watch syncs via HealthKit automatically." : ""} Other providers are not switched on yet.
             </p>
           </div>
         )}
@@ -789,43 +799,15 @@ const HealthSync = () => {
         )}
       </div>
 
-      {/* ── Watches ── */}
-      <div className="mt-6">
-        <h2 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
-          <Watch size={12} /> Watches & bands
-          <span className="ml-auto text-[12px] font-semibold normal-case tracking-normal text-muted-foreground/70">
-            {cloudLoading ? "Checking…" : `${Object.values(cloudMap).filter((c) => c?.connected).length} connected`}
-          </span>
-        </h2>
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-          {CLOUD_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
-        </div>
-      </div>
+      {/* The cloud, recovery and social sections used to sit here. They are gone
+          rather than hidden: an empty grid under a heading, or a card for a
+          provider that cannot be connected, is a promise this build does not
+          keep yet. Both come back by switching `available` on in the catalog. */}
 
-      {/* ── Recovery ── */}
-      <div className="mt-6">
-        <h2 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
-          <Moon size={12} /> Recovery & sleep
-        </h2>
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-          {RECOVERY_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
-        </div>
-      </div>
-
-      {/* ── Social / extras ── */}
-      <div className="mt-6">
-        <h2 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">
-          <Sparkles size={12} /> Network & extras
-        </h2>
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-          {SOCIAL_SECTION.map((id) => <ProviderCard key={id} id={id} />)}
-        </div>
-        <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-          Strava imports from any watch that posts to Strava; Suunto, Withings and Huawei round out the long tail. Every import writes the same normalized rows — one provider per workout, deduplicated by your account.
-        </p>
-      </div>
-
-      <HistoryImportCard />
+      {/* The import source is a provider too (IMPORT_SOURCE), and it is not
+          shipped yet — same switch as the cards above, so switching it on
+          brings its importer back rather than leaving a second one behind. */}
+      {isWearableAvailable(IMPORT_SOURCE) && <HistoryImportCard />}
 
       {/* ── Bridge tip ── */}
       <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
@@ -836,7 +818,7 @@ const HealthSync = () => {
             <h3 className="text-sm font-bold">Most watches need no extra link on Android</h3>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Samsung Galaxy Watch, Pixel Watch / Wear OS, Fitbit, Garmin, Polar, COROS, WHOOP, Oura and Huawei Health already write into Health Connect on your phone. Install Health Connect, connect your watch to it once, then connect Health Connect here — workouts arrive without any cloud OAuth. Use the direct links above only if you prefer a cloud copy or your watch does not bridge locally.
+            Most watches write into Health Connect on your phone already: install it, pair your watch with it once, then connect Health Connect here. Workouts arrive without a separate account of ours, a cloud link or a second consent screen — and Vaylo Sports reads them only when you tap Sync.
           </p>
         </div>
       </div>
@@ -913,7 +895,7 @@ const HealthSync = () => {
                               <p className="text-xs font-bold leading-tight">{w.title ?? ACTIVITY_LABELS[w.activity_type] ?? `Activity ${w.activity_type}`}</p>
                               <span className="shrink-0 rounded-full bg-white/[0.06] border border-white/[0.06] px-2 py-0.5 text-[12px] font-semibold text-muted-foreground">{providerLabel}</span>
                             </div>
-                            <p className="text-[12px] font-mono text-muted-foreground mt-0.5">{new Date(w.start_time).toLocaleString()}</p>
+                            <p className="text-[12px] font-mono text-muted-foreground mt-0.5">{formatDateTimeExact(w.start_time)}</p>
                             <div className="mt-1.5 grid grid-cols-3 gap-2 text-[12px]">
                               <span className="flex items-center gap-1 text-muted-foreground"><Timer size={12} /> {fmtDuration(w.duration_seconds)}</span>
                               <span className="flex items-center gap-1 text-muted-foreground"><Activity size={12} /> {fmtDist(w.distance_meters)}</span>
@@ -935,7 +917,7 @@ const HealthSync = () => {
                       {recentSamples.map((s) => (
                         <div key={s.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur px-3 py-2 text-xs">
                           <span className="flex items-center gap-1.5 font-semibold capitalize">{s.metric === "sleep" ? <Moon size={12} /> : s.metric === "steps" ? <Footprints size={12} /> : <Activity size={12} />}{s.metric}<span className="rounded-full bg-white/[0.06] border border-white/[0.06] px-1.5 py-0.5 text-[12px] font-mono text-muted-foreground ml-1">{s.source ?? "—"}</span></span>
-                          <span className="text-muted-foreground font-mono text-[12px]">{s.metric === "sleep" && s.value == null ? `${Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000 * 10) / 10}h` : s.value != null ? `${s.value} ${s.unit}` : "—"} · {new Date(s.start_time).toLocaleDateString()}</span>
+                          <span className="text-muted-foreground font-mono text-[12px]">{s.metric === "sleep" && s.value == null ? `${Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000 * 10) / 10}h` : s.value != null ? `${s.value} ${s.unit}` : "—"} · {formatShortDate(s.start_time)}</span>
                         </div>
                       ))}
                     </div>

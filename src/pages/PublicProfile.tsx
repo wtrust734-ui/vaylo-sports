@@ -7,6 +7,7 @@ import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarC
 import { fetchDisplayName } from "@/lib/publicIdentity";
 import { useAuth } from "@/contexts/AuthContext";
 import ReportMenu from "@/components/safety/ReportMenu";
+import { formatNumber, formatShortDate } from "@/i18n/format";
 
 // ============================================================================
 // VAYLO SPORTS — public athlete profile
@@ -201,7 +202,7 @@ const PublicProfile = () => {
                 </span>
               )}
               <span className="text-[12px] uppercase tracking-wider bg-energy/15 text-energy px-2 py-0.5 rounded-md font-bold">
-                {state.points.toLocaleString()} pts
+                {formatNumber(state.points)} pts
               </span>
             </div>
           </div>
@@ -209,7 +210,7 @@ const PublicProfile = () => {
       </div>
 
       <div className="px-5 mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat icon={Activity} label="Points" value={state.points.toLocaleString()} />
+        <Stat icon={Activity} label="Points" value={formatNumber(state.points)} />
         <Stat icon={Trophy} label="Challenges" value={state.joinedChallenges} />
         <Stat icon={Users} label="Communities" value={state.communities} />
         <Stat icon={Target} label="Rank" value={state.rank ? `#${state.rank}` : "—"} />
@@ -217,7 +218,7 @@ const PublicProfile = () => {
 
       {state.rank && state.competitors > 0 && (
         <p className="px-5 mt-2 text-[12px] text-muted-foreground">
-          Ranked #{state.rank} of {state.competitors.toLocaleString()} athletes by total points.
+          Ranked #{state.rank} of {formatNumber(state.competitors)} athletes by total points.
         </p>
       )}
 
@@ -253,7 +254,7 @@ const PublicProfile = () => {
 
       {state.lastActive && (
         <p className="px-5 mt-4 text-[12px] text-muted-foreground text-center">
-          Profile last updated {new Date(state.lastActive).toLocaleDateString()}
+          Profile last updated {formatShortDate(new Date(state.lastActive))}
         </p>
       )}
 

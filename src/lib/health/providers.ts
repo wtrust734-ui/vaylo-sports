@@ -19,6 +19,12 @@
 // WHOOP / Oura all write into Health Connect on Android today; Apple Watch
 // writes into HealthKit on iOS. Cloud OAuth gives a direct path for athletes
 // who prefer it and for watches that do not bridge locally.
+//
+// SHIPPED vs DECLARED. The catalog is deliberately wider than the app: every
+// provider stays declared here, so switching one on later is an entry in this
+// file (plus its OAuth secret) rather than a screen to rewrite. `available` is
+// what separates "declared" from "shipped", and only Health Connect is shipped
+// — see APP_WEARABLE_PROVIDERS, which is what the UI renders from.
 // ===========================================================================
 
 export type SyncFamily = "native" | "cloud";
@@ -58,6 +64,12 @@ export interface WearableProviderSpec {
   helpUrl?: string;
   /** Brand accent (used for the small provider badge). */
   accent: string;
+  /**
+   * True only for a provider this build actually ships. False means declared
+   * for later: `APP_WEARABLE_PROVIDERS` filters on it, so a false entry must
+   * never reach the UI — not a card, not a count, not a heading.
+   */
+  available: boolean;
 }
 
 export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec> = {
@@ -72,6 +84,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthConnectBridged: false,
     healthKitBridged: false,
     accent: "from-emerald-500 to-teal-500",
+    available: true,
   },
   healthkit: {
     id: "healthkit",
@@ -84,6 +97,9 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthConnectBridged: false,
     healthKitBridged: false,
     accent: "from-zinc-900 to-zinc-700",
+    // Declared, not shipped: there is no iOS build yet, and the `iphone` flag
+    // is off, so this card is hidden twice over.
+    available: false,
   },
   garmin: {
     id: "garmin",
@@ -97,6 +113,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://connect.garmin.com/",
     accent: "from-sky-600 to-cyan-500",
+    available: false,
   },
   fitbit: {
     id: "fitbit",
@@ -110,6 +127,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.fitbit.com/",
     accent: "from-teal-600 to-emerald-500",
+    available: false,
   },
   polar: {
     id: "polar",
@@ -123,6 +141,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://flow.polar.com/",
     accent: "from-red-600 to-rose-500",
+    available: false,
   },
   coros: {
     id: "coros",
@@ -136,6 +155,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.coros.com/",
     accent: "from-orange-600 to-amber-500",
+    available: false,
   },
   whoop: {
     id: "whoop",
@@ -149,6 +169,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.whoop.com/",
     accent: "from-zinc-800 to-neutral-600",
+    available: false,
   },
   oura: {
     id: "oura",
@@ -162,6 +183,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: true,
     helpUrl: "https://ouraring.com/",
     accent: "from-slate-800 to-slate-600",
+    available: false,
   },
   samsung_health: {
     id: "samsung_health",
@@ -175,6 +197,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.samsung.com/global/galaxy/apps/samsung-health/",
     accent: "from-blue-700 to-indigo-600",
+    available: false,
   },
   google_fit: {
     id: "google_fit",
@@ -187,6 +210,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthConnectBridged: true,
     healthKitBridged: false,
     accent: "from-blue-600 to-sky-500",
+    available: false,
   },
   suunto: {
     id: "suunto",
@@ -200,6 +224,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.suunto.com/",
     accent: "from-amber-700 to-orange-600",
+    available: false,
   },
   withings: {
     id: "withings",
@@ -213,6 +238,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: true,
     helpUrl: "https://www.withings.com/",
     accent: "from-cyan-700 to-teal-600",
+    available: false,
   },
   strava: {
     id: "strava",
@@ -226,6 +252,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthKitBridged: false,
     helpUrl: "https://www.strava.com/",
     accent: "from-orange-600 to-red-500",
+    available: false,
   },
   huawei: {
     id: "huawei",
@@ -238,6 +265,7 @@ export const WEARABLE_PROVIDERS: Record<WearableProviderId, WearableProviderSpec
     healthConnectBridged: true,
     healthKitBridged: false,
     accent: "from-red-600 to-red-400",
+    available: false,
   },
 };
 
@@ -267,3 +295,16 @@ export const CLOUD_PROVIDERS = WEARABLE_ORDER.filter(
 export const NATIVE_PROVIDERS = WEARABLE_ORDER.filter(
   (id) => WEARABLE_PROVIDERS[id].family === "native"
 ) as WearableProviderId[];
+
+/**
+ * The providers this build actually ships, in catalog order. Every screen
+ * renders from this list and never from WEARABLE_ORDER, so a provider that is
+ * declared for later cannot leak into a card, a section heading or a count.
+ */
+export const APP_WEARABLE_PROVIDERS = WEARABLE_ORDER.filter(
+  (id) => WEARABLE_PROVIDERS[id].available
+) as WearableProviderId[];
+
+/** True when this build ships the provider — the same switch as the list above. */
+export const isWearableAvailable = (id: WearableProviderId): boolean =>
+  WEARABLE_PROVIDERS[id].available === true;

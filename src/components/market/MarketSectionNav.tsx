@@ -49,11 +49,14 @@ export default function MarketSectionNav({
                 isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
+              {/* Plain rather than a gradient pill with a glow behind it: the
+                  nav moves between six sections, it is not a call to action,
+                  and it is the first thing on the tab. */}
               {isActive && (
                 <motion.span
                   layoutId="market-section-pill"
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                  className="absolute inset-0 rounded-full bg-gradient-primary shadow-glow"
+                  className="absolute inset-0 rounded-full bg-primary"
                 />
               )}
               <Icon size={13} className="relative z-10" />
