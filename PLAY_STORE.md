@@ -27,7 +27,7 @@ provide" is the list of things that will stop you.
 | Public app URL | Not configured — no owned canonical domain yet |
 | Store icon + feature graphic | Generated into `store/` |
 | Screenshots | **Not yet captured** — see §6 |
-| Wearable sync / GPS / coach marketplace | Launch-gated **off** via `src/config/featureFlags.ts` |
+| Feature flags | Wearable sync **on** (Health Connect); GPS tracking removed; coach marketplace **off** — see `src/config/featureFlags.ts` |
 | AI features | Enabled in app; availability depends on configured provider secrets |
 
 ---
@@ -252,12 +252,10 @@ repository:
 **Not collected:**
 
 - **Location.** Worth stating explicitly because it is a plausible mistake: the
-  app calls `navigator.geolocation` while a workout is tracking
-  (`src/pages/Workouts.tsx`, `src/pages/Routines.tsx`) but stores only the derived
-  distance in `workouts.distance_km`. Coordinates live in a `useRef` and are
-  discarded. On Android it does not even get that far — the manifest declares **no
-  location permission**, so GPS tracking is inert on the shipped app (see
-  "Known gaps").
+  app collects no location at all. Nothing calls `navigator.geolocation`, the
+  manifest declares **no location permission**, and a workout's distance is a
+  figure the athlete types in (`src/pages/Workouts.tsx`, stored as
+  `workouts.distance_km`). There is no coordinate anywhere to discard.
 - **Payment info.** Handled entirely by Google Play.
 - **Contacts, calendar, audio, files, web browsing, device or other IDs.** No SDK
   or permission touches any of these.
@@ -418,8 +416,8 @@ As of this commit it does not:
 
 | Feature | How it is handled |
 |---|---|
-| **Wearable sync** | `wearableSync` flag, default off. `/health-sync` redirects to `/recover`, and all three entry points (sidebar, Recover hub, the route) are gated from `src/config/featureFlags.ts`. |
-| **GPS tracking** | `gpsTracking` flag, default off. The "Track with GPS" control is hidden in Workouts and Routines; manual distance entry still works. |
+| **Wearable sync** | `wearableSync` flag, **on**. `/health-sync` is reachable from the sidebar, the Recover hub and the route. Health Connect is complete and shipping — native plugin, six read permissions, incremental pull — and only providers with `available: true` are rendered, so the cloud providers that have no OAuth secrets yet are labelled as unconfigured rather than promised. |
+| **GPS tracking** | Removed, not hidden. Nothing calls `navigator.geolocation` and distance is a figure the athlete types in, so there is no inert control left for a tester to find. The `gpsTracking` flag is still defined and off by default, but nothing reads it. |
 | **Coach marketplace** | `coachMarketplace` flag, already off before this change. |
 | **AI** | **Not flagged, on purpose.** AI is inside the core pages — Training generates the plan, FormAnalysis / Nutrition / Tactics analyse, Goals writes the weekly review, Coach chats. A flag would not hide a feature, it would gut the product. The athlete already sees "not switched on yet"; the real fix is `supabase secrets set OPENAI_API_KEY=…`. **If you are choosing between adding that key and adding a flag, add the key.** |
 
@@ -427,7 +425,7 @@ To build a bundle that *shows* one of these, set the override — see
 `.env.example`:
 
 ```bash
-VITE_ENABLE_wearableSync=true   # or gpsTracking, coachMarketplace
+VITE_ENABLE_coachMarketplace=true   # gpsTracking no longer has a consumer
 ```
 
 Overrides are build-time and per-machine. No owned public website is currently
@@ -444,8 +442,8 @@ rollout to a closed track, not before production.
   Health Connect data makes this a health app, which brings extra scrutiny and
   requires the privacy policy to cover health data specifically. Start it first.
 - ☐ **Data safety** — declare Health Connect, account credentials, and whatever
-  the AI features would send. The location question resolves itself given the
-  GPS flag above.
+  the AI features would send. The location question resolves itself: nothing in
+  the app asks for location.
 - ☐ **Content rating** questionnaire.
 - ☐ **Target audience and content**.
 - ☐ **Store listing** — screenshots are still not captured (§6). Title must be
@@ -518,24 +516,24 @@ than waiting for the closed test to look finished.
 ## Known gaps
 
 These are not Play blockers, but they are real and they will surface in a review
-if a tester goes looking. Items 1 and 2 are now handled by launch flags rather
-than left for a tester to find — see the pre-launch checklist above.
+if a tester goes looking. Item 1 is now handled rather than left for a tester to
+find — see the pre-launch checklist above.
 
-1. **GPS tracking does nothing on Android.** `Workouts.tsx` and `Routines.tsx` call
-   `navigator.geolocation`, but the manifest declares no location permission, so the
-   call fails and the button is inert. The `gpsTracking` flag now hides both
-   controls, which also keeps location out of the Data safety form. To turn it
-   on properly: add `ACCESS_FINE_LOCATION` plus a WebView geolocation grant, and
-   declare location in Data safety.
+1. **GPS tracking is gone, not merely inert.** The app no longer calls
+   `navigator.geolocation` anywhere and the manifest declares no location
+   permission, so distance is a figure the athlete types in. The `gpsTracking`
+   flag is still defined and off, but nothing reads it. To bring live tracking
+   back: add `ACCESS_FINE_LOCATION` plus a WebView geolocation grant, wire the
+   control to the flag, and declare location in Data safety.
 2. **AI feature availability depends on provider secrets.** Ensure OpenAI routes
    have `OPENAI_API_KEY` and video form analysis has `GOOGLE_API` configured in
    Supabase before advertising those routes as available to reviewers.
-3. **Wearable sync is unconfigured.** `wearable-oauth` answers `not_configured` for
-   every provider because no vendor OAuth secrets exist — Garmin, Strava and the
-   rest each need a developer agreement signed by a human. The `wearableSync`
-   flag now hides the whole surface, including the route, so a reviewer never
-   lands on a screen of dead providers. Set `VITE_ENABLE_wearableSync=true` once
-   the secrets do exist.
+3. **The cloud wearable providers are unconfigured — Health Connect is not.**
+   `wearable-oauth` answers `not_configured` for every cloud provider because no
+   vendor OAuth secrets exist; Garmin, Strava and the rest each need a developer
+   agreement signed by a human. The surface ships anyway (`wearableSync` is on)
+   because Health Connect works, and each unconfigured provider is labelled as
+   such on the screen rather than promised.
 4. **Password-reset email delivery** depends on Supabase's SMTP configuration; the
    built-in sender is rate-limited and unsuitable for real users.
 5. **No owned canonical website is configured.** Do not put a Lovable preview

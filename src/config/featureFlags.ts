@@ -27,21 +27,15 @@
 //   secret; the OAuth and import plumbing is all still there and inert until
 //   then.
 //
-//   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
-//   default. The Android manifest declares no location permission, so
-//   `navigator.geolocation` never resolves and the button is inert. Declaring
-//   ACCESS_FINE_LOCATION would also mean declaring location in the Data safety
-//   form and handling it in the privacy policy, which is a larger commitment
-//   than the feature deserves during closed testing. On the web this works, so
-//   set VITE_ENABLE_gpsTracking=true for a self-hosted web build.
-//
-//   gpsTracking — the live-distance buttons in Workouts and Routines. OFF by
-//   default. The Android manifest declares no location permission, so
-//   `navigator.geolocation` never resolves and the button is inert. Declaring
-//   ACCESS_FINE_LOCATION would also mean declaring location in the Data safety
-//   form and handling it in the privacy policy, which is a larger commitment
-//   than the feature deserves during closed testing. On the web this works, so
-//   set VITE_ENABLE_gpsTracking=true for a self-hosted web build.
+//   gpsTracking — kept defined, with no consumer. Live-distance tracking was
+//   removed from the app on 2026-10-12: nothing calls `navigator.geolocation`
+//   and a workout's distance is a figure the athlete types in, so the control
+//   this flag used to hide no longer exists. It stays in the map, off by
+//   default, because it is part of the launch record and because re-adding it is
+//   the work described here — not because any build turns something on.
+//   Bringing tracking back means declaring ACCESS_FINE_LOCATION in the manifest,
+//   granting geolocation to the WebView, wiring the control to this flag, and
+//   declaring location in the Data safety form and the privacy policy.
 //
 //   There is deliberately no `aiCoach` flag. AI is not a separate section of the
 //   app — it is inside the core pages (Training generates the plan, FormAnalysis,

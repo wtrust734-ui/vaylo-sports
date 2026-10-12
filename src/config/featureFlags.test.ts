@@ -25,8 +25,9 @@ describe("launch defaults", () => {
   });
 
   it("keeps GPS tracking off", () => {
-    // The Android manifest declares no location permission, so
-    // navigator.geolocation never resolves and the control is inert.
+    // Nothing reads this flag any more: live-distance tracking was removed from
+    // the app on 2026-10-12, so there is no control left to hide. It stays in
+    // the map, off, so a stale build cannot turn one back on.
     expect(isFlagOn("gpsTracking")).toBe(false);
   });
 
