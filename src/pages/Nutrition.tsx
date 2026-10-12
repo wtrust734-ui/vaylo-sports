@@ -6,21 +6,83 @@ import { Droplets, ScanLine, UtensilsCrossed, Plus, Trash2, Zap, Camera, FileTex
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
-import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
+import { creditCost } from "@/lib/credits";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { dietPlanRefusalReason, isAdultDob } from "@/lib/age";
-import { DISCLAIMERS, disclaimerShort } from "@/config/disclaimers";
+import { disclaimerShort } from "@/config/disclaimers";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
-import { capturePhoto } from "@/lib/camera";
+import { shortfallFromEdgeError } from "@/lib/shortfall";
+import { requestCreditTopUp } from "@/lib/topUpStore";
+import NutritionPlanWizard, { type PlanDraft } from "@/components/nutrition/NutritionPlanWizard";
+import SavedNutritionPlan from "@/components/nutrition/SavedNutritionPlan";
+import {
+  normalizeIntake,
+  prefillIntake,
+  targetsForRequest,
+  type NutritionIntake,
+} from "@/lib/nutritionTargets";
+import { newNutritionPlanRequestId, parseGeneratedPlan } from "@/lib/nutritionPlan";
+import { capturePhoto, pickPhoto } from "@/lib/camera";
 import { isNative } from "@/lib/platform";
 import { hapticImpact } from "@/lib/haptics";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
+
+/**
+ * What the `nutrition_review` call returns.
+ *
+ * Every field optional, because the shape comes back as model JSON and nothing
+ * has validated it beyond the prompt: a missing sentence renders as nothing,
+ * rather than crashing a screen the athlete paid to see.
+ */
+type FoodReview = {
+  headline?: string;
+  verdict?: "good" | "thin" | "unclear";
+  fuel?: string;
+  protein?: string;
+  around_training?: string;
+  what_works?: string[];
+  suggestions?: string[];
+  limits?: string;
+};
+
+/**
+ * The questionnaire answers, as the brief the model is given.
+ *
+ * Kept in the athlete's own terms and short: `generate-nutrition-plan` caps
+ * `notes` and puts them in the user turn as "Athlete's own request", so this is
+ * read as the instruction rather than mined out of the dossier. Allergies are
+ * stated as hard exclusions because that is what they are.
+ */
+function buildPlanNotes(intake: NutritionIntake): string {
+  return [
+    `Goal: ${intake.goal}.`,
+    `Training ${intake.trainingDaysPerWeek} day${intake.trainingDaysPerWeek === 1 ? "" : "s"} a week, about ${intake.sessionMinutes} minutes a session.`,
+    `They can fit ${intake.mealsPerDay} meal${intake.mealsPerDay === 1 ? "" : "s"} into a day.`,
+    intake.dietaryPattern !== "omnivore"
+      ? `Dietary pattern: ${intake.dietaryPattern} — every meal must respect it.`
+      : "",
+    intake.foodDislikes.trim()
+      ? `Hard exclusions (allergies or foods they avoid): ${intake.foodDislikes.trim()}. Do not include these in any meal.`
+      : "",
+    intake.weightKg ? `Body weight ${intake.weightKg}kg${intake.heightCm ? `, height ${intake.heightCm}cm` : ""}.` : "",
+    intake.notes.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 800);
+}
+
+/**
+ * How much of the log a review reads.
+ *
+ * A week, not a day: one day cannot tell "eating enough" from "logged one big
+ * meal", and the question the feature answers is about the training week.
+ */
+const REVIEW_WINDOW_DAYS = 7;
 
 const Nutrition = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
-  const spendWithTopUp = useSpendWithTopUp();
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(3000);
   const [showWaterGoalEdit, setShowWaterGoalEdit] = useState(false);
@@ -37,13 +99,12 @@ const Nutrition = () => {
 
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [plans, setPlans] = useState<Tables<"nutrition_plans">[]>([]);
-  const [planTitle, setPlanTitle] = useState("");
-  const [planGoal, setPlanGoal] = useState("Maintain");
-  const [planCalories, setPlanCalories] = useState("2200");
-  const [planProtein, setPlanProtein] = useState("150");
-  const [planCarbs, setPlanCarbs] = useState("250");
-  const [planFat, setPlanFat] = useState("70");
-  const [planWeeks, setPlanWeeks] = useState("4");
+  // The questionnaire's starting answers: whatever the athlete saved on a
+  // previous visit (fetchSettings), with the profile filled in where it knows
+  // something. Nothing here is a target until they accept the recommendation.
+  const [planIntake, setPlanIntake] = useState<NutritionIntake>(() => prefillIntake({}));
+  const [writingPlan, setWritingPlan] = useState(false);
+  const [openPlanId, setOpenPlanId] = useState<string | null>(null);
 
   const [showScan, setShowScan] = useState(false);
   const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string; verdict?: "fuel" | "light" | "treat"; verdict_reason?: string } | null>(null);
@@ -53,7 +114,19 @@ const Nutrition = () => {
   // delete fired two DELETEs and a double reload.
   const [deleting, setDeleting] = useState(false);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
+  // The AI food review: a reading of the week's log against the training. Not
+  // stored anywhere — it is a reading of a moment, like the scan result, and
+  // saving it would turn a comment into a record the athlete has to keep true.
+  const [foodReview, setFoodReview] = useState<FoodReview | null>(null);
+  const [reviewing, setReviewing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The gallery input is a SECOND input, and the difference is the whole point:
+  // a single `<input type="file" accept="image/*" capture="environment">`
+  // opens the camera from BOTH buttons on Android, because `capture` overrides
+  // the picker. "Upload" then silently took a photo instead of letting the
+  // athlete choose one they already had. Only the camera button now carries
+  // `capture`; this one has no capture attribute, so it opens the real picker.
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const mealsRef = useRef(null);
   const mealsInView = useInView(mealsRef, { once: true, margin: "-30px" });
@@ -75,12 +148,33 @@ const Nutrition = () => {
   const CALORIE_SCAN_REFUSAL =
     "Calorie and macro estimation is built for adult athletes (18+). If you are under 18, we do not estimate calories or macros for you — this is deliberate, not a missing setting.";
 
+  // A food review is nutrition advice, so it is adult-only for exactly the same
+  // reason the scan and the plans are (src/lib/age.ts): the product does not
+  // analyse food for under-18s at all. Unknown date of birth is not an adult.
+  const canReviewFood = isAdultDob(profile?.date_of_birth);
+  const REVIEW_REFUSAL =
+    "Reviewing your food is built for adult athletes (18+). If you are under 18, we do not analyse your food or estimate calories for you — this is deliberate, not a missing setting.";
+
   useEffect(() => { if (user) { fetchWater(); fetchMeals(); fetchSettings(); fetchPlans(); } }, [user]);
 
   const fetchSettings = async () => {
     if (!user) return;
     const { data } = await supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle();
     if (data?.water_goal_ml) { setWaterGoal(data.water_goal_ml); setNewWaterGoal(String(data.water_goal_ml)); }
+    // The saved questionnaire answers, so a returning athlete is not asked
+    // twelve questions again. Fetched in its own tolerant call: a build running
+    // ahead of the intake migration must still load the water goal, and a
+    // missing column is not something the screen needs to report.
+    const { data: intakeRow, error: intakeError } = await supabase
+      .from("user_settings")
+      .select("dietary_pattern, food_dislikes, meals_per_day, training_days_per_week, typical_session_minutes, activity_level, sex")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (intakeError) {
+      console.warn("nutrition intake not available:", intakeError.message);
+      return;
+    }
+    if (intakeRow) setPlanIntake((current) => normalizeIntake(intakeRow, current));
   };
 
   const fetchWater = async () => {
@@ -151,6 +245,127 @@ const Nutrition = () => {
       fetchMeals();
     } finally {
       setDeleting(false);
+    }
+  };
+
+  /**
+   * The last week of the log, as text for the model.
+   *
+   * A readable per-day digest rather than raw rows or JSON: the prompt reads a
+   * list of days, and a compact digest is both cheaper and harder to misread
+   * than a table. Capped at 3,000 characters because the server caps `summary`
+   * at 4,000 — and days are appended oldest first, so if anything is ever
+   * dropped it is the oldest day, never today's.
+   */
+  const buildFoodLogDigest = async (): Promise<{ digest: string; mealCount: number; daysLogged: number }> => {
+    if (!user) return { digest: "", mealCount: 0, daysLogged: 0 };
+    const since = localDateKey(new Date(Date.now() - (REVIEW_WINDOW_DAYS - 1) * 86_400_000));
+    const { data } = await supabase
+      .from("meal_logs")
+      .select("log_date, meal_type, name, calories, protein_g, carbs_g, fat_g")
+      .eq("user_id", user.id)
+      .gte("log_date", since)
+      .order("log_date", { ascending: true })
+      .order("logged_at", { ascending: true });
+
+    const rows = data ?? [];
+    const byDay = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const day = String(row.log_date);
+      const list = byDay.get(day) ?? [];
+      list.push(row);
+      byDay.set(day, list);
+    }
+
+    const lines: string[] = [];
+    for (const [day, meals] of byDay) {
+      const total = meals.reduce(
+        (acc, meal) => ({
+          kcal: acc.kcal + (meal.calories ?? 0),
+          protein: acc.protein + (meal.protein_g ?? 0),
+          carbs: acc.carbs + (meal.carbs_g ?? 0),
+          fat: acc.fat + (meal.fat_g ?? 0),
+        }),
+        { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+      );
+      lines.push(
+        `${day} — about ${Math.round(total.kcal)} kcal, ${Math.round(total.protein)}g protein, ${Math.round(total.carbs)}g carbs, ${Math.round(total.fat)}g fat`,
+      );
+      for (const meal of meals) {
+        lines.push(
+          `  ${meal.meal_type ?? "meal"}: ${meal.name}${meal.calories ? ` (${meal.calories} kcal${meal.protein_g ? `, ${meal.protein_g}g protein` : ""})` : ""}`,
+        );
+      }
+    }
+
+    let digest = lines.join("\n");
+    if (digest.length > 3000) digest = `${digest.slice(0, 3000)}\n… (log truncated)`;
+    return { digest, mealCount: rows.length, daysLogged: byDay.size };
+  };
+
+  /**
+   * Ask the AI to read the log against the athlete's training.
+   *
+   * An empty log is refused BEFORE the call, so a review of nothing costs
+   * nothing: the one thing this must never do is invent a week of food and
+   * charge for the invention.
+   */
+  const runFoodReview = async () => {
+    if (!user || !profile) return;
+    if (!canReviewFood) {
+      toast({ title: "Age restriction", description: REVIEW_REFUSAL, variant: "destructive" });
+      return;
+    }
+    setReviewing(true);
+    setFoodReview(null);
+    try {
+      const log = await buildFoodLogDigest();
+      if (log.mealCount === 0) {
+        toast({
+          title: "Nothing to review yet",
+          description: "Log or scan a few meals first — a review of an empty log would be invented. Nothing was charged.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Nutrition is a standard tab: the server charges nutrition_review per
+      // use and refunds on failure. Nothing is charged or priced here.
+      const { data, error } = await supabase.functions.invoke("ai-analyze", {
+        body: {
+          type: "nutrition_review",
+          summary: log.digest,
+          userLocale: getAiLocale(),
+          pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })),
+        },
+      });
+      if (error) throw new Error(await edgeErrorMessage(error));
+      const payload = (data ?? {}) as { result?: string; cost?: number };
+      let parsed: FoodReview | null = null;
+      try {
+        parsed = JSON.parse(payload.result ?? "") as FoodReview;
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || typeof parsed !== "object") {
+        // Answered, but not in a shape the screen can show. Say that rather
+        // than rendering an empty card over a charge.
+        toast({
+          title: "The review came back unreadable",
+          description: "Nothing was shown because the answer could not be read. Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setFoodReview(parsed);
+      toast({
+        title: "Food review ready",
+        description: payload.cost ? `${payload.cost} credits used.` : "Included with Unlimited.",
+      });
+      await refreshProfile();
+    } catch (err) {
+      toast({ title: "Review failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setReviewing(false);
     }
   };
 
@@ -232,9 +447,36 @@ const Nutrition = () => {
     await runScan(shot.base64);
   };
 
+  /**
+   * Native "choose from my photos". Same age gate and same scan path as the
+   * camera route: the picker is reachable on its own, so the check cannot live
+   * only on the button that opens it.
+   */
+  const scanFromLibrary = async () => {
+    if (!user || !profile) return;
+    if (!canScanCalories) {
+      toast({ title: "Age restriction", description: CALORIE_SCAN_REFUSAL, variant: "destructive" });
+      return;
+    }
+    const picked = await pickPhoto();
+    if (!picked) return; // cancelled
+    setScanPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return picked.previewUrl;
+    });
+    hapticImpact("light");
+    await runScan(picked.base64);
+  };
+
   const onScanPhoto = () => {
     if (isNative()) void scanFromCamera();
     else fileInputRef.current?.click();
+  };
+
+  /** Upload / choose an existing photo — the camera is never opened from here. */
+  const onScanUpload = () => {
+    if (isNative()) void scanFromLibrary();
+    else galleryInputRef.current?.click();
   };
 
   const addScanResult = async () => {
@@ -251,7 +493,18 @@ const Nutrition = () => {
     toast({ title: "Scanned meal logged!" });
   };
 
-  const createNutritionPlan = async () => {
+  /**
+   * The paid, AI-written plan.
+   *
+   * The order matters, and it is not the old order. The server charges
+   * `nutrition_plan_week` per week and refunds on every failure path, so
+   * nothing is charged from here and nothing is saved before the provider call
+   * comes back: an athlete who is short of credits, or whose plan cannot be
+   * written, ends up with exactly what they had. The questionnaire answers go
+   * to user_settings first, because they belong to the athlete whether or not
+   * the plan gets written.
+   */
+  const submitPlan = async (draft: PlanDraft) => {
     if (!user || !profile) return;
     // One check, shared with every other entry point (see dietPlanRefusalReason).
     //
@@ -265,47 +518,113 @@ const Nutrition = () => {
       toast({ title: "Nutrition plans are 18+", description: refusal, variant: "destructive" });
       return;
     }
-    const weeks = Math.max(1, Math.min(52, parseInt(planWeeks, 10) || 4));
-    // Nutrition is a standard tab, not a purchase: every plan charges per week
-    // for everyone. No pack, no free pass — the server enforces the same price.
-    const cost = creditCost("nutrition_plan_week", weeks);
 
-    // Create the plan FIRST, then charge. If the save fails the athlete loses
-    // nothing; if the charge fails we roll the plan back. Targets are clamped
-    // to physiological/product bounds; invalid input falls back to the
-    // product defaults rather than storing 0 or NaN.
-    const clampTarget = (v: string, min: number, max: number, fallback: number) => {
-      const n = parseInt(v, 10);
-      return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
-    };
-    const { data: created, error: insertError } = await supabase.from("nutrition_plans").insert({
-      user_id: user.id, title: planTitle || `${planGoal} Plan`, goal: planGoal,
-      calories_target: clampTarget(planCalories, 800, 6000, 2200),
-      protein_target: clampTarget(planProtein, 20, 400, 150),
-      carbs_target: clampTarget(planCarbs, 0, 1200, 250),
-      fat_target: clampTarget(planFat, 10, 300, 70),
-      weeks,
-    }).select("id").single();
-    if (insertError) { toast({ title: "Couldn't save your plan", description: insertError.message, variant: "destructive" }); return; }
+    const { intake, targets, title } = draft;
+    const weeks = Math.max(1, Math.min(12, intake.weeks));
+    setWritingPlan(true);
 
-    if (cost > 0) {
-      // Insufficient credits open the global top-up sheet; on purchase the same
-      // spend is retried, so the plan (already saved) just completes.
-      const spend = await spendWithTopUp("nutrition_plan_week", { quantity: weeks, reason: `Nutrition plan: ${planTitle || planGoal} (${weeks} weeks)` });
-      if (!spend.success) {
-        if (created?.id) {
-          const { error: rollbackError } = await supabase.from("nutrition_plans").delete().eq("id", created.id);
-          if (rollbackError) console.error("nutrition plan rollback failed:", rollbackError.message);
+    try {
+      const { error: intakeError } = await supabase.from("user_settings").upsert({
+        user_id: user.id,
+        dietary_pattern: intake.dietaryPattern,
+        food_dislikes: intake.foodDislikes.trim().slice(0, 300) || null,
+        meals_per_day: intake.mealsPerDay,
+        training_days_per_week: intake.trainingDaysPerWeek,
+        typical_session_minutes: intake.sessionMinutes,
+        activity_level: intake.activityLevel,
+        sex: intake.sex,
+      }, { onConflict: "user_id" });
+      if (intakeError) console.warn("nutrition intake not saved:", intakeError.message);
+
+      const projected = targetsForRequest(targets);
+      const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", {
+        body: {
+          // The function validates this spelling, lowercase.
+          goal: intake.goal.toLowerCase(),
+          weeks,
+          sport: profile.sport ?? "",
+          level: profile.experience_level ?? "intermediate",
+          notes: buildPlanNotes(intake),
+          userLocale: getAiLocale(),
+          request_id: newNutritionPlanRequestId(),
+          calories_target: projected.calories,
+          protein_target: projected.protein,
+          carbs_target: projected.carbs,
+          fat_target: projected.fat,
+        },
+      });
+
+      if (error) {
+        const message = await edgeErrorMessage(error);
+        const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
+        if (status === 402) {
+          // Charge failure = purchase opportunity. Not a credit was spent, so
+          // after a top-up the same button can be pressed again.
+          const short = await shortfallFromEdgeError(error);
+          if (short) {
+            const outcome = await requestCreditTopUp({ shortfall: short.shortfall, reasonLabel: "Nutrition plan" });
+            if (outcome.purchased) {
+              toast({ title: "Credits added — tap Write my plan again." });
+              return;
+            }
+          }
         }
-        if (spend.dismissedTopUp) toast({ title: "Not enough credits", description: spendErrorMessage("nutrition_plan_week", spend, weeks), variant: "destructive" });
+        toast({ title: "Couldn't write your plan", description: message, variant: "destructive" });
         return;
       }
-    }
 
-    await refreshProfile();
-    setShowCreatePlan(false); setPlanTitle("");
-    fetchPlans();
-    toast({ title: "Nutrition plan created! 🥗", description: `${cost} credits used.` });
+      const payload = (data ?? {}) as { plan?: unknown; cost?: number };
+      const parsed = parseGeneratedPlan(payload.plan);
+      if (!parsed.plan) {
+        // Charged but unreadable. The server refunds a failed call; an answer we
+        // cannot read is reported here rather than stored as an empty plan.
+        toast({
+          title: "The plan could not be read",
+          description: parsed.error || "Nothing was saved. Try again — a failed call is refunded.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const row = {
+        user_id: user.id,
+        title: title || `${intake.goal} plan · ${weeks} week${weeks === 1 ? "" : "s"}`,
+        goal: intake.goal,
+        calories_target: targets.calories,
+        protein_target: targets.protein_g,
+        carbs_target: targets.carbs_g,
+        fat_target: targets.fat_g,
+        weeks,
+        plan_data: parsed.plan.weeks as unknown as Json,
+      };
+      // One retry, then the honest failure. The plan exists and was paid for, so
+      // a transient write is the one case worth a second attempt — but it must
+      // never be GENERATED again, because that would charge a second time.
+      let { error: insertError } = await supabase.from("nutrition_plans").insert(row);
+      if (insertError) {
+        ({ error: insertError } = await supabase.from("nutrition_plans").insert(row));
+      }
+      if (insertError) {
+        toast({
+          title: "Your plan was written but not saved",
+          description: `Do not generate it again — that would charge you a second time. ${insertError.message}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      await refreshProfile();
+      fetchPlans();
+      setShowCreatePlan(false);
+      toast({
+        title: "Your plan is ready 🥗",
+        description: payload.cost
+          ? `${payload.cost} credits used · ${parsed.plan.weeks.length} weeks.`
+          : "Included with Unlimited.",
+      });
+    } finally {
+      setWritingPlan(false);
+    }
   };
 
   const totalCalories = meals.reduce((s, m) => s + (m.calories || 0), 0);
@@ -314,6 +633,16 @@ const Nutrition = () => {
   const totalFat = meals.reduce((s, m) => s + (m.fat_g || 0), 0);
   const inputClass = "w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-electric-purple/50 transition-all duration-300";
   const waterQuickAmounts = [50, 100, 150, 200, 250, 330, 500];
+
+  // Read at open time rather than at mount, so the profile's own numbers are
+  // used if they exist by then, and a saved answer still wins over them.
+  const profileFacts = profile as { weight_kg?: number | null; height_cm?: number | null; goals?: unknown } | null;
+  const intakeInitial = prefillIntake({
+    weightKg: typeof profileFacts?.weight_kg === "number" ? profileFacts.weight_kg : null,
+    heightCm: typeof profileFacts?.height_cm === "number" ? profileFacts.height_cm : null,
+    goals: String(profileFacts?.goals ?? ""),
+    saved: planIntake,
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -392,12 +721,100 @@ const Nutrition = () => {
           </motion.button>
         </div>
 
+        {/* AI food review. A reading of the week's log against the training the
+            athlete is actually doing — not a diet plan, and deliberately not a
+            target to hit. The disclaimer is the same one the plan carries. */}
+        <div className="bg-card border border-border rounded-2xl p-4 mb-5">
+          <div className="flex items-center gap-2 mb-1.5">
+            <UtensilsCrossed size={16} className="text-electric-glow" />
+            <span className="text-sm font-semibold">Review my food</span>
+            <span className="ml-auto rounded-full border border-electric-purple/40 bg-electric-purple/10 px-2 py-0.5 text-[11px] font-semibold text-electric-purple">
+              {creditCost("nutrition_review")} credits
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            An AI read of the last {REVIEW_WINDOW_DAYS} days of your log against the training you are
+            doing: whether you are eating enough for it, protein and fuel around sessions, and a few
+            ordinary food suggestions — with what is already working said first.
+          </p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground/80 mt-1">
+            {disclaimerShort("nutrition")}
+          </p>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              if (!canReviewFood) {
+                toast({ title: "Age restriction", description: REVIEW_REFUSAL, variant: "destructive" });
+                return;
+              }
+              void runFoodReview();
+            }}
+            disabled={reviewing}
+            aria-disabled={!canReviewFood}
+            className={`mt-3 w-full flex items-center justify-center gap-2 font-semibold py-2.5 rounded-xl disabled:opacity-60 ${
+              canReviewFood ? "bg-gradient-primary text-primary-foreground shadow-glow" : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {reviewing ? <Loader2 size={16} className="animate-spin" /> : <UtensilsCrossed size={16} />}
+            {reviewing ? "Reading your log…" : `Review my food (${creditCost("nutrition_review")} credits)`}
+          </motion.button>
+
+          {foodReview && (
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
+              className="mt-3 rounded-xl border border-electric-purple/20 bg-gradient-card p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold">{foodReview.headline ?? "Your review"}</p>
+                {foodReview.verdict && (
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    foodReview.verdict === "good" ? "bg-emerald-500/10 text-emerald-300"
+                    : foodReview.verdict === "thin" ? "bg-amber-500/10 text-amber-300"
+                    : "bg-muted text-muted-foreground"
+                  }`}>
+                    {foodReview.verdict === "good" ? "Eating enough" : foodReview.verdict === "thin" ? "Looks light" : "Not enough logged"}
+                  </span>
+                )}
+              </div>
+              {[foodReview.fuel, foodReview.protein, foodReview.around_training]
+                .filter((line): line is string => !!line)
+                .map((line, i) => (
+                  <p key={i} className="text-xs text-muted-foreground mt-2 leading-relaxed">{line}</p>
+                ))}
+              {(foodReview.what_works?.length ?? 0) > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] uppercase tracking-wider text-emerald-300 font-semibold">Going well</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {foodReview.what_works?.map((item, i) => (
+                      <li key={i} className="text-xs text-muted-foreground leading-relaxed">• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(foodReview.suggestions?.length ?? 0) > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] uppercase tracking-wider text-electric-purple font-semibold">A few suggestions</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {foodReview.suggestions?.map((item, i) => (
+                      <li key={i} className="text-xs text-foreground leading-relaxed">• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {foodReview.limits && (
+                <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/80">{foodReview.limits}</p>
+              )}
+            </motion.div>
+          )}
+        </div>
+
         {/* Scan UI with image upload */}
         {showScan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-electric-purple/20 rounded-2xl p-4 space-y-3 mb-5">
             <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan Food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; }); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
-            <p className="text-xs text-muted-foreground">Take a photo or upload an image of your meal. Our AI will estimate calories and macros.</p>
+            <p className="text-xs text-muted-foreground">Take a photo there and then, or upload one you already have. Our AI will estimate calories and macros.</p>
+            {/* Camera: `capture` asks the device for the camera. */}
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanImage} className="hidden" />
+            {/* Upload: no `capture`, so this is the gallery / file picker. */}
+            <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleScanImage} className="hidden" />
             
             {scanPreview && (
               <div className="rounded-xl overflow-hidden border border-border">
@@ -418,9 +835,9 @@ const Nutrition = () => {
                   className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
                   <Camera size={16} /> Take Photo
                 </motion.button>
-                <motion.button onClick={() => fileInputRef.current?.click()} whileTap={{ scale: 0.98 }}
+                <motion.button onClick={onScanUpload} whileTap={{ scale: 0.98 }}
                   className="bg-card border border-border px-4 py-2.5 rounded-xl flex items-center gap-2 hover:border-electric-purple/20">
-                  <Upload size={16} /> Upload
+                  <Upload size={16} /> {isNative() ? "Choose Photo" : "Upload"}
                 </motion.button>
               </div>
             )}
@@ -454,36 +871,26 @@ const Nutrition = () => {
           </motion.div>
         )}
 
-        {/* Create Nutrition Plan */}
+        {/* Under-18 refusal, stated where the plan button is rather than only in
+            a toast after a tap. */}
+        {!isAdultDob(profile?.date_of_birth) && (
+          <p className="text-xs text-muted-foreground flex items-start gap-1 mb-5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
+            <span>{disclaimerShort("minor")}</span>
+          </p>
+        )}
+
+        {/* Build a plan: the questionnaire asks what decides an intake, and the
+            recommendation panel answers the target question itself. */}
         {showCreatePlan && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">Create Nutrition Plan</h3><button onClick={() => setShowCreatePlan(false)} className="text-muted-foreground"><X size={16} /></button></div>
-            <p className="text-xs text-muted-foreground flex items-start gap-1"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{disclaimerShort("minor")}</span></p>
-            <input type="text" placeholder="Plan name (optional)" value={planTitle} onChange={e => setPlanTitle(e.target.value)} className={inputClass} />
-            <div className="flex gap-1.5">
-              {["Cut", "Maintain", "Bulk"].map(g => (
-                <button key={g} onClick={() => setPlanGoal(g)} className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-all ${planGoal === g ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>{g}</button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><label className="text-[12px] text-muted-foreground">Daily Calories</label><input type="number" value={planCalories} onChange={e => setPlanCalories(e.target.value)} className={inputClass} /></div>
-              <div><label className="text-[12px] text-muted-foreground">Protein (g)</label><input type="number" value={planProtein} onChange={e => setPlanProtein(e.target.value)} className={inputClass} /></div>
-              <div><label className="text-[12px] text-muted-foreground">Carbs (g)</label><input type="number" value={planCarbs} onChange={e => setPlanCarbs(e.target.value)} className={inputClass} /></div>
-              <div><label className="text-[12px] text-muted-foreground">Fat (g)</label><input type="number" value={planFat} onChange={e => setPlanFat(e.target.value)} className={inputClass} /></div>
-            </div>
-            <div><label className="text-[12px] text-muted-foreground">Duration (weeks) — {creditCost("nutrition_plan_week")} credits per week</label>
-              <input type="number" min={1} max={52} value={planWeeks} onChange={e => setPlanWeeks(e.target.value)} className={inputClass} /></div>
-            {/* The plan stores targets the athlete typed in themselves, so the
-                honest statement is that these are their numbers and the app is
-                not a dietitian. Not a liability clause — a description. */}
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              {DISCLAIMERS.nutrition.full}
-            </p>
-            <motion.button onClick={createNutritionPlan} whileTap={{ scale: 0.98 }}
-              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
-              Create Plan ({creditCost("nutrition_plan_week", parseInt(planWeeks) || 4)} credits · {creditCost("nutrition_plan_week")}/wk)
-            </motion.button>
-          </motion.div>
+          <NutritionPlanWizard
+            initial={intakeInitial}
+            age={getAge()}
+            costPerWeek={creditCost("nutrition_plan_week")}
+            busy={writingPlan}
+            onSubmit={submitPlan}
+            onClose={() => setShowCreatePlan(false)}
+          />
         )}
 
         {/* Log Meal */}
@@ -536,13 +943,25 @@ const Nutrition = () => {
               {plans.map((plan, i) => (
                 <motion.div key={plan.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
                   className="bg-card border border-border rounded-xl p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-semibold">{plan.title}</h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-semibold truncate">{plan.title}</h4>
                       <p className="text-[12px] text-muted-foreground">{plan.goal} · {plan.weeks}w · {plan.calories_target} kcal · {plan.protein_target}g P</p>
                     </div>
-                    {plan.active && <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">Active</span>}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {plan.active && <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">Active</span>}
+                      {/* The plan itself, not just the receipt for it. */}
+                      <button
+                        type="button"
+                        onClick={() => setOpenPlanId(openPlanId === plan.id ? null : plan.id)}
+                        aria-expanded={openPlanId === plan.id}
+                        className="text-xs font-semibold text-electric-purple"
+                      >
+                        {openPlanId === plan.id ? "Hide" : "View plan"}
+                      </button>
+                    </div>
                   </div>
+                  {openPlanId === plan.id && <SavedNutritionPlan plan={plan} />}
                 </motion.div>
               ))}
             </div>

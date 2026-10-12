@@ -55,7 +55,14 @@ const CALLS = {
   plan_edit: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
   plan_edit_full: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
   calorie_scan: { model: "luna", outCap: 2000, util: 0.45, inTok: 2500 },
+  // A nutrition review reads a week of logged meals plus the dossier and answers
+  // with a short structured review: text-only, so the input is the large half
+  // and there is no image to bill.
+  nutrition_review: { model: "luna", outCap: 2000, util: 0.60, inTok: 13000 },
   tactical_prep: { model: "luna", outCap: 2500, util: 0.60, inTok: 7000 },
+  // One plan per injury: the report plus the dossier in, a weeks-long scaffold
+  // out. The injury report is short, so this is the dossier-bound case again.
+  injury_plan: { model: "luna", outCap: 4000, util: 0.30, inTok: 10000 },
   training_insight: { model: "luna", outCap: 2000, util: 0.60, inTok: 6000 },
   development_trajectory: { model: "luna", outCap: 2000, util: 0.45, inTok: 4000 },
   archetype_view: { model: "luna", outCap: 3000, util: 0.40, inTok: 5000 },
@@ -84,6 +91,10 @@ const FEATURE_COSTS = {
   plan_edit: 10,
   plan_edit_full: 20,
   calorie_scan: 12,
+  nutrition_review: 8,
+  // Per plan, on top of the one-off tab unlock (25) beside it: the tab is the
+  // screen, the plan is a provider call.
+  injury_plan: 6,
   tactical_prep: 12,
   development_trajectory: 8,
   archetype_view: 10,

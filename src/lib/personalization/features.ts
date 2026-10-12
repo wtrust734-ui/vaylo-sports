@@ -80,7 +80,14 @@ export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
   // strength and combat athletes (football, cricket, tennis, lifting, MMA)
   // never see the tab — their sports have no PBs.
   "training.pbs": { key: "training.pbs", families: ["endurance", "multi"], route: "/pbs" },
-  "training.form": { key: "training.form", families: ["skill", "team", "strength", "combat", "multi"], route: "/form" },
+  // Form is universal, and its own CONTENT is what personalises now. It used to
+  // be scoped to the technique families, on the reading that "technique" is a
+  // skill-sport word — which hid the free drills and cues from the athlete whose
+  // sport needs them most, a runner. The tab is free for everyone and filters
+  // the drills inside it by family (src/lib/formDrills.ts: a runner is shown
+  // running work, never a footballer's), so the door no longer needs a rule.
+  // The AI video analysis inside the tab is still paid, per analysis.
+  "training.form": { key: "training.form", families: ["*"], route: "/form" },
   // Logging a finished session is not a preference any sport opts out of: the
   // record it writes is what the recovery read, the streak and the insights all
   // consume, so it is universal like plans are.

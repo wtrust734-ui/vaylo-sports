@@ -66,6 +66,24 @@ export function formatDateTime(date: Date | string | number): string {
   return formatDate(date, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+/**
+ * Date + time **to the second**, per locale — the drop-in for a bare
+ * `toLocaleString()`. `formatDateTime` above deliberately stops at the minute,
+ * which is right for a schedule; a log line ("Samples · 9 Oct 2026 14:05:06")
+ * needs the seconds, and every call site that used to call `toLocaleString()`
+ * directly was relying on those seconds being there.
+ */
+export function formatDateTimeExact(date: Date | string | number): string {
+  return formatDate(date, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 /** Weekday + long date for event screens: "Tuesday, 22 September 2026". */
 export function formatWeekdayDate(date: Date | string | number): string {
   return formatDate(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" });

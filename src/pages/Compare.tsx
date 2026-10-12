@@ -1,64 +1,86 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Loader2, Lock } from "lucide-react";
+import { Trophy, Loader2, Lock, Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { creditCost } from "@/lib/credits";
 import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
-import { calculateVPR, type MetricRow, type VPRScores } from "@/lib/performance";
+import { calculateVPR, type MetricRow } from "@/lib/performance";
+import {
+  ELITE_GROUPS_WITH_PROFILES,
+  ELITE_PROFILES,
+  groupForSport,
+  profilesInGroup,
+  type EliteProfile,
+} from "@/lib/eliteProfiles";
 import { Radar, RadarChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, ResponsiveContainer } from "recharts";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Elite reference profiles — ILLUSTRATIVE stylized 0-100 indices for motivational
-// benchmarking only. Not measured athlete data, not official stats — approximated
-// from public benchmarks and rounded for display.
-const ELITES: Record<string, { name: string; profile: VPRScores }> = {
-  "Sprinting": { name: "Usain Bolt (peak)", profile: { speed_index: 100, power_index: 95, endurance_capacity: 50, repeatability: 80, skill_consistency: 85, reaction_efficiency: 90, overall_vpr: 89 } },
-  "Running": { name: "Eliud Kipchoge", profile: { speed_index: 78, power_index: 60, endurance_capacity: 100, repeatability: 95, skill_consistency: 90, reaction_efficiency: 70, overall_vpr: 88 } },
-  "Football": { name: "Cristiano Ronaldo (peak)", profile: { speed_index: 88, power_index: 92, endurance_capacity: 80, repeatability: 85, skill_consistency: 90, reaction_efficiency: 85, overall_vpr: 87 } },
-  "Basketball": { name: "LeBron James (peak)", profile: { speed_index: 82, power_index: 95, endurance_capacity: 78, repeatability: 88, skill_consistency: 92, reaction_efficiency: 90, overall_vpr: 88 } },
-  "Cycling": { name: "Tadej Pogačar", profile: { speed_index: 75, power_index: 92, endurance_capacity: 100, repeatability: 95, skill_consistency: 85, reaction_efficiency: 70, overall_vpr: 88 } },
-  "Swimming": { name: "Michael Phelps (peak)", profile: { speed_index: 90, power_index: 88, endurance_capacity: 95, repeatability: 90, skill_consistency: 95, reaction_efficiency: 80, overall_vpr: 90 } },
-  "Tennis": { name: "Novak Djokovic", profile: { speed_index: 80, power_index: 80, endurance_capacity: 88, repeatability: 92, skill_consistency: 95, reaction_efficiency: 95, overall_vpr: 88 } },
-  "Rugby": { name: "Maro Itoje", profile: { speed_index: 78, power_index: 95, endurance_capacity: 85, repeatability: 90, skill_consistency: 80, reaction_efficiency: 80, overall_vpr: 85 } },
-  "default": { name: "World-class generalist", profile: { speed_index: 85, power_index: 85, endurance_capacity: 85, repeatability: 85, skill_consistency: 85, reaction_efficiency: 85, overall_vpr: 85 } },
-};
-
+/**
+ * STACK UP VS ELITE
+ *
+ * The benchmarks are real athletes, one per event, across essentially every
+ * sport the app supports (see src/lib/eliteProfiles.ts). The 0–100 indices are
+ * illustrative shapes of what each event demands, on the same scale as the
+ * athlete's own VPR — they are not measurements of the named athlete, and the
+ * screen says so in words right under the chart.
+ *
+ * A comparison costs 2 credits, once per target. Browsing the list, switching
+ * sport and switching event are all free; only revealing a comparison spends,
+ * and comparing again to a target already paid for does not charge twice.
+ */
 const Compare = () => {
   const { user, profile, refreshProfile } = useAuth();
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [loading, setLoading] = useState(true);
   const userSport = profile?.sport?.split(",")[0]?.trim() || "Running";
-  const [compareSport, setCompareSport] = useState(userSport);
-  // Comparing your VPR against an elite profile costs 2 credits per
-  // comparison, for the sport selected below. Browsing, logging data and
-  // switching targets are free — only revealing a comparison spends.
+
+  // Opens on the athlete's own sport family, so a 800m runner lands on the
+  // 800m target rather than on whatever is first in the list.
+  const [group, setGroup] = useState<string>(() => groupForSport(userSport));
+  const groupTargets = useMemo(() => profilesInGroup(group), [group]);
+  const [targetId, setTargetId] = useState<string>(() => profilesInGroup(groupForSport(userSport))[0].id);
+  const [touched, setTouched] = useState(false);
+
   const compareCost = creditCost("vpr_compare");
   const spendWithTopUp = useSpendWithTopUp();
-  const [paidSports, setPaidSports] = useState<string[]>([]);
+  const [paidIds, setPaidIds] = useState<string[]>([]);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  const elite: EliteProfile = ELITE_PROFILES.find((p) => p.id === targetId) ?? groupTargets[0];
+
+  // Until the athlete picks something themselves, follow the profile: the
+  // profile can finish loading after first render, and landing on the wrong
+  // sport is the complaint this screen exists to fix.
+  useEffect(() => {
+    if (touched) return;
+    const nextGroup = groupForSport(userSport);
+    setGroup(nextGroup);
+    setTargetId(profilesInGroup(nextGroup)[0].id);
+  }, [userSport, touched]);
 
   const unlockComparison = async () => {
     if (!user) return;
     setPaying(true);
     setPayError(null);
     try {
-      const eliteName = (ELITES[compareSport] || ELITES.default).name;
-      const spend = await spendWithTopUp("vpr_compare", { reason: `VPR comparison vs ${eliteName}` });
+      const spend = await spendWithTopUp("vpr_compare", {
+        reason: `VPR comparison vs ${elite.name} (${elite.event})`,
+      });
       if (!spend.success) {
-        setPayError(spend.dismissedTopUp ? "Not enough credits — top up to compare." : (spend.error || "Could not start the comparison."));
+        setPayError(
+          spend.dismissedTopUp
+            ? "Not enough credits — top up to compare."
+            : spend.error || "Could not start the comparison.",
+        );
         return;
       }
-      setPaidSports((prev) => (prev.includes(compareSport) ? prev : [...prev, compareSport]));
+      setPaidIds((prev) => (prev.includes(elite.id) ? prev : [...prev, elite.id]));
       await refreshProfile();
     } finally {
       setPaying(false);
     }
   };
-
-  // Keep the comparison sport in sync when the profile finishes loading or changes.
-  useEffect(() => { setCompareSport(userSport); }, [userSport]);
 
   useEffect(() => { if (user) void load(); }, [user]);
   const load = async () => {
@@ -71,7 +93,6 @@ const Compare = () => {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   const userVpr = calculateVPR(metrics, userSport);
-  const elite = ELITES[compareSport] || ELITES.default;
 
   const data = [
     { axis: "Speed", you: userVpr.speed_index, elite: elite.profile.speed_index },
@@ -84,6 +105,8 @@ const Compare = () => {
 
   const gaps = data.map((d) => ({ axis: d.axis, gap: d.elite - d.you })).sort((a, b) => b.gap - a.gap);
   const biggestGap = gaps[0];
+  const hasData = metrics.length > 0;
+  const isPaid = paidIds.includes(elite.id);
 
   const guidance: Record<string, string> = {
     Speed: "Add 2 sprint sessions/week. Focus on max-velocity flying 30s and acceleration starts.",
@@ -94,22 +117,68 @@ const Compare = () => {
     React: "Add reaction-cue drills (visual/audio) pre-warmup. 5 min × 4 days/week.",
   };
 
-  const hasData = metrics.length > 0;
+  const chooseGroup = (g: string) => {
+    setTouched(true);
+    setGroup(g);
+    setTargetId(profilesInGroup(g)[0].id);
+    setPayError(null);
+  };
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-5">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Trophy size={14} /> Athlete Comparison</div>
         <h1 className="text-4xl font-display font-bold mt-2">Stack Up vs <span className="text-gradient-electric">Elite</span></h1>
-        <p className="text-muted-foreground mt-1 text-sm">Illustrative benchmarking — stylized elite profiles for motivation, not official measurements.</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {ELITE_PROFILES.length} benchmarks across {ELITE_GROUPS_WITH_PROFILES.length} sports — one per event, so an 800m runner compares against an 800m runner.
+        </p>
       </motion.div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">Compare to:</span>
-        <Select value={compareSport} onValueChange={(v) => { setCompareSport(v); setPayError(null); }}>
-          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.keys(ELITES).filter((k) => k !== "default").map((k) => <SelectItem key={k} value={k}>{k} — {ELITES[k].name}</SelectItem>)}</SelectContent>
-        </Select>
+      {/* Sport group — the first narrowing. A runner should never have to scroll
+          past Formula 1 to find the 800m. */}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sport</p>
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          {ELITE_GROUPS_WITH_PROFILES.map((g) => (
+            <button
+              key={g.group}
+              type="button"
+              onClick={() => chooseGroup(g.group)}
+              className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${
+                group === g.group
+                  ? "border-transparent bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {g.group}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" htmlFor="elite-event">
+          Event &amp; athlete
+        </label>
+        <select
+          id="elite-event"
+          value={elite.id}
+          onChange={(e) => { setTouched(true); setTargetId(e.target.value); setPayError(null); }}
+          className="w-full rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground"
+        >
+          {groupTargets.map((p) => (
+            <option key={p.id} value={p.id}>{p.event} — {p.name}</option>
+          ))}
+        </select>
+
+        {/* The fact that makes the benchmark credible, shown next to the name —
+            and labelled as a verified fact rather than an app claim. */}
+        <div className="flex items-start gap-2 rounded-xl border border-border bg-card/60 px-3 py-2.5">
+          <Info size={14} className="mt-0.5 shrink-0 text-primary" />
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">{elite.name}</span> · {elite.country} — {elite.credential}.
+          </p>
+        </div>
       </div>
 
       {!hasData && (
@@ -119,67 +188,71 @@ const Compare = () => {
         </div>
       )}
 
-      {paidSports.includes(compareSport) ? (
-      <>
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
-        className="p-6 rounded-2xl bg-card/40 border border-border">
-        <ResponsiveContainer width="100%" height={320}>
-          <RadarChart data={data}>
-            <PolarGrid stroke="hsl(var(--border))" />
-            <PolarAngleAxis dataKey="axis" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-            <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-            <Radar name="Elite" dataKey="elite" stroke="hsl(var(--energy))" fill="hsl(var(--energy))" fillOpacity={0.15} />
-            <Radar name="You" dataKey="you" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.4} />
-          </RadarChart>
-        </ResponsiveContainer>
-        <div className="flex items-center justify-center gap-4 text-xs mt-2">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-primary" /> You · {userVpr.overall_vpr} VPR</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-energy" /> {elite.name} · {elite.profile.overall_vpr} VPR</span>
-        </div>
-        <p className="mt-3 text-center text-[12px] leading-relaxed text-muted-foreground">Elite profiles are illustrative benchmarks (0–100 indices) — not actual measurements of the named athletes. Your VPR is calculated only from your logged metrics using the same 0–100 scale. Use the gap as a directional training prompt, not a diagnosis.</p>
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-        className="p-5 rounded-2xl bg-card/40 border border-border">
-        <h3 className="font-semibold mb-3">Biggest Gap → Action Plan</h3>
-        {!hasData ? (
-          <p className="text-sm text-muted-foreground">Add at least 3 performance logs to generate a personalised action plan.</p>
-        ) : (
-          <>
-            <div className="text-sm mb-1 text-muted-foreground">Your largest opportunity is in <span className="text-primary font-semibold">{biggestGap.axis}</span> ({biggestGap.gap > 0 ? `+${biggestGap.gap} pts` : "you lead"}).</div>
-            <p className="text-sm">{guidance[biggestGap.axis]}</p>
-          </>
-        )}
-
-        <div className="mt-4 space-y-1.5">
-          {gaps.map((g) => (
-            <div key={g.axis} className="flex items-center gap-3">
-              <span className="w-16 text-xs text-muted-foreground">{g.axis}</span>
-              <div className="flex-1 bg-muted/30 h-2 rounded-full overflow-hidden">
-                <motion.div initial={{ width: 0 }} whileInView={{ width: `${Math.max(0, Math.min(100, (data.find((d) => d.axis === g.axis)!.you / 100) * 100))}%` }} viewport={{ once: true }}
-                  className="h-full bg-primary" />
-              </div>
-              <span className="w-16 text-xs text-right">{g.gap > 0 ? `-${g.gap}` : `+${-g.gap}`}</span>
+      {isPaid ? (
+        <>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
+            className="p-6 rounded-2xl bg-card/40 border border-border">
+            <ResponsiveContainer width="100%" height={320}>
+              <RadarChart data={data}>
+                <PolarGrid stroke="hsl(var(--border))" />
+                <PolarAngleAxis dataKey="axis" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
+                <Radar name="Elite" dataKey="elite" stroke="hsl(var(--energy))" fill="hsl(var(--energy))" fillOpacity={0.15} />
+                <Radar name="You" dataKey="you" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.4} />
+              </RadarChart>
+            </ResponsiveContainer>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs mt-2">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-primary" /> You · {userVpr.overall_vpr} VPR</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-energy" /> {elite.name} ({elite.event}) · {elite.profile.overall_vpr} VPR</span>
             </div>
-          ))}
-        </div>
-      </motion.div>
-      </>
+            <p className="mt-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+              {elite.name} is a real benchmark athlete for the {elite.event} — {elite.credential}. The six indices are illustrative
+              (0–100) and are not measurements of them; your VPR is calculated only from your logged metrics on the same scale.
+              Use the gap as a directional training prompt, not a diagnosis.
+            </p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            className="p-5 rounded-2xl bg-card/40 border border-border">
+            <h3 className="font-semibold mb-3">Biggest Gap → Action Plan</h3>
+            {!hasData ? (
+              <p className="text-sm text-muted-foreground">Add at least 3 performance logs to generate a personalised action plan.</p>
+            ) : (
+              <>
+                <div className="text-sm mb-1 text-muted-foreground">Your largest opportunity is in <span className="text-primary font-semibold">{biggestGap.axis}</span> ({biggestGap.gap > 0 ? `+${biggestGap.gap} pts` : "you lead"}).</div>
+                <p className="text-sm">{guidance[biggestGap.axis]}</p>
+              </>
+            )}
+
+            <div className="mt-4 space-y-1.5">
+              {gaps.map((g) => (
+                <div key={g.axis} className="flex items-center gap-3">
+                  <span className="w-16 text-xs text-muted-foreground">{g.axis}</span>
+                  <div className="flex-1 bg-muted/30 h-2 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} whileInView={{ width: `${Math.max(0, Math.min(100, (data.find((d) => d.axis === g.axis)!.you / 100) * 100))}%` }} viewport={{ once: true }}
+                      className="h-full bg-primary" />
+                  </div>
+                  <span className="w-16 text-xs text-right">{g.gap > 0 ? `-${g.gap}` : `+${-g.gap}`}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </>
       ) : (
-      <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-        className="p-6 rounded-2xl border-2 border-primary/40 bg-card/40 text-center space-y-3">
-        <Lock size={24} className="mx-auto text-primary" />
-        <h3 className="font-display font-bold text-lg">Stack up against {elite.name}</h3>
-        <p className="text-sm text-muted-foreground">Your VPR radar overlaid on theirs, your biggest gap, and the action plan that closes it.</p>
-        <div className="text-3xl font-display font-bold">{compareCost} <span className="text-sm text-muted-foreground">credits · per comparison</span></div>
-        <button onClick={unlockComparison} disabled={paying || !hasData || !user}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow disabled:opacity-50">
-          <Trophy size={16} /> {paying ? "Unlocking…" : `Compare for ${compareCost} credits`}
-        </button>
-        {!hasData && <p className="text-xs text-muted-foreground">Log at least one workout, skill or test first — there is no VPR to compare yet.</p>}
-        {payError && <p className="text-xs text-destructive">{payError}</p>}
-        <div className="text-[12px] text-muted-foreground">Your balance: {profile?.credits ?? 0} credits</div>
-      </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          className="p-6 rounded-2xl border-2 border-primary/40 bg-card/40 text-center space-y-3">
+          <Lock size={24} className="mx-auto text-primary" />
+          <h3 className="font-display font-bold text-lg">Stack up against {elite.name}</h3>
+          <p className="text-sm text-muted-foreground">Your VPR radar overlaid on {elite.event}, your biggest gap, and the action plan that closes it.</p>
+          <div className="text-3xl font-display font-bold">{compareCost} <span className="text-sm text-muted-foreground">credits · per comparison</span></div>
+          <button onClick={unlockComparison} disabled={paying || !hasData || !user}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow disabled:opacity-50">
+            <Trophy size={16} /> {paying ? "Unlocking…" : `Compare for ${compareCost} credits`}
+          </button>
+          {!hasData && <p className="text-xs text-muted-foreground">Log at least one workout, skill or test first — there is no VPR to compare yet.</p>}
+          {payError && <p className="text-xs text-destructive">{payError}</p>}
+          <div className="text-[12px] text-muted-foreground">Your balance: {profile?.credits ?? 0} credits</div>
+        </motion.div>
       )}
     </div>
   );

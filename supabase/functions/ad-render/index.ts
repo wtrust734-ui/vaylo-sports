@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authenticate, readJsonBody, json } from "../_shared/guard.ts";
+import type { RenderPlanInput } from "../_shared/renderPlan.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,14 @@ const corsHeaders = {
 const RENDER_WORKER_URL = Deno.env.get("RENDER_WORKER_URL") ?? "";
 const RENDER_TOKEN = Deno.env.get("RENDER_TOKEN") ?? "";
 
+interface RenderRequestBody {
+  action?: string;
+  jobId?: string;
+  campaignId?: string | null;
+  conceptId?: string | null;
+  renderRequest?: RenderPlanInput;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -17,7 +26,7 @@ Deno.serve(async (req) => {
     const userId = await authenticate(req);
     if (!userId) return json({ error: "Unauthorized" }, 401);
 
-    const body = await readJsonBody(req);
+    const body = (await readJsonBody(req)) as RenderRequestBody | null;
     if (!body) return json({ error: "Invalid request body" }, 400);
 
     const action = typeof body.action === "string" ? body.action : "render";
@@ -46,7 +55,7 @@ Deno.serve(async (req) => {
             headers: { "x-render-token": RENDER_TOKEN },
           });
           if (res.ok) {
-            const wjob = await res.json();
+            const wjob = (await res.json()) as any;
             const updates: any = {
               status: wjob.state,
               progress: wjob.progress ?? 0,
@@ -123,7 +132,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify(workerReq),
       });
 
-      const wbody = await res.json().catch(() => ({}));
+      const wbody = (await res.json().catch(() => ({}))) as any;
       if (!res.ok && res.status !== 202 && res.status !== 200) {
         await admin
           .from("ad_render_jobs")

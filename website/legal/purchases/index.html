@@ -169,6 +169,8 @@
         <tr><td>Streak shield</td><td>3</td></tr>
         <tr><td>Vaylo Sports Coach message</td><td>8</td></tr>
         <tr><td>Nutrition plan (per week)</td><td>8</td></tr>
+        <tr><td>AI Nutrition Review</td><td>8</td></tr>
+        <tr><td>AI Injury Plan (per plan)</td><td>6</td></tr>
         <tr><td>Development trajectory</td><td>8</td></tr>
         <tr><td>Weekly coach review</td><td>10</td></tr>
         <tr><td>Athlete archetype</td><td>10</td></tr>
@@ -190,15 +192,36 @@
     </table></div>
     <p>
       The items that cost the most are the ones that run a model: a coach
-      message, a weekly review, a training week, a calorie scan and a tactical
-      breakdown all call an external AI service, and a video form analysis calls
-      one that returns the most data. We price those to cover what the service
-      costs us and to keep the app running, which is why they are not the same
-      number as the cheaper in-app features above.
+      message, a weekly review, a training week, a nutrition plan week, an
+      injury plan, a calorie scan, a food review and a tactical breakdown all
+      call an external AI service, and a video form analysis calls one that
+      returns the most data. We price those to cover what the service costs us
+      and to keep the app running, which is why they are not the same number as
+      the cheaper in-app features above.
     </p>
   <p>
     The items labelled <em>unlock</em> are one-off permanent unlocks: you pay once and
     keep access to that feature. Everything else is charged each time you use it.
+  </p>
+  <p>
+    <strong>Two entries above need a word of explanation,</strong> because a price
+    list that quietly includes something you cannot buy is its own kind of wrong.
+    The photo form-analysis price is kept for older builds that can still send a
+    still image; the current form-analysis screen is video-only and charges 45, so
+    that is the price a new analysis actually costs. The Learning Hub unlock is
+    published at its configured price, but the hub is open to every account today,
+    so nobody is charged it. If either changes, the table and the app change
+    together.
+  </p>
+  <p>
+    <strong>An unlock buys the screen, not unlimited use of what runs on it.</strong>
+    Where a feature inside an unlocked tab calls an external AI service, that call
+    is charged per use like every other one. The clearest example is Injury
+    Management: the 25-credit unlock opens the tab (your load-versus-recovery
+    figures, your injury log and the general scaffold, all of which are calculated
+    on your device), and each personalised plan written inside it is charged at 6
+    credits, because each one is a paid call to the model. We would rather charge
+    for the calls we make than treat one payment as covering a year of them.
   </p>
   <p>
     <strong>Money prices are shown at checkout and nowhere else.</strong> We do not

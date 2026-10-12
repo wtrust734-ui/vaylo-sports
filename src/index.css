@@ -226,6 +226,20 @@
        one everywhere in the same change: a gutter honoured by some pages and
        not others is the drift the token was for. */
     --vaylo-screen-top: 12px;
+
+    /* The desktop sidebar's width, in one place.
+
+       It was written as a literal twice and the two disagreed: the aside was
+       `w-[272px]` while `main` reserved `lg:pl-60` — 240px. The sidebar is
+       translucent (`bg-card/60 backdrop-blur-2xl`), so its right-hand 32px sat
+       over the first 32px of every page's content on an iPad in landscape and
+       on any window at or above the `lg:` breakpoint: the left edge of the
+       content column ghosted through the panel. It only ever showed on wide
+       screens, which is why a phone-sized review pass never saw it.
+
+       Both sides read this token now, so the width cannot drift again. */
+    --vaylo-sidebar-w: 272px;
+
     --vaylo-title-gap: 24px;   /* section header → content below it      */
     --vaylo-card-pad: 16px;    /* card interior                          */
     --vaylo-card-gap: 16px;    /* between stacked cards                  */

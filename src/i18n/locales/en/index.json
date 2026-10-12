@@ -144,6 +144,23 @@
       "arcadeDesc": "Reaction and precision games"
     }
   },
+  "form": {
+    "title": "Form",
+    "subtitle": "Technique drills, cues and video analysis.",
+    "drillsTitle": "Your drills",
+    "free": "Free",
+    "tunedFor": "Tuned for {{sport}}",
+    "allSports": "Showing every sport — add a sport to your profile to tune these.",
+    "foundations": "Foundations — every sport",
+    "yourSport": "For your sport",
+    "why": "Why it helps",
+    "how": "How to do it",
+    "cues": "Cues",
+    "analysisBadge": "AI Form Analysis",
+    "analysisTitle": "Analyse a movement video",
+    "analysisBody": "Upload a running, sprint or general-movement clip and get a full AI coaching report — {{cost}} credits per analysis, no unlock needed.",
+    "analysisCta": "Analyse a video · {{cost}} credits"
+  },
   "dashboard": {
     "goodMorning": "Good morning",
     "goodAfternoon": "Good afternoon",

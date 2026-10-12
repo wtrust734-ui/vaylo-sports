@@ -144,6 +144,23 @@
       "arcadeDesc": "Reactie- en precisiespellen"
     }
   },
+  "form": {
+    "title": "Techniek",
+    "subtitle": "Techniekdrills, cues en video-analyse.",
+    "drillsTitle": "Jouw drills",
+    "free": "Gratis",
+    "tunedFor": "Afgestemd op {{sport}}",
+    "allSports": "Alle sporten worden getoond — voeg een sport toe aan je profiel om dit af te stemmen.",
+    "foundations": "Basis — elke sport",
+    "yourSport": "Voor jouw sport",
+    "why": "Waarom het helpt",
+    "how": "Hoe je het doet",
+    "cues": "Cues",
+    "analysisBadge": "AI-techniekanalyse",
+    "analysisTitle": "Analyseer een bewegingsvideo",
+    "analysisBody": "Upload een clip van hardlopen, sprinten of algemene beweging en krijg een volledig AI-coachrapport — {{cost}} credits per analyse, geen unlock nodig.",
+    "analysisCta": "Analyseer een video · {{cost}} credits"
+  },
   "dashboard": {
     "goodMorning": "Goedemorgen",
     "goodAfternoon": "Goedemiddag",

@@ -322,7 +322,7 @@ const Market = () => {
           <div className="mb-4 flex items-start justify-between">
             <div>
               <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="font-display text-3xl font-bold text-gradient-electric">Market</motion.h1>
+                className="font-display text-3xl font-bold">Market</motion.h1>
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
                 className="mt-1 text-sm text-muted-foreground">{/* The shop's own blurb must not advertise a section the flag hides:
                     promising "coaching" on a screen with no Coaches tab is the
@@ -424,23 +424,19 @@ const Market = () => {
         )}
       </AnimatePresence>
 
-      {/* Live promo */}
+      {/* Live promo — one quiet line. This used to be a full-width banner with a
+          three-colour gradient behind it, stacked directly above the starter
+          offer and the pick-for-you banner: three promos before a single product.
+          Nothing about the offer changed; it just stopped shouting over the
+          thing it is selling. */}
       {isAdult && doubleOffer && section === "packs" && (
-        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-          className="mx-5 mb-4 relative overflow-hidden rounded-2xl border border-energy/30">
-          <div className="absolute inset-0 bg-gradient-to-r from-energy/20 via-electric-purple/15 to-primary/20" />
-          <div className="relative flex items-center gap-3 p-4">
-            <div className="rounded-xl bg-energy/20 p-2"><Flame size={20} className="text-energy" /></div>
-            <div className="flex-1">
-              <p className="font-display text-sm font-bold">{doubleOffer.title}</p>
-              <p className="text-[12px] text-muted-foreground">{doubleOffer.description}</p>
-            </div>
-            <div className="text-right">
-              <Clock size={14} className="mb-0.5 inline text-energy" />
-              <p className="text-[12px] font-bold text-energy">LIVE</p>
-            </div>
-          </div>
-        </motion.div>
+        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-card px-4 py-3">
+          <Flame size={16} className="shrink-0 text-energy" />
+          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">{doubleOffer.title}</span> — {doubleOffer.description}
+          </p>
+          <span className="shrink-0 text-[12px] font-bold text-energy">LIVE</span>
+        </div>
       )}
 
       {/* Section nav */}
@@ -460,8 +456,8 @@ const Market = () => {
               credits: (packs.find((p) => p.id === starterOffer.pack_id)?.credits ?? 0) + (packs.find((p) => p.id === starterOffer.pack_id)?.bonus ?? 0),
               bonus: starterOffer.bonus_flat,
             })}
-            className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-electric-purple via-primary to-electric-purple p-[1px] text-start">
-            <div className="rounded-[22px] bg-card p-5">
+            className="w-full overflow-hidden rounded-2xl border border-border bg-card text-start transition-colors hover:border-primary/40">
+            <div className="p-5">
               <div className="mb-2 flex items-center justify-between">
                 <span className="rounded-full bg-electric-purple/15 px-2 py-1 text-[12px] font-bold text-electric-purple">
                   <Gift size={10} className="mr-1 inline" /> ONE-TIME OFFER
@@ -517,7 +513,15 @@ const Market = () => {
                   everyone — the economy should never be a mystery. */}
               <CreditPacksSection packs={enhancedPacks} currency={region.currency} loading={loading} onAdd={addPack} />
               {!isAdult && <div className="px-5 pt-4"><GuardianNote /></div>}
-              <div className="px-5 pt-3"><CreditCostsList /></div>
+              {/* The price list is reference material, not a product. Collapsed
+                  by default, the packs tab opens on packs instead of on a wall
+                  of numbers an athlete did not come for. */}
+              <details className="px-5 pt-4">
+                <summary className="cursor-pointer text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
+                  See the full credit price list
+                </summary>
+                <div className="pt-3"><CreditCostsList /></div>
+              </details>
             </>
           )}
           {section === "unlocks" && <UnlocksSection />}

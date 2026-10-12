@@ -13,6 +13,9 @@ import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
 import { recordTermsAcceptance } from "@/lib/consent";
+import { isAndroid } from "@/lib/platform";
+import { armHealthConnectOffer } from "@/lib/health/connectOffer";
+import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
 import logo from "@/assets/logo.jpg";
 
 type Mode = "auth" | "forgot" | "updatePassword";
@@ -82,6 +85,14 @@ const Auth = () => {
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const { toast } = useToast();
+  // Health Connect can only be connected once a session exists, and this screen
+  // is the one place in the app where there deliberately is none — a signed-in
+  // visitor is bounced away above. So the offer here is honest about being a
+  // promise: tapping it opens a pop-up that names every read, and confirming
+  // there arms the connection for onboarding to honour a moment later, rather
+  // than showing a button that cannot work yet.
+  const offerHealthConnect = isAndroid() && isFlagOn("wearableSync");
+  const [showHealthConnect, setShowHealthConnect] = useState(false);
   const { session, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   // What this Supabase project actually offers (OAuth, passkeys, email);
@@ -912,6 +923,25 @@ const Auth = () => {
                 </div>
               )}
 
+              {!isLogin && offerHealthConnect && (
+                <div className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+                  <Smartphone size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-[12px] leading-relaxed text-muted-foreground">
+                      Already wear a watch? Health Connect on your phone has the sessions it
+                      recorded. You can skip logging them by hand.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowHealthConnect(true)}
+                      className="w-full rounded-lg border border-primary/40 px-3 py-2 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10"
+                    >
+                      Connect my Health Connect
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <motion.button
                 type="submit"
                 disabled={loading}
@@ -941,6 +971,22 @@ const Auth = () => {
         )}
         </div>
       </motion.div>
+
+      {/* The pop-up itself. Opened from the sign-up card above; `onArm` puts it
+          in preview mode, because this screen has no session to connect with. */}
+      {!isLogin && offerHealthConnect && (
+        <HealthConnectPrompt
+          open={showHealthConnect}
+          onClose={() => setShowHealthConnect(false)}
+          onArm={() => {
+            armHealthConnectOffer();
+            toast({
+              title: "Health Connect saved",
+              description: "We'll ask to connect it the moment your account is ready.",
+            });
+          }}
+        />
+      )}
     </div>
   );
 };

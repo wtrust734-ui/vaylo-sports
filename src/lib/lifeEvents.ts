@@ -184,7 +184,13 @@ export const LIFE_EVENT_TYPES: readonly TypeDefinition[] = [
     label: "Holiday",
     hint: "Away, resting or just not training",
     icon: "Plane",
-    defaultAllowTraining: "optional",
+    // A holiday is a planned break the plan is rebuilt around: the week before
+    // is preloaded, nothing is programmed inside it, and the return climbs back
+    // through `returnProgression`. All three only run when the availability
+    // layer cancels what the break covers, and that happens for "no" alone —
+    // as "optional" nothing changed at all and the plan still asked for every
+    // session in the week the athlete had just said they were away for.
+    defaultAllowTraining: "no",
     defaultActivity: "light",
   },
   {

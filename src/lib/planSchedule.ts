@@ -51,7 +51,15 @@ export interface ReturnWeekMeta {
   weekBack: number;
   volumePct: number;
   intensityPct: number;
-  focus: "rebuild" | "restore" | "resume" | "compete";
+  /**
+   * What the week is for. The first four are the return progression; `preload`
+   * is the loading week BEFORE a planned break and `holiday` the eased week
+   * inside one, because a break reshapes the weeks around it as well as the
+   * ones after it. Kept as an explicit union rather than imported from
+   * `adaptivePlan` so a new kind of week is a compile error here rather than a
+   * label the screens silently cannot render.
+   */
+  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
   sessions: number;
   dropped: number;
   /** Titles of what was dropped, for the detail view rather than the summary. */

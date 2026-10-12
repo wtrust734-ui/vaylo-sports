@@ -154,6 +154,30 @@ export async function showDeviceNotification(
 }
 
 /**
+ * Turns device notifications on, from a settings screen.
+ *
+ * showDeviceNotification already asks lazily, at the moment a trigger has
+ * something to say. That is the right default, but it left the settings screen
+ * unable to answer the one question an athlete asks there — "how do I turn
+ * these on?" — because the permission prompt only appeared later, in a flow the
+ * athlete never connected to the switch. This is the explicit version: request
+ * the permission and create the channel now, so the answer is a button rather
+ * than a wait. Returns "shown" when the permission and channel are in place.
+ */
+export async function enableDeviceNotifications(): Promise<DeviceNotifyOutcome> {
+  if (!deviceNotificationsSupported()) return "unsupported";
+  const p = await plugin();
+  if (!p) return "unsupported";
+  try {
+    if (!(await ensurePermission(p))) return "denied";
+    await ensureChannel(p);
+    return "shown";
+  } catch {
+    return "failed";
+  }
+}
+
+/**
  * Routes a tap on a device notification back into the app.
  *
  * Only alongside the app's own router, so the destination goes through

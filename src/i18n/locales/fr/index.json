@@ -144,6 +144,23 @@
       "arcadeDesc": "Jeux de réaction et de précision"
     }
   },
+  "form": {
+    "title": "Technique",
+    "subtitle": "Exercices techniques, consignes et analyse vidéo.",
+    "drillsTitle": "Vos exercices",
+    "free": "Gratuit",
+    "tunedFor": "Adapté à {{sport}}",
+    "allSports": "Tous les sports sont affichés — ajoutez un sport à votre profil pour personnaliser.",
+    "foundations": "Fondamentaux — tous les sports",
+    "yourSport": "Pour votre sport",
+    "why": "Pourquoi c'est utile",
+    "how": "Comment le faire",
+    "cues": "Consignes",
+    "analysisBadge": "Analyse technique IA",
+    "analysisTitle": "Analysez une vidéo de mouvement",
+    "analysisBody": "Importez un clip de course, de sprint ou de mouvement général et recevez un rapport complet d'entraîneur IA — {{cost}} crédits par analyse, aucun déblocage requis.",
+    "analysisCta": "Analyser une vidéo · {{cost}} crédits"
+  },
   "dashboard": {
     "goodMorning": "Bonjour",
     "goodAfternoon": "Bon après-midi",

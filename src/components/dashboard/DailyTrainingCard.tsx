@@ -1,4 +1,4 @@
-interface PlanWeek { week: number; sessions?: DaySession[]; isHoliday?: boolean; [key: string]: unknown }
+interface PlanWeek { week: number; sessions?: DaySession[]; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,7 +64,7 @@ const DailyTrainingCard = () => {
   const [readiness, setReadiness] = useState<number | null>(null);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
   const [upcomingEvent, setUpcomingEvent] = useState<EventRow | null>(null);
-  const [isHolidayWeek, setIsHolidayWeek] = useState(false);
+
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-30px" });
   const today = localDateKey();
@@ -96,9 +96,7 @@ const DailyTrainingCard = () => {
         setActivePlan(plan);
         if (plan.plan_data && Array.isArray(plan.plan_data)) {
           const weekData = (plan.plan_data as PlanWeek[]).find((w) => w.week === plan.week_current);
-          if (weekData?.isHoliday) {
-            setIsHolidayWeek(true);
-          } else if (weekData?.sessions) {
+          if (weekData?.sessions) {
             const dayOfWeek = new Date().getDay() || 7;
             if (hasAdjusted) {
               setTodaySessions([hasAdjusted as unknown as DaySession]);
@@ -119,11 +117,18 @@ const DailyTrainingCard = () => {
     });
   }, [user]);
 
-  const session = todaySessions[0];
+  // A break that stops training takes today's session off the card entirely.
+  // The sessions inside it are not deleted — they are marked unavailable — but
+  // an athlete who recorded a holiday must not be handed work by the dashboard.
+  // This is the same rule the plan screen applies through the availability
+  // statuses; the card reads it from the break itself because it never loads
+  // `plan_events`.
+  const breakStopsTraining = activeBreak?.allow_training === "no";
+  const session = breakStopsTraining ? undefined : todaySessions[0];
   const isRestDay = session?.isRest;
   const isRecoveryDay = session?.isRecovery;
   const isTrainingDay = session && !isRestDay && !isRecoveryDay;
-  const noSession = !session && activePlan && !isHolidayWeek;
+  const noSession = !session && !!activePlan;
   const totalDayMinutes = isTrainingDay ? (session.duration_minutes + 20) : 0;
   const zoneDot = readiness !== null ? getZoneDot(readiness) : null;
   // Whether the day-summary grid has anything real to show. A brand-new athlete
@@ -203,28 +208,21 @@ const DailyTrainingCard = () => {
           </div>
         )}
 
-        {isHolidayWeek && activePlan && (
-          <>
-            <h3 className="font-display font-bold text-lg">Holiday Week</h3>
-            <p className="text-xs text-muted-foreground mb-3">This week is marked as a holiday. Sessions have been redistributed.</p>
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] backdrop-blur p-3 mb-3 space-y-1">
-              <p className="text-[12px] font-semibold">Recommended today:</p>
-              <p className="text-[12px] text-muted-foreground">• Light walk or swim (15-20 min)</p>
-              <p className="text-[12px] text-muted-foreground">• Stretching & foam rolling</p>
-              <p className="text-[12px] text-muted-foreground">• Hydrate well — {(waterGoal/1000).toFixed(1)}L+</p>
-              <p className="text-[12px] text-muted-foreground">• Sleep 8-9 hours</p>
-            </div>
-            <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] text-foreground font-semibold py-3 text-sm backdrop-blur">
-              <Moon size={16} /> Log Recovery
-            </motion.button>
-          </>
-        )}
-
         {(isRestDay || noSession) && (
           <>
-            <h3 className="font-display font-bold text-lg">Rest & Recovery Day</h3>
-            <p className="text-xs text-muted-foreground mb-3">No training scheduled. Focus on recovery.</p>
+            <h3 className="font-display font-bold text-lg">
+              {breakStopsTraining ? "On a break" : "Rest & Recovery Day"}
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              {breakStopsTraining
+                ? "Nothing is programmed while you are away. Your sessions are marked unavailable rather than moved into the days after it, and the plan builds back gradually when you return."
+                : "No training scheduled. Focus on recovery."}
+            </p>
+            {/* A break that stops training gets no activity list. Recording one
+                is the athlete saying the app should stop asking, so the one
+                thing this card must not do is hand them a workout or a
+                stretching routine. The list stays for an ordinary rest day. */}
+            {!breakStopsTraining && (
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
               <p className="text-[12px] font-semibold">What to do today:</p>
               {session?.exercises ? session.exercises.map((ex, i) => (
@@ -238,6 +236,7 @@ const DailyTrainingCard = () => {
                 </>
               )}
             </div>
+            )}
             <motion.button onClick={() => navigate("/recovery")} whileTap={{ scale: 0.98 }}
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary/15 bg-primary/10 text-primary font-semibold py-3 text-sm">
               <Moon size={16} /> Log Recovery

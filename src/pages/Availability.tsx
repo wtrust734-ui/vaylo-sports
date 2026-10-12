@@ -17,7 +17,7 @@ import { flattenPlan, type DatedSession, type TrainingPlanLike } from "@/lib/pla
 import {
   ACTIVITY_LEVELS, ALLOW_TRAINING_OPTIONS, LIFE_EVENT_TYPES, YOUTH_BREAK_NOTE,
   asPlannedSession, assessAvailability, availabilityKind, eventOnDate, formatPeriod,
-  sortEvents, spanDays, type ActivityLevel, type AllowTraining, type LifeEvent, type LifeEventType,
+  lifeEventType, sortEvents, spanDays, type ActivityLevel, type AllowTraining, type LifeEvent, type LifeEventType,
 } from "@/lib/lifeEvents";
 
 /**
@@ -73,6 +73,16 @@ const KIND_STYLE = {
   training: "bg-primary/15 border-primary/35",
 } as const;
 
+/**
+ * The form's opening state: the catalogue's own defaults for a holiday, so the
+ * screen can never drift from the type it has selected. A holiday opens on "no
+ * training" on purpose — saving that cancels the sessions it covers and hands
+ * the plan to the adaptive rebuild (harder the week before, nothing programmed
+ * during it, a graded return after), which is what an athlete means by marking
+ * a holiday.
+ */
+const HOLIDAY_DEFAULTS = lifeEventType("holiday");
+
 const Availability = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -90,8 +100,8 @@ const Availability = () => {
     start_date: localDateKey(today),
     end_date: localDateKey(addDays(today, 6)),
     event_type: "holiday",
-    activity_level: "light",
-    allow_training: "optional",
+    activity_level: HOLIDAY_DEFAULTS.defaultActivity,
+    allow_training: HOLIDAY_DEFAULTS.defaultAllowTraining,
     note: "",
   }));
 
@@ -173,8 +183,8 @@ const Availability = () => {
       start_date: localDateKey(new Date()),
       end_date: localDateKey(addDays(new Date(), 6)),
       event_type: "holiday",
-      activity_level: "light",
-      allow_training: "optional",
+      activity_level: HOLIDAY_DEFAULTS.defaultActivity,
+      allow_training: HOLIDAY_DEFAULTS.defaultAllowTraining,
       note: "",
     });
   };
@@ -474,7 +484,7 @@ const Availability = () => {
               </p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                 {form.allow_training === "no"
-                  ? "Sessions in these dates will be marked unavailable and left out of your completion percentage. They are not moved to later days."
+                  ? `Sessions in these dates will be marked unavailable and left out of your completion percentage. They are not moved to later days.${definition.id === "holiday" || definition.id === "travel" ? " The week before is loaded a little harder, so nothing is programmed while you are away." : ""}`
                   : form.allow_training === "optional"
                     ? "Your plan stays as it is. Sessions in these dates are marked optional and won't be counted against you if you skip them."
                     : "Your plan is untouched — these dates are just recorded so the app knows where you are."}

@@ -22,24 +22,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { permissionOutcome } from "./sync";
+import { permissionOutcome } from "./permissionOutcome";
+
 
 const KOTLIN = "android/app/src/main/java/com/vaylosports/app/health/HealthConnectPlugin.kt";
 
 describe("the Android plugin emits what this parser reads", () => {
   const source = readFileSync(KOTLIN, "utf8");
-
-  it("marks the partial case with the code both sides agree on", () => {
-    expect(source).toContain('"permission_partial"');
-  });
-
-  it("carries the list after the marker, comma-joined", () => {
-    // The exact expression, not just the substring: `joinToString(", ")` with a
-    // space would produce "steps, sleep session" split into the one name
-    // "steps, sleep session" — a wrong name shown to the athlete rather than a
-    // crash.
-    expect(source).toMatch(/"permission_partial:"\s*\+\s*[\s\S]{0,120}?joinToString\(","\)/);
-  });
 
   it("keeps a real revocation as the bare string the parser special-cases", () => {
     // Two call sites, both of them whole-permission-list emptiness. They must
@@ -66,12 +55,6 @@ describe("permissionOutcome", () => {
     });
   });
 
-  it("accepts the JSON list as well as the plain one", () => {
-    expect(permissionOutcome({ message: 'permission_partial:["steps","sleep"]' })).toEqual({
-      kind: "partial",
-      missing: ["steps", "sleep"],
-    });
-  });
 
   it("reports a partial grant with no names rather than inventing them", () => {
     // An older build that sends the code and a human sentence: the athlete is

@@ -144,6 +144,23 @@
       "arcadeDesc": "Reaktions- und Präzisionsspiele"
     }
   },
+  "form": {
+    "title": "Technik",
+    "subtitle": "Technikübungen, Cue-Signale und Videoanalyse.",
+    "drillsTitle": "Deine Übungen",
+    "free": "Kostenlos",
+    "tunedFor": "Abgestimmt auf {{sport}}",
+    "allSports": "Alle Sportarten werden angezeigt — trage deine Sportart im Profil ein, um die Auswahl anzupassen.",
+    "foundations": "Grundlagen — jede Sportart",
+    "yourSport": "Für deine Sportart",
+    "why": "Warum es hilft",
+    "how": "So geht's",
+    "cues": "Cue-Signale",
+    "analysisBadge": "KI-Technikanalyse",
+    "analysisTitle": "Analysiere ein Bewegungsvideo",
+    "analysisBody": "Lade einen Clip von Lauf, Sprint oder allgemeiner Bewegung hoch und erhalte einen vollständigen KI-Coaching-Bericht — {{cost}} Credits pro Analyse, kein Unlock nötig.",
+    "analysisCta": "Video analysieren · {{cost}} Credits"
+  },
   "dashboard": {
     "goodMorning": "Guten Morgen",
     "goodAfternoon": "Guten Tag",

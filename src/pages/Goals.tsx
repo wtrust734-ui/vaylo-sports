@@ -432,13 +432,21 @@ const Goals = () => {
       {/* AI Coach — 3 credits per review */}
       <Reveal delay={0.2}>
         <Card className="p-4 border-primary/30 bg-gradient-to-br from-primary/10 to-card">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles size={18} className="text-primary" />
+          {/* Wraps rather than shrinks: the title, the credit badge and the
+              "Run Review · 10 cr" button together need ~400px, and the card's
+              content box on a 320px phone is 256px. As one non-wrapping row the
+              button was pushed past the card's edge and the label cut in half
+              (reported by ui-audit as `button.inline-flex.items-center` clipped
+              on /goals). Both groups wrap, so the badge and then the button drop
+              to their own lines on a narrow screen and nothing moves on a wide
+              one, where the row still fits. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+              <Sparkles size={18} className="shrink-0 text-primary" />
               <h3 className="font-semibold">Weekly Coach Review</h3>
-              <span className="inline-flex items-center gap-1 text-[12px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} /> {goalCost} credits</span>
+              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-energy bg-energy/10 border border-energy/20 rounded-full px-2 py-0.5"><Coins size={11} /> {goalCost} credits</span>
             </div>
-            <Button size="sm" onClick={runAiReview} disabled={aiLoading}>
+            <Button size="sm" className="shrink-0" onClick={runAiReview} disabled={aiLoading}>
               {aiLoading ? "Analyzing…" : `Run Review · ${goalCost} cr`}
             </Button>
           </div>

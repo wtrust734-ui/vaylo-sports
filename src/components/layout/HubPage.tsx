@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { ChevronRight, Lock, type LucideIcon } from "lucide-react";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { visibleByEntitlement } from "@/lib/personalization/nav";
 
 export interface HubLink {
   icon: LucideIcon;
@@ -11,10 +13,10 @@ export interface HubLink {
   path: string;
   /**
    * True when the destination is a purchased unlock the athlete does not own
-   * yet (Mental Gym, Injury Management). The tile still navigates — the page
-   * itself carries the paywall and the purchase call — but it wears a lock so
-   * "bought" and "open" visibly match. Icon only, so no new strings are
-   * needed in any locale.
+   * yet (Mental Gym, Injury Management). A tile for a route in ROUTE_UNLOCKS is
+   * DROPPED from the hub until the unlock is owned — see HubGroup — so this flag
+   * is now only a belt-and-braces badge for a paid tile that no map knows about
+   * yet. Icon only, so no new strings are needed in any locale.
    */
   locked?: boolean;
 }
@@ -75,7 +77,15 @@ export const HubTile = ({ icon: Icon, label, description, path, locked }: HubLin
   );
 };
 
-export const HubGroup = ({ title, links }: { title: string; links: HubLink[] }) => (
+export const HubGroup = ({ title, links }: { title: string; links: HubLink[] }) => {
+  // Hiding, not badging. A hub is a menu, and a menu row whose only outcome is
+  // a paywall is an advert. The Market sells these; the hub lists what the
+  // athlete can actually open. `hasFeature` is true for a purchased unlock and
+  // for Unlimited, and false while entitlements load, so nothing flashes in.
+  const { hasFeature } = useSubscription();
+  const visible = visibleByEntitlement(links, hasFeature);
+  if (visible.length === 0) return null;
+  return (
   /* `cv-auto` + a size hint: every hub is 3–5 groups of static tiles, and only
      the first group is on screen at rest. The browser then skips style, layout
      and paint for the groups the athlete has not scrolled to yet, which is most
@@ -88,14 +98,15 @@ export const HubGroup = ({ title, links }: { title: string; links: HubLink[] }) 
   <section
     className="px-5 pb-6 cv-auto"
     aria-label={title}
-    style={{ "--cv-size": `${links.length * 74 + 40}px` } as CSSProperties}
+    style={{ "--cv-size": `${visible.length * 74 + 40}px` } as CSSProperties}
   >
     <h2 className="mb-2.5 px-1 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">{title}</h2>
     <div className="space-y-2">
-      {links.map((l) => <HubTile key={l.path} {...l} />)}
+      {visible.map((l) => <HubTile key={l.path} {...l} />)}
     </div>
   </section>
-);
+  );
+};
 
 export const HubPage = ({ icon, title, subtitle, primary, groups }: {
   icon: LucideIcon;

@@ -1,7 +1,7 @@
 import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
-import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info } from "lucide-react";
+import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info, MessageSquare } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,7 @@ import type { MetricRow } from "@/lib/performance";
 import { EQUIPMENT, describeEquipment, normaliseEquipment, type EquipmentId } from "@/config/equipment";
 import { DISCLAIMERS } from "@/config/disclaimers";
 import { useAdaptiveSchedule } from "@/hooks/useAdaptiveSchedule";
-import { sessionStatusMeta } from "@/lib/lifeEvents";
+import { lifeEventType, sessionStatusMeta, type LifeEvent } from "@/lib/lifeEvents";
 import { useActiveBreak } from "@/hooks/useActiveBreak";
 import ActiveBreakBanner from "@/components/ActiveBreakBanner";
 import { breakBriefForGenerator, rebuildPlanForBreak, undoPlanRebuild } from "@/lib/adaptivePlanning";
@@ -25,7 +25,10 @@ import type { AdjustmentDecision } from "@/lib/recoveryAdjust";
 import { explainDecision, explainWeek } from "@/lib/explanations";
 import { WhyBody } from "@/components/insights/WhyDisclosure";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
-import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
+import { sessionDate, weekOneMonday, type ReturnSessionMeta, type ReturnWeekMeta } from "@/lib/planSchedule";
+import { useLifeEvents } from "@/hooks/useLifeEvents";
+import PlanEditChat from "@/components/training/PlanEditChat";
+import { editCost, type PlanEditScope, type PlanWeekLike } from "@/lib/planEdit";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -299,6 +302,10 @@ const Training = () => {
   const [editingSession, setEditingSession] = useState<{ week: number; day: number } | null>(null);
   const [editSessionTitle, setEditSessionTitle] = useState("");
   const [editSessionDuration, setEditSessionDuration] = useState("");
+  // The plan coach. Availability is read here too, because a holiday marked
+  // inside the plan is a real break the same way one added on /availability is.
+  const [chatOpen, setChatOpen] = useState(false);
+  const lifeEvents = useLifeEvents();
   const toolsRef = useRef(null);
   const toolsInView = useInView(toolsRef, { once: true, margin: "-50px" });
 
@@ -554,12 +561,32 @@ const Training = () => {
       }
       if (!planData) planData = generatePlanData(sport, goal, level, duration, age, quiz);
 
-      const { data: inserted, error: insertError } = await supabase.from("training_plans").insert({
+      // By the time this runs the athlete has already been charged, so a failed
+      // insert is a charge with nothing behind it — the failure they reported as
+      // "it took my credits and did not give me a plan". The row is in memory and
+      // the usual cause is a transient write failure, so it is attempted twice
+      // before anything is given up on. See planDeliveryWiring.test.ts.
+      const planRow = {
         user_id: user.id, title: title.trim() || `${goals.join(" + ")} ${sport} Plan`, sport, goal, level, duration_weeks: duration,
         description: `${duration}-week ${goals.join(" + ").toLowerCase()} plan for ${sport.toLowerCase()} (age ${age}) · ${planDaysPerWeek}d/wk · ${planHoursPerWeek}h/wk · ${planIntensityPref} intensity${planTargetEvent ? ` · targeting ${planTargetEvent}` : ""}`,
         plan_data: planData as unknown as Json,
-      }).select("id").single();
-      if (insertError) throw insertError;
+      };
+      let insertedResult = await supabase.from("training_plans").insert(planRow).select("id").single();
+      if (insertedResult.error) {
+        insertedResult = await supabase.from("training_plans").insert(planRow).select("id").single();
+      }
+      if (insertedResult.error) {
+        // Said plainly, and the one instruction that matters is first: creating
+        // the plan again would charge a second time, and the client cannot
+        // refund a charge itself (credits_grant is service-role only).
+        toast({
+          title: "Your plan was written but not saved",
+          description: "You were charged for this plan and it is not in your account yet. Do not create it again — a second attempt would charge you a second time. Contact support and we will put it right.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const inserted = insertedResult.data as { id: string };
 
       // A plan created days after a break *is* a return from that break, so the
       // same rebuild that runs when a break is added runs here too: the athlete
@@ -1101,58 +1128,135 @@ const Training = () => {
     toast({ title: "Session updated! ✏️" });
   };
 
+  /**
+   * The calendar days a plan week covers.
+   *
+   * Taken from the same projection the calendar, the availability layer and the
+   * rebuild all read (`@/lib/planSchedule`) rather than re-derived here: a
+   * holiday that cancels the wrong week is the exact failure that projection
+   * exists to prevent.
+   */
+  const planWeekRange = (plan: TrainingPlan, weekNum: number) => {
+    const anchor = weekOneMonday(plan);
+    return { start: sessionDate(anchor, weekNum, 1), end: sessionDate(anchor, weekNum, 7) };
+  };
+
+  /** The holiday break covering a plan week, if the athlete has recorded one. */
+  const holidayForWeek = (plan: TrainingPlan, weekNum: number): LifeEvent | null => {
+    const { start, end } = planWeekRange(plan, weekNum);
+    return (
+      lifeEvents.events.find(
+        (event) => event.event_type === "holiday" && event.start_date <= end && event.end_date >= start,
+      ) ?? null
+    );
+  };
+
+  /** Re-read one plan after something outside this screen changed its data. */
+  const reloadPlan = async (planId: string) => {
+    const { data } = await supabase.from("training_plans").select("*").eq("id", planId).maybeSingle();
+    if (!data) return;
+    setSelectedPlan(data);
+    setPlans((prev) => prev.map((plan) => (plan.id === data.id ? data : plan)));
+  };
+
+  /**
+   * Mark or unmark a plan week as a holiday.
+   *
+   * This used to write an `isHoliday` flag into the stored plan and rewrite the
+   * week's sessions into 15-minute "light movement" items, then hand the week's
+   * real work to the next week as an extra note. Two things were wrong with
+   * that, and both are why a holiday marked here changed nothing: it MOVED
+   * sessions into the days that follow — the one thing the availability layer
+   * refuses to do, because cramming a missed week into the next one is how a
+   * training app injures someone — and it never reached the rebuild, so nothing
+   * was cancelled and nothing was reshaped.
+   *
+   * A week marked here is now a real `life_events` row, exactly as if it had
+   * been added on /availability, and the same machinery runs: the sessions
+   * inside it are marked unavailable and stay where they are, the week before is
+   * loaded a little harder, and the return after it climbs back through the
+   * progression. Unmarking deletes the event and puts the sessions it cancelled
+   * back to `planned`, because the athlete changed their mind — this was never a
+   * record of a day they actually missed.
+   */
   const toggleWeekHoliday = async (weekNum: number) => {
-    if (!selectedPlan) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const weekIdx = planData.findIndex((w) => w.week === weekNum);
-    if (weekIdx === -1) return;
-    const wasHoliday = planData[weekIdx].isHoliday;
-    planData[weekIdx].isHoliday = !wasHoliday;
-    
-    // If marking as holiday, redistribute sessions to next non-holiday week
-    if (!wasHoliday) {
-      const holidaySessions = planData[weekIdx].sessions.filter((s) => !s.isRest && !s.isRecovery);
-      // Find next non-holiday week
-      const nextWeekIdx = planData.findIndex((w, i) => i > weekIdx && !w.isHoliday);
-      if (nextWeekIdx !== -1 && holidaySessions.length > 0) {
-        // Add key sessions to next week as extra work
-        planData[nextWeekIdx].redistributedFrom = weekNum;
-        planData[nextWeekIdx].extraNote = `Includes redistributed work from Week ${weekNum} (holiday)`;
-      }
-      // Replace sessions with light recovery for holiday
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
-        if (s.isRest) return s;
-        return {
-          ...s, title: "Holiday — Light Movement (optional)", type: "holiday",
-          duration_minutes: 15, description: "Holiday week. Optional light activity — walk, swim, stretch. Enjoy your break!",
-          exercises: [
-            { name: "Light walk or swim", sets: "15-20 min · completely easy" },
-            { name: "Stretching", sets: "10 min · focus on tight areas" },
-            { name: "Stay hydrated", sets: "3L+ water" },
-          ],
-          originalTitle: s.title, originalExercises: s.exercises,
-        };
+    if (!selectedPlan || !user) return;
+    const existing = holidayForWeek(selectedPlan, weekNum);
+
+    if (existing) {
+      const { ok, error } = await lifeEvents.remove(existing.id);
+      if (!ok) { toast({ title: "Couldn't remove the holiday", description: error, variant: "destructive" }); return; }
+      // The sessions were never lost — they were set aside. Removing the break
+      // puts them back, so the toggle is a toggle rather than a one-way door.
+      const { error: restoreError } = await supabase
+        .from("plan_events")
+        .update({ status: "planned", life_event_id: null })
+        .eq("user_id", user.id)
+        .eq("life_event_id", existing.id);
+      if (restoreError) console.error("plan_events restore failed:", restoreError.message);
+      await reloadPlan(selectedPlan.id);
+      toast({
+        title: "Holiday removed",
+        description: "The sessions it marked unavailable are planned again. If it rebuilt your next weeks, that stays — undo it from the rebuild panel.",
+        duration: 8000,
       });
-    } else {
-      // Restore original sessions
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
-        if (s.originalTitle) {
-          return { ...s, title: s.originalTitle, exercises: s.originalExercises, type: s.originalTitle.toLowerCase().replace(/[^a-z]/g, "_"), duration_minutes: 40, description: `Restored session` };
-        }
-        return s;
-      });
+      return;
     }
-    
-    // Scoped to this plan (see saveSessionEdit — an unfiltered update would
-    // overwrite every plan the athlete owns).
+
+    const { start, end } = planWeekRange(selectedPlan, weekNum);
+    const created = await lifeEvents.create({
+      start_date: start,
+      end_date: end,
+      event_type: "holiday",
+      // The catalogue's own defaults, read rather than repeated here: a holiday
+      // pauses the plan, and that pause is what makes the rebuild fire at all.
+      activity_level: lifeEventType("holiday").defaultActivity,
+      allow_training: lifeEventType("holiday").defaultAllowTraining,
+    });
+    // `=== false`, not `!created.ok`: the repo's save outcomes are a union of
+    // `{ ok: true, … }` and `{ ok: false, error }`, and this is the form that
+    // narrows it (the same check Availability.tsx uses).
+    if (created.ok === false) { toast({ title: "Couldn't mark that week", description: created.error, variant: "destructive" }); return; }
+
+    const outcome = await lifeEvents.applyToPlan(created.event);
+    await reloadPlan(selectedPlan.id);
+    toast({
+      title: `Week ${weekNum} marked as a holiday 🏖️`,
+      description:
+        outcome.rebuild?.applied
+          ? outcome.rebuild.explanation
+          : outcome.explanation ?? "The sessions in that week are marked unavailable — nothing is moved into the week after it.",
+      duration: 8000,
+    });
+    if (outcome.rebuild && !outcome.rebuild.applied && outcome.rebuild.error) {
+      toast({ title: "Your plan wasn't rebuilt", description: `${outcome.rebuild.error} Your holiday was still saved.`, variant: "destructive" });
+    }
+  };
+
+  /**
+   * Persist a coach edit. The weeks arrive already spliced by week NUMBER, so
+   * this writes them as they are — scoped to this plan, like every other write
+   * on this screen. It throws when the write fails, because the coach sheet only
+   * says "done" once the plan row actually holds the edit.
+   */
+  const applyPlanEdit = async (
+    weeks: PlanWeekLike[],
+    meta: { scope: PlanEditScope; week: number; cost: number },
+  ) => {
+    if (!selectedPlan || !user) throw new Error("No plan is open.");
+    const plan_data = weeks as unknown as Json;
     const { error } = await supabase
       .from("training_plans")
-      .update({ plan_data: planData as unknown as Json })
+      .update({ plan_data })
       .eq("id", selectedPlan.id)
-      .eq("user_id", user?.id ?? "");
-    if (error) { toast({ title: "Couldn't update your week", description: error.message, variant: "destructive" }); return; }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
-    toast({ title: !wasHoliday ? "Week marked as holiday 🏖️ — sessions redistributed to next week" : "Holiday removed — sessions restored" });
+      .eq("user_id", user.id);
+    if (error) {
+      toast({ title: "Couldn't save the edit", description: error.message, variant: "destructive" });
+      throw new Error(error.message);
+    }
+    setSelectedPlan({ ...selectedPlan, plan_data });
+    await refreshProfile();
+    toast({ title: "Plan updated by the coach", description: `${meta.cost} credits used.` });
   };
 
   /**
@@ -1607,14 +1711,13 @@ const Training = () => {
         )}
 
         <div className="px-5 space-y-3 mb-8">
-          {planData?.map((week) => (
-            <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === selectedPlan.week_current ? "border-primary/30" : week.isHoliday ? "border-energy/30" : "border-border"}`}>
+          {planData?.map((week) => (              <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === selectedPlan.week_current ? "border-primary/30" : holidayForWeek(selectedPlan, week.week) ? "border-energy/30" : "border-border"}`}>
               <button onClick={() => setExpandedWeek(expandedWeek === week.week ? null : week.week)}
                 className="w-full flex items-center justify-between p-4">
                 <div className="flex items-center gap-2">
                   <h4 className="font-display font-bold text-sm">Week {week.week}{week.isDeload ? " (Deload)" : ""}</h4>
                   {week.week === selectedPlan.week_current && <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Current</span>}
-                  {week.isHoliday && <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">🏖️ Holiday</span>}
+                  {holidayForWeek(selectedPlan, week.week) && <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">🏖️ Holiday</span>}
                   {/* The week-level tag: this week is not what the generator
                       wrote, and the athlete can see that from the outside. */}
                   {week.returnFromBreak && (
@@ -1636,7 +1739,7 @@ const Training = () => {
                     <div className="flex gap-2 mb-3">
                       <motion.button whileTap={{ scale: 0.95 }} onClick={() => toggleWeekHoliday(week.week)}
                         className="text-[12px] bg-energy/10 text-energy px-3 py-1 rounded-lg font-semibold">
-                        {week.isHoliday ? "Remove Holiday" : "🏖️ Mark Holiday"}
+                        {holidayForWeek(selectedPlan, week.week) ? "Remove Holiday" : "🏖️ Mark Holiday"}
                       </motion.button>
                     </div>
                     <div className="space-y-2">
@@ -1750,6 +1853,34 @@ const Training = () => {
             </div>
           ))}
         </div>
+
+        {/* The coach, in the corner of the open plan. The `bottom` offset is the
+            same safe-area + floating-tab-bar one the nav uses, so the button is
+            never underneath it — and a fixed 5rem, which is what the older
+            floating controls in this app used, is exactly inside it. */}
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          aria-label={`Ask the coach to change this plan — from ${editCost("week")} credits`}
+          className="fixed right-5 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-40 flex items-center gap-2 rounded-full bg-gradient-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+        >
+          <MessageSquare size={16} /> Edit plan
+        </button>
+
+        <PlanEditChat
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          // The stored weeks, and the week the sheet opens on: whatever the
+          // athlete has expanded, falling back to the week they are in.
+          weeks={planData ?? []}
+          defaultWeek={expandedWeek && expandedWeek > 0 ? expandedWeek : selectedPlan.week_current ?? 1}
+          sport={selectedPlan.sport ?? undefined}
+          level={selectedPlan.level ?? undefined}
+          durationWeeks={selectedPlan.duration_weeks ?? undefined}
+          // No target event is sent: `training_plans` has no target_event column,
+          // and the plan's own title/description already name the goal.
+          onApplied={applyPlanEdit}
+        />
       </div>
     );
   }

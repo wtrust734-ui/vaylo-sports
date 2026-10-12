@@ -162,7 +162,10 @@ const AppLayout = () => {
           root takes the second, which is what separates the page's first
           element from the Back button above it. Neither carries a bottom pad,
           so the two cannot collapse into one. */}
-      <main className="relative pb-28 lg:pl-60">
+      {/* The left reservation is the sidebar's own token, not a `pl-60`
+          literal: 240px did not match the 272px aside, so the translucent
+          panel sat over the first 32px of every page at `lg:` and up. */}
+      <main className="relative pb-28 lg:pl-[var(--vaylo-sidebar-w)]">
         {/* `min-w-0` on the flex/grid child is what actually stops a wide
             descendant (a long username, an AI response, a stat grid) from
             pushing the page wider than the viewport. Without it the child is

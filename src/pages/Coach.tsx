@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Plus, Trash2, Edit3, Send, Loader2, Brain, X, ChevronLeft, Database } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Edit3, Send, Loader2, Brain, X, ChevronLeft, Database, Info } from "lucide-react";
 import { DISCLAIMERS } from "@/config/disclaimers";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import AthleteKnowledgePanel from "@/components/coach/AthleteKnowledgePanel";
 import { useTranslation } from "react-i18next";
 import { isCurrentLanguageRtl } from "@/i18n";
 import ReactMarkdown from "react-markdown";
@@ -33,6 +34,8 @@ const Coach = () => {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  // "What the coach knows about you" — the dossier, shown to the athlete.
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
@@ -226,6 +229,13 @@ const Coach = () => {
             <p className="text-xs text-muted-foreground">3 credits per prompt · {profile?.credits ?? 0} credits</p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => setKnowledgeOpen(true)}
+              aria-label="What the coach knows about you"
+              className="p-2 rounded-xl bg-card border border-border"
+            >
+              <Info size={16} className="text-muted-foreground" />
+            </button>
             <button onClick={() => { setMemoryOpen(true); loadMemories(); }} className="p-2 rounded-xl bg-card border border-border">
               <Database size={16} className="text-muted-foreground" />
             </button>
@@ -273,6 +283,7 @@ const Coach = () => {
           onNew={createConversation} editingTitle={editingTitle} setEditingTitle={setEditingTitle}
           newTitle={newTitle} setNewTitle={setNewTitle} onRename={renameConversation} />
         <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} memories={memories} onDelete={deleteMemory} />
+        <AthleteKnowledgePanel open={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
       </div>
     );
   }
@@ -287,6 +298,13 @@ const Coach = () => {
           <p className="text-[12px] text-muted-foreground">{profile?.credits ?? 0} credits remaining</p>
         </div>
         <div className="flex gap-1.5">
+          <button
+            onClick={() => setKnowledgeOpen(true)}
+            aria-label="What the coach knows about you"
+            className="p-1.5 text-muted-foreground"
+          >
+            <Info size={16} />
+          </button>
           <button onClick={() => { setMemoryOpen(true); loadMemories(); }} className="p-1.5 text-muted-foreground"><Database size={16} /></button>
           <button onClick={() => setSidebarOpen(true)} className="p-1.5 text-muted-foreground"><MessageSquare size={16} /></button>
         </div>
@@ -349,6 +367,7 @@ const Coach = () => {
         onNew={createConversation} editingTitle={editingTitle} setEditingTitle={setEditingTitle}
         newTitle={newTitle} setNewTitle={setNewTitle} onRename={renameConversation} />
       <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} memories={memories} onDelete={deleteMemory} />
+      <AthleteKnowledgePanel open={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
     </div>
   );
 };

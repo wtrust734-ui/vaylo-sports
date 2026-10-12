@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
-import { User, Medal, Settings, ChevronRight, Zap, Globe, LogOut, Ruler, Weight, Target, Calendar, Trash2, MapPin, MessageCircle } from "lucide-react";
+import { User, Users, Medal, Settings, ChevronRight, Zap, Globe, LogOut, Ruler, Weight, Target, Calendar, Trash2, MapPin, MessageCircle } from "lucide-react";
 import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatSports } from "@/lib/profile";
-import AIConnectionTest from "@/components/AIConnectionTest";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
 import PersonalizationSetting from "@/components/settings/PersonalizationSetting";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -18,8 +17,11 @@ import CountrySelect from "@/components/geo/CountrySelect";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
-import { Bell, FileText, Scale, ShieldCheck } from "lucide-react";
+import { Bell, FileText, Scale, ShieldCheck, Watch } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
+import { isAndroid } from "@/lib/platform";
+import { isFlagOn } from "@/config/featureFlags";
+import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
 
 const currencies = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD"];
 const goalOptions = [
@@ -100,6 +102,12 @@ const Profile = () => {
   const { toast } = useToast();
   const [showSettings, setShowSettings] = useState(false);
   const [showCosmetics, setShowCosmetics] = useState(false);
+  // Connect and manage Health Connect from here, not only from the Wearables
+  // screen: this is where an athlete looks for anything about their own account,
+  // and "how do I connect my watch" used to mean finding a screen that is two
+  // levels down inside the Recover hub.
+  const [showHealthConnect, setShowHealthConnect] = useState(false);
+  const wearableOffer = isAndroid() && isFlagOn("wearableSync");
   const { equippedDefs } = useCosmetics();
   const [currency, setCurrency] = useState("USD");
   // ISO alpha-2, stored in `user_region` — the table the leaderboards read.
@@ -254,6 +262,24 @@ const Profile = () => {
     // possible guard against the row being quietly dropped in a refactor.
     { icon: Scale, label: "Legal & Safety", desc: "All 26 policies, your rights, and reporting", onClick: () => navigate("/legal") },
     { icon: Bell, label: "Notifications", desc: "Your alerts and what may be sent", path: "/notifications" },
+    // Android + launch flag only — on any other build there is no Health
+    // Connect to manage, and a row leading to an explanation is worse than no
+    // row. The sheet itself gates too; this is what keeps it out of the list.
+    ...(wearableOffer
+      ? [{
+          icon: Watch,
+          label: "Wearables",
+          desc: "Connect and manage Health Connect",
+          onClick: () => setShowHealthConnect(true),
+        }]
+      : []),
+    // Friends is back on this screen. The surface itself never went away — /friends
+    // is a real page with the friend graph, messages and sharing behind it — but
+    // after the drawer's mobile entry point was removed its only remaining door
+    // was the sidebar, which a phone cannot open. That made a working feature
+    // effectively invisible: "friends" read as deleted because there was no way
+    // in. The Profile tab is always one tap away, so this is the door.
+    { icon: Users, label: "Friends", desc: "Connect, message and share sessions", path: "/friends" },
     // Achievements lived here until 2026-10-10. They now live in the Perform
     // hub's Trophy Room (/achievements, /challenges) — they are earned by
     // performing, so that is where an athlete looks for them. The sidebar
@@ -485,15 +511,11 @@ const Profile = () => {
                 </button>
               </div>
 
-              {/* The live AI self-test is a support tool, not an account
-                  surface. It was a full-width card between Settings and the
-                  row list, which pushed the destinations an athlete actually
-                  came for below the fold; it is a diagnostic, so it lives at
-                  the bottom of Settings where it is two taps away and out of
-                  the way otherwise. */}
-              <div className="border-t border-border pt-3">
-                <AIConnectionTest />
-              </div>
+              {/* The live AI self-test used to sit at the foot of Settings. It was
+                  a developer diagnostic on an athlete's own settings screen, and
+                  it has been removed (owner request, 2026-10-11) — a support tool
+                  that asks a customer to press "Run AI test" is a question they
+                  should never have been asked. */}
             </Panel>
           )}
         </motion.div>
@@ -522,6 +544,7 @@ const Profile = () => {
       </div>
 
       <CosmeticShop open={showCosmetics} onClose={() => setShowCosmetics(false)} />
+      <HealthConnectPrompt open={showHealthConnect} onClose={() => setShowHealthConnect(false)} />
     </div>
   );
 };

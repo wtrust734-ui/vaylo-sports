@@ -5,10 +5,14 @@
 //   npm run ui:check              # same measurements, non-zero exit on a defect
 //   node scripts/ui-audit.mjs metrics avatar   # just these routes
 //
-// It fails on: a control under 44px, a page that scrolls sideways, a value that
-// rendered as `undefined`, a doubled word in copy, and any console exception or
-// failed request. It does NOT fail on a decorative glow hanging off the edge of
-// a clipping parent, or on a carousel's off-screen cards — both are reported as
+// Every route is measured at every device in DEVICES (see below): the app has
+// three layouts, and a defect at 768px is invisible in a 390px screenshot.
+//
+// It fails on: a control under 44px, a control that is covered by something and
+// so cannot be tapped, a page that scrolls sideways, a value that rendered as
+// `undefined`, a doubled word in copy, and any console exception or failed
+// request. It does NOT fail on a decorative glow hanging off the edge of a
+// clipping parent, or on a carousel's off-screen cards — both are reported as
 // overflow, both are fine.
 //
 // Drives system Chrome over the DevTools Protocol using Node's built-in
@@ -53,6 +57,49 @@ const OUT = ".freebuff/ui-audit";
 // Absolute on purpose: Chrome exits instantly with code -1 and no message when
 // --user-data-dir is relative. Cost a whole debugging detour once.
 const PROFILE = resolve(".freebuff/ui-audit-profile");
+
+// The devices every route is measured at. One viewport is not enough: the app
+// has three real layouts (phone, the `sm:`/`md:` tablet range, and the `lg:`
+// desktop sidebar), so a defect that only appears when a card is three columns
+// wide at 768px is invisible in a 390px screenshot. The widths straddle each
+// breakpoint in tailwind.config.ts rather than being evenly spaced:
+//   320  the narrowest phone the app claims to support (the overflow test floor)
+//   390  a common Android phone
+//   430  a large phone (Pixel Pro / iPhone Pro Max)
+//   640  the `sm:` boundary
+//   768  the `md:` boundary — a 10" tablet in portrait
+//   834  iPad Air portrait
+//   1024 the `lg:` boundary, where the sidebar appears and the bottom bar goes
+//   1366 iPad Pro landscape
+// Override with UI_DEVICES=phone,ipad to audit a subset.
+const ALL_DEVICES = [
+  { name: "phone-320", width: 320, height: 568, dpr: 2 },
+  { name: "phone", width: 390, height: 844, dpr: 3 },
+  { name: "phone-xl", width: 430, height: 932, dpr: 3 },
+  { name: "tablet-sm", width: 640, height: 960, dpr: 2 },
+  { name: "tablet", width: 768, height: 1024, dpr: 2 },
+  { name: "ipad", width: 834, height: 1194, dpr: 2 },
+  { name: "ipad-lg", width: 1024, height: 1366, dpr: 2 },
+  { name: "ipad-land", width: 1366, height: 1024, dpr: 2 },
+];
+// The default pass covers the four shapes the app actually changes at: a phone,
+// a large phone, a 10" tablet in portrait (the `md:` layout), and an iPad in
+// portrait (the `lg:` desktop-sidebar layout) — plus the 320px floor the
+// overflow rule is written against. `UI_DEVICES=...` widens it to any of
+// ALL_DEVICES (e.g. `UI_DEVICES=phone,ipad-land` for the landscape desktop case,
+// which is the slowest to run because it renders the most).
+const DEFAULT_DEVICES = ["phone-320", "phone", "phone-xl", "tablet", "ipad-lg"];
+const DEVICE_FILTER = (process.env.UI_DEVICES || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const DEVICES = (DEVICE_FILTER.length ? DEVICE_FILTER : DEFAULT_DEVICES)
+  .map((name) => ALL_DEVICES.find((d) => d.name === name))
+  .filter(Boolean);
+if (!DEVICES.length) {
+  console.error(`ui-audit: UI_DEVICES matched no device. Known: ${ALL_DEVICES.map((d) => d.name).join(", ")}`);
+  process.exit(1);
+}
 
 const LOCAL_CREDS = ".freebuff/ui-audit.local.json";
 const localCreds = existsSync(LOCAL_CREDS) ? JSON.parse(readFileSync(LOCAL_CREDS, "utf8")) : {};
@@ -341,12 +388,18 @@ async function main() {
   await cdp.send("Runtime.enable");
   await cdp.send("Log.enable");
   await cdp.send("Network.enable");
-  await cdp.send("Emulation.setDeviceMetricsOverride", {
-    width: 390,
-    height: 844,
-    deviceScaleFactor: 2,
-    mobile: true,
-  });
+  // Applied per device inside the route loop below. `mobile: true` is what
+  // makes Chrome report the narrow layout viewport and honour
+  // viewport-fit=cover, so env(safe-area-inset-*) behaves like a real handset.
+  const applyDevice = async (device) => {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: device.width,
+      height: device.height,
+      deviceScaleFactor: device.dpr,
+      mobile: true,
+    });
+  };
+  await applyDevice(DEVICES[0]);
 
   const consoleIssues = [];
 
@@ -413,6 +466,11 @@ async function main() {
 
   const report = [];
   const flowResults = [];
+  for (const device of DEVICES) {
+    await applyDevice(device);
+    console.log(
+      `\n[ui-audit] ${device.name} — ${device.width}x${device.height} @${device.dpr}x`,
+    );
   for (const [name, route] of routes) {
     cdp.drain();
     if (route && name === "auth") {
@@ -427,8 +485,11 @@ async function main() {
 
     await cdp.send("Page.navigate", { url: `${APP}${route}` });
     // Let the SPA route, fetch, and paint. Long enough for the charts chunk and
-    // the supabase round-trips; this is a review pass, not a benchmark.
-    await sleep(4000);
+    // the supabase round-trips; this is a review pass, not a benchmark. Trimmed
+    // from 4s to 2.6s when the pass became per-device: 46 routes x 5 devices is
+    // 230 navigations, and the extra 1.4s each would have added seven minutes to
+    // a run that already needs a settled page, not a faster one.
+    await sleep(2600);
 
     const probe = await cdp.evaluate(`(() => {
       const vw = window.innerWidth;
@@ -513,6 +574,65 @@ async function main() {
           });
         }
       }
+      // ── Controls that are the right size but cannot be tapped ─────────────
+      // Size is not reachability. A control can measure 44px, be fully on
+      // screen, pass every rule above, and still be unclickable because
+      // something is painted on top of it — a floating notice, a stale overlay
+      // that never reset pointer-events, a z-index that stacked the wrong way.
+      // The only way to see that is to ask the browser what a finger would
+      // actually hit: elementFromPoint at the control's centre. It must come
+      // back as the control itself, something inside it, or something that
+      // contains it (a <label> wrapping its input is a legitimate hit).
+      //
+      // A modal that is open is the one exemption: it is *supposed* to block the
+      // page behind it, so a page-level control reading as blocked while a
+      // dialog is up is correct behaviour, not a defect.
+      const blockedTargets = [];
+      const blockedSeen = new Set();
+      const dialogOpen = Boolean(
+        document.querySelector('[aria-modal="true"], [role="dialog"], [data-vaul-drawer]'),
+      );
+      if (!dialogOpen) {
+        for (const el of document.querySelectorAll("button, a, [role=button], [role=tab], [role=switch], input, select, textarea")) {
+          const r = el.getBoundingClientRect();
+          if (r.width < 4 || r.height < 4) continue;
+          const cs = getComputedStyle(el);
+          if (cs.visibility === "hidden" || cs.display === "none") continue;
+          if (el.disabled) continue;
+          // Only judge a control whose centre is on screen; one below the fold
+          // is reachable by scrolling and is not this rule's business.
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) continue;
+          let top = null;
+          try {
+            top = document.elementFromPoint(cx, cy);
+          } catch {
+            continue;
+          }
+          if (!top) continue;
+          if (top === el || el.contains(top) || top.contains(el)) continue;
+          const label = (el.getAttribute("aria-label") || el.textContent || el.tagName)
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 44);
+          const by =
+            top.tagName.toLowerCase() +
+            (typeof top.className === "string" && top.className
+              ? "." + top.className.trim().split(/\s+/).slice(0, 2).join(".")
+              : "");
+          const key = label + "|" + by;
+          if (blockedSeen.has(key)) continue;
+          blockedSeen.add(key);
+          blockedTargets.push({
+            label: label || el.tagName.toLowerCase(),
+            by: by.slice(0, 60),
+            w: Math.round(r.width),
+            h: Math.round(r.height),
+          });
+        }
+      }
+      blockedTargets.sort((a, b) => b.w * b.h - a.w * a.h);
       // ── Things that touch with no gutter, or sit on top of each other ─────
       // The "RUNNINGTrend" class of defect: a badge or a pill sitting flush
       // against the text beside it, two chips whose borders meet, a label
@@ -560,14 +680,51 @@ async function main() {
       // rather than with one Range over the subtree, because a Range also returns
       // the boxes of block children and even of empty decorative elements (a
       // blurred accent circle counts), which invents overlap that is not there.
+      // Text inside a scroll container keeps a rect at its layout position
+      // even after the container has scrolled it out of sight, so the ink of a
+      // long list reaches past its own card. Unclamped, that phantom ink makes
+      // two *stacked* siblings look like they share a visual row and the touch
+      // rule below reports a jam between them: measured in the sidebar at
+      // 1024x1366, the 31-line nav reports ink 117px below its own box (y1332
+      // against a box ending at y1215) and "collides" with the footer beneath
+      // it across 209px of horizontal overlap — two boxes that never share a
+      // pixel on screen. The ink is therefore intersected with the clip rects
+      // of its own overflow and of its ancestors', so the rule measures what is
+      // actually visible — the element itself counts, since the sidebar nav is the thing clipping its own content. The root scroller is deliberately not one of them:
+      // content below the fold there is scrolled into view, not hidden.
+      const clipOf = (node) => {
+        const clips = (v) => v === "hidden" || v === "clip" || v === "auto" || v === "scroll";
+        let clip = null;
+        for (let p = node.nodeType === 1 ? node : node.parentElement; p && p !== document.documentElement && p !== document.body; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (!clips(cs.overflowX) && !clips(cs.overflowY)) continue;
+          const r = p.getBoundingClientRect();
+          clip = {
+            left: Math.max(clip ? clip.left : -Infinity, r.left),
+            right: Math.min(clip ? clip.right : Infinity, r.right),
+            top: Math.max(clip ? clip.top : -Infinity, r.top),
+            bottom: Math.min(clip ? clip.bottom : Infinity, r.bottom),
+          };
+        }
+        return clip;
+      };
       const inkOf = (node) => {
         const acc = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity, lines: 0 };
+        const clip = clipOf(node);
         const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
         for (let t = walker.nextNode(); t; t = walker.nextNode()) {
           if (!t.textContent.trim()) continue;
           const range = document.createRange();
           range.selectNodeContents(t);
-          for (const r of range.getClientRects()) {
+          for (const raw of range.getClientRects()) {
+            const r = clip
+              ? {
+                  left: Math.max(raw.left, clip.left),
+                  right: Math.min(raw.right, clip.right),
+                  top: Math.max(raw.top, clip.top),
+                  bottom: Math.min(raw.bottom, clip.bottom),
+                }
+              : raw;
             if (r.width <= 0 || r.height <= 0) continue;
             acc.left = Math.min(acc.left, r.left);
             acc.right = Math.max(acc.right, r.right);
@@ -726,6 +883,8 @@ async function main() {
         overlapCount: overlaps.length,
         smallTargets: smallTargets.slice(0, 20),
         smallTargetCount: smallTargets.length,
+        blockedTargets: blockedTargets.slice(0, 12),
+        blockedCount: blockedTargets.length,
         url: location.pathname,
         viewport: vw,
         docWidth: document.documentElement.scrollWidth,
@@ -742,7 +901,7 @@ async function main() {
     })()`);
 
     const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
-    writeFileSync(`${OUT}/${name}.png`, Buffer.from(shot.data, "base64"));
+    writeFileSync(`${OUT}/${device.name}-${name}.png`, Buffer.from(shot.data, "base64"));
 
     const events = cdp.drain();
     for (const e of events) {
@@ -773,17 +932,18 @@ async function main() {
     }
 
     probe.badStrings = findBadText(probe.text || "");
-    report.push({ name, requested: route, ...probe });
+    report.push({ device: device.name, name, requested: route, ...probe });
     const flags = [];
     if (probe.offenderCount) flags.push(`OVERFLOW x${probe.offenderCount}`);
     if (probe.clippedCount) flags.push(`CLIPPED-TEXT x${probe.clippedCount}`);
     if (probe.docWidth > probe.viewport) flags.push(`H-SCROLL ${probe.docWidth}>${probe.viewport}`);
     if (probe.url !== route) flags.push(`redirected to ${probe.url}`);
     if (probe.smallTargetCount) flags.push(`${probe.smallTargetCount} small targets`);
+    if (probe.blockedCount) flags.push(`BLOCKED x${probe.blockedCount}`);
     if (probe.collisionCount) flags.push(`JAMMED x${probe.collisionCount}`);
     if (probe.overlapCount) flags.push(`STACKED x${probe.overlapCount}`);
     console.log(
-      `${name.padEnd(13)} ${String(probe.textLength).padStart(6)}ch  ${(flags.join(", ") || "ok").padEnd(28)} ${probe.firstLine.slice(0, 3).join(" | ")}`,
+      `${(device.name + ":" + name).padEnd(24)} ${String(probe.textLength).padStart(6)}ch  ${(flags.join(", ") || "ok").padEnd(28)} ${probe.firstLine.slice(0, 3).join(" | ")}`,
     );
     for (const o of probe.offenders) {
       console.log(`               +${o.over}px  ${o.tag}  "${o.text}"`);
@@ -794,6 +954,9 @@ async function main() {
     for (const t of probe.smallTargets || []) {
       console.log(`                target ${t.w}x${t.h}  "${t.label}"`);
     }
+    for (const b of probe.blockedTargets || []) {
+      console.log(`                blocked ${b.w}x${b.h}  "${b.label}"  under ${b.by}`);
+    }
     for (const c of probe.collisions || []) {
       console.log(`                jammed (${c.gap}px)  in ${c.parent}\n                  ${c.pair}  "${c.text}"`);
     }
@@ -801,6 +964,7 @@ async function main() {
       console.log(`                stacked (${o.depth}px)  in ${o.parent}\n                  ${o.pair}  "${o.text}"`);
     }
     if (probe.badStrings.length) console.log(`               bad text: ${probe.badStrings.join(", ")}`);
+  }
   }
 
   // The one journey with money in it that a screenshot cannot check: a locked
@@ -844,18 +1008,24 @@ async function main() {
   if (process.argv.includes("--check")) {
     const failures = [];
     for (const r of report) {
-      if (r.smallTargetCount) failures.push(`${r.name}: ${r.smallTargetCount} controls under 44px`);
-      if (r.docWidth > r.viewport) failures.push(`${r.name}: page scrolls sideways (${r.docWidth} > ${r.viewport})`);
-      if (r.clippedCount) failures.push(`${r.name}: ${r.clippedCount} elements cut off by their own container`);
-      if (r.badStrings?.length) failures.push(`${r.name}: placeholder text on screen (${r.badStrings.join(", ")})`);
+      if (r.smallTargetCount) failures.push(`${r.device ?? "?"} ${r.name}: ${r.smallTargetCount} controls under 44px`);
+      if (r.blockedCount) {
+        for (const b of r.blockedTargets ?? []) {
+          failures.push(`${r.device ?? "?"} ${r.name}: "${b.label}" (${b.w}x${b.h}) is unclickable — covered by ${b.by}`);
+        }
+      }
+      const where = `${r.device ?? "?"} ${r.name}`;
+      if (r.docWidth > r.viewport) failures.push(`${where}: page scrolls sideways (${r.docWidth} > ${r.viewport})`);
+      if (r.clippedCount) failures.push(`${where}: ${r.clippedCount} elements cut off by their own container`);
+      if (r.badStrings?.length) failures.push(`${where}: placeholder text on screen (${r.badStrings.join(", ")})`);
       if (r.collisionCount) {
         for (const c of r.collisions) {
-          failures.push(`${r.name}: ${c.pair} touch with no gutter (${c.gap}px) — "${c.text}"`);
+          failures.push(`${where}: ${c.pair} touch with no gutter (${c.gap}px) — "${c.text}"`);
         }
       }
       if (r.overlapCount) {
         for (const o of r.overlaps) {
-          failures.push(`${r.name}: ${o.pair} drawn over each other (${o.depth}px deep) — "${o.text}"`);
+          failures.push(`${where}: ${o.pair} drawn over each other (${o.depth}px deep) — "${o.text}"`);
         }
       }
     }
@@ -953,7 +1123,7 @@ function writeGallery() {
   figcaption{padding:4px 8px;font-weight:600;border-bottom:1px solid #2a2a33}
   img{display:block;width:280px}
 </style>
-<header>Vaylo Sports — ${shots.length} screens at 390x844</header><main>${cells}</main>`,
+<header>Vaylo Sports — ${shots.length} screens across ${DEVICES.length} device(s): ${DEVICES.map((d) => `${d.name} ${d.width}x${d.height}`).join(", ")}</header><main>${cells}</main>`,
   );
 }
 

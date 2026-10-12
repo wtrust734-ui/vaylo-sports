@@ -137,7 +137,11 @@ describe("life event vocabulary", () => {
     // A wellbeing break must never be defaulted to "no training": pausing is
     // the athlete's decision, not the app's.
     expect(byId("wellbeing").defaultAllowTraining).toBe("optional");
-    expect(byId("holiday").defaultAllowTraining).toBe("optional");
+    // A holiday is a planned break, and the plan is expected to reshape around
+    // it: harder the week before, nothing programmed during it, a graded return
+    // after. As "optional" it cancelled nothing and left every session in the
+    // plan, so marking a holiday changed no part of it — which is the defect.
+    expect(byId("holiday").defaultAllowTraining).toBe("no");
   });
 });
 

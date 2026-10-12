@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Star, Shield, Crown, Zap, Target, Flame, Brain, ShoppingBag, Dumbbell, Droplets, Medal, Award, Check, Plus, X, Users, Calendar, TrendingUp, Heart, type LucideIcon } from "lucide-react";
+import { Trophy, Star, Shield, Crown, Zap, Target, Flame, Brain, ShoppingBag, Dumbbell, Droplets, Medal, Award, Check, X, Users, Calendar, TrendingUp, Heart, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
 type Achievement = Tables<"achievements">;
-type Challenge = Tables<"challenges">;
 
 /**
  * Every counter an achievement rule can test against. Built by fetchAll from
@@ -268,6 +267,15 @@ const builtInChallenges = [
 
 type TabType = "achievements" | "badges" | "challenges";
 
+const TAB_LABELS: Record<TabType, string> = {
+  achievements: "Achievements",
+  badges: "Badges",
+  challenges: "Challenges",
+};
+
+const isTabType = (value: string | null): value is TabType =>
+  value === "achievements" || value === "badges" || value === "challenges";
+
 /**
  * The achievements earned by buying something from the Market — the badges
  * shelf of the Trophy Room. These are the only achievement ids whose `check`
@@ -288,25 +296,15 @@ const Achievements = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   // Deep-linkable from the Perform hub's Trophy Room: /achievements?tab=badges
-  // opens the badges shelf directly.
+  // opens the badge case and /achievements?tab=challenges opens the challenge
+  // shelf directly.
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const initialTab: TabType =
-    searchParams.get("tab") === "badges"
-      ? "badges"
-      : searchParams.get("tab") === "challenges"
-        ? "challenges"
-        : "achievements";
+  const requestedTab = searchParams.get("tab");
+  const initialTab: TabType = isTabType(requestedTab) ? requestedTab : "achievements";
   const [tab, setTab] = useState<TabType>(initialTab);
   const [earnedAchievements, setEarnedAchievements] = useState<Achievement[]>([]);
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [purchases, setPurchases] = useState<string[]>([]);
   const [stats, setStats] = useState<AchievementStats>(emptyStats);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newChTitle, setNewChTitle] = useState("");
-  const [newChDesc, setNewChDesc] = useState("");
-  const [newChTarget, setNewChTarget] = useState("7");
-  const [newChUnit, setNewChUnit] = useState("days");
 
   useEffect(() => { if (user) fetchAll(); }, [user]);
 
@@ -332,7 +330,6 @@ const Achievements = () => {
     ]);
 
     setEarnedAchievements(achRes.data || []);
-    setChallenges(chRes.data || []);
     const pIds = (purchRes.data || []).map(p => p.product_id);
     setPurchases(pIds);
 
@@ -392,23 +389,6 @@ const Achievements = () => {
     setEarnedAchievements(refreshed || []);
   };
 
-  const createChallenge = async () => {
-    if (!user || !newChTitle.trim()) return;
-    const { error } = await supabase.from("challenges").insert({
-      creator_id: user.id,
-      title: newChTitle.trim(),
-      description: newChDesc.trim() || null,
-      target_value: parseInt(newChTarget) || 7,
-      target_unit: newChUnit,
-      start_date: new Date().toISOString(),
-      end_date: new Date(Date.now() + 30 * 86400000).toISOString(),
-    });
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-    setNewChTitle(""); setNewChDesc(""); setNewChTarget("7"); setShowCreate(false);
-    fetchAll();
-    toast({ title: "Challenge created! 🏆" });
-  };
-
   const earnedIds = new Set(earnedAchievements.map(a => a.type));
   const earnedCount = earnedAchievements.length;
   const totalAch = builtInAchievements.length;
@@ -443,70 +423,59 @@ const Achievements = () => {
       </motion.div>
 
 
-      {/* Tabs — achievements, purchase badges, and challenges all live on this
-          one screen, reached from the Perform hub's Trophy Room. */}
+      {/* Tabs — the achievements shelf, the purchase-badge case, and the challenge shelf. */}
       <div className="px-5 mb-4">
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar" role="tablist" aria-label="Trophy Room sections">
           {(["achievements", "badges", "challenges"] as const).map((key) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`min-h-[44px] px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
                 tab === key ? "bg-gradient-to-r from-primary to-electric-purple text-primary-foreground border-transparent shadow-glow" : "bg-card border-border text-muted-foreground hover:border-primary/40"
               }`}>
-              {key === "achievements" ? "Achievements" : key === "badges" ? "Badges" : "Challenges"}
+              {TAB_LABELS[key]}
             </button>
           ))}
         </div>
       </div>
 
-      {tab === "challenges" ? (
-        <div className="px-5 space-y-3 mb-8">
-          <p className="text-sm text-muted-foreground">Take on challenges, or make your own. Personal suggestions and sponsored challenges live on the full Challenges screen.</p>
-          <button onClick={() => navigate("/challenges")}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-sm font-semibold shadow-glow">
-            Open full Challenges
-          </button>
-          {/* Make a challenge */}
-          <div className="bg-card border border-border rounded-2xl p-4">
-            {!showCreate ? (
-              <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 text-sm font-semibold text-primary">
-                <Plus size={15} /> Create a challenge
-              </button>
-            ) : (
-              <div className="space-y-2.5">
-                <input value={newChTitle} onChange={(e) => setNewChTitle(e.target.value)} placeholder="Challenge title"
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-                <textarea value={newChDesc} onChange={(e) => setNewChDesc(e.target.value)} placeholder="Description (optional)" rows={2}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-                <div className="flex gap-2">
-                  <input value={newChTarget} onChange={(e) => setNewChTarget(e.target.value)} inputMode="numeric" aria-label="Target value"
-                    className="w-24 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-                  <input value={newChUnit} onChange={(e) => setNewChUnit(e.target.value)} aria-label="Target unit"
-                    className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={createChallenge} className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold">Create</button>
-                  <button onClick={() => setShowCreate(false)} className="px-3 py-2 rounded-lg border border-border text-xs text-muted-foreground">Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-          {challenges.map((c) => (
-            <button key={c.id} onClick={() => navigate(`/challenges/${c.id}`)}
-              className="w-full text-start bg-card border border-border rounded-2xl p-4 hover:border-primary/30 transition-colors">
-              <h3 className="font-display font-bold text-sm truncate">{c.title}</h3>
-              {c.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.description}</p>}
-              <p className="text-[12px] text-muted-foreground mt-1.5">Target: {String(c.target_value)} {String(c.target_unit)}</p>
-            </button>
-          ))}
-          {challenges.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No challenges yet — create the first one above.</p>
-          )}
-        </div>
-      ) : (
       <div className="px-5">
         {tab === "badges" && (
           <p className="text-sm text-muted-foreground mb-3">Badges you earned from Market purchases — proof of what you own.</p>
         )}
+        {tab === "challenges" && (
+          <div className="mb-3 rounded-xl border border-border bg-card p-3">
+            <p className="text-sm text-muted-foreground">
+              These are the standing Trophy Room challenges. Join, track, and log the live ones on the Challenges screen.
+            </p>
+            <Link
+              to="/challenges"
+              className="press mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-glow"
+            >
+              Open live challenges
+            </Link>
+          </div>
+        )}
+        {tab === "challenges" ? (
+          <div className="grid grid-cols-2 gap-3 mb-8">
+            {builtInChallenges.map((challenge, i) => (
+              <motion.div key={challenge.title}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: Math.min(i * 0.02, 1), type: "spring", stiffness: 300, damping: 25 }}
+                className="rounded-xl p-3 text-center border transition-all duration-300 bg-card/50 border-border/50">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1.5 bg-primary/15">
+                  <Target size={18} className="text-primary" />
+                </div>
+                <h4 className="text-[12px] font-bold">{challenge.title}</h4>
+                <p className="text-[8px] text-muted-foreground mt-0.5">{challenge.desc}</p>
+                <p className="text-[8px] text-primary font-bold mt-1">Target: {challenge.target} {challenge.unit}</p>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3 mb-8">
           {builtInAchievements.filter((ach) => tab === "achievements" || BADGE_IDS.has(ach.id)).map((ach, i) => {
             const earned = earnedIds.has(ach.id);
@@ -530,8 +499,8 @@ const Achievements = () => {
             );
           })}
         </div>
+        )}
       </div>
-      )}
     </div>
   );
 };

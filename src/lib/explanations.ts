@@ -512,6 +512,12 @@ const FOCUS_LABELS: Record<ReturnFocus, string> = {
   restore: "restoring your usual load",
   resume: "getting back to full training",
   compete: "staying fresh for competition",
+  // A planned break reshapes the weeks AROUND it too, so the same progression
+  // record can carry a week that is not a return week at all. Both are named
+  // here rather than left to a default, because the sentence is read by the
+  // athlete and "rebuilding your base" over a holiday week would be wrong.
+  preload: "banking a little extra before your break",
+  holiday: "easy movement while you are away",
 };
 
 export interface RebuildExplanationInput {

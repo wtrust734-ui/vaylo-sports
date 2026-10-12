@@ -291,11 +291,21 @@ describe("no invented operator details", () => {
     expect(Object.keys(operator).sort()).toEqual(["contactEmail", "operatorName"]);
   });
 
-  it("admits the missing details in the app rather than hiding them", () => {
-    const legal = read("src/pages/Legal.tsx");
-    expect(legal).toMatch(/company number/i);
-    expect(legal).toMatch(/ICO registration/i);
-    expect(legal).toMatch(/not yet|not published/i);
+  it("keeps the honest gap disclosures in the policies, not on the app's landing screen", () => {
+    // Changed 2026-10-11 (owner request): the Legal centre no longer renders a
+    // "what we have not published yet" list. The disclosure itself is not
+    // retracted — it stays in the documents a reader opens for it, because that
+    // is where a missing company number or retention window belongs. This test
+    // now pins both halves: the documents still say what is missing, and the
+    // landing screen no longer shows the operator's to-do list as if it were a
+    // user-facing notice.
+    const privacy = read("legal/privacy.html");
+    expect(privacy, "the privacy policy dropped its retention disclosure").toMatch(/not published|not yet/i);
+    const dataRights = read("legal/data-rights.html");
+    expect(dataRights, "the data-rights page dropped its retention disclosure").toMatch(/not published|not yet/i);
+    expect(read("src/pages/Legal.tsx"), "the unpublished-particulars list is back").not.toMatch(
+      /What we have not published yet<\/h2>/i,
+    );
   });
 
   it("adds no personal-data column to solve a legal problem", () => {

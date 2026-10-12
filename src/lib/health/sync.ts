@@ -21,6 +21,71 @@ import {
 } from "./bridge";
 import { HEALTH_PERMISSIONS_VERSION } from "./permissions";
 import type { HealthConnectionStatus } from "./types";
+import { isString } from "@/lib/typeUtils";
+
+export type PermissionOutcome =
+  | { kind: "partial"; missing: string[] }
+  | { kind: "revoked"; missing: string[] }
+  | { kind: null; missing: string[] };
+
+export function permissionOutcome(input: unknown): PermissionOutcome {
+  const source = typeof input === "string"
+    ? input
+    : (input as Record<string, unknown> | undefined);
+
+  if (source === undefined || source === null) {
+    return { kind: null, missing: [] };
+  }
+
+  // Whole-permission-list emptiness: two call sites, both stay "revoked",
+  // which clears stored consent and is what the plugin special-cases in Kotlin.
+  if (
+    typeof source === "string" &&
+    (source === "permission_revoked" || source === "permission_revoked:")
+  ) {
+    return { kind: "revoked", missing: [] };
+  }
+
+  const code = (source as { code?: unknown }).code ?? undefined;
+  const message = (source as { message?: unknown }).message ?? undefined;
+
+  if (code === "permission_revoked" || typeof message === "string" && message === "permission_revoked") {
+    return { kind: "revoked", missing: [] };
+  }
+
+  // The plugin also carries a plain one-argument form (message only) and a
+  // JSON-array form: ["steps","sleep"].
+  if (typeof message === "string") {
+    const partial = message.match(/permission_partial:(.*)/);
+    if (partial) {
+      const missing = partial[1].trim();
+      // JSON list: ["steps","sleep"]
+      if (missing.startsWith("[") && missing.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(missing.slice(1, -1)) as unknown[];
+          return {
+            kind: "partial",
+            missing: parsed.filter(isString).map((name) => name.trim()).filter(Boolean),
+          } as PermissionOutcome;
+        } catch {
+          // Not a valid list — this message carries no names we can trust.
+          return { kind: "partial", missing: [] };
+        }
+      }
+      // Plain comma-joined list: steps,sleep session
+      const plain = missing.split(",").map((name) => name.trim()).filter(Boolean);
+      return { kind: "partial", missing: plain.length > 0 ? plain : [] };
+    }
+  }
+
+  if (code === "permission_partial") {
+    return { kind: "partial", missing: [] };
+  }
+
+  // Anything that is not a recognised permissions outcome is returned as
+  // `kind: null` so a sync or availability failure cannot be read as permissions.
+  return { kind: null, missing: [] };
+}
 
 const STATE_KEY = (userId: string) => `vaylo:hc:state:${userId}`;
 const CONSENT_KEY = (userId: string) => `vaylo:hc:consent:${userId}`;

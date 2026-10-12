@@ -51,9 +51,15 @@ describe("nutrition is one tab: plan builder plus calorie scan", () => {
   const nutrition = read("/src/pages/Nutrition.tsx");
 
   it("builds the nutrition plan and runs the AI scan from the same page", () => {
-    expect(nutrition).toContain("createNutritionPlan");
+    // The plan builder is now a questionnaire that calls the generator, and the
+    // GENERATOR charges the week server-side — so the page must still state the
+    // price without spending the credits itself (charging twice for one plan is
+    // the failure this guards).
+    expect(nutrition).toContain("NutritionPlanWizard");
+    expect(nutrition).toContain('invoke("generate-nutrition-plan"');
     expect(nutrition).toContain("runScan");
     expect(nutrition).toContain('creditCost("nutrition_plan_week"');
     expect(nutrition).toContain('creditCost("calorie_scan"');
+    expect(nutrition).not.toContain('spendWithTopUp("nutrition_plan_week"');
   });
 });

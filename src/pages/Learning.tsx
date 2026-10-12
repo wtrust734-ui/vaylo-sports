@@ -22,8 +22,16 @@ import { FilterSheet, DEFAULT_FILTERS, type LearningFilters } from "@/components
 import { ProgressPanel } from "@/components/learning/ProgressPanel";
 import { CompactCard, ContinueCard, FeaturedCard, LessonRow } from "@/components/learning/LessonCard";
 
+// One gutter for the whole page: 20px (`px-5`), the app's horizontal gutter
+// (see the note on --vaylo-screen-top in index.css). This used to be
+// `px-4 sm:px-6` while the hero above it was `px-5`, so the content column
+// moved 4px sideways between the hero and the first section — and, worse, the
+// full-bleed carousels are written `-mx-5 px-5` against a 20px gutter: inside a
+// 16px one they hung 4px past the left edge and 4px past the right, where
+// `main`'s overflow-hidden sliced the ends off. Every 320-430px screen showed
+// it, and it is invisible in a 390px screenshot unless you measure.
 const PageSection = ({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) => (
-  <section className="mx-auto mt-10 max-w-6xl px-4 sm:px-6">
+  <section className="mx-auto mt-10 max-w-6xl px-5">
     <div className="mb-4">
       <h2 className="font-display text-2xl font-bold">{title}</h2>
       {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}

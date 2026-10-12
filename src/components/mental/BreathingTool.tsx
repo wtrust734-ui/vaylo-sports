@@ -5,7 +5,12 @@ import { Play, Pause, RotateCcw } from "lucide-react";
 const presets = [
   { id: "box", label: "Box Breathing", phases: [4, 4, 4, 4], labels: ["Breathe In", "Hold", "Breathe Out", "Hold"] },
   { id: "calm", label: "Calm Breathing", phases: [4, 0, 6, 0], labels: ["Breathe In", "", "Breathe Out", ""] },
-  { id: "quick", label: "Quick Reset", phases: [2, 1, 3, 1], labels: ["In", "Hold", "Out", "Hold"] },
+  // Quick Reset used to be 2 in / 1 hold / 3 out / 1 hold — about six breaths a
+  // minute faster than a calm breath, which is a pace that raises the heart rate
+  // rather than settling it. The point of a reset is to slow the exhale, so the
+  // phases are now 4 in / 2 hold / 6 out / 2 hold (a 14-second cycle, ~4
+  // breaths a minute) and the session runs long enough for that to take effect.
+  { id: "quick", label: "Quick Reset", phases: [4, 2, 6, 2], labels: ["In", "Hold", "Out", "Hold"] },
 ];
 
 const BreathingTool = () => {
@@ -55,8 +60,9 @@ const BreathingTool = () => {
         return c - 1;
       });
       totalTime.current += 1;
-      // Auto-stop quick reset after 30s
-      if (preset.id === "quick" && totalTime.current >= 30) {
+      // Auto-stop quick reset after 60s — four full cycles at the slower pace
+      // above, which is what "a reset" means now that the breathing is calm.
+      if (preset.id === "quick" && totalTime.current >= 60) {
         stop();
       }
     }, 1000);

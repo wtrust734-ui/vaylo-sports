@@ -31,9 +31,9 @@ const FamilyPickBanner = ({ currency = "USD" }: { currency?: string }) => {
   const price = creditCost(rec.feature as FeatureCostKey, 1);
 
   return (
-    <div className="mx-5 mb-4 flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-        <Sparkles size={15} className="text-primary-foreground" />
+    <div className="mx-5 mb-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+        <Sparkles size={15} className="text-primary" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-bold uppercase tracking-wider text-primary">Picked for you</p>

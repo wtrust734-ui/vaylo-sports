@@ -363,7 +363,16 @@ describe("native lifecycle — App.tsx", () => {
 describe("media handling — Nutrition scan", () => {
   it("every scan preview blob URL is revoked", () => {
     const n = read(NUTRITION);
-    expect(n.match(/URL\.revokeObjectURL/g)?.length).toBe(3);
+    const created = n.match(/URL\.createObjectURL/g)?.length ?? 0;
+    const revoked = n.match(/URL\.revokeObjectURL/g)?.length ?? 0;
+    // An invariant rather than a magic count: the scan now has a camera route, a
+    // gallery route and a native picker route that all write the same preview
+    // state, so the number of releases moves whenever a capture path is added.
+    // What must not move is that every preview created is released — asserting
+    // the relationship is what stops a new route from shipping a leak past a
+    // count that nobody updated.
+    expect(created, "the scan must still create a preview").toBeGreaterThan(0);
+    expect(revoked, "every created preview needs a revoke path").toBeGreaterThanOrEqual(created);
     expect(n).toMatch(/leaked each photo's bytes/);
   });
 });

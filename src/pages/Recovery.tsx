@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { recordHealthConsent } from "@/lib/consent";
+import { adaptDailyPlanForReadiness } from "@/lib/dailyReadinessAdaptation";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -197,6 +198,7 @@ const Recovery = () => {
   const [recentRpeAvg, setRecentRpeAvg] = useState<number | null>(null);
   const [todaySession, setTodaySession] = useState<PlanSession | null>(null);
   const [adjustedSession, setAdjustedSession] = useState<PlanSession | null>(null);
+  const [planChange, setPlanChange] = useState<string | null>(null);
   const [showHrvGuide, setShowHrvGuide] = useState(false);
 
   // Gamification
@@ -299,6 +301,50 @@ const Recovery = () => {
 
     const score = calcReadiness100(hrvVal, baseline, sleep, fatigue, soreness, mood, recentRpeAvg);
     const zone = getZone(score);
+
+    // A low morning check-in is written back into the training plan, not just
+    // shown beside it. A hard day can trade places with an easy tomorrow, so
+    // both days still add up to the week the coach intended.
+    let planNotice: string | null = null;
+    if (zone.label === "CAUTION" || zone.label === "RED") {
+      const { data: activePlan } = await supabase
+        .from("training_plans")
+        .select("id, week_current, plan_data")
+        .eq("user_id", user.id)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      if (activePlan?.plan_data && Array.isArray(activePlan.plan_data)) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const adaptation = adaptDailyPlanForReadiness({
+          weeks: activePlan.plan_data as unknown as PlanWeek[],
+          week: activePlan.week_current,
+          day: new Date().getDay() || 7,
+          zone: zone.label,
+          logDate: today,
+          todayDate: today,
+          tomorrowDate: localDateKey(tomorrow),
+        });
+        if (adaptation.changed) {
+          const { error: planError } = await supabase
+            .from("training_plans")
+            .update({ plan_data: adaptation.weeks as unknown as never })
+            .eq("id", activePlan.id)
+            .eq("user_id", user.id);
+          if (planError) {
+            planNotice = "Saved your check-in, but the training plan could not be updated.";
+          } else {
+            const updatedToday = adaptation.weeks
+              .find((week) => week.week === adaptation.todayWeek)
+              ?.sessions?.find((session) => session.day === adaptation.todayDay);
+            if (updatedToday) setTodaySession(updatedToday as PlanSession);
+            planNotice = adaptation.summary;
+          }
+        }
+      }
+    }
+    setPlanChange(planNotice);
 
     // A bad morning check-in adapts today's training for everyone: the
     // readiness score and the adjusted session are the check-in's whole point,
@@ -482,6 +528,9 @@ const Recovery = () => {
                 <p className="text-xs text-muted-foreground mb-2">{adjustedSession.description}</p>
                 {adjustedSession._reason && (
                   <p className="text-[12px] text-muted-foreground italic mb-2">💡 {adjustedSession._reason}</p>
+                )}
+                {planChange && (
+                  <p className="text-[12px] text-muted-foreground mb-2">📝 Training plan updated: {planChange}</p>
                 )}
                 {adjustedSession.exercises && (
                   <div className="space-y-1">

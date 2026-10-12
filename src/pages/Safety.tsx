@@ -114,8 +114,9 @@ const Safety = () => {
               recovering. They're motivation, not prescription.
             </li>
             <li>
-              <strong>Hydration and food are yours to judge.</strong> The app can log them; it cannot
-              tell you if you're eating enough.
+              <strong>Hydration and food are yours to judge.</strong> The app can log them, and a food
+              review can compare that log to your training &mdash; as a rough estimate from what you
+              logged, not dietetic advice, and never as a reason to eat less.
             </li>
           </ul>
           <Callout tone="warning">

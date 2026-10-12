@@ -5,13 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin, Dumbbell, Ruler, Weight } from "lucide-react";
+import { ChevronRight, ChevronLeft, Sparkles, Activity, Target, Calendar, Rocket, Cake, MapPin, Dumbbell, Ruler, Weight, Watch } from "lucide-react";
 import { toast } from "sonner";
 import { AUDIENCE_COPY, ageBand, earliestDob, validateDob } from "@/lib/age";
 import { localDateKey } from "@/lib/dates";
 import CountrySelect from "@/components/geo/CountrySelect";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
 import { EQUIPMENT, describeEquipment, normaliseEquipment, type EquipmentId } from "@/config/equipment";
+import { isAndroid } from "@/lib/platform";
+import { isFlagOn } from "@/config/featureFlags";
+import HealthConnectOffer from "@/components/health/HealthConnectOffer";
 
 const SPORTS = ["Running", "Cycling", "Football", "Cricket", "Basketball", "Tennis", "Swimming", "Weightlifting", "Triathlon", "Climbing", "MMA / Boxing", "Other"];
 const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
@@ -116,6 +119,18 @@ export default function Onboarding() {
 
   const total = steps.length;
   const cur = steps[step];
+
+  // ── Health Connect offer ────────────────────────────────────────────────
+  // The watch path is the easiest way to get a training history into the app,
+  // and it used to be reachable only by finding the Wearables screen after
+  // onboarding — which is what made it hard to connect. So onboarding offers it
+  // instead: a pop-up (see HealthConnectOffer, which decides when to ask) plus
+  // this step's own row, so it stays findable after "Not now".
+  //
+  // Android-only, and mounted behind the flag: the offer reads Health Connect
+  // state as soon as it runs, which a build with no plugin should not pay for.
+  const wearableOffer = isAndroid() && isFlagOn("wearableSync");
+  const [showHealthConnect, setShowHealthConnect] = useState(false);
 
   const canContinue = () => {
     if (cur.key === "sport") return !!data.sport;
@@ -479,6 +494,30 @@ export default function Onboarding() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground text-center">Plus 14 days of Pro on the house.</p>
+
+                {/* The standing way back in. The pop-up asks once; this row keeps
+                    Health Connect findable after "Not now", rather than only in
+                    Profile. Android + flag only, like the pop-up itself. */}
+                {wearableOffer && (
+                  <div className="space-y-2 rounded-xl border border-border bg-card p-3 text-start">
+                    <div className="flex items-start gap-3">
+                      <Watch size={16} className="mt-0.5 shrink-0 text-electric-purple" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">Wear a watch?</p>
+                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                          Skip logging every session by hand — import what your watch already recorded.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowHealthConnect(true)}
+                      className="press w-full rounded-lg border border-electric-purple/40 py-2.5 text-[12px] font-semibold text-electric-purple"
+                    >
+                      Connect my Health Connect
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </motion.div>
@@ -509,6 +548,18 @@ export default function Onboarding() {
           {step < total - 1 && <ChevronRight className="h-4 w-4 ml-1" />}
         </Button>
       </div>
+
+      {/* Owns the single Health Connect state read and decides when to ask.
+          Not mounted at all on a build with no plugin, so onboarding on the web
+          does not query for a feature it cannot offer. */}
+      {wearableOffer && (
+        <HealthConnectOffer
+          open={showHealthConnect}
+          onOpen={() => setShowHealthConnect(true)}
+          onClose={() => setShowHealthConnect(false)}
+          onLastStep={step === total - 1}
+        />
+      )}
     </div>
   );
 }

@@ -63,6 +63,58 @@ export type Database = {
         }
         Relationships: []
       }
+      // Hand-mirrored from supabase/migrations/20261010120000_app_error_reports.sql:
+      // the table shipped in a migration but the generated types were never
+      // refreshed for it, so the admin screen that reads it did not type-check.
+      // Shape and column list follow the migration and the constraints in it.
+      app_error_reports: {
+        Row: {
+          app_version: string
+          fingerprint: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          message: string
+          name: string
+          occurrences: number
+          platform: string
+          screen: string | null
+          stack: string | null
+          status: string
+          user_agent: string | null
+        }
+        Insert: {
+          app_version: string
+          fingerprint: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          message: string
+          name: string
+          occurrences?: number
+          platform?: string
+          screen?: string | null
+          stack?: string | null
+          status?: string
+          user_agent?: string | null
+        }
+        Update: {
+          app_version?: string
+          fingerprint?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          message?: string
+          name?: string
+          occurrences?: number
+          platform?: string
+          screen?: string | null
+          stack?: string | null
+          status?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       accountability_groups: {
         Row: {
           created_at: string
@@ -4319,37 +4371,58 @@ export type Database = {
       }
       user_settings: {
         Row: {
+          activity_level: string | null
           ar_metrics: Json
           ar_persona: string
           ar_position: string
           ar_theme: string
           ar_voice_enabled: boolean
           currency: string
+          dietary_pattern: string | null
+          food_dislikes: string | null
           id: string
+          meals_per_day: number | null
+          sex: string | null
+          training_days_per_week: number | null
+          typical_session_minutes: number | null
           updated_at: string
           user_id: string
           water_goal_ml: number
         }
         Insert: {
+          activity_level?: string | null
           ar_metrics?: Json
           ar_persona?: string
           ar_position?: string
           ar_theme?: string
           ar_voice_enabled?: boolean
           currency?: string
+          dietary_pattern?: string | null
+          food_dislikes?: string | null
           id?: string
+          meals_per_day?: number | null
+          sex?: string | null
+          training_days_per_week?: number | null
+          typical_session_minutes?: number | null
           updated_at?: string
           user_id: string
           water_goal_ml?: number
         }
         Update: {
+          activity_level?: string | null
           ar_metrics?: Json
           ar_persona?: string
           ar_position?: string
           ar_theme?: string
           ar_voice_enabled?: boolean
           currency?: string
+          dietary_pattern?: string | null
+          food_dislikes?: string | null
           id?: string
+          meals_per_day?: number | null
+          sex?: string | null
+          training_days_per_week?: number | null
+          typical_session_minutes?: number | null
           updated_at?: string
           user_id?: string
           water_goal_ml?: number

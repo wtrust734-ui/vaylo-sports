@@ -17,11 +17,14 @@ import { requestMyData, downloadExport, fetchMyReports, type PortabilityExport }
 // only from the sign-up screen and Profile settings, and reporting, community
 // rules, AI limitations and data portability did not exist in the app at all.
 //
-// Built from what the codebase actually does. Where a fact is not in the
-// repository — the registered company number, the postal address, the
-// retention periods — it is shown as "not yet stated" rather than invented. A
-// privacy centre that quietly fabricates a company number is worse than one that
-// admits the gap.
+// Built from what the codebase actually does. The honest note about facts we
+// do not hold — the registered company particulars and the server-log
+// retention window — lives in the policy documents themselves (privacy,
+// data-rights, complaints), which is where a reader looking for those answers
+// goes. It used to be repeated as an unpublished-particulars list on this
+// screen; that list was removed on 2026-10-11 because the landing page is for
+// reaching documents, not for listing the operator's to-dos. Nothing was
+// invented to fill the gap — the disclosures simply stayed where they belong.
 // ============================================================================
 
 const CONTACT_EMAIL = "vaylosportsupport@gmail.com";
@@ -336,19 +339,6 @@ const Legal = () => {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-energy/30 bg-energy/5 p-4">
-        <h2 className="text-sm font-semibold text-energy">What we have not published yet</h2>
-        <ul className="mt-1.5 list-inside list-disc space-y-1 text-xs leading-relaxed text-muted-foreground">
-          <li>Registered company name, company number and postal address</li>
-          <li>ICO registration number</li>
-          <li>Named data protection officer, if one is appointed</li>
-          <li>Exact server-log retention periods</li>
-        </ul>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          These are required of us and are not yet available to us to publish. We would rather say so
-          here than print something untrue. Email us and we'll answer directly.
-        </p>
-      </section>
     </div>
   );
 };

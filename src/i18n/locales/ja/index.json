@@ -144,6 +144,23 @@
       "arcadeDesc": "反応と精度のミニゲーム"
     }
   },
+  "form": {
+    "title": "フォーム",
+    "subtitle": "技術ドリル、キュー、動画分析。",
+    "drillsTitle": "あなたのドリル",
+    "free": "無料",
+    "tunedFor": "{{sport}}向けに調整",
+    "allSports": "すべてのスポーツを表示中 — プロフィールにスポーツを追加すると絞り込めます。",
+    "foundations": "基本 — すべてのスポーツ",
+    "yourSport": "あなたのスポーツ向け",
+    "why": "なぜ効果的か",
+    "how": "やり方",
+    "cues": "キュー",
+    "analysisBadge": "AIフォーム分析",
+    "analysisTitle": "動きの動画を分析",
+    "analysisBody": "ランニング、スプリント、一般的な動作のクリップをアップロードすると、AIコーチの詳細なレポートが届きます — 分析1回につき{{cost}}クレジット、解除は不要です。",
+    "analysisCta": "動画を分析 · {{cost}}クレジット"
+  },
   "dashboard": {
     "goodMorning": "おはようございます",
     "goodAfternoon": "こんにちは",

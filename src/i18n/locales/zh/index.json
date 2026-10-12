@@ -144,6 +144,23 @@
       "arcadeDesc": "反应与精准度游戏"
     }
   },
+  "form": {
+    "title": "技术",
+    "subtitle": "技术练习、动作要点与视频分析。",
+    "drillsTitle": "你的训练动作",
+    "free": "免费",
+    "tunedFor": "已针对 {{sport}} 定制",
+    "allSports": "显示所有运动，在个人资料中添加运动即可定制。",
+    "foundations": "基础动作（所有运动适用）",
+    "yourSport": "你的运动专属",
+    "why": "为什么有用",
+    "how": "如何练习",
+    "cues": "动作要点",
+    "analysisBadge": "AI 技术分析",
+    "analysisTitle": "分析动作视频",
+    "analysisBody": "上传跑步、冲刺或一般动作的视频，即可获得完整的 AI 教练报告：每次分析 {{cost}} 点数，无需解锁。",
+    "analysisCta": "分析视频 · {{cost}} 点数"
+  },
   "dashboard": {
     "goodMorning": "早上好",
     "goodAfternoon": "下午好",

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Dumbbell, Plus, Trash2 } from "lucide-react";
+import { Check, Dumbbell, Plus, Sparkles, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
+import { creditCost } from "@/lib/credits";
+import { runWorkoutReview, type WorkoutReviewResult } from "@/lib/runWorkoutReview";
 
 // ============================================================================
 // WORKOUTS — the log, and only the log
@@ -48,6 +51,84 @@ interface WorkoutRow {
   created_at: string;
 }
 
+/** The active plan, only as far as the review needs it. */
+interface ActivePlanRow {
+  id: string;
+  plan_data: unknown;
+  week_current: number | null;
+  duration_weeks: number | null;
+}
+
+/** "longRunPace" / "long_run" → "Long run pace" / "Long run". */
+const humanize = (key: string) =>
+  key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^\w/, (c) => c.toUpperCase());
+
+type ReviewBlock = { label: string | null; lines: string[] };
+
+/**
+ * The AI answers with JSON, and the first version of this screen dropped that
+ * JSON into a `<pre>`: braces, escaped quotes and a horizontal scrollbar, on a
+ * phone. Every other AI surface in the app shows sentences, so this one does
+ * too.
+ *
+ * The flattening is deliberately shape-tolerant. The stats call can answer
+ * with a string, a list, or an object of strings and lists of strings or
+ * objects, and none of those shapes is pinned by a schema the client can rely
+ * on. Anything this does not recognise still falls through to the raw JSON, so
+ * a new field is never silently dropped — it is just the last resort now
+ * instead of the only rendering.
+ */
+const reviewBlocks = (data: unknown): ReviewBlock[] => {
+  if (data == null) return [];
+  if (typeof data === "string") return [{ label: null, lines: [data] }];
+  if (Array.isArray(data)) {
+    const lines = data.filter((v) => v != null && v !== "").map((v) => (typeof v === "string" ? v : JSON.stringify(v)));
+    return lines.length ? [{ label: null, lines }] : [];
+  }
+  if (typeof data === "object") {
+    const blocks: ReviewBlock[] = [];
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (value == null || value === "") continue;
+      if (typeof value === "string" || typeof value === "number") {
+        blocks.push({ label: humanize(key), lines: [String(value)] });
+        continue;
+      }
+      if (Array.isArray(value)) {
+        const lines = value
+          .map((entry) => {
+            if (typeof entry === "string") return entry;
+            if (entry && typeof entry === "object") {
+              const rec = entry as Record<string, unknown>;
+              const heading =
+                typeof rec.title === "string" ? rec.title
+                  : typeof rec.label === "string" ? rec.label
+                    : typeof rec.day === "string" ? rec.day
+                      : null;
+              const body =
+                typeof rec.detail === "string" ? rec.detail
+                  : typeof rec.description === "string" ? rec.description
+                    : typeof rec.action === "string" ? rec.action
+                      : typeof rec.summary === "string" ? rec.summary
+                        : null;
+              if (heading && body) return `${heading} — ${body}`;
+              return heading ?? body ?? JSON.stringify(entry);
+            }
+            return String(entry);
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length) blocks.push({ label: humanize(key), lines });
+        continue;
+      }
+      blocks.push({ label: humanize(key), lines: [JSON.stringify(value)] });
+    }
+    if (blocks.length) return blocks;
+  }
+  return [{ label: null, lines: [JSON.stringify(data, null, 2)] }];
+};
+
 const inputClass =
   "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25";
 
@@ -84,6 +165,12 @@ const Workouts = () => {
   const [rows, setRows] = useState<WorkoutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewData, setReviewData] = useState<WorkoutReviewResult>({ kind: "empty", reason: "" });
+  // The active plan, read alongside the log: the review compares execution
+  // against the week the athlete is actually in.
+  const [plan, setPlan] = useState<ActivePlanRow | null>(null);
 
   // The profile arrives after the first render, so the default sport follows it
   // until the athlete picks a type themselves.
@@ -96,17 +183,30 @@ const Workouts = () => {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("workouts")
-        .select("id,title,type,sport,duration_minutes,distance_km,completed_at,created_at")
-        .eq("user_id", user.id)
-        .order("completed_at", { ascending: false, nullsFirst: false })
-        .limit(20);
-      if (error) {
-        toast.error(error.message);
+      const [log, planRes] = await Promise.all([
+        supabase
+          .from("workouts")
+          .select("id,title,type,sport,duration_minutes,distance_km,completed_at,created_at")
+          .eq("user_id", user.id)
+          .order("completed_at", { ascending: false, nullsFirst: false })
+          .limit(20),
+        supabase
+          .from("training_plans")
+          .select("id,plan_data,week_current,duration_weeks")
+          .eq("user_id", user.id)
+          .eq("active", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (log.error) {
+        toast.error(log.error.message);
         return;
       }
-      setRows((data ?? []) as WorkoutRow[]);
+      setRows((log.data ?? []) as WorkoutRow[]);
+      // A missing plan is not an error: "Analyse my workouts" still works, it
+      // just says no active plan was supplied rather than inventing one.
+      setPlan((planRes.data ?? null) as ActivePlanRow | null);
     } finally {
       setLoading(false);
     }
@@ -289,6 +389,81 @@ const Workouts = () => {
         </div>
       </section>
 
+      {/* ── Analyse my workouts ── */}
+      <div className="px-5">
+        <button
+          type="button"
+          onClick={() => {
+            if (reviewing) return;
+            setReviewing(true);
+            setReviewError(null);
+            setReviewData({ kind: "empty", reason: "" });
+            void runWorkoutReview({
+              user: { id: user!.id },
+              profile: { sport: profile?.sport ?? null },
+              planWeek: plan?.plan_data as unknown as Array<{ week: number; sessions: Array<{ day: number; title?: string | null; type?: string | null; duration_minutes?: number | null; description?: string | null; skipped?: boolean | null }> }> | null,
+              weekCurrent: plan?.week_current ?? null,
+              durationWeeks: plan?.duration_weeks ?? null,
+              onCharge: (charged) => {
+                if (charged > 0) setReviewData((current) => ({ ...current, charged }));
+              },
+            })
+              .then((result) => {
+                setReviewData(result);
+              })
+              .catch((error: unknown) => {
+                setReviewError(error instanceof Error ? error.message : "Analyse failed.");
+              })
+              .finally(() => setReviewing(false));
+          }}
+          disabled={reviewing}
+          className="press flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+        >
+          <Sparkles size={16} aria-hidden /> {reviewing ? "Analysing…" : `Analyse my workouts (${creditCost("training_insight")} credits)`}
+        </button>
+        {reviewError && (
+          <p className="mt-2 text-xs text-destructive">{reviewError}</p>
+        )}
+        {/* The refusal is information, not a silent no-op. It used to be the one
+            state this panel deliberately skipped, so tapping Analyse with
+            nothing logged looked like a dead button. */}
+        {reviewData.kind === "empty" && reviewData.reason && (
+          <p className="mt-2 text-xs text-muted-foreground">{reviewData.reason}</p>
+        )}
+        {reviewData.kind === "unreadable" && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            The answer came back in a format the app could not read. Try again — no credits were
+            spent on a result you cannot see.
+          </p>
+        )}
+        {reviewData.kind === "ready" && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 space-y-3 rounded-xl border border-border bg-card/60 p-4"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              AI review{reviewData.charged ? ` \u00b7 ${reviewData.charged} credits` : ""}
+            </p>
+            {reviewBlocks(reviewData.data).map((block, index) => (
+              <div key={`${block.label ?? "block"}-${index}`} className="space-y-1.5">
+                {block.label && (
+                  <p className="text-[12px] font-bold text-foreground">{block.label}</p>
+                )}
+                {block.lines.map((line, lineIndex) => (
+                  <p
+                    key={lineIndex}
+                    className="text-[13px] leading-relaxed text-muted-foreground"
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </div>
+
       {/* ── Recent sessions ── */}
       <section className="px-5 pt-6">
         <h2 className="mb-2.5 px-1 text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
@@ -296,7 +471,7 @@ const Workouts = () => {
         </h2>
 
         {loading && rows.length === 0 && (
-          <p className="px-1 text-sm text-muted-foreground">Loading your sessions…</p>
+          <p className="px-1 text-sm text-muted-foreground">Nothing logged yet. Add the session you just finished and it will appear here.</p>
         )}
 
         {!loading && rows.length === 0 && (
@@ -353,6 +528,7 @@ const Workouts = () => {
           })}
         </div>
       </section>
+
     </div>
   );
 };

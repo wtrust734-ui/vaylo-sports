@@ -148,6 +148,21 @@ const INJECTION_GUARD =
 
 const base = (body: string) => `${COACH_VOICE}\n${AUDIENCE}\n${SAFETY}\n${INJECTION_GUARD}\n\n${body}\n\n${OUTPUT_SAFETY}`;
 
+// ---------------------------------------------------------------------------
+// The same contract, for the functions that write their own system message.
+// ---------------------------------------------------------------------------
+// generate-plan, edit-plan and generate-nutrition-plan speak the Chat
+// Completions protocol directly rather than going through generateAIResponse(),
+// so they cannot use `base()` — and each of them needs the safety contract in
+// full, because all three are places where the app tells an athlete what to
+// physically do. Copying the wording into those files is how the copies drift,
+// so the pieces are exported here instead and the registry's own prompts keep
+// using them through `base()`.
+//
+export const SAFETY_PREAMBLE = `${COACH_VOICE}\n${AUDIENCE}\n${SAFETY}\n${INJECTION_GUARD}`;
+
+export const OUTPUT_SAFETY_CONTRACT = OUTPUT_SAFETY;
+
 /**
  * Feature registry. Key = feature name passed to generateAIResponse().
  * Luna ($0.10/$0.50 per 1M) is the default for every feature; Sol
@@ -157,6 +172,22 @@ const base = (body: string) => `${COACH_VOICE}\n${AUDIENCE}\n${SAFETY}\n${INJECT
  */
 export const AI_FEATURES: Record<string, FeatureConfig> = {
   // ---------------------------------------------------------------- PRIMARY
+  // Editing part of a plan the athlete already owns. Registered here for the
+  // same reason every feature is: the model tier, the label and the safety
+  // contract live in one place (the live call is made by the edit-plan
+  // function, which builds its own request from these same exports).
+  edit_plan: {
+    label: "AI plan edit",
+    model: MODELS.MINI,
+    system: base(
+      "TASK: Edit part of an existing training plan on the athlete's instruction, changing nothing else.\n" +
+        "Return only the weeks you were given, in the same schema and order, with every untouched session identical to the input.\n" +
+        "If the request is unsafe, impossible with the stated equipment, or outside a coach's remit, return the weeks unchanged.",
+    ),
+    maxOutputTokens: 6000,
+    reasoningEffort: "medium",
+  },
+
   connection_test: {
     label: "Connection test",
     model: MODELS.MINI,
@@ -193,6 +224,21 @@ End with: "Estimates only — not a substitute for advice from a registered diet
     reasoningEffort: "low",
   },
 
+  // The week-by-week nutrition plan the Nutrition screen sells per week. It is
+  // registered here for the same reason every other feature is: the model tier,
+  // the label and the guard rails live in one place. The live call lives in
+  // supabase/functions/generate-nutrition-plan and reads this tier rather than
+  // naming a model of its own.
+  nutrition_plan: {
+    label: "Nutrition plan (week by week, 18+)",
+    model: MODELS.MINI,
+    system: base(`TASK: Write a week-by-week meal plan for an adult (18+) athlete.
+Days run Monday to Sunday. For every day give 3-6 meals with real, shop-able foods and estimated portions, and make that day's meals add up to the calorie target you were given with the protein target hit. Put the carbohydrate around the training the athlete actually does.
+End with: "Estimates only — not a substitute for advice from a registered dietitian."`),
+    maxOutputTokens: 8000,
+    reasoningEffort: "medium",
+  },
+
   ai_coach: {
     label: "AI Coach (full)",
     model: MODELS.MINI,
@@ -220,6 +266,23 @@ Only describe what is actually visible. If the image is unclear, say so instead 
     maxOutputTokens: 3500,
     reasoningEffort: "low",
     allowImages: true,
+  },
+
+  // The per-plan rehabilitation scaffold sold beside the Injury Management tab.
+  // The live call is made by ai-analyze (type "injury_plan"); it is registered
+  // here for the same reason every feature is — the model tier, the label and
+  // the safety contract live in one place, and the contract matters most here:
+  // this is the one feature whose subject is an injury, so it must never
+  // diagnose, never prescribe, and always name the signs that mean a clinician.
+  injury_plan: {
+    label: "Rehabilitation plan (injury, clinician-supervised)",
+    model: MODELS.MINI,
+    system: base(`TASK: Write a week-by-week rehabilitation scaffold for an injured athlete, for a qualified professional to supervise.
+Use what the athlete reported (site, severity, what still hurts and what does not) and their dossier. For each week give: the focus, 2-4 items or sessions with exact sets/reps/time, what has to be pain-free before progressing, and one progression rule.
+Add a "when to stop" list of the signs that mean stop and see a clinician, and one line saying when a physiotherapist should be seen for this injury.
+Never diagnose, never name a specific tissue diagnosis, never prescribe medication or injections, never promise a timeline to full recovery, and never tell an athlete to train through pain.`),
+    maxOutputTokens: 4000,
+    reasoningEffort: "medium",
   },
 
   race_strategy: {

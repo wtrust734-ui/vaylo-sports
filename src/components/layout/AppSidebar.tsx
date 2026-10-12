@@ -48,8 +48,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatSports } from "@/lib/profile";
 import { discordInviteUrl } from "@/config/community";
 import { usePersonalization } from "@/hooks/usePersonalization";
-import { NAV_CATALOG } from "@/lib/personalization/nav";
+import { NAV_CATALOG, visibleByEntitlement } from "@/lib/personalization/nav";
 import { isRouteVisible } from "@/config/featureFlags";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import logo from "@/assets/logo.jpg";
 
 function CommunityLink() {
@@ -200,6 +201,10 @@ const AppSidebar = () => {
   const { t } = useTranslation();
   const { profile, signOut } = useAuth();
   const personalization = usePersonalization();
+  // Paid screens are absent until they are owned (or Unlimited covers them).
+  // `hasFeature` is false while entitlements are still loading, so a paid entry
+  // is never briefly listed and then removed — it simply is not there yet.
+  const { hasFeature } = useSubscription();
   const setOpen = setShowAllOpen; // keep existing naming intact
 
   // Personalised nav: same groups/icons, filtered + reordered per athlete.
@@ -211,8 +216,11 @@ const AppSidebar = () => {
     return NAV_CATALOG.map((spec) => {
       const base = byTitle.get(spec.titleKey);
       if (!base) return null;
+      // Entitlement first: a route the athlete has not bought is not a nav item
+      // at all, so it cannot be reordered, badged or reached from the drawer.
+      const entitled = visibleByEntitlement(spec.items, hasFeature);
       const items: NavItem[] = personalization
-        .visible(spec.items.map((it) => ({ ...it })))
+        .visible(entitled.map((it) => ({ ...it })))
         .map(({ labelKey, path }) => ({
           labelKey,
           path,
@@ -231,7 +239,7 @@ const AppSidebar = () => {
         items,
       };
     }).filter((g): g is NavGroup => g !== null);
-  }, [personalization]);
+  }, [personalization, hasFeature]);
 
   const activeGroupKey = useMemo(() => {
     const found = navGroupsFiltered.find((g) => groupContainsPath(g, location.pathname));
@@ -434,7 +442,11 @@ const AppSidebar = () => {
           through openAppNav(). */}
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 start-0 z-30 hidden w-[272px] flex-col border-e border-white/[0.06] bg-card/60 backdrop-blur-2xl lg:flex">
+      {/* The width comes from --vaylo-sidebar-w so it cannot drift from the
+          `lg:pl-[var(--vaylo-sidebar-w)]` that main reserves for it. When the
+          two were separate literals (272px here, a 240px `pl-60` there) the
+          translucent panel covered 32px of every page at wide widths. */}
+      <aside className="fixed inset-y-0 start-0 z-30 hidden w-[var(--vaylo-sidebar-w)] flex-col border-e border-white/[0.06] bg-card/60 backdrop-blur-2xl lg:flex">
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-white/[0.04] via-transparent to-transparent pointer-events-none" />
         <div className="flex items-center gap-3 px-5 pb-4 pt-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow overflow-hidden">

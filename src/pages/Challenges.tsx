@@ -96,10 +96,13 @@ const Challenges = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Hero */}
-      <div className="relative overflow-hidden">
-        <div className="absolute -top-24 -right-16 w-72 h-72 bg-electric-purple/20 blur-[110px] rounded-full pointer-events-none" />
-        <div className="absolute -top-32 left-0 w-72 h-72 bg-primary/20 blur-[110px] rounded-full pointer-events-none" />
+      {/* Hero — on the plain page background. Two 288px blurred colour blobs
+          used to sit behind this header, which painted a purple wash that faded
+          out partway down the screen: the header read as a different surface
+          from the rest of the page, with a visible band where the wash ended.
+          The body already carries the app-wide mesh; nothing local is needed
+          (owner report, 2026-10-11). */}
+      <div>
         <div className="relative px-5 pt-[var(--vaylo-screen-top)] pb-5">
           <p className="text-[12px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5">
             <Trophy size={12} /> Compete

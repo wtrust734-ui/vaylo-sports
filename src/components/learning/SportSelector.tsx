@@ -7,7 +7,11 @@ const ICONS: Record<string, LucideIcon> = { Crosshair, Dumbbell, Zap, Moon, Appl
 /** Horizontal-scrolling (mobile) / wrapped (desktop) sport selector chips. */
 export function SportSelector({ selected, onSelect }: { selected: string; onSelect: (sport: string) => void }) {
   return (
-    <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+    // `-mx-5 px-5` matches the page's 20px gutter (PageSection), which is what
+    // makes this full-bleed: with the old `-mx-4 px-4` against a 20px parent it
+    // sat 4px inside the screen edge instead of reaching it, so the first chip
+    // lined up with nothing.
+    <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
       {SPORTS.map((sport) => {
         const active = sport === selected;
         return (

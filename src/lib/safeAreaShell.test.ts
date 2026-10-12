@@ -253,7 +253,14 @@ describe("safe-area insets", () => {
     //
     // Two `flex-1` groups make the space either side equal whatever the labels
     // say, so the button is centred by construction rather than by luck.
-    const groups = bottomNav.match(/flex flex-1 items-center justify-around gap-1/g) ?? [];
+    //
+    // Matched on the contract, not on a literal class string: the groups also
+    // carry `min-w-0` now (so they can shrink on a 320px phone), and a test that
+    // demands one exact class list fails on a change that keeps the guarantee.
+    // What must survive is that exactly two `flex-1` groups carry the
+    // `justify-around` tab row.
+    const groups =
+      bottomNav.match(/<div className="[^"]*\bflex-1\b[^"]*\bjustify-around\b[^"]*"/g) ?? [];
     expect(groups).toHaveLength(2);
 
     // Left group → button → right group, in that order. Matched on the JSX
@@ -281,6 +288,28 @@ describe("safe-area insets", () => {
     expect(groupGap).toBeGreaterThanOrEqual(0);
     const group = (280 - actionW - 2 * rowGap) / 2;
     expect(2 * minW + groupGap).toBeLessThanOrEqual(group);
+
+    // The arithmetic above is necessary but was NOT sufficient, and the app
+    // shipped the difference: it models a tab as `min-w` wide, while a tab's
+    // real width came from its label — a nowrap "Perform" at 12px with
+    // tracking-widest is ~59px, plus 16px of padding — so four tabs needed
+    // ~364px inside the 280px box. The row spilled past the screen and the
+    // Profile tab was drawn 15px off the right edge, half untappable, on every
+    // 320px phone. Measured, not guessed: `npm run ui:audit` at 320x568.
+    //
+    // What makes the arithmetic true for the real content is that a tab can
+    // shrink to its floor and clip instead of pushing: `flex-1` to share its
+    // group, `min-w-[48px]` to hold the touch floor, `overflow-hidden` so the
+    // worst case is an ellipsis rather than an element outside the viewport.
+    const navButton = bottomNav.slice(bottomNav.indexOf("const NavButton"));
+    const navButtonClass = /className="(press relative flex[^"]*)"/.exec(navButton)?.[1] ?? "";
+    expect(navButtonClass, "NavButton className not found").not.toBe("");
+    expect(navButtonClass).toContain("flex-1");
+    expect(navButtonClass).toContain("min-w-[48px]");
+    expect(navButtonClass).toContain("overflow-hidden");
+    // And the label has to be the thing that truncates, not the button that
+    // overflows: `w-full` measures it against the tab, `truncate` ellipsises.
+    expect(navButton).toMatch(/className=\{`[^`]*\bw-full\b[^`]*\btruncate\b[^`]*`\}/);
   });
 });
 

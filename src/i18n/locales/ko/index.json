@@ -144,6 +144,23 @@
       "arcadeDesc": "반응 속도와 정확도 게임"
     }
   },
+  "form": {
+    "title": "폼",
+    "subtitle": "기술 드릴, 신호, 영상 분석.",
+    "drillsTitle": "내 드릴",
+    "free": "무료",
+    "tunedFor": "{{sport}} 맞춤",
+    "allSports": "모든 종목을 표시하고 있어요 — 프로필에 종목을 추가하면 맞춤으로 바뀌어요.",
+    "foundations": "기초 — 모든 종목",
+    "yourSport": "내 종목",
+    "why": "도움이 되는 이유",
+    "how": "하는 방법",
+    "cues": "신호",
+    "analysisBadge": "AI 폼 분석",
+    "analysisTitle": "동작 영상 분석",
+    "analysisBody": "달리기, 스프린트, 일반 동작 영상을 올리면 AI 코치 리포트를 받아요 — 분석 1회당 {{cost}} 크레딧, 별도 해제는 필요 없어요.",
+    "analysisCta": "영상 분석 · {{cost}} 크레딧"
+  },
   "dashboard": {
     "goodMorning": "좋은 아침이에요",
     "goodAfternoon": "좋은 오후예요",

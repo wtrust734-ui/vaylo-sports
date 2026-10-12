@@ -30,7 +30,17 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
       aria-label={label}
       aria-current={isActive ? "page" : undefined}
       onClick={() => navigate(item.path)}
-      className="press relative flex min-w-[48px] min-h-[48px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-2xl"
+      // `flex-1` + `min-w-[48px]` + `overflow-hidden` are what keep this row
+      // inside the screen on a 320px phone. `min-w-[48px]` alone was not
+      // enough: a tab's width was set by its label's intrinsic width (a
+      // nowrap "Perform" at 12px with tracking-widest is ~59px, plus 16px of
+      // padding), so four tabs needed ~364px inside a 280px box and the last
+      // one — Profile — was drawn 15px past the right edge, half off-screen
+      // and hard to hit. `flex-1` makes the two tabs in a group share the
+      // space evenly, `min-w-[48px]` keeps the 44px touch floor intact, and
+      // `overflow-hidden` means the worst case is an ellipsis rather than an
+      // element outside the viewport, in any language.
+      className="press relative flex min-w-[48px] min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-2xl px-2 py-1.5 max-[400px]:px-1"
     >
       {isActive && (
         <motion.div
@@ -50,7 +60,12 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
         }`}
       />
       <span
-        className={`relative z-10 text-[12px] font-bold tracking-widest truncate max-w-[64px] transition-colors duration-200 ${
+        // `w-full` so the truncation happens against the tab's real width
+        // rather than the label's own max-content, which is what let the row
+        // overflow. Below 400px the type steps down from 12px/tracking-widest
+        // to 10.5px/tracking-normal, which is enough for the longest English
+        // label ("Perform") to fit a 320px phone without an ellipsis.
+        className={`relative z-10 w-full max-w-[64px] truncate text-center text-[12px] font-bold tracking-widest transition-colors duration-200 max-[400px]:text-[10.5px] max-[400px]:tracking-normal ${
           isActive ? "text-primary" : "text-muted-foreground/60"
         }`}
       >
@@ -105,10 +120,15 @@ const BottomNav = () => {
             the narrowest phone this app supports, and the wider phones the
             app actually ships on grow to fill it via justify-around.
 
-            min-w is a floor, not a width, so dropping it changes nothing on a
-            screen with room; it only relaxes the constraint where there was
-            none. 48px stays above the 44px floor that touchTargets.test.ts
-            enforces. */}
+            min-w is a floor, not a width, so it changes nothing on a screen
+            with room; it only relaxes the constraint where there was none.
+            48px stays above the 44px floor that touchTargets.test.ts enforces.
+
+            The arithmetic above is about the FAB's separation, and it was the
+            only thing checked when this row was written — it assumed a tab was
+            48px wide, but a tab's width came from its label, so the row still
+            overflowed a 320px screen by 15px. See the NavButton's own note for
+            what actually holds the width now. */}
         <div className="flex items-center gap-1 px-2 py-2">
           {/* Two equal-width groups around the action button, rather than four
               `justify-around` siblings of it.
@@ -128,13 +148,13 @@ const BottomNav = () => {
               inside a group keep their natural width, which is what keeps
               "Perform" from truncating: giving each of the five an equal share
               instead would have clipped it on a 320px phone. */}
-          <div className="flex flex-1 items-center justify-around gap-1">
+          <div className="flex min-w-0 flex-1 items-center justify-around gap-1">
             {LEFT.map((item) => (
               <NavButton key={item.path} item={item} />
             ))}
           </div>
           <QuickActionSheet />
-          <div className="flex flex-1 items-center justify-around gap-1">
+          <div className="flex min-w-0 flex-1 items-center justify-around gap-1">
             {RIGHT.map((item) => (
               <NavButton key={item.path} item={item} />
             ))}

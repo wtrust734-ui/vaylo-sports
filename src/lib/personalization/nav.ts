@@ -11,6 +11,14 @@ export type NavItemSpec = {
   feature: FeatureKey;
   labelKey: string;
   path: string;
+  /**
+   * The entitlement key (`hasFeature`) this route needs before it may appear.
+   * Absent = free. Set it and the item is filtered out of every navigation
+   * surface until the unlock — or Unlimited — is owned, instead of being listed
+   * with a padlock on it. Must agree with ROUTE_UNLOCKS below; nav.test.ts
+   * refuses a route that is gated in one place and not the other.
+   */
+  unlock?: string;
   /** Promote for brand-new athletes (onboarding-friendly surfaces). */
   newFirst?: boolean;
   /** Promote once the athlete has history (depth surfaces). */
@@ -66,8 +74,12 @@ export const NAV_CATALOG: NavGroupSpec[] = [
       { feature: "recover.recovery", labelKey: "sidebar.recovery", path: "/recovery", newFirst: true },
       { feature: "recover.wearables", labelKey: "sidebar.wearables", path: "/health-sync" },
       { feature: "recover.nutrition", labelKey: "sidebar.nutrition", path: "/nutrition" },
-      { feature: "recover.mental", labelKey: "sidebar.mental", path: "/mental" },
-      { feature: "recover.injury", labelKey: "sidebar.injury", path: "/injury" },
+      // Mental Gym and Injury Management are one-off purchases: an athlete who
+      // has not bought them does not have these entries at all. The Market's
+      // unlocks section is where they are bought; until then, a menu row that
+      // only leads to a paywall is a menu row for a product, not for a screen.
+      { feature: "recover.mental", labelKey: "sidebar.mental", path: "/mental", unlock: "mental_gym" },
+      { feature: "recover.injury", labelKey: "sidebar.injury", path: "/injury", unlock: "injury_management" },
     ],
   },
   {
@@ -119,3 +131,60 @@ export const QUICK_ACTIONS: (NavItemSpec & { descKey: string; icon: string })[] 
   { feature: "recover.recovery", labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery", icon: "HeartPulse" },
   { feature: "perform.vpr", labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr", icon: "Pencil" },
 ];
+
+// ---------------------------------------------------------------------------
+// Purchased screens — routes that are useless until the unlock is owned
+// ---------------------------------------------------------------------------
+// One map, so a route cannot be gated in the sidebar and open in a hub. The
+// values are the entitlement keys `hasFeature()` answers for (see
+// src/config/unlocks.ts, which owns the purchase side).
+//
+// The Cross-Sport unlock is deliberately NOT here: its route in the catalogue is
+// /training, which is the free training-plan screen — the analysis it sells now
+// lives inside the plan, so gating /training would hide a standard tab.
+//
+export const ROUTE_UNLOCKS: Record<string, string> = {
+  "/mental": "mental_gym",
+  "/injury": "injury_management",
+};
+
+/** The entitlement a route needs, or null when the route is free. */
+export function unlockForPath(path: string): string | null {
+  const base = path.split("?")[0].replace(/\/$/, "");
+  if (ROUTE_UNLOCKS[base]) return ROUTE_UNLOCKS[base];
+  for (const [prefix, feature] of Object.entries(ROUTE_UNLOCKS)) {
+    if (base.startsWith(`${prefix}/`)) return feature;
+  }
+  return null;
+}
+
+/**
+ * True when the athlete may see this route at all.
+ *
+ * `hasFeature` comes from useSubscription(): true for a bought unlock AND for an
+ * Unlimited subscription, which is what "paid for it" has to mean here. While
+ * entitlements are still loading the answer is false, so a paid entry is absent
+ * rather than flashing in and out.
+ */
+export function isRouteEntitled(
+  path: string,
+  hasFeature: (feature: string) => boolean,
+): boolean {
+  const needed = unlockForPath(path);
+  return needed === null || hasFeature(needed);
+}
+
+/**
+ * The one filter every nav surface uses. Items are dropped, not badged: a
+ * padlock on a row the athlete cannot open is an advert, and the app already
+ * has a shop for that.
+ */
+export function visibleByEntitlement<T extends { path: string; unlock?: string }>(
+  items: T[],
+  hasFeature: (feature: string) => boolean,
+): T[] {
+  return items.filter((item) => {
+    const needed = item.unlock ?? unlockForPath(item.path);
+    return needed === null || needed === undefined || hasFeature(needed);
+  });
+}

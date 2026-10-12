@@ -115,7 +115,12 @@ const OfflineBanner = () => {
         // to carry its own. `pt-safe-t` was a dead class (defined nowhere
         // since the root rule landed) and the banner's text sat under the
         // status bar whenever the app went offline.
-        className={`fixed top-0 left-0 right-0 z-[70] max-h-[70vh] overflow-y-auto px-4 py-2 pt-[calc(var(--vaylo-inset-top)+0.5rem)] text-xs font-semibold shadow-lg ${TONE[sync.copy.tone]}`}
+        // `start-0 end-0` rather than `left-0 right-0` so the `lg:` offset below
+        // is the logical edge too, and the banner mirrors with the layout in
+        // RTL. From `lg:` up the desktop sidebar owns the start edge, so the
+        // banner starts after it — a full-bleed strip put the sync banner over
+        // the sidebar's own header, hiding the brand for as long as it showed.
+        className={`fixed top-0 start-0 end-0 z-[70] max-h-[70vh] overflow-y-auto px-4 py-2 pt-[calc(var(--vaylo-inset-top)+0.5rem)] text-xs font-semibold shadow-lg lg:start-[var(--vaylo-sidebar-w)] ${TONE[sync.copy.tone]}`}
         role="status"
         aria-live="polite"
       >

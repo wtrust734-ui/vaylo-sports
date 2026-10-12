@@ -31,6 +31,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { UNLOCK_CATALOG, PER_USE_ROUTES } from "@/config/unlocks";
+import { NAV_CATALOG, ROUTE_UNLOCKS } from "@/lib/personalization/nav";
 import { FEATURE_UNLOCKS, featureKeyFor, labelFor } from "@/lib/featureUnlocks";
 import {
   API_COST_CEILING_USD,
@@ -174,6 +175,47 @@ describe("unlock catalogue — every entry clears its cost", () => {
     }
   });
 
+});
+
+describe("unlock catalogue — a purchased screen is hidden until it is bought", () => {
+  /**
+   * The gating rule, checked from the purchase side: if a route can only be used
+   * after buying an unlock, that route must be in ROUTE_UNLOCKS — otherwise the
+   * sidebar and every hub would keep listing it for an athlete who has not paid.
+   *
+   * `route` is not always a gated screen, which is why this is not simply "every
+   * entry": Cross-Sport's catalogue route is /training, the free training-plan
+   * screen (the analysis it sells now lives inside the plan), so gating it would
+   * hide a standard tab.
+   */
+  const FREE_AFTER_UNLOCK: string[] = ["/training"];
+
+  it("gates every route that is a purchased screen", () => {
+    for (const entry of UNLOCK_CATALOG) {
+      if (FREE_AFTER_UNLOCK.includes(entry.route)) continue;
+      expect(
+        ROUTE_UNLOCKS[entry.route],
+        `${entry.product} unlocks a screen at ${entry.route}, which is not in ROUTE_UNLOCKS — it would be listed before it is bought`,
+      ).toBe(entry.feature);
+    }
+  });
+
+  it("has a nav catalogue item behind every gated route", () => {
+    const items = NAV_CATALOG.flatMap((g) => g.items);
+    for (const [path, feature] of Object.entries(ROUTE_UNLOCKS)) {
+      const item = items.find((i) => i.path === path);
+      expect(item, `${path} is gated in ROUTE_UNLOCKS but has no nav item`).toBeTruthy();
+      expect(item!.unlock).toBe(feature);
+    }
+  });
+
+  it("sells the unlock somewhere the athlete can still reach", () => {
+    // Hiding the paid screen must not hide the way to buy it: the Market is a
+    // free route in the same catalogue, and the unlocks it lists come from this
+    // file.
+    const items = NAV_CATALOG.flatMap((g) => g.items);
+    expect(items.some((i) => i.path === "/market" && !i.unlock)).toBe(true);
+  });
 });
 
 describe("per-use reference — a price always leads somewhere", () => {

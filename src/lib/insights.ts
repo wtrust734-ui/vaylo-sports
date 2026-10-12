@@ -148,7 +148,13 @@ export interface InsightReturnProgression {
   weekBack: number;
   totalWeeks: number;
   volumePct: number;
-  focus: "rebuild" | "restore" | "resume" | "compete";
+  /**
+   * What the week is for. The first four are the return progression; `preload`
+   * is the loading week before a planned break and `holiday` the eased week
+   * inside one, because a break reshapes the weeks around it too. Mirrors
+   * `ReturnFocus` in `@/lib/adaptivePlan`.
+   */
+  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
 }
 
 export interface InsightFacts {

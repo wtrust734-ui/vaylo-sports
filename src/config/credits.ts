@@ -56,8 +56,10 @@ export type FeatureCostKey =
   | "form_analysis"
   | "video_form_analysis"
   | "injury_management_unlock"
+  | "injury_plan"
   | "calorie_scan"
   | "nutrition_plan_week"
+  | "nutrition_review"
   | "mental_gym_unlock"
   | "vaylo_coach_message"
   | "weekly_coach_review"
@@ -143,7 +145,17 @@ export const API_COST_CEILING_USD = {
   plan_edit: 0.003,
   plan_edit_full: 0.003,
   calorie_scan: 0.0014, // 2.5k in / 0.9k out
+  // A nutrition review is a text call over what the athlete has actually
+  // logged plus their dossier, so the input is the large half: a week of meals
+  // is ~13k tokens in, with a short structured answer out. Luna-class, doubled
+  // for a bad token estimate — the same treatment every other ceiling gets.
+  nutrition_review: 0.0038,
   tactical_prep: 0.0029, // 7k in / 1.5k out
+  // One Luna-class text call per injury plan: the athlete's injury (site,
+  // severity, what they can still do) plus the dossier in, a week-by-week
+  // rehabilitation scaffold out. Slightly cheaper than tactical_prep and the
+  // same shape — no image, no video, a bounded JSON answer.
+  injury_plan: 0.0032,
   development_trajectory: 0.0017, // 4k in / 0.9k out
   archetype_view: 0.0022, // 5k in / 1.2k out
   // 20k in / 3k out on Gemini Flash. This is the second most expensive call in
@@ -239,6 +251,15 @@ export const FEATURE_COSTS: Record<FeatureCostKey, number> = {
   form_analysis: 15,
   video_form_analysis: 45,
   injury_management_unlock: 25,
+  // Injury Management is bought once (25), and BUYING THE TAB DOES NOT BUY THE
+  // PLANS IN IT. This is the per-plan AI charge that sits on top: 6 credits,
+  // $0.063 of revenue at the worst-case net credit value against a $0.0032
+  // ceiling — ~19x, clear of the 8x floor — the same band as the other small
+  // repeatable AI checks. A rehab scaffold is written from the athlete's own
+  // injury and training, so it costs us a provider call every time it is made;
+  // a flat rate on it would lose money to exactly the athlete who re-plans
+  // every week.
+  injury_plan: 6,
   calorie_scan: 12,
   // NOT an AI feature, and priced as such. Creating a nutrition plan writes the
   // macro targets the athlete typed in (see Nutrition.tsx createNutritionPlan)
@@ -254,6 +275,15 @@ export const FEATURE_COSTS: Record<FeatureCostKey, number> = {
   //
   // The AI half of this screen is calorie_scan (photo -> macros), priced at 12.
   nutrition_plan_week: 8,
+  // The other AI half of this screen: a review of what the athlete has actually
+  // logged, read against their age, sport, training load and goals. One
+  // Luna-class text call with no image, and the ceiling is the doubled 13k-in /
+  // 1.2k-out estimate above, so 8 credits is $0.084 at the worst-case net
+  // credit value ($0.0105) against a $0.0038 ceiling: ~22x, comfortably clear
+  // of the 8x floor. Priced in the same band as the other small, repeatable AI
+  // checks (weekly coach review 10, training insight 8) rather than priced up:
+  // a weekly fuel check only earns its keep if an athlete actually runs it.
+  nutrition_review: 8,
   mental_gym_unlock: 30,
   vaylo_coach_message: 8,
   weekly_coach_review: 10,
@@ -282,8 +312,10 @@ export const FEATURE_LABELS: Record<FeatureCostKey, string> = {
   form_analysis: "AI Form Analysis (per analysis)",
   video_form_analysis: "AI Video Form Analysis",
   injury_management_unlock: "Injury Management unlock",
+  injury_plan: "AI Injury Plan (per plan)",
   calorie_scan: "AI Calorie Scan",
   nutrition_plan_week: "Nutrition Plan (per week)",
+  nutrition_review: "AI Nutrition Review",
   mental_gym_unlock: "Mental Gym unlock",
   vaylo_coach_message: "Vaylo Sports Coach message",
   weekly_coach_review: "Weekly Coach Review",
@@ -307,6 +339,7 @@ export const AI_USAGE_FEATURES: FeatureCostKey[] = [
   "vaylo_coach_message",
   "weekly_coach_review",
   "calorie_scan",
+  "nutrition_review",
   "video_form_analysis",
   "tactical_prep",
   "training_plan_week",
@@ -317,6 +350,7 @@ export const AI_USAGE_FEATURES: FeatureCostKey[] = [
   "form_analysis",
   "limiter_fix_plan",
   "training_insight",
+  "injury_plan",
 ];
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,22 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Plus, X } from "lucide-react";
+import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Plus, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeLoads, type LoadRow } from "@/lib/performance";
 import { creditCost } from "@/lib/credits";
+import { edgeErrorMessage } from "@/lib/edgeErrors";
+import { shortfallFromEdgeError } from "@/lib/shortfall";
+import { requestCreditTopUp } from "@/lib/topUpStore";
+import { getAiLocale } from "@/i18n";
+import { getLocalPBs } from "@/lib/athleteDossier";
+import {
+  buildInjuryBriefing,
+  parseInjuryPlan,
+  planHeadline,
+  renderInjuryProtocol,
+  splitStoredProtocol,
+} from "@/lib/injuryPlan";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Button } from "@/components/ui/button";
@@ -101,6 +113,9 @@ const Injury = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
   const [unlocking, setUnlocking] = useState(false);
+  // The injury whose personalised plan is being written right now. One at a
+  // time: a double tap used to be two paid calls.
+  const [planningId, setPlanningId] = useState<string | null>(null);
   const unlock = useUnlockFeature();
   const { hasFeature, loading: entitlementsLoading, refresh: refreshEntitlements } = useSubscription();
 
@@ -204,7 +219,7 @@ const Injury = () => {
     });
     if (error) toast.error(error.message);
     else {
-      toast.success("Injury logged — recovery plan generated below");
+      toast.success("Injury logged — a free generic scaffold is below. A personalised plan costs credits.");
       setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); load();
     }
   };
@@ -215,6 +230,105 @@ const Injury = () => {
     load();
   };
 
+  /**
+   * The PAID path on this tab: a personalised rehabilitation plan for one injury.
+   *
+   * Injury Management is bought once; this is what costs credits per use, and
+   * the charge is deliberate rather than a paywall on an existing feature: the
+   * plan is written by the model for this injury at this severity, against the
+   * athlete's own training week, so it is a provider call every time it is
+   * made — even for an athlete who already owns the tab. The free generic
+   * scaffold stays free because it costs nothing to produce.
+   *
+   * The SERVER charges (ai-analyze, type "injury_plan") and refunds on failure,
+   * so this page never spends credits itself, and nothing is written to the
+   * injury row until an answer has arrived AND been read. A 402 is a purchase
+   * opportunity, not a dead end: the top-up sheet opens for the exact gap.
+   */
+  const generateInjuryPlan = async (injury: InjuryRow) => {
+    if (!user || !profile || planningId) return;
+    setPlanningId(injury.id);
+    try {
+      const created = typeof injury.created_at === "string" ? injury.created_at : null;
+      const daysSince = created
+        ? Math.max(1, Math.round((Date.now() - new Date(created).getTime()) / 86_400_000))
+        : null;
+      const briefing = buildInjuryBriefing({
+        bodyPart: injury.body_part,
+        severity: injury.severity,
+        notes: injury.notes ?? null,
+        daysSince: Number.isFinite(daysSince as number) ? daysSince : null,
+        sport: profile.sport ?? null,
+      });
+
+      const { data, error } = await supabase.functions.invoke("ai-analyze", {
+        body: {
+          type: "injury_plan",
+          briefing,
+          userLocale: getAiLocale(),
+          pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })),
+        },
+      });
+
+      if (error) {
+        const message = await edgeErrorMessage(error);
+        const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
+        if (status === 402) {
+          const short = await shortfallFromEdgeError(error);
+          if (short) {
+            const outcome = await requestCreditTopUp({
+              shortfall: short.shortfall,
+              reasonLabel: "AI Injury Plan",
+            });
+            if (outcome.purchased) {
+              toast.message("Credits added — tap \"Personalised plan\" again.");
+              return;
+            }
+          }
+        }
+        toast.error(message);
+        return;
+      }
+
+      const parsed = parseInjuryPlan((data as { result?: unknown } | null)?.result);
+      if (!parsed.plan) {
+        // Charged but unreadable: say so, and save nothing. The server has
+        // already refunded a failed call; an unreadable answer is reported
+        // rather than rendered as an empty plan the athlete paid for.
+        toast.error(parsed.error || "The plan could not be read, so nothing was saved.");
+        return;
+      }
+
+      // Written BEFORE the save, so a failed write is visible as a failure.
+      // Creating it again would charge a second time, which is the one thing
+      // the athlete cannot fix from here.
+      const { error: saveError } = await supabase
+        .from("injury_logs")
+        .update({ recovery_protocol: renderInjuryProtocol(parsed.plan) })
+        .eq("id", injury.id);
+      if (saveError) {
+        toast.error(
+          "Your plan was written but not saved to this injury. Contact support — do not generate it again, a second attempt would charge you twice.",
+        );
+        return;
+      }
+
+      // The cost the SERVER charged, not the price from the config: Unlimited
+      // pays nothing for a call that is metered for everyone else, and telling a
+      // subscriber they spent 6 credits would be a lie about their own balance.
+      const charged = Number((data as { cost?: unknown } | null)?.cost ?? 0);
+      toast.success(planHeadline(parsed.plan), {
+        description: charged > 0 ? `${charged} credits used.` : "Included with Unlimited.",
+      });
+      await refreshProfile();
+      load();
+    } catch (e) {
+      toast.error((e as Error)?.message || "Could not create the plan");
+    } finally {
+      setPlanningId(null);
+    }
+  };
+
   if (loading || entitlementsLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   if (!unlocked) {
@@ -223,11 +337,12 @@ const Injury = () => {
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest mb-2"><ShieldAlert size={14} /> Training strain & recovery</div>
         <h1 className="text-4xl font-display font-bold">Injury <span className="text-gradient-electric">Management</span></h1>
         <div className="mt-8 p-6 rounded-2xl border-2 border-primary/40 bg-card/40 backdrop-blur space-y-4">
-          <div className="text-sm text-muted-foreground">Unlock a training-strain reading, evidence-led recovery scaffolds, and automatic protocol generation whenever you log an injury.</div>
+          <div className="text-sm text-muted-foreground">Unlock a training-strain reading, a free generic return-to-training scaffold with every injury, and personalised AI plans.</div>
           <ul className="text-sm space-y-1.5">
             <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Strain reading 0–100 from your load, recovery and sleep</li>
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Body-area specific return-to-training plans</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> A body-area scaffold with every injury you log — free, and it stays free</li>
             <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Load & A:C ratio tracking</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Personalised AI plans, {creditCost("injury_plan")} credits each — charged per plan, even once the tab is unlocked</li>
           </ul>
           <div className="text-3xl font-display font-bold">{creditCost("injury_management_unlock")} <span className="text-sm text-muted-foreground">credits · one-time</span></div>
           <Button onClick={unlockInjury} disabled={unlocking} className="w-full">{unlocking ? "Unlocking..." : `Unlock for ${creditCost("injury_management_unlock")} credits`}</Button>
@@ -317,7 +432,7 @@ const Injury = () => {
               <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
               <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-training scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
             </div>
-            <Button onClick={submitInjury} className="w-full">Save & generate plan</Button>
+            <Button onClick={submitInjury} className="w-full">Save injury — free generic scaffold</Button>
           </motion.div>
         )}
         {injuries.length === 0 ? (
@@ -337,16 +452,47 @@ const Injury = () => {
                   </div>
                   {i.status === "active" && <Button size="sm" variant="ghost" onClick={() => resolveInjury(i.id)}>Resolve</Button>}
                 </div>
-                {i.recovery_protocol && (
-                  <div className="mt-2 pt-2 border-t border-border/40">
-                    <div className="text-[12px] uppercase tracking-widest text-primary mb-1">Recovery Plan</div>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      {i.recovery_protocol.split("\n").map((line: string, idx: number) => (
-                        <li key={idx} className="flex gap-2"><span className="text-primary">•</span><span>{line}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {i.recovery_protocol && (() => {
+                  // The column holds both plans, so the label comes from the
+                  // stored text (the marker line the paid path writes) rather
+                  // than from state: a generic scaffold must never be shown as
+                  // the thing the athlete paid for, and vice versa.
+                  const stored = splitStoredProtocol(i.recovery_protocol);
+                  return (
+                    <div className="mt-2 pt-2 border-t border-border/40">
+                      <div className="text-[12px] uppercase tracking-widest text-primary mb-1">
+                        {stored.personalised ? "Personalised plan (written for this injury)" : "Generic scaffold (free)"}
+                      </div>
+                      <ul className="space-y-1 text-xs text-muted-foreground">
+                        {stored.lines.map((line, idx) => (
+                          <li key={idx} className="flex gap-2"><span className="text-primary">•</span><span>{line}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+
+                {/* The paid action. The price comes from the credit config, never
+                    from a literal written here, and the reason is on screen
+                    rather than implied: a plan is written for this injury at this
+                    severity against the athlete's training week, so it costs us a
+                    provider call every time it is made. */}
+                <div className="mt-3 pt-2 border-t border-border/40">
+                  <Button
+                    size="sm"
+                    onClick={() => void generateInjuryPlan(i)}
+                    disabled={planningId === i.id}
+                    className="w-full gap-1.5"
+                  >
+                    {planningId === i.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    {planningId === i.id
+                      ? "Writing your plan…"
+                      : `${i.recovery_protocol ? "Replace with a" : "Create a"} personalised plan · ${creditCost("injury_plan")} credits`}
+                  </Button>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    {creditCost("injury_plan")} credits per plan — written for this injury against your training week, so it costs a provider call every time it is made. The tab unlock does not cover it. The generic scaffold above stays free.
+                  </p>
+                </div>
               </div>
             ))}
           </div>

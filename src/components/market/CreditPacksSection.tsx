@@ -40,16 +40,16 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
             transition={{ delay: 0.03 + i * 0.05, type: "spring", stiffness: 210, damping: 24 }}
             className={`relative overflow-hidden rounded-3xl ${
               pack.popular
-                ? "p-[1.5px] bg-gradient-to-br from-primary via-electric-purple to-primary shadow-glow"
+                ? "p-[1px] bg-primary/40"
                 : pack.best_value
-                ? "p-[1.5px] bg-gradient-to-br from-energy via-electric-purple to-primary"
+                ? "p-[1px] bg-energy/40"
                 : "p-[1px] bg-border"
             }`}
           >
             {highlight && (
               <span
-                className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold text-primary-foreground ${
-                  pack.popular ? "bg-gradient-primary shadow-glow" : "bg-gradient-to-r from-energy to-electric-purple"
+                className={`absolute right-4 top-4 z-10 rounded-full px-2.5 py-1 text-[12px] font-bold ${
+                  pack.popular ? "bg-primary text-primary-foreground" : "bg-energy text-background"
                 }`}
               >
                 {pack.popular ? (
@@ -62,7 +62,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
 
             <div className="rounded-[22px] bg-card p-5">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-electric-purple/15">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
                   <Zap size={28} className="text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -71,7 +71,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                     <span className="text-xs text-muted-foreground">credits</span>
                   </div>
                   {pack.bonus > 0 && (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-energy/30 bg-gradient-to-r from-energy/25 to-electric-purple/25 px-2 py-0.5">
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-energy/30 bg-energy/15 px-2 py-0.5">
                       <Sparkles size={10} className="text-energy" />
                       <span className="text-[12px] font-bold text-energy">+{pack.bonus} bonus</span>
                     </span>
@@ -102,7 +102,7 @@ export default function CreditPacksSection({ packs, currency, loading, onAdd }: 
                 whileTap={canBuy ? { scale: 0.97 } : undefined}
                 onClick={() => onAdd?.(pack)}
                 disabled={!canBuy}
-                className="mt-3 w-full rounded-2xl bg-gradient-primary py-3 font-bold text-primary-foreground shadow-glow disabled:opacity-50 disabled:shadow-none"
+                className="mt-3 w-full rounded-2xl bg-primary py-3 font-bold text-primary-foreground disabled:opacity-50"
               >
                 {canBuy ? `Add to basket · ${formatLocalPrice(pack.price_cents, currency)}` : "Purchases are 18+ only"}
               </motion.button>

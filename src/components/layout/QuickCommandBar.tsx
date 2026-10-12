@@ -22,7 +22,15 @@ const QuickCommandBar = () => {
       transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 28 }}
       className="fixed bottom-4 left-1/2 hidden -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-md lg:block"
     >
-      <div className="relative rounded-[22px] border border-white/[0.08] bg-card/70 sm:backdrop-blur-2xl shadow-card px-2 py-2 flex items-center justify-between">
+      {/* `gap-1` rather than `justify-between`.
+
+          `justify-between` never did anything here: every tab is `flex-1`, so
+          the free space it would have distributed was already consumed by the
+          tabs stretching to fill the row. The result was two `rounded-xl` pills
+          butted edge-to-edge with a measured 0px between them — visible only at
+          `lg:` and up, because that is where this bar exists, which is why the
+          phone-only review pass never caught it. */}
+      <div className="relative rounded-[22px] border border-white/[0.08] bg-card/70 sm:backdrop-blur-2xl shadow-card px-2 py-2 flex items-center justify-between gap-1">
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.06] to-transparent" />
         {items.map((item) => {
           const isActive = location.pathname === item.path;

@@ -209,9 +209,17 @@ android {
         // nutrition pricing) after other agents' landings. No manifest,
         // permission or plugin change — WebView-only.
         //
+        // Health Connect is offered where the athlete actually is instead of
+        // only inside the Recover hub: a pop-up on the sign-up screen (which
+        // arms the connection, since that screen has no session to connect
+        // with), the same pop-up plus a standing "Wear a watch?" row at the end
+        // of onboarding, and a Wearables row in Profile to sync, manage
+        // permissions or disconnect. Refresh of the current tree otherwise. No
+        // manifest, permission or plugin change — WebView-only.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 27
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.23"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 28
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.24"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -149,6 +149,38 @@ create policy "ad_render_jobs_owner_rw" on public.ad_render_jobs
   for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
 -- Grants
+-- Storage bucket for rendered videos
+insert into storage.buckets (id, name, public)
+values ('renders', 'renders', true)
+on conflict (id) do nothing;
+
+-- Storage policies: allow authenticated users to read/write their own files in renders bucket
+-- Renders are stored under renders/{userId}/{filename}
+create policy if not exists "renders_select_own" on storage.objects
+  for select using (
+    bucket_id = 'renders'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy if not exists "renders_insert_own" on storage.objects
+  for insert with check (
+    bucket_id = 'renders'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy if not exists "renders_update_own" on storage.objects
+  for update using (
+    bucket_id = 'renders'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy if not exists "renders_delete_own" on storage.objects
+  for delete using (
+    bucket_id = 'renders'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Grants
 grant all on public.ad_campaigns to authenticated, service_role;
 grant all on public.ad_concepts to authenticated, service_role;
 grant all on public.ad_assets to authenticated, service_role;

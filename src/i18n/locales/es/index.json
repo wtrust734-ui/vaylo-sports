@@ -144,6 +144,23 @@
       "arcadeDesc": "Juegos de reacción y precisión"
     }
   },
+  "form": {
+    "title": "Técnica",
+    "subtitle": "Ejercicios de técnica, claves y análisis de vídeo.",
+    "drillsTitle": "Tus ejercicios",
+    "free": "Gratis",
+    "tunedFor": "Adaptado a {{sport}}",
+    "allSports": "Mostrando todos los deportes: añade un deporte a tu perfil para ajustarlos.",
+    "foundations": "Fundamentos — todos los deportes",
+    "yourSport": "Para tu deporte",
+    "why": "Por qué ayuda",
+    "how": "Cómo hacerlo",
+    "cues": "Claves",
+    "analysisBadge": "Análisis de técnica con IA",
+    "analysisTitle": "Analiza un vídeo de movimiento",
+    "analysisBody": "Sube un vídeo de carrera, sprint o movimiento general y recibe un informe completo de coaching con IA — {{cost}} créditos por análisis, sin desbloqueo.",
+    "analysisCta": "Analizar un vídeo · {{cost}} créditos"
+  },
   "dashboard": {
     "goodMorning": "Buenos días",
     "goodAfternoon": "Buenas tardes",

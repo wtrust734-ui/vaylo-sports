@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Bell, BellOff, CheckCircle2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { pushAvailability, registerPush } from "@/lib/push";
-import { deviceNotificationsSupported } from "@/lib/localNotifications";
+import { deviceNotificationsSupported, enableDeviceNotifications } from "@/lib/localNotifications";
 
 const KEYS: { key: string; label: string; desc: string }[] = [
   { key: "workout_reminders", label: "Workout reminders", desc: "Daily nudges to keep you on plan." },
@@ -44,6 +44,16 @@ export default function NotificationPrefs() {
   const [loading, setLoading] = useState(true);
   const [push, setPush] = useState<PushState>({ kind: "checking" });
   const [registering, setRegistering] = useState(false);
+  /**
+   * Device (local) reminders are on for this install.
+   *
+   * Separate from `push` on purpose: server-sent push needs a Firebase project
+   * this build does not have, but the phone's own notification scheduler does
+   * not — and until now there was no button anywhere that would ask for the OS
+   * permission, so "you can get notifications from Vaylo Sports" was a promise
+   * with no way to accept it (owner report, 2026-10-11).
+   */
+  const [localOn, setLocalOn] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -115,6 +125,30 @@ export default function NotificationPrefs() {
     }
   };
 
+  /**
+   * Turns on the OS notification permission and this app's reminder channel.
+   *
+   * Shown only where the device can do it (a real native app) and only for the
+   * local-reminder path, so it can never imply that server-sent push is live
+   * when the build has no delivery service behind it.
+   */
+  const enableLocal = async () => {
+    setRegistering(true);
+    try {
+      const outcome = await enableDeviceNotifications();
+      if (outcome === "shown") {
+        setLocalOn(true);
+        toast.success("Reminders are on for this device");
+      } else if (outcome === "denied") {
+        toast.error("Notifications are blocked for Vaylo in your device settings.");
+      } else if (outcome !== "unsupported") {
+        toast.error("Could not turn on reminders. Try again later.");
+      }
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const toggle = async (key: string, value: boolean) => {
     if (!user) return;
     const next = { ...prefs, [key]: value };
@@ -142,7 +176,7 @@ export default function NotificationPrefs() {
       <div className="p-4 rounded-2xl border border-border bg-card mb-4">
         <div className="flex items-start gap-3">
           <div className="shrink-0 mt-0.5">
-            {push.kind === "registered" ? (
+            {localOn || push.kind === "registered" ? (
               <CheckCircle2 className="h-5 w-5 text-success" />
             ) : push.kind === "denied" || push.kind === "unsupported" ? (
               <BellOff className="h-5 w-5 text-muted-foreground" />
@@ -154,15 +188,17 @@ export default function NotificationPrefs() {
             <p className="font-medium">Notifications on this device</p>
             <div className="text-xs text-muted-foreground mt-0.5">
               {push.kind === "checking" && "Checking what this device can deliver…"}
-              {push.kind === "registered" &&
+              {localOn &&
+                "Reminders are on for this device. The switches below decide what is posted, and they stay on the screen after you close the app."}
+              {!localOn && push.kind === "registered" &&
                 "This device is registered. Anything you switch on below can reach you when the app is closed."}
               {push.kind === "ready" &&
                 "Your device allows notifications, but this phone is not registered yet. Nothing below can reach you until it is."}
               {push.kind === "denied" &&
                 "Notifications are turned off for Vaylo in your device settings. Turn them on there, then come back."}
-              {push.kind === "unconfigured" &&
+              {!localOn && push.kind === "unconfigured" &&
                 deviceNotificationsSupported()
-                  ? "Reminders reach this phone through its own notification system: when the app notices something worth telling you about — a session still unlogged, a streak about to break — it posts it here, and it stays on the screen after you close the app. Server-sent push (a message arriving while the app has not run) needs a delivery service this build does not have, so nothing arrives out of the blue. The switches below decide what is posted."
+                  ? "Reminders reach this phone through its own notification system: when the app notices something worth telling you about — a session still unlogged, a streak about to break — it posts it here, and it stays on the screen after you close the app. Server-sent push (a message arriving while the app has not run) needs a delivery service this build does not have, so nothing arrives out of the blue. Turn them on below; the switches then decide what is posted."
                   : "This build has no push delivery configured. The switches below still control your in-app notifications."}
               {push.kind === "unsupported" &&
                 "Push delivery is only available in the Vaylo app on Android. In a browser these switches still control your in-app notifications."}
@@ -175,6 +211,21 @@ export default function NotificationPrefs() {
               >
                 {registering ? "Turning on…" : "Turn on notifications on this device"}
               </button>
+            )}
+            {/* The path that actually exists in this build: the phone's own
+                scheduler. Without this button the screen explained the limit and
+                then offered the athlete nothing to do about it. */}
+            {!localOn && push.kind === "unconfigured" && deviceNotificationsSupported() && (
+              <button
+                onClick={enableLocal}
+                disabled={registering}
+                className="mt-3 text-sm font-semibold text-electric-purple underline disabled:opacity-50"
+              >
+                {registering ? "Turning on…" : "Turn on reminders on this device"}
+              </button>
+            )}
+            {localOn && (
+              <p className="mt-2 text-xs font-semibold text-success">Reminders are on for this device.</p>
             )}
           </div>
         </div>
