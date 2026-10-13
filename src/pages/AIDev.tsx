@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert, Video } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, Clock, Hash, ShieldAlert, Video, Download } from "lucide-react";
 import { fetchAICatalog, runAIDetailed, testAIConnection, type AIFeature, type AIResult } from "@/lib/aiService";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,11 +33,22 @@ const AIDev = () => {
   });
   const [adLoading, setAdLoading] = useState(false);
   const [adError, setAdError] = useState<string | null>(null);
-  const [adResult, setAdResult] = useState<any>(null);
+  // Edge-function JSON payloads: decoded, never constructed here, so the
+  // honest type is unknown (adResult) or the narrow slice the UI reads.
+  const [adResult, setAdResult] = useState<unknown>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
-  const [selectedConcept, setSelectedConcept] = useState<any>(null);
+  const [selectedConcept, setSelectedConcept] = useState<{ id: string } | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<any>(null);
+  const [jobStatus, setJobStatus] = useState<{
+    job_id?: string;
+    status?: string;
+    progress?: number;
+    storage_path?: string | null;
+    public_url?: string | null;
+    error?: string | null;
+  } | null>(null);
+  const [plan, setPlan] = useState<unknown>(null);
+  const [appFootage, setAppFootage] = useState<Record<string, File | null>>({});
 
   // Admin gate — this console burns AI tokens and reveals prompts, so it must
   // never be reachable by regular users (mirrors AdminPricing's check).
@@ -106,6 +117,17 @@ const AIDev = () => {
       });
       if (error) throw new Error(error.message);
       setAdResult(data);
+      // Also create a persisted campaign
+      try {
+        const res = await supabase.functions.invoke("ad-campaigns", {
+          body: { name: adBrief.name, objective: adBrief.objective, audience: adBrief.audience, platform: adBrief.platform, budget_usd: adBrief.budgetUsd, message: adBrief.message, call_to_action: adBrief.callToAction, brief: adBrief },
+        });
+        if (res.data?.campaign?.id) {
+          setCampaignId(res.data.campaign.id);
+        }
+      } catch (e2) {
+        console.warn(e2);
+      }
     } catch (e) {
       setAdError(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -125,6 +147,29 @@ const AIDev = () => {
       if (data.concepts?.[0]) {
         setSelectedConcept(data.concepts[0]);
       }
+      if (campaignId && data.concepts) {
+        await supabase.functions.invoke("ad-campaigns", {
+          body: { concepts: data.concepts.map((c: Record<string, unknown>, i: number) => ({ ...c, concept_number: i + 1 })), campaignId },
+        });
+      }
+    } catch (e) {
+      setAdError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAdLoading(false);
+    }
+  };
+
+  const buildPlan = async () => {
+    if (!selectedConcept) return;
+    setAdLoading(true);
+    setAdError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("campaign", {
+        body: { action: "plan", brief: adBrief, concept: selectedConcept },
+      });
+      if (error) throw new Error(error.message);
+      setPlan(data);
+      setAdResult(data);
     } catch (e) {
       setAdError(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -148,7 +193,7 @@ const AIDev = () => {
         outputPath: "test.mp4",
       };
       const { data, error } = await supabase.functions.invoke("ad-render", {
-        body: { action: "render", renderRequest: renderReq },
+        body: { action: "render", renderRequest: renderReq, campaignId, conceptId: selectedConcept.id },
       });
       if (error) throw new Error(error.message);
       setAdResult(data);
@@ -266,6 +311,10 @@ const AIDev = () => {
               className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
               Get Concepts
             </motion.button>
+            <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading || !selectedConcept} onClick={buildPlan}
+              className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
+              Build Plan
+            </motion.button>
             <motion.button whileTap={{ scale: 0.98 }} disabled={adLoading || !selectedConcept} onClick={startRender}
               className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs disabled:opacity-60">
               Start Render (test)
@@ -277,6 +326,18 @@ const AIDev = () => {
           </div>
 
           {adError && <p className="text-xs text-destructive">{adError}</p>}
+          {selectedConcept && (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-semibold">Selected Concept</summary>
+              <pre className="mt-2 overflow-auto max-h-60 bg-muted p-2 rounded-lg">{JSON.stringify(selectedConcept, null, 2)}</pre>
+            </details>
+          )}
+          {plan && (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-semibold">Plan (estimated costs)</summary>
+              <pre className="mt-2 overflow-auto max-h-60 bg-muted p-2 rounded-lg">{JSON.stringify(plan, null, 2)}</pre>
+            </details>
+          )}
           {adResult && (
             <pre className="text-xs overflow-auto max-h-40 bg-muted p-2 rounded-lg">{JSON.stringify(adResult, null, 2)}</pre>
           )}
@@ -284,6 +345,8 @@ const AIDev = () => {
             <div className="text-xs">
               <div className="font-semibold">Job: {jobStatus.job_id}</div>
               <div>Status: {jobStatus.status} ({jobStatus.progress}%)</div>
+              {jobStatus.storage_path && <div>Storage: {jobStatus.storage_path}</div>}
+              {jobStatus.public_url && <div className="flex items-center gap-1"><Download size={12}/><a href={jobStatus.public_url} target="_blank" rel="noreferrer" className="text-primary underline">Download</a></div>}
               {jobStatus.error && <div className="text-destructive">{jobStatus.error}</div>}
             </div>
           )}

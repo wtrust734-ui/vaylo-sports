@@ -133,7 +133,16 @@ describe("Google AI form-analysis path (ai-analyze photos + video-form-analysis)
     // API (so they are no longer capped at 6 MB); the invariant that matters is
     // that the host lives here and nowhere else, which is asserted below.
     expect(src).toMatch(/const UPLOAD_URL = "https:\/\/generativelanguage\.googleapis\.com\/upload\/v1beta\/files"/);
-    expect(src).toMatch(/const FILES_URL = "https:\/\/generativelanguage\.googleapis\.com\/v1beta\/files"/);
+    // The Files API root, and why it is NOT ".../v1beta/files": a file resource's
+    // `name` is already `files/<id>`, so retrieve and delete are addressed as
+    // `v1beta/{name}` and are built here as `${API_BASE}/${name}`. A base that
+    // itself ended in `/files` asked the API for `/v1beta/files/files/<id>`,
+    // which 404s — and that is exactly how every video analysis failed until the
+    // provider happened to report a clip as ACTIVE without being polled.
+    expect(src).toMatch(/const API_BASE = "https:\/\/generativelanguage\.googleapis\.com\/v1beta"/);
+    expect(src).toMatch(/\$\{API_BASE\}\/\$\{name\}\?key=/);
+    expect(src).toMatch(/\$\{API_BASE\}\/\$\{args\.name\}\?key=/);
+    expect(src, "a file path is appended to a base that already ends in /files").not.toMatch(/\/files\/\$\{/);
     expect(src.match(/generativelanguage/g)?.length ?? 0).toBe(3);
     // ...and the caller that used to hold a second copy of the host does not.
     expect(read("/supabase/functions/video-form-analysis/index.ts")).not.toMatch(/generativelanguage/);

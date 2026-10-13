@@ -150,11 +150,12 @@ export interface InsightReturnProgression {
   volumePct: number;
   /**
    * What the week is for. The first four are the return progression; `preload`
-   * is the loading week before a planned break and `holiday` the eased week
-   * inside one, because a break reshapes the weeks around it too. Mirrors
+   * is the loading week before a planned break, `holiday` the eased week inside
+   * one and `paused` the week inside one the athlete said they would not train
+   * in, because a break reshapes the weeks around it too. Mirrors
    * `ReturnFocus` in `@/lib/adaptivePlan`.
    */
-  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
+  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday" | "paused";
 }
 
 export interface InsightFacts {
@@ -710,7 +711,13 @@ function returnMetric(facts: InsightFacts): InsightMetric | null {
               ? "restoring your usual load"
               : back.focus === "resume"
                 ? "getting back to full training"
-                : "staying fresh for competition"
+                : back.focus === "paused"
+                  ? "a week you told the app you would not train in"
+                  : back.focus === "preload"
+                    ? "banking a little extra before your break"
+                    : back.focus === "holiday"
+                      ? "easy movement while you are away"
+                      : "staying fresh for competition"
         }.`,
         source: "plan",
       },

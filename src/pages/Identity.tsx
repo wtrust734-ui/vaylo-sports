@@ -35,15 +35,14 @@ const Identity = () => {
   }).sort((a, b) => a[1] - b[1]).slice(0, 2);
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Fingerprint size={14} /> Performance Identity</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Your <span className="text-gradient-electric">Archetype</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Your Archetype</h1>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-        className="relative overflow-hidden rounded-2xl border border-primary/30 p-8 bg-gradient-to-br from-primary/10 via-accent/10 to-transparent">
-        <div className="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-primary/10 blur-3xl" />
+        className="relative overflow-hidden rounded-2xl border border-border bg-card p-8">
         <div className="relative">
           <div className="text-xs uppercase tracking-widest text-primary">{arch ? "Current" : "Not enough data yet"}</div>
           {arch ? (

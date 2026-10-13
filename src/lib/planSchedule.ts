@@ -53,13 +53,14 @@ export interface ReturnWeekMeta {
   intensityPct: number;
   /**
    * What the week is for. The first four are the return progression; `preload`
-   * is the loading week BEFORE a planned break and `holiday` the eased week
-   * inside one, because a break reshapes the weeks around it as well as the
-   * ones after it. Kept as an explicit union rather than imported from
-   * `adaptivePlan` so a new kind of week is a compile error here rather than a
-   * label the screens silently cannot render.
+   * is the loading week BEFORE a planned break, `holiday` the eased week inside
+   * one and `paused` the week inside one the athlete said they would not train
+   * in (emptied rather than eased), because a break reshapes the weeks around
+   * it as well as the ones after it. Kept as an explicit union rather than
+   * imported from `adaptivePlan` so a new kind of week is a compile error here
+   * rather than a label the screens silently cannot render.
    */
-  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
+  focus: "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday" | "paused";
   sessions: number;
   dropped: number;
   /** Titles of what was dropped, for the detail view rather than the summary. */

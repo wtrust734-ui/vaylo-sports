@@ -19,7 +19,14 @@
 | P5 | **Wearable / health platform providers** | Data source, athlete-initiated | Activity, heart rate, sleep, workouts, GPS — **only after the athlete connects one** | Feature exists; **no connections are live**, and no provider is named anywhere in the code |
 | P6 | **Payment providers** | Payment processing | Transaction references. Full card details are **not** held — the app records a purchase event, not a card | Purchases are recorded as events |
 | P7 | **Email delivery** | Not configured | None | **No provider is configured.** Sign-in and support mail are effectively unverified |
-| P8 | **Error/analytics service** | Deliberately absent | None | No analytics is installed, by choice, and the Privacy Policy says so |
+| P8 | **Error/analytics service (third party)** | Deliberately absent | None | No analytics is installed, by choice, and the Privacy Policy says so |
+
+> Failure reports are a first-party failure report flow, not a third-party
+> processor: the app sends a short diagnostic report (error name/message,
+> redacted stack, screen, platform, version — no tokens, no health values) to
+> the project's own backend table `public.app_error_reports` via the
+> `report-error` edge function, which is already a declared processor under P1.
+> No third-party crash or analytics SDK is installed anywhere.
 
 ## 2. The entries that matter most
 

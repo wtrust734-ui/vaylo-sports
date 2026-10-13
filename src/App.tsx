@@ -72,6 +72,7 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const EventPacks = lazy(() => import("./pages/EventPacks"));
 const Achievements = lazy(() => import("./pages/Achievements"));
+const Badges = lazy(() => import("./pages/Badges"));
 const VPR = lazy(() => import("./pages/VPR"));
 const Train = lazy(() => import("./pages/Train"));
 const Perform = lazy(() => import("./pages/Perform"));
@@ -106,6 +107,7 @@ const AdminPricing = lazy(() => import("./pages/AdminPricing"));
 const AdminRewards = lazy(() => import("./pages/AdminRewards"));
 const AdminEventPacks = lazy(() => import("./pages/AdminEventPacks"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
+const AdminErrorReports = lazy(() => import("./pages/AdminErrorReports"));
 const EventPackLanding = lazy(() => import("./pages/EventPackLanding"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const ChallengeDetail = lazy(() => import("./pages/ChallengeDetail"));
@@ -442,6 +444,10 @@ const App = () => (
                 <Route path="/event-packs" element={<EventPacks />} />
                 <Route path="/packs/:packId" element={<EventPackLanding />} />
                 <Route path="/achievements" element={<Achievements />} />
+                {/* The Trophy Room's other two tabs. Each is its own screen:
+                    Badges are bought, Achievements are earned by training, and
+                    Challenges were always a page of their own. */}
+                <Route path="/badges" element={<Badges />} />
                 <Route path="/vpr" element={<VPR />} />
                 <Route path="/skills" element={<SkillAnalytics />} />
                 <Route path="/tactics" element={<Tactics />} />
@@ -563,6 +569,7 @@ const App = () => (
                 <Route path="/admin/rewards" element={<RequireAdmin><AdminRewards /></RequireAdmin>} />
                 <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
                 <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
+                <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
                 <Route path="/collection" element={<Collection />} />
                 <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
                 <Route path="/settings/delete-account" element={<DeleteAccount />} />

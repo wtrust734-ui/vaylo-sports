@@ -191,13 +191,12 @@ export default function Learning() {
   const isFiltering = query.trim().length > 0 || sport !== "All Sports" || filters.category !== "All" || filters.difficulty !== "All" || filters.time !== "All" || filters.type !== "All";
 
   return (
-    <main className="min-h-screen overflow-hidden pb-28 pt-[var(--vaylo-screen-top)]">
+    <main className="min-h-screen overflow-hidden bg-background pb-28 pt-[var(--vaylo-screen-top)]">
       {/* 1 — Hero */}
       <section className="mx-auto max-w-6xl px-5">
-        <div className="relative overflow-hidden rounded-[2rem] border border-electric-purple/25 bg-gradient-to-br from-electric-purple/20 via-card to-navy-deep p-6 shadow-card sm:p-9">
-          <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-electric-purple/20 blur-3xl" />
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-card sm:p-9">
           <p className="relative text-[12px] font-bold tracking-[0.24em] text-electric-purple">LEARNING</p>
-          <h1 className="relative mt-3 max-w-xl font-display text-4xl font-black tracking-tight sm:text-5xl">
+          <h1 className="relative mt-1 max-w-xl font-display text-2xl font-bold">
             Get Better at <span className="text-gradient-electric">Your Sport.</span>
           </h1>
           <p className="relative mt-3 max-w-xl text-sm leading-6 text-muted-foreground">

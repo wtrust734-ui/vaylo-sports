@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { creditCost } from "@/lib/credits";
 import { getLocalPBs } from "@/lib/athleteDossier";
-import { dietPlanRefusalReason, isAdultDob } from "@/lib/age";
+import { dietPlanRefusalReason, isAdultDob, validateDob } from "@/lib/age";
 import { disclaimerShort } from "@/config/disclaimers";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { shortfallFromEdgeError } from "@/lib/shortfall";
@@ -104,6 +104,7 @@ const Nutrition = () => {
   // something. Nothing here is a target until they accept the recommendation.
   const [planIntake, setPlanIntake] = useState<NutritionIntake>(() => prefillIntake({}));
   const [writingPlan, setWritingPlan] = useState(false);
+  const [savingDob, setSavingDob] = useState(false);
   const [openPlanId, setOpenPlanId] = useState<string | null>(null);
 
   const [showScan, setShowScan] = useState(false);
@@ -197,7 +198,15 @@ const Nutrition = () => {
 
   const addWater = async () => {
     if (!user) return;
-    const ml = parseInt(addAmount) || 250;
+    // A water entry is a measured pour: whole millilitres, more than nothing,
+    // and no more than a large bottle at once. Zero, negative, fractional
+    // and excessive entries are rejected rather than stored — the same rule
+    // the meal fields keep via the numeric-bounds constraint.
+    const ml = Number(addAmount);
+    if (!Number.isInteger(ml) || ml < 1 || ml > 5000) {
+      toast({ title: "Enter 1–5000 ml", description: "That amount cannot be logged as a drink of water.", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("water_logs").insert({ user_id: user.id, amount_ml: ml, log_date: today });
     if (error) { toast({ title: "Couldn't log water", description: error.message, variant: "destructive" }); return; }
     fetchWater();
@@ -206,7 +215,13 @@ const Nutrition = () => {
 
   const saveWaterGoal = async () => {
     if (!user) return;
-    const goal = parseInt(newWaterGoal) || 3000;
+    // A daily goal of zero (or less) would make the progress bar divide by
+    // nothing and tell the athlete they are done before drinking anything.
+    const goal = Number(newWaterGoal);
+    if (!Number.isInteger(goal) || goal < 500 || goal > 10000) {
+      toast({ title: "Enter a goal of 500–10000 ml", description: "That goal cannot be saved.", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("user_settings").upsert({ user_id: user.id, water_goal_ml: goal }, { onConflict: "user_id" });
     if (error) { toast({ title: "Couldn't save your water goal", description: error.message, variant: "destructive" }); return; }
     setWaterGoal(goal); setShowWaterGoalEdit(false);
@@ -504,6 +519,37 @@ const Nutrition = () => {
    * to user_settings first, because they belong to the athlete whether or not
    * the plan gets written.
    */
+  /**
+   * Save the one fact that decides whether a plan is allowed at all.
+   *
+   * A nutrition plan needs an adult age, and `profiles.date_of_birth` is
+   * optional — which left every account without one (all but one of them, in
+   * practice) unable to build a plan, with the refusal pointing at a Profile
+   * screen it did not link to. The date can be given here instead, validated by
+   * the same helper the field uses, and it lands in the same column Profile
+   * writes: one fact, one place to find it.
+   *
+   * The 18+ rule itself is untouched, and the server applies it again.
+   */
+  const saveDob = async (dob: string): Promise<string | null> => {
+    if (!user) return "You are not signed in.";
+    const problem = validateDob(dob);
+    if (problem) return problem;
+    setSavingDob(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ date_of_birth: dob }).eq("user_id", user.id);
+      if (error) return error.message;
+      // refreshProfile is what re-renders the wizard with a real age: the
+      // recommendation panel and the button both read it, so the form answers
+      // the question it just asked instead of asking it twice.
+      await refreshProfile();
+      toast({ title: "Date of birth saved", description: "The plan can be written now." });
+      return null;
+    } finally {
+      setSavingDob(false);
+    }
+  };
+
   const submitPlan = async (draft: PlanDraft) => {
     if (!user || !profile) return;
     // One check, shared with every other entry point (see dietPlanRefusalReason).
@@ -886,6 +932,8 @@ const Nutrition = () => {
           <NutritionPlanWizard
             initial={intakeInitial}
             age={getAge()}
+            onSaveDob={saveDob}
+            savingDob={savingDob}
             costPerWeek={creditCost("nutrition_plan_week")}
             busy={writingPlan}
             onSubmit={submitPlan}

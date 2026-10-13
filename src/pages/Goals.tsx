@@ -27,6 +27,16 @@ import {
 import { loadRoadmapContext, persistRoadmapPatches } from "@/lib/roadmapPlanning";
 import ReactMarkdown from "react-markdown";
 import NaturalLanguageGoalInput from "@/components/goals/NaturalLanguageGoalInput";
+import GoalSetupWizard from "@/components/goals/GoalSetupWizard";
+import {
+  dailyActionRows,
+  emptyDraft,
+  planWrites,
+  processGoalRow,
+  reviewDraft,
+  type GoalDraft,
+  type GoalIntent,
+} from "@/lib/goalSetup";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 import { checkStreakAlert } from "@/lib/notificationTriggers";
 
@@ -44,7 +54,13 @@ const Goals = () => {
   const [actions, setActions] = useState<DailyAction[]>([]);
   const [logs, setLogs] = useState<ActionLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showOutcome, setShowOutcome] = useState(false);
+  // The setup quiz. Held here rather than inside the wizard so the answers
+  // survive the screen re-rendering under it (load() runs after every tick).
+  const [goalDraft, setGoalDraft] = useState<GoalDraft | null>(null);
+  const [creatingGoal, setCreatingGoal] = useState(false);
+  // The free-text path, kept behind a click: the quiz is the front door, but
+  // "just describe it" still has to be possible.
+  const [showDescribe, setShowDescribe] = useState(false);
   const [showProcess, setShowProcess] = useState<string | null>(null);
   const [showAction, setShowAction] = useState<string | null>(null);
   const [aiFeedback, setAiFeedback] = useState<string>("");
@@ -58,7 +74,6 @@ const Goals = () => {
   // which is what made it read as a wall rather than a plan. Each block below
   // is folded until it is asked for, and the composer opens by itself for an
   // athlete who has nothing yet.
-  const [showComposer, setShowComposer] = useState(false);
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
   const [expandedProcess, setExpandedProcess] = useState<string | null>(null);
   const [showStats, setShowStats] = useState(false);
@@ -68,8 +83,15 @@ const Goals = () => {
   // them: opening it unprompted is the difference between "add your first goal"
   // and an empty screen with a button on it.
   useEffect(() => {
-    if (!loading && outcomes.length === 0 && processes.length === 0) setShowComposer(true);
+    if (!loading && outcomes.length === 0 && processes.length === 0) {
+      setGoalDraft((current) => current ?? emptyDraft("both"));
+    }
   }, [loading, outcomes.length, processes.length]);
+
+  const openWizard = (intent: GoalIntent) => {
+    setShowDescribe(false);
+    setGoalDraft(emptyDraft(intent));
+  };
 
   const load = async () => {
     if (!user) return;
@@ -207,6 +229,77 @@ const Goals = () => {
     }
   };
 
+  /**
+   * Write what the quiz decided.
+   *
+   * Three tables in one order, because the id of the first is what the second
+   * hangs off: a "both" goal creates the target, then the weekly habits under
+   * it, then each habit's daily actions. A habit-only goal writes
+   * `outcome_goal_id: null` — the column has always been nullable, and that is
+   * precisely the case the UI had no door for: a weekly habit used to be
+   * addable only from inside a target's card.
+   *
+   * Each step reports its own failure and stops there rather than rolling on:
+   * half a goal (a target with none of the habits that close its gap, say) is
+   * worse than a clear error, because the athlete can see exactly what did and
+   * did not get saved.
+   *
+   * Nothing here costs credits. Goals are the athlete's own record; the paid
+   * Weekly Coach Review is a separate button further down this screen.
+   */
+  const createGoal = async (draft: GoalDraft) => {
+    if (!user || creatingGoal) return;
+    // The same review the quiz's last step showed. The screen does not trust a
+    // "Create" tap to mean the answers were valid.
+    if (!reviewDraft(draft).ok) return;
+    setCreatingGoal(true);
+    try {
+      const plan = planWrites(user.id, draft);
+      let outcomeGoalId: string | null = null;
+
+      if (plan.goal) {
+        const { data, error } = await supabase
+          .from("outcome_goals")
+          .insert(plan.goal)
+          .select("id")
+          .single();
+        if (error || !data) { toast.error(error?.message ?? "Couldn't save the target."); return; }
+        outcomeGoalId = data.id;
+      }
+
+      for (const { habit, actions } of plan.habits) {
+        const { data, error } = await supabase
+          .from("process_goals")
+          .insert(processGoalRow(user.id, habit, outcomeGoalId))
+          .select("id")
+          .single();
+        if (error || !data) { toast.error(error?.message ?? "Couldn't save the habit."); return; }
+
+        const rows = dailyActionRows(user.id, actions).map((row) => ({
+          ...row,
+          process_goal_id: data.id,
+        }));
+        if (rows.length) {
+          const { error: actionError } = await supabase.from("daily_actions").insert(rows);
+          if (actionError) toast.error(actionError.message);
+        }
+      }
+
+      const habitCount = plan.habits.length;
+      toast.success(
+        plan.goal && habitCount
+          ? "Target set, with its habits underneath."
+          : plan.goal
+            ? "Target set."
+            : "Habit set — it does not need a target above it.",
+      );
+      setGoalDraft(null);
+      await load();
+    } finally {
+      setCreatingGoal(false);
+    }
+  };
+
   const goalCost = FEATURE_COSTS.weekly_coach_review;
   const activeGoalCount = outcomes.filter(g => g.status !== "completed").length;
   // One line of state instead of a hero card: what is left to do today, and how
@@ -221,33 +314,67 @@ const Goals = () => {
     <div className="min-h-screen pb-32 px-5 pt-[var(--vaylo-screen-top)] max-w-3xl mx-auto space-y-5">
       {/* The header carries the page's single primary action. Nothing the page
           could do before is gone; it is just not all on screen at once. */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-display font-bold text-gradient-electric">Goals</h1>
           <p className="text-sm text-muted-foreground mt-1">{summaryLine}</p>
         </div>
-        <Button size="sm" className="shrink-0" aria-expanded={showComposer} onClick={() => setShowComposer(v => !v)}>
-          <Plus size={14} className="mr-1" /> New goal
-        </Button>
+        {/* Two ways in, both explicit. The quiz is the primary one because it
+            answers the questions the old form asked the athlete to supply
+            (where are you now, where do you want to be, by when); the
+            sentence box stays for when a sentence is simply easier. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            aria-expanded={showDescribe}
+            onClick={() => { setGoalDraft(null); setShowDescribe(v => !v); }}
+          >
+            <Sparkles size={14} className="mr-1" /> Describe it
+          </Button>
+          <Button
+            size="sm"
+            aria-expanded={!!goalDraft}
+            onClick={() => { setShowDescribe(false); setGoalDraft(goalDraft ? null : emptyDraft("both")); }}
+          >
+            <Plus size={14} className="mr-1" /> New goal
+          </Button>
+        </div>
       </div>
 
-      {/* Natural language is still the first way to add a goal, with the manual
-          form one tap behind it — both inside the composer, which is where the
-          "how goals work" line belongs, right before you add one. */}
-      {showComposer && (
+      {/* The guided setup. It asks what the athlete wants and works out the
+          shape — a target, a weekly habit, or both — where the form it
+          replaces asked for five numbers they were supposed to already know. */}
+      {goalDraft && (
+        <Reveal>
+          <GoalSetupWizard
+            draft={goalDraft}
+            onDraftChange={setGoalDraft}
+            busy={creatingGoal}
+            onCreate={createGoal}
+            onClose={() => setGoalDraft(null)}
+          />
+        </Reveal>
+      )}
+
+      {/* "Just describe it": the same goal, read out of a sentence. Kept
+          reachable rather than removed — it is the fastest path for an athlete
+          who already knows exactly what they want, and the parser is offline
+          and deterministic. */}
+      {showDescribe && !goalDraft && (
         <Reveal>
           <Card className="p-4 space-y-3">
             <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
               <HelpCircle size={12} aria-hidden />
-              Set a long-term target, add a weekly habit, then tick the daily actions it takes.
+              Write it as you would say it — the numbers are read out of the sentence.
             </p>
             <NaturalLanguageGoalInput onCreated={load} />
             <button
               type="button"
-              onClick={() => setShowOutcome(true)}
+              onClick={() => { setShowDescribe(false); setGoalDraft(emptyDraft("both")); }}
               className="text-xs font-semibold text-primary hover:underline"
             >
-              Or set the target up by hand
+              Or set it up step by step
             </button>
           </Card>
         </Reveal>
@@ -453,7 +580,17 @@ const Goals = () => {
       <Reveal delay={0.1}>
         <section className="space-y-3">
           <SectionHeading title="This week's habits" />
-          {processes.length === 0 && <EmptyHint text="No weekly habits yet — open a goal above and add one." />}
+          {processes.length === 0 && (
+            <Card className="space-y-2 p-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                No weekly habits yet. A habit is worth setting up on its own — it does not need a
+                target above it.
+              </p>
+              <Button size="sm" variant="outline" onClick={() => openWizard("habit")}>
+                <Plus size={12} className="mr-1" /> Set a weekly habit
+              </Button>
+            </Card>
+          )}
           {processes.map(pg => {
             const w = weeklyCompletionForProcess(pg, actions, logs);
             const linkedActions = actions.filter(a => a.process_goal_id === pg.id);
@@ -599,7 +736,6 @@ const Goals = () => {
           which does not exist is worse than no card. */}
 
       {/* Dialogs */}
-      <OutcomeDialog open={showOutcome} onClose={() => setShowOutcome(false)} userId={user?.id} onSaved={load} />
       <ProcessDialog open={!!showProcess} outcomeId={showProcess} onClose={() => setShowProcess(null)} userId={user?.id} onSaved={load} />
       <ActionDialog open={!!showAction} processId={showAction} onClose={() => setShowAction(null)} userId={user?.id} onSaved={load} />
     </div>
@@ -838,56 +974,6 @@ const Mini = ({ label, value }: { label: string; value: string }) => (
 const EmptyHint = ({ text }: { text: string }) => (
   <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>
 );
-
-const OutcomeDialog = ({ open, onClose, userId, onSaved }: { open: boolean; onClose: () => void; userId?: string; onSaved: () => void }) => {
-  const [f, setF] = useState({ title: "", category: "performance", target_value: "", metric_unit: "", deadline: "", current_value: "0" });
-  const submit = async () => {
-    if (!f.title || !userId) return;
-    // Numeric goals are clamped to finite, non-negative values; an inverted
-    // target (target < current) is refused rather than producing a negative
-    // progress bar.
-    const num = (v: string) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0 ? n : null;
-    };
-    const target = f.target_value ? num(f.target_value) : null;
-    const current = num(f.current_value) ?? 0;
-    if (target != null && current > target) {
-      toast.error("Target must be greater than or equal to the current value.");
-      return;
-    }
-    const { error } = await supabase.from("outcome_goals").insert({
-      user_id: userId, title: f.title.slice(0, 120), category: f.category,
-      target_value: target,
-      current_value: current,
-      metric_unit: f.metric_unit.slice(0, 20) || null,
-      deadline: f.deadline || null,
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Outcome goal added");
-    setF({ title: "", category: "performance", target_value: "", metric_unit: "", deadline: "", current_value: "0" });
-    onSaved(); onClose();
-  };
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>New Outcome Goal</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <Input placeholder="Title (e.g. Sub-18 5K)" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} />
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Current" value={f.current_value} onChange={e => setF({ ...f, current_value: e.target.value })} />
-            <Input placeholder="Target" value={f.target_value} onChange={e => setF({ ...f, target_value: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Unit (kg, sec, km)" value={f.metric_unit} onChange={e => setF({ ...f, metric_unit: e.target.value })} />
-            <Input type="date" value={f.deadline} onChange={e => setF({ ...f, deadline: e.target.value })} />
-          </div>
-          <Button className="w-full" onClick={submit}>Create</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 const ProcessDialog = ({ open, outcomeId, onClose, userId, onSaved }: { open: boolean; outcomeId: string | null; onClose: () => void; userId?: string; onSaved: () => void }) => {
   const [title, setTitle] = useState("");

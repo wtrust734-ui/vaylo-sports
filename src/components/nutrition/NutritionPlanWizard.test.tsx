@@ -17,7 +17,7 @@
 // ============================================================================
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import NutritionPlanWizard from "@/components/nutrition/NutritionPlanWizard";
 import SavedNutritionPlan from "@/components/nutrition/SavedNutritionPlan";
@@ -25,20 +25,29 @@ import { NUTRITION_INTAKE_DEFAULTS } from "@/lib/nutritionTargets";
 
 afterEach(cleanup);
 
-const renderWizard = (overrides: { age?: number | null } = {}) => {
+const renderWizard = (
+  overrides: {
+    age?: number | null;
+    onSaveDob?: (dob: string) => Promise<string | null>;
+    savingDob?: boolean;
+  } = {},
+) => {
   const onSubmit = vi.fn();
   const onClose = vi.fn();
+  const onSaveDob = overrides.onSaveDob ?? vi.fn(async () => null);
   render(
     <NutritionPlanWizard
       initial={{ ...NUTRITION_INTAKE_DEFAULTS, weightKg: 80, heightCm: 180 }}
       age={overrides.age === undefined ? 25 : overrides.age}
+      onSaveDob={onSaveDob}
+      savingDob={overrides.savingDob ?? false}
       costPerWeek={8}
       busy={false}
       onSubmit={onSubmit}
       onClose={onClose}
     />,
   );
-  return { onSubmit, onClose };
+  return { onSubmit, onClose, onSaveDob };
 };
 
 describe("the nutrition plan questionnaire", () => {
@@ -111,6 +120,51 @@ describe("the nutrition plan questionnaire", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0].targets.calories).toBe(3100);
     expect(onSubmit.mock.calls[0][0].usedRecommended).toBe(false);
+  });
+});
+
+// ============================================================================
+// NO DATE OF BIRTH — the dead end this screen used to be
+// ----------------------------------------------------------------------------
+// Calorie and macro targets are adult-only, and an unknown date of birth counts
+// as not-adult (`profiles.date_of_birth` is optional, and almost every account
+// has none). The rule stays. What changed is that the question can be ANSWERED
+// on this form: the panel that used to say "add it in Profile" now takes it, and
+// the request button refuses to look pressable while the fact is missing.
+// ============================================================================
+describe("an athlete whose date of birth we do not have", () => {
+  it("is asked for it here, and it is saved from here", async () => {
+    const onSaveDob = vi.fn(async () => null);
+    renderWizard({ age: null, onSaveDob });
+
+    const field = screen.getByLabelText(/date of birth/i);
+    fireEvent.change(field, { target: { value: "1995-04-02" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(onSaveDob).toHaveBeenCalledWith("1995-04-02"));
+  });
+
+  it("cannot ask for a plan that cannot be written", () => {
+    renderWizard({ age: null });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    // The reason is on the button, not in a toast after a tap that could never
+    // have worked.
+    expect(screen.getByRole("button", { name: /add your date of birth to continue/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /write my plan/i })).toBeNull();
+  });
+
+  it("is told why a date is refused, rather than it being swallowed", async () => {
+    renderWizard({ age: null, onSaveDob: vi.fn(async () => "That date doesn't look right.") });
+
+    fireEvent.change(screen.getByLabelText(/date of birth/i), { target: { value: "2030-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/doesn't look right/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByRole("button", { name: /add your date of birth to continue/i })).toBeDisabled();
   });
 });
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowRight,
   Check,
   ExternalLink,
   Loader2,
@@ -48,6 +49,11 @@ export const HEALTH_CONNECT_CTA = "Connect my Health Connect";
  *  CTA: nothing can be connected before the account exists, and the button that
  *  says so is the honest one. */
 export const HEALTH_CONNECT_ARM_CTA = "Connect it after sign-up";
+
+/** The six reads, in one line, for the state where they are already granted.
+ *  Derived from the permission catalog so it cannot drift from what the native
+ *  request actually asks for. */
+const READ_LABELS = HEALTH_PERMISSION_LIST.map(([, spec]) => spec.label).join(" · ");
 
 export interface HealthConnectPromptProps {
   open: boolean;
@@ -190,13 +196,31 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
     if (connected) {
       return (
         <div className="space-y-3">
-          <StatusLine ok>Connected. Vaylo reads only the six types below, and never writes.</StatusLine>
+          <StatusLine ok>Connected. Vaylo reads only what you approved, and never writes.</StatusLine>
+          {/* The line above used to say "the six types below" while the list of
+              them was rendered on the *connect* path only — so once connected,
+              the sheet named a list that was not on screen. A privacy screen
+              has to name what it is reading, so it names it here. */}
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Reading {READ_LABELS} — nothing else.
+          </p>
           <p className="text-[12px] leading-relaxed text-muted-foreground">
             {hc.syncState.lastSyncAt
               ? `Last sync ${formatDateTimeExact(new Date(hc.syncState.lastSyncAt))}.`
               : "No sync yet — the first one imports your recent sessions."}
           </p>
           {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}
+          {/* The full screen is what an athlete comes to this sheet to manage:
+              import history, per-provider controls, deleting what was
+              imported. It was a 12px text link at the very bottom of the body,
+              which is the wrong end of a sheet that this same tap closes. */}
+          <Button
+            onClick={() => { onClose(); navigate("/health-sync"); }}
+            variant="outline"
+            className="w-full h-10 rounded-xl"
+          >
+            <ArrowRight size={14} className="mr-1.5" /> Open the full Wearables screen
+          </Button>
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => void hc.managePermissions()}
@@ -220,13 +244,6 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
               Disconnect
             </Button>
           </div>
-          <button
-            type="button"
-            onClick={() => { onClose(); navigate("/health-sync"); }}
-            className="w-full text-[12px] font-semibold text-primary hover:underline"
-          >
-            Open the full Wearables screen
-          </button>
         </div>
       );
     }
@@ -273,21 +290,32 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
   ) : !offered || hc.apiStatus === "update_required" ? (
     closeOnly
   ) : connected ? (
-    <Button
-      onClick={() => void sync()}
-      disabled={busy !== null}
-      className="w-full h-11 rounded-xl bg-gradient-primary text-primary-foreground font-semibold"
-    >
-      {busy === "sync" ? (
-        <>
-          <Loader2 size={14} className="mr-1.5 animate-spin" /> Syncing…
-        </>
-      ) : (
-        <>
-          <RefreshCw size={14} className="mr-1.5" /> Sync now
-        </>
-      )}
-    </Button>
+    /* Connected is the state an athlete comes back to, and it used to offer one
+       footer control: "Sync now". A sheet whose only prominent action is not an
+       exit reads as a trap — the header X was the sole way out, and the first
+       thing reported about this screen was that it could not be dismissed.
+       "Done" is the primary action now, and syncing sits beside it: both are
+       things the athlete actually wants, and leaving is never the harder one. */
+    <div className="flex gap-2">
+      <Button onClick={onClose} variant="outline" className="h-11 flex-1 rounded-xl">
+        Done
+      </Button>
+      <Button
+        onClick={() => void sync()}
+        disabled={busy !== null}
+        className="h-11 flex-1 rounded-xl bg-gradient-primary text-primary-foreground font-semibold"
+      >
+        {busy === "sync" ? (
+          <>
+            <Loader2 size={14} className="mr-1.5 animate-spin" /> Syncing…
+          </>
+        ) : (
+          <>
+            <RefreshCw size={14} className="mr-1.5" /> Sync now
+          </>
+        )}
+      </Button>
+    </div>
   ) : hc.checking ? undefined : (
     <div className="flex gap-2">
       <Button onClick={onClose} variant="outline" className="h-11 rounded-xl px-4">
@@ -313,6 +341,15 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
     <BottomSheet
       open={open}
       onClose={onClose}
+      /* Above every app-level surface (offline banner and promo pop-ups at 70,
+         the terms-change notice and streak shield at 65, the credit warning at
+         60). Those sit above the default bottom-sheet rung at z-[59] on
+         purpose — but this sheet is opened from three different screens and
+         the two bottom-anchored ones (the terms notice at
+         `bottom-[calc(...)+5.5rem]`, the credit warning in the same place) land
+         squarely on this sheet's footer, where they took the taps meant for
+         its own buttons. Nothing may cover a modal the athlete is inside. */
+      z="z-[71]"
       title={connected ? "Health Connect" : "Bring your training with you"}
       subtitle={
         connected

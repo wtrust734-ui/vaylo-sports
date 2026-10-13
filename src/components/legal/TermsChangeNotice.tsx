@@ -5,9 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { legalPath } from "@/lib/legalUrls";
 import { TERMS_VERSION, recordTermsAcceptance } from "@/lib/consent";
 
-const COOKIE_NOTICE_KEY = "vaylo:cookie-notice";
-const COOKIE_NOTICE_VERSION = "2026-10-07";
-
 // ============================================================================
 // TERMS RE-ACCEPTANCE NOTICE
 // ----------------------------------------------------------------------------
@@ -95,28 +92,19 @@ const TermsChangeNotice = () => {
     };
   }, [shown]);
 
-  // Check if cookie notice should be shown (takes priority)
-  let cookieNeedsAccept = false;
-  try {
-    const remembered = window.localStorage.getItem(COOKIE_NOTICE_KEY);
-    cookieNeedsAccept = remembered !== COOKIE_NOTICE_VERSION;
-  } catch {
-    cookieNeedsAccept = false;
-  }
-
   // No profile yet (signed out, or the row is still loading) means nothing is
   // known about what this person accepted, and asking on a guess would be worse
   // than asking a second later.
-  // No profile yet (signed out, or the row is still loading) means nothing is
-  // known about what this person accepted, and asking on a guess would be worse
-  // than asking a second later.
+  //
+  // The profile is the only source of truth here: no local "already seen"
+  // flag. CookieNotice already yields to this banner (one at a time), so this
+  // component must not read browser storage at all — a reinstall or an offline
+  // device must never skip a consent event that never took place.
   if (!profile || accepted) return null;
 
   // A null `terms_version` is "never recorded", which is behind by definition —
   // that is the state of every account created before the columns existed.
   const recorded = profile.terms_version ?? null;
-  // Don't show cookie notice if terms notice needs to be shown (one at a time)
-  if (cookieNeedsAccept) return null;
   if (recorded === TERMS_VERSION) return null;
 
   const accept = async () => {
@@ -140,7 +128,7 @@ const TermsChangeNotice = () => {
       // on every render while it is on screen; the only thing that can change
       // while it is up is whether the acceptance landed, and that is either
       // already on record or it is not.
-      refreshProfile();
+      await refreshProfile();
     } finally {
       setSaving(false);
     }

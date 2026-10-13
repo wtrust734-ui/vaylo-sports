@@ -54,7 +54,18 @@ const before = await balance();
 const PROBES = [
   ["ai-service", { feature: "coach_chat", userPrompt: "Say 'ready' in five words." }],
   ["coach-chat", { message: "Say 'ready' in five words." }],
-  ["ai-analyze", { text: "Felt strong today. Easy pace, good sleep." }],
+  // The stats-insight payload "Analyse my workouts" actually sends. The
+  // function switches on `type` and prices the call as training_insight, so a
+  // probe carrying free text (`{ text }`) is refused with "Invalid type" before
+  // the provider is reached — which reports a working feature as untestable.
+  [
+    "ai-analyze",
+    {
+      type: "stats_insight",
+      summary: "Last 7 days: 4 sessions, 42 km, all easy pace. No recovery data logged.",
+      sport: "General",
+    },
+  ],
   ["generate-plan", { goal: "5k", sport: "running", weeks: 1 }],
   ["weekly-review", { stats: { workouts: 1, totalKm: 5 } }],
   ["learning-recommend", { topic: "threshold running" }],

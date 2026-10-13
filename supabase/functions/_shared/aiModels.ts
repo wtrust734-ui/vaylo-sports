@@ -100,7 +100,16 @@ export interface FeatureConfig {
   maxOutputTokens: number;
   /** Only applied to models that support it. */
   temperature?: number;
-  /** Reasoning effort for reasoning-class models: low | medium | high. */
+  /**
+   * Reasoning effort for reasoning-class models: low | medium | high.
+   *
+   * Effort is the largest single lever on latency, and the athlete is holding a
+   * phone: every feature an athlete waits on with a screen in front of them runs
+   * at "low", and the deeper setting is spent only where the answer *is* the
+   * reasoning (see the registry note below). Output caps are untouched by this —
+   * a cap feeds the credit price in scripts/credit-economy-model.mjs, effort
+   * does not.
+   */
   reasoningEffort?: "low" | "medium" | "high";
   /** Feature accepts image input (data URLs). */
   allowImages?: boolean;
@@ -169,6 +178,16 @@ export const OUTPUT_SAFETY_CONTRACT = OUTPUT_SAFETY;
  * ($2/$10 per 1M) is kept for limiter_analysis alone. The tiering below is a
  * cost decision backed by measurement — do not promote a feature to Sol
  * without re-measuring it, because the price gap is 20x.
+ *
+ * Reasoning effort is tiered the same way and for the same kind of reason, but
+ * on latency rather than price. Plan generation, plan editing, the nutrition
+ * plan and the rehab scaffold are all blocked on an athlete watching a progress
+ * screen, and a long plan is already thousands of output tokens of work — the
+ * effort spent on top of that is mostly time, not quality. All of them run at
+ * "low". limiter_analysis stays at "medium": it is the one feature whose value
+ * is the synthesis itself, it is the one on the Sol tier, and it is the one
+ * call an athlete expects to take a moment. Do not raise an effort back to
+ * "medium" for a plan-shaped feature without timing it on a real request first.
  */
 export const AI_FEATURES: Record<string, FeatureConfig> = {
   // ---------------------------------------------------------------- PRIMARY
@@ -185,7 +204,7 @@ export const AI_FEATURES: Record<string, FeatureConfig> = {
         "If the request is unsafe, impossible with the stated equipment, or outside a coach's remit, return the weeks unchanged.",
     ),
     maxOutputTokens: 6000,
-    reasoningEffort: "medium",
+    reasoningEffort: "low",
   },
 
   connection_test: {
@@ -202,7 +221,7 @@ export const AI_FEATURES: Record<string, FeatureConfig> = {
     system: base(`TASK: Build a running training plan.
 Respect available days/hours per week and current fitness. For every session give: purpose, warmup, main set with exact distances/paces or effort (RPE or %HR), recoveries, and cooldown. Include weekly volume totals and one deload rule.`),
     maxOutputTokens: 6000,
-    reasoningEffort: "medium",
+    reasoningEffort: "low",
   },
 
   strength_plan: {
@@ -211,7 +230,7 @@ Respect available days/hours per week and current fitness. For every session giv
     system: base(`TASK: Build a sport-specific strength programme.
 For each session give warmup, main lifts as exact sets x reps @ RPE with rest, accessory work, and form cues. Explain how it transfers to the athlete's sport and how to progress week to week.`),
     maxOutputTokens: 5000,
-    reasoningEffort: "medium",
+    reasoningEffort: "low",
   },
 
   meal_plan: {
@@ -236,7 +255,7 @@ End with: "Estimates only — not a substitute for advice from a registered diet
 Days run Monday to Sunday. For every day give 3-6 meals with real, shop-able foods and estimated portions, and make that day's meals add up to the calorie target you were given with the protein target hit. Put the carbohydrate around the training the athlete actually does.
 End with: "Estimates only — not a substitute for advice from a registered dietitian."`),
     maxOutputTokens: 8000,
-    reasoningEffort: "medium",
+    reasoningEffort: "low",
   },
 
   ai_coach: {
@@ -282,7 +301,7 @@ Use what the athlete reported (site, severity, what still hurts and what does no
 Add a "when to stop" list of the signs that mean stop and see a clinician, and one line saying when a physiotherapist should be seen for this injury.
 Never diagnose, never name a specific tissue diagnosis, never prescribe medication or injections, never promise a timeline to full recovery, and never tell an athlete to train through pain.`),
     maxOutputTokens: 4000,
-    reasoningEffort: "medium",
+    reasoningEffort: "low",
   },
 
   race_strategy: {

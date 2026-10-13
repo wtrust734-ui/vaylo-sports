@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   FORM_VIDEO_BUCKET,
+  FORM_VIDEO_LENGTH_LABEL,
   FORM_VIDEO_MIME,
   MAX_FORM_VIDEO_BYTES,
   MAX_FORM_VIDEO_SECONDS,
@@ -15,7 +16,7 @@ import {
 // The form-video gate, pinned at its boundaries.
 //
 // The caps here are enforced twice — once in the page so the athlete is told
-// before a 25MB upload, once in `video-form-analysis` because a client check is
+// before a long upload, once in `video-form-analysis` because a client check is
 // a convenience rather than a control — and the numbers live in two files that
 // cannot import from each other. These cases are the record of what "at the
 // limit" means, so a later change to one side is a failing test rather than a
@@ -82,21 +83,25 @@ describe("checkFormVideo", () => {
   });
 
   it("allows a second of grace on duration, because metadata is not exact", () => {
-    // Browsers round a container's duration, and a 60.4s clip that the athlete
-    // trimmed to a minute should not be refused for arithmetic.
+    // Browsers round a container's duration, and a clip the athlete trimmed to
+    // exactly the limit should not be refused for arithmetic.
     expect(checkFormVideo(clip({ seconds: MAX_FORM_VIDEO_SECONDS + 1 })).ok).toBe(true);
     expect(checkFormVideo(clip({ seconds: MAX_FORM_VIDEO_SECONDS + 5 }))).toEqual({
       ok: false,
       reason: "too-long",
-      message: expect.stringContaining(`${MAX_FORM_VIDEO_SECONDS} seconds`),
+      // The refusal quotes the cap the way the upload card words it, from the
+      // same constant, so the two cannot drift apart.
+      message: expect.stringContaining(FORM_VIDEO_LENGTH_LABEL),
     });
   });
 
   it("refuses a clip over the size cap", () => {
+    // Derived from the constant rather than written out, so raising the cap
+    // cannot leave this case asserting an obsolete number in the copy.
     expect(checkFormVideo(clip({ bytes: MAX_FORM_VIDEO_BYTES + 1 }))).toEqual({
       ok: false,
       reason: "too-large",
-      message: expect.stringContaining("25MB"),
+      message: expect.stringContaining(`${Math.round(MAX_FORM_VIDEO_BYTES / (1024 * 1024))}MB`),
     });
   });
 
@@ -109,9 +114,9 @@ describe("checkFormVideo", () => {
 
   it("accepts an unreadable duration only while the file is small enough to be short", () => {
     // Unknown length is a real case, not a failure: some containers will not
-    // report it. Below the fallback size the clip cannot plausibly be over a
-    // minute, so it is allowed; above it, the honest answer is to ask for a
-    // trimmed clip rather than upload a cost nobody can predict.
+    // report it. Below the fallback size the clip cannot plausibly be long, so
+    // it is allowed; above it, the honest answer is to ask for a trimmed clip
+    // rather than upload a cost nobody can predict.
     expect(
       checkFormVideo({ mimeType: "video/mp4", bytes: UNVERIFIED_DURATION_MAX_BYTES, seconds: null }).ok,
     ).toBe(true);
@@ -120,7 +125,7 @@ describe("checkFormVideo", () => {
     ).toEqual({
       ok: false,
       reason: "length-unknown",
-      message: expect.stringContaining("under a minute"),
+      message: expect.stringContaining("Trim it to a shorter clip"),
     });
   });
 
@@ -132,7 +137,7 @@ describe("checkFormVideo", () => {
     expect(reasonOf(checkFormVideo({ ...big, seconds: Number.POSITIVE_INFINITY }))).toBe("length-unknown");
     expect(reasonOf(checkFormVideo({ ...big, seconds: Number.NaN }))).toBe("length-unknown");
     // ...and the same unknown length on a small file is allowed, because it
-    // cannot plausibly be over a minute.
+    // cannot plausibly be long.
     expect(checkFormVideo({ ...big, bytes: 4 * MB, seconds: Number.NaN }).ok).toBe(true);
   });
 

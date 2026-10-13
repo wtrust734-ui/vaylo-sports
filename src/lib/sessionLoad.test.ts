@@ -9,7 +9,9 @@ import {
   INTENSITY_BANDS,
   FIELD_MATCH_FACTOR,
   FIELD_PRACTICE_FACTOR,
+  WALK_DURATION_FACTOR,
   type SessionLoadInput,
+  type SportKind,
 } from "./sessionLoad";
 
 // Spec §4 gives a formula per sport. Each of these cases is one line of §4,
@@ -242,5 +244,106 @@ describe("sessionLoad — aggregation", () => {
       { date: "2026-10-01", load: 10 },
     ]);
     expect(totals.map((d) => d.date)).toEqual(["2026-10-01", "2026-10-03"]);
+  });
+});
+
+describe("sessionLoad — walking, and the wider sport catalogue", () => {
+  it("classifies walking and hiking as walking rather than running", () => {
+    expect(classifySport("walk")).toBe("walking");
+    expect(classifySport("Walking")).toBe("walking");
+    expect(classifySport("hike")).toBe("walking");
+    expect(classifySport("Hiking")).toBe("walking");
+    // The variants where a substring test could easily read "run": none of
+    // these is a run, and all of them are training.
+    expect(classifySport("power walk")).toBe("walking");
+    expect(classifySport("race walk")).toBe("walking");
+    expect(classifySport("Nordic walk")).toBe("walking");
+    // And the session-type vocabulary the plan generator writes.
+    expect(classifySport(null, "recovery walk")).toBe("walking");
+  });
+
+  it("prices an hour of walking below an hour of running, and never as nothing", () => {
+    const walk = sessionLoad({ sport: "walk", durationMinutes: 60, rpe: 6 });
+    const run = sessionLoad({ sport: "Running", durationMinutes: 60, rpe: 6 });
+
+    expect(walk.sport).toBe("walking");
+    expect(walk.method).toBe("walking-minutes-x-factor");
+    expect(walk.load).toBe(Math.round(60 * INTENSITY_BANDS.moderate.factor * WALK_DURATION_FACTOR));
+    expect(walk.load!).toBeLessThan(run.load!);
+    // The failure this kind exists to prevent: an hour on your feet coming back
+    // as an hour of running, or as zero.
+    expect(walk.load!).toBeGreaterThan(0);
+  });
+
+  it("says out loud that a walking figure is a proxy, not a measurement", () => {
+    const rated = sessionLoad({ sport: "Hiking", durationMinutes: 240, rpe: 7 });
+    expect(rated.confidence).toBe("low");
+    expect(rated.caveat).toMatch(/proxy/i);
+
+    const unrated = sessionLoad({ sport: "walk", durationMinutes: 45 });
+    expect(unrated.confidence).toBe("low");
+    expect(unrated.caveat).toMatch(/moderate walk/i);
+  });
+
+  it("still refuses a number when the walk has no duration", () => {
+    const result = sessionLoad({ sport: "walk", rpe: 5 });
+    expect(result.load).toBeNull();
+    expect(result.caveat).toMatch(/no duration/i);
+  });
+
+  it("lets an effort rating raise a hard walk without turning it into a run", () => {
+    const hard = sessionLoad({ sport: "hike", durationMinutes: 120, rpe: 8 });
+    const easy = sessionLoad({ sport: "hike", durationMinutes: 120, rpe: 3 });
+    const run = sessionLoad({ sport: "Running", durationMinutes: 120, rpe: 8 });
+    expect(hard.load!).toBeGreaterThan(easy.load!);
+    expect(hard.load!).toBeLessThan(run.load!);
+  });
+
+  it("places cricket with the field sports", () => {
+    expect(classifySport("Cricket")).toBe("field");
+    expect(classifySport("cricket nets")).toBe("field");
+  });
+
+  it("maps every sport the logger offers onto a kind, or leaves it a stated guess", () => {
+    // The other half of this contract is SESSION_TYPES in src/pages/Workouts.tsx.
+    // The picker and the load model are two files, and this is the assertion
+    // that stops them drifting: each value the athlete can choose either lands
+    // on a real formula or is deliberately unclassified.
+    const placed: [string, SportKind][] = [
+      ["run", "running"],
+      ["walk", "walking"],
+      ["hike", "walking"],
+      ["cycle", "cycling"],
+      ["swim", "swimming"],
+      ["row", "cycling"],
+      ["gym", "strength"],
+      ["cricket", "field"],
+      ["football", "field"],
+      ["rugby", "field"],
+      ["hockey", "field"],
+      ["basketball", "court"],
+      ["tennis", "court"],
+      ["badminton", "court"],
+    ];
+    for (const [value, kind] of placed) expect(classifySport(value), value).toBe(kind);
+
+    // Offered, and honestly unclassified: the app has no load formula for any
+    // of these, so they price as a moderate session with a caveat that says so
+    // rather than borrowing the running formula and inflating the number.
+    const deliberatelyUnclassified = [
+      "hiit",
+      "yoga",
+      "pilates",
+      "climb",
+      "ski",
+      "golf",
+      "boxing",
+      "mma",
+      "dance",
+      "sport",
+    ];
+    for (const value of deliberatelyUnclassified) {
+      expect(classifySport(value), value).toBe("unknown");
+    }
   });
 });

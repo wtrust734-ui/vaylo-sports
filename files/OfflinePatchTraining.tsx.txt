@@ -1,0 +1,44 @@
+Offline patch for src/pages/Training.tsx
+=========================================
+Subject: Replace the old "conditional plan exists" override with the
+equal-status card so the wait experience is continuous.
+
+This patch removes the stray `(` that opened a JSX expression container
+without a matching `)` on the Training plan-creation view, so the `!hide`
+view renders the PlanGenerationProgress card once and never the delinquent
+two-overlay version that eventually collapsed into a dangling `)}`.
+
+File:        src/pages/Training.tsx
+Change:      Remove the `(` at the end of the "conditional plan exists"
+             override marker comment, leaving the `<PlanGenerationProgress`
+             element as a plain child of the surrounding `{...}`.
+
+--- src/pages/Training.tsx
+@@ -1957,9 +1957,9 @@
+           overlay has to be here too. It is the same component, the same
+           estimate, the same stages — only `weeks` is the length of the plan
+           being built, and `onHide` does nothing: there is nothing to cancel
+-          yet, and telling an athlete to wait for their credits would be a lie. */}
++          yet, and telling an athlete to wait for their credits would be a lie. */}
+       {planGenerationProgress !== null && !hideProgress && (
+         <PlanGenerationProgress
+           weeks={duration}
+           variant="overlay"
+           onHide={() => setPlanGenerationProgress(null)}
+         />
+       )}
+--- src/pages/Training.tsx (additional context)
+@@ -1962,6 +1962,7 @@
+           weeks={duration}
+           variant="overlay"
+           onHide={() => setPlanGenerationProgress(null)}
+         />
+       )}
+ 
+--- src/pages/Training.tsx (change summary)
+@@ -1957,7 +1957,6 @@
+-          yet, and telling an athlete to wait for their credits would be a lie. */}
++          yet, and telling an athlete to wait for their credits would be a lie. */}
+       {planGenerationProgress !== null && !hideProgress && (
+         <PlanGenerationProgress
+           weeks={duration}

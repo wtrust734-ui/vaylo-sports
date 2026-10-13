@@ -108,7 +108,7 @@ describe("video-form-analysis: entitlement + retention", () => {
     expect(src).toMatch(/AI video form analysis failed — auto refund/);
   });
 
-  it("keeps one video cap on both sides, and re-measures it after download", () => {
+  it("keeps one video cap on both sides, and re-measures it from the object itself", () => {
     // Rewritten 2026-10-12. This used to assert `MAX_BYTES = 6 * 1024 * 1024` in
     // the function AND the page, because the clip was base64'd into the request
     // body and the shared Edge body limit was therefore what sized a video. The
@@ -117,13 +117,20 @@ describe("video-form-analysis: entitlement + retention", () => {
     // the caps live in ONE module, the server does not take the client's word
     // for the size, and no video bytes ride in a JSON body at all.
     const limits = read("/src/lib/formVideo.ts");
-    expect(limits).toMatch(/export const MAX_FORM_VIDEO_BYTES = 25 \* 1024 \* 1024/);
-    expect(limits).toMatch(/export const MAX_FORM_VIDEO_SECONDS = 60/);
-    expect(src).toMatch(/const MAX_BYTES = 25 \* 1024 \* 1024/);
-    expect(src).toMatch(/const MAX_SECONDS = 60/);
-    // The refusal is decided on the bytes that were actually downloaded, not on
-    // a length the caller supplied.
-    expect(src).toMatch(/videoBytes\.byteLength > MAX_BYTES/);
+    expect(limits).toMatch(/export const MAX_FORM_VIDEO_BYTES = 512 \* 1024 \* 1024/);
+    expect(limits).toMatch(/export const MAX_FORM_VIDEO_SECONDS = 600/);
+    expect(src).toMatch(/const MAX_BYTES = 512 \* 1024 \* 1024/);
+    expect(src).toMatch(/const MAX_SECONDS = 600/);
+    // The refusal is decided on the object's own stored size — read by the server
+    // before a byte moves — not on a length the caller supplied. It used to be
+    // measured on the buffered download; the control is the same, the source of
+    // the number is Storage's metadata rather than the athlete's claim.
+    expect(src).toMatch(/content-length/);
+    expect(src).toMatch(/declaredBytes > MAX_BYTES/);
+    // ...and the clip is streamed, so a long clip never has to fit in the
+    // function's memory (nor in a second copy on the way out).
+    expect(src).toMatch(/body: clip\.body/);
+    expect(src, "the clip is buffered into memory again").not.toMatch(/arrayBuffer\(\)/);
     // The guard still caps JSON bodies, and video is no longer one of them.
     expect(read(GUARD)).toMatch(/MAX_BODY_BYTES = 10 \* 1024 \* 1024/);
     expect(src).not.toMatch(/video_base64/);
@@ -140,6 +147,37 @@ describe("video-form-analysis: entitlement + retention", () => {
     expect(migration).toMatch(/storage\.buckets/);
     expect(migration).toMatch(/on conflict \(id\) do update set public = false/);
     expect(migration).toMatch(/auth\.uid\(\)::text = \(storage\.foldername\(name\)\)\[1\]/);
+  });
+
+  it("claims a request without treating its own fresh row as somebody else's", () => {
+    // The bug this pins, added 2026-10-12: `claim_video_analysis_request`
+    // inserted the claim row, then read it back and compared its
+    // `lease_expires_at` against now(). A brand-new row takes the default
+    // `now() + 20 minutes`, so the comparison was TRUE on the request that had
+    // just created it and the function answered `claimed: false` — 409 for every
+    // athlete, on every clip, forever. Nothing in the JS suite could see it, and
+    // the six-megabyte body cap hid it behind an earlier failure. So the shape
+    // of the fix is asserted here: liveness is decided by ONE statement, and a
+    // take-over requires a lease that has genuinely run out.
+    const claim = read("/supabase/migrations/20261012150000_fix_video_analysis_claim.sql");
+    // The function's own body, not the whole file. The migration ends with a DO
+    // block that asserts the stored function no longer contains the read-back,
+    // and that block necessarily names the statement it is looking for — so a
+    // whole-file search would match the guard instead of the code.
+    const body = claim.slice(claim.indexOf("AS $$"), claim.indexOf("$$;"));
+    expect(body.length, "the claim function body could not be located").toBeGreaterThan(200);
+    expect(body, "the read-back that caused the bug is back").not.toMatch(
+      /SELECT status, lease_expires_at/,
+    );
+    expect(body).toMatch(/ON CONFLICT \(user_id, request_id\) DO UPDATE/);
+    // A completed claim must still block, or a delivered analysis could be
+    // re-run against the same upload; only an expired `processing` lease is
+    // recovered, which is the crash case the schema documents.
+    expect(body).toMatch(/status = 'processing'\s*\n\s*AND public\.video_analysis_request_claims\.lease_expires_at <= now\(\)/);
+    expect(body).toMatch(/RETURNING status/);
+    // Service-role only, restated, because this is the lock the charge sits behind.
+    expect(claim).toMatch(/FROM PUBLIC, anon, authenticated/);
+    expect(claim).toMatch(/TO service_role/);
   });
 
   it("deletes the clip from Gemini and from storage on every exit path", () => {

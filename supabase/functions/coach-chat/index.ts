@@ -51,46 +51,95 @@ export async function persistCoachMemories(
 /**
  * Wraps the upstream SSE byte stream so the FULL assistant reply can be
  * inspected as it passes through, without buffering the whole stream first.
- * onDone receives the complete text once upstream closes.
+ *
+ * Two guarantees the naive tee does not give:
+ *
+ *   1. The terminal frame is held back, not forwarded. Memory persistence is
+ *      awaited BEFORE the held frame is delivered — a function frozen right
+ *      after the response would otherwise drop the memories. Fire-and-forget
+ *      here is a lost write dressed as a saved one.
+ *   2. Persistence is skipped when the upstream never said DONE. An
+ *      interrupted stream has no complete response to remember, and persisting
+ *      a fragment would store a half-thought as the coach's answer.
+ *
+ * Split UTF-8 stays split-safe (the decoder holds partial code points across
+ * chunks and is flushed once the stream ends), and an unterminated final line
+ * is still processed rather than dropping the tail of the reply. A line that
+ * is not valid JSON is kept for the next chunk while the stream is open — a
+ * frame split across chunks — and reported as malformed only once the stream
+ * has ended, never spun on.
  */
 export function teeSseText(
   upstream: ReadableStream<Uint8Array>,
-  onDone: (fullText: string) => void,
+  onDone: (fullText: string, completed: boolean) => unknown,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const reader = upstream.getReader();
   let buffer = "";
   let full = "";
+  let terminalSeen = false;
+  let heldTerminal = "";
   const SSE_LINE = /"choices"\s*:\s*\[\s*\{[\s\S]*?"delta"\s*:\s*\{\s*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+  const forwardable: string[] = [];
+  const drainLines = (final: boolean) => {
+    let newlineIdx: number;
+    while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+      let line = buffer.slice(0, newlineIdx);
+      buffer = buffer.slice(newlineIdx + 1);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (!line.startsWith("data:")) continue;
+      const jsonStr = line.slice(5).trim();
+      if (jsonStr.includes("[DONE]")) {
+        terminalSeen = true;
+        heldTerminal += line + "\n";
+        continue;
+      }
+      if (!jsonStr) continue;
+      try {
+        const payload = JSON.parse(jsonStr);
+        const delta = payload?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string") {
+          full += delta;
+          // Fast path: once the trailing marker region has fully passed, stop
+          // unescaping every frame.
+          if (full.includes("MEMORY_SAVE") || /[\],]\s*$/.test(full)) {
+            const m = SSE_LINE.exec(line);
+            if (m) full = full.slice(0, full.length - delta.length) + JSON.parse(`"${m[1]}"`);
+          }
+        }
+      } catch {
+        // A line that is still broken once the stream has ended is forwarded
+        // as-is: the client flags it explicitly rather than either side
+        // spinning on it or silently dropping the tail of the reply.
+        if (!final) { buffer = line + "\n" + buffer; break; }
+      }
+      forwardable.push(line + "\n");
+    }
+  };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
-        try { onDone(full); } catch { /* memory persistence must not break the stream */ }
+        buffer += decoder.decode();
+        if (buffer.trim()) buffer += "\n";
+        drainLines(true);
+        if (forwardable.length) {
+          controller.enqueue(encoder.encode(forwardable.join("")));
+          forwardable.length = 0;
+        }
+        if (terminalSeen) {
+          try { await onDone(full, true); } catch { /* memory persistence must not break the stream */ }
+          controller.enqueue(encoder.encode(heldTerminal));
+        }
         controller.close();
         return;
       }
-      controller.enqueue(value);
       buffer += decoder.decode(value, { stream: true });
-      const frames = buffer.split("\n");
-      buffer = frames.pop() ?? "";
-      for (const frame of frames) {
-        const line = frame.trim();
-        if (!line.startsWith("data:") || line.includes("[DONE]")) continue;
-        try {
-          const payload = JSON.parse(line.slice(5).trim());
-          const delta = payload?.choices?.[0]?.delta?.content;
-          if (typeof delta === "string") {
-            full += delta;
-            // Fast path: once the trailing marker region has fully passed, stop
-            // unescaping every frame.
-            if (full.includes("MEMORY_SAVE") || /[\],]\s*$/.test(full)) {
-              const m = SSE_LINE.exec(line);
-              if (m) full = full.slice(0, full.length - delta.length) + JSON.parse(`"${m[1]}"`);
-            }
-          }
-        } catch { /* keep-alive or partial frame */ }
+      drainLines(false);
+      if (forwardable.length) {
+        controller.enqueue(encoder.encode(forwardable.join("")));
+        forwardable.length = 0;
       }
     },
     cancel() {
@@ -159,6 +208,22 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // Rejected BEFORE spending credits: an empty conversation buys nothing,
+    // and a caller-supplied system/developer message would be forwarded to
+    // the model as an instruction — the server's own prompt is the only one.
+    if (messages.length === 0) {
+      return new Response(JSON.stringify({ error: "messages required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    for (const m of messages) {
+      const role = (m as { role?: unknown } | null)?.role;
+      if (role !== "user" && role !== "assistant") {
+        return new Response(JSON.stringify({ error: "Invalid message role" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
     // Prompt-stuffing caps: bound conversation size before it hits the model.
     if (messages.length > 40) {
       return new Response(JSON.stringify({ error: "Too many messages in one request" }), {
@@ -196,10 +261,6 @@ serve(async (req) => {
 
     // Charged — but honour the documented refund policy: a spent credit line is
     // only written for a real deduction, never for an Unlimited-plan audit row.
-    chargedCredits = spend?.cost ?? 3;
-    chargedUserId = user.id;
-    chargedUrl = supabaseUrl;
-
     chargedCredits = spend?.cost ?? 3;
     chargedUserId = user.id;
     chargedUrl = supabaseUrl;
@@ -319,23 +380,33 @@ ${dossierBlock}`;
     // full reply is reassembled server-side for memory persistence. The model
     // is the source of truth for what gets remembered — not whichever client
     // happens to finish parsing the stream.
-    const apiKey = OPENAI_API_KEY;
-    const supabaseUrlForMem = supabaseUrl;
     const adminForMem = serviceClient;
     const memUserId = user.id;
-    // response.body is null when the upstream closed without a body. Guard it
-    // rather than letting teeSseText throw and collapse into a generic 500.
+    // response.body is null when the upstream closed without a body: the
+    // athlete was charged and got nothing, so this enters the refund path
+    // like any other provider failure rather than answering a bare 502.
     if (!response.body) {
+      if (chargedUserId) {
+        await refundCredits({
+          supabaseUrl: chargedUrl,
+          serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          userId: chargedUserId,
+          amount: chargedCredits,
+          reason: "Coach reply failed — empty provider response (auto refund)",
+        });
+        chargedUserId = null;
+      }
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const streamed = teeSseText(response.body, (fullText) => {
-      // Fire-and-forget is unsafe in a function that may be frozen after the
-      // response, so persist inline before the stream's final frame is flushed.
-      persistCoachMemories(adminForMem, memUserId, fullText).catch(() => undefined);
-      void apiKey;
-      void supabaseUrlForMem;
+    const streamed = teeSseText(response.body, async (fullText, completed) => {
+      // Awaited before the held terminal frame is delivered, and skipped when
+      // the upstream never finished — there is no complete response to
+      // remember then. Fire-and-forget is unsafe in a function that may be
+      // frozen after the response.
+      if (!completed) return;
+      await persistCoachMemories(adminForMem, memUserId, fullText).catch(() => undefined);
     });
     return new Response(streamed, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },

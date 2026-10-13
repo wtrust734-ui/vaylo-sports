@@ -139,12 +139,27 @@ describe("credit economy — every metered feature clears its cost", () => {
     });
   }
 
-  it("has no ceiling declared for a feature that makes no AI call", () => {
-    // nutrition_plan_week is the one priced feature with no provider call. It
-    // must NOT have a ceiling, because a ceiling implies a cost that does not
-    // exist and would be used to justify a price rise.
-    expect(API_COST_CEILING_USD).not.toHaveProperty("nutrition_plan_week");
-    expect(FEATURE_COSTS.nutrition_plan_week).toBeGreaterThan(0);
+  it("declares a ceiling for the nutrition plan, which is a metered call", () => {
+    // The plan used to be free to produce — it stored the macro targets the
+    // athlete typed in — and the suite used to assert the ABSENCE of a ceiling
+    // here. generate-nutrition-plan now writes the weeks with the model, so the
+    // key is metered and must be measured like every other AI feature: without a
+    // ceiling the floor loop below would skip it entirely, which is how a price
+    // gets justified by a cost nobody ever wrote down.
+    expect(API_COST_CEILING_USD).toHaveProperty("nutrition_plan_week");
+    expect(API_COST_CEILING_USD.nutrition_plan_week).toBeGreaterThan(0);
+    expect(meteredKeys).toContain("nutrition_plan_week");
+  });
+
+  it("has no ceiling for a per-use priced action that makes no AI call", () => {
+    // A comparison is arithmetic over numbers already on the device, so there is
+    // no cost to cover and there must be no ceiling: a ceiling here would imply
+    // a cost that does not exist and would be used to justify a price rise. It
+    // is the only per-use priced action in this position — the permanent unlocks
+    // are bought once and streak_shield is a consumable, neither of which makes
+    // a call at all.
+    expect(API_COST_CEILING_USD).not.toHaveProperty("vpr_compare");
+    expect(FEATURE_COSTS.vpr_compare).toBeGreaterThan(0);
   });
 });
 

@@ -201,6 +201,18 @@
     advertising identifier in this app.
   </p>
 
+  <h3>Failure reports</h3>
+  <p>
+    When something goes wrong in the app, the app itself sends us a short diagnostic
+    report so a tester&apos;s &ldquo;it broke&rdquo; can be answered: the error name and
+    message, a redacted stack trace, the screen it happened on, and the platform and
+    app version. The report carries no sign-in tokens, no passwords, no email
+    addresses, no health values and no message bodies &mdash; anything shaped like a
+    secret is stripped on the device before sending. Reports are grouped by failure
+    on our own backend, which is already listed in section 5, and no third-party
+    crash or analytics service is installed.
+  </p>
+
   <h2 id="health">2. Health and fitness data</h2>
   <p>
     Health data only comes from a source you explicitly connect. There is no

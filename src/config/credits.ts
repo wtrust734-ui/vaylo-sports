@@ -145,6 +145,13 @@ export const API_COST_CEILING_USD = {
   plan_edit: 0.003,
   plan_edit_full: 0.003,
   calorie_scan: 0.0014, // 2.5k in / 0.9k out
+  // A nutrition plan week. One call writes two weeks of plan (~6k in / ~8k out
+  // on Luna, $0.0046), so this is the per-week half of that call, doubled the
+  // same way every other ceiling here is. It had no ceiling while the plan
+  // stored the targets the athlete typed in and made no provider call; the plan
+  // became a metered call when generate-nutrition-plan took over writing the
+  // weeks, and a metered call is exactly what a ceiling is for.
+  nutrition_plan_week: 0.0046,
   // A nutrition review is a text call over what the athlete has actually
   // logged plus their dossier, so the input is the large half: a week of meals
   // is ~13k tokens in, with a short structured answer out. Luna-class, doubled
@@ -160,6 +167,20 @@ export const API_COST_CEILING_USD = {
   archetype_view: 0.0022, // 5k in / 1.2k out
   // 20k in / 3k out on Gemini Flash. This is the second most expensive call in
   // the app after the limiter plan, because a clip is many frames.
+  //
+  // That budget was sized for the old 60-second clip cap. On 2026-10-12 the cap
+  // became 10 minutes, so it now describes the SHORT case: Gemini bills video at
+  // roughly 258 tokens per sampled frame (1 fps by default) plus ~32 tokens per
+  // second of audio, which puts a 10-minute clip near 174k input tokens. No
+  // sampling setting brings that back inside a 60-second budget — the audio
+  // track alone is budget-sized.
+  //
+  // Deliberately NOT re-derived here. This ceiling feeds the price through
+  // MIN_MARGIN_MULTIPLE, so raising it would raise what an athlete pays, and that
+  // is a pricing decision rather than a modelling one. Nothing is sold at a loss
+  // in the meantime: at 45 credits the worst-case revenue still clears a long
+  // clip's real cost by roughly 8x. Raise this figure together with the price the
+  // first time long clips are common enough to measure properly.
   video_form_analysis: 0.0272,
   form_analysis: 0.00715, // one photo, 2k in / 1.2k out
   // The largest single output in the app (limiter_analysis, 8000 output tokens
@@ -261,19 +282,26 @@ export const FEATURE_COSTS: Record<FeatureCostKey, number> = {
   // every week.
   injury_plan: 6,
   calorie_scan: 12,
-  // NOT an AI feature, and priced as such. Creating a nutrition plan writes the
-  // macro targets the athlete typed in (see Nutrition.tsx createNutritionPlan)
-  // — there is no provider call and therefore no per-use cost. It has no
-  // ceiling and no margin floor: pricing a free action against a cost it does
-  // not incur would be a made-up justification, and pricing.test.ts only
-  // requires it to be above zero.
+  // A nutrition plan week, and it IS a metered model call:
+  // generate-nutrition-plan writes the week-by-week plan with Luna, so this key
+  // carries a ceiling like every other AI feature (see API_COST_CEILING_USD).
+  // 8 credits is ~18x that ceiling, clear of the 8x floor.
+  //
+  // 8, not the 15 the database charged between 2026-10-09 and 2026-10-12: the
+  // button has read 8 since the key existed, and 8 is what keeps the day-one
+  // basket inside the 260-credit grant — an 8-week plan (160) plus a scan,
+  // three coach messages, a form analysis, a weekly review and four nutrition
+  // weeks is 253. At 15 it is 281 and does not fit, which would have turned "the
+  // starting grant covers your first eight weeks" into a shopping trip in week
+  // one. The database was returned to 8 (20261012170000), so the shown price
+  // and the charged price are one number again.
   //
   // There is deliberately NO nutrition unlock. Nutrition is a standard tab,
   // free to open: the plan charges per week and the AI calorie scan charges
   // per scan (12). A pack that made either free would be a flat rate on a
   // metered cost, which is the product this file refuses to sell.
   //
-  // The AI half of this screen is calorie_scan (photo -> macros), priced at 12.
+  // The other AI half of this screen is calorie_scan (photo -> macros), at 12.
   nutrition_plan_week: 8,
   // The other AI half of this screen: a review of what the athlete has actually
   // logged, read against their age, sport, training load and goals. One

@@ -130,11 +130,22 @@ export default function BottomSheet({
                   {subtitle && <p className="mt-0.5 break-words text-[12px] text-muted-foreground">{subtitle}</p>}
                 </div>
                 {headerRight}
+                {/* The one way out of every sheet in the app, so it has to be
+                    hittable with a thumb.
+
+                    It used to be a 16px icon in a `p-1.5` box: 28px wide. The
+                    44px touch floor in index.css only sets `min-height`, so
+                    this control passed the floor while being barely half a
+                    thumb wide — and on the Health Connect sheet, where the
+                    header X is the *only* permanent exit (the footer's primary
+                    action is "Sync now"), an athlete who missed it read the
+                    sheet as an unclosable pop-up. `-me-2 -mt-1` keeps the icon
+                    where it was drawn while the hit area grows around it. */}
                 <button
                   type="button"
                   onClick={onClose}
                   aria-label="Close"
-                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                  className="-me-2 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <X size={16} />
                 </button>

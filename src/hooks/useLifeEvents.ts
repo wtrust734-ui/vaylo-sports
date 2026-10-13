@@ -232,8 +232,28 @@ export function useLifeEvents(): UseLifeEvents {
       // from `plan_events`: that table holds only the sessions something has
       // already changed, so asking it would make the second break of a season
       // behave differently from the first.
+      // A break the plan is rebuilt around. There are two cases and they are
+      // genuinely different:
+      //
+      //   • "no training" — the covered weeks are emptied in the stored plan,
+      //     so there is nothing left in them asking to be made up.
+      //   • a holiday or travel window — the week before is loaded and the
+      //     weeks after ramp back, whether or not the athlete trains while they
+      //     are away. Reading the plan only for "no" meant the loading week and
+      //     the return ramp — the two halves the holiday type's own definition
+      //     promises — did not run at all for an athlete who said they would
+      //     train a little on holiday, which is the default shape of a holiday.
+      //
+      // Everything else is left alone: an exam period or a busy week the
+      // athlete is still training through is a change to their availability,
+      // not a reason to rewrite the plan under them.
+      const reshapesPlan =
+        event.allow_training === "no" ||
+        event.event_type === "holiday" ||
+        event.event_type === "travel";
+
       let planRow: TrainingPlanLike | null = null;
-      if (event.allow_training === "no") {
+      if (reshapesPlan) {
         const { data } = await supabase
           .from("training_plans")
           .select("id, created_at, week_current, duration_weeks, plan_data, plan_adjustments")
@@ -344,12 +364,12 @@ export function useLifeEvents(): UseLifeEvents {
       // after the record is written and is allowed to fail on its own: the
       // break is saved either way, and the athlete is told which half worked.
       //
-      // Deliberately only for `allow_training: "no"`. An athlete who kept
-      // training through their holiday has not been away, and rebuilding their
-      // plan around a break they did not take would be the app arguing with
-      // them about their own week.
+      // Only for the breaks above. `planRebuild` decides what each one does to
+      // the weeks — it empties the ones inside a "no training" break, eases an
+      // "optional" holiday and leaves a holiday the athlete is training through
+      // exactly as it is, while the loading week and the ramp run either way.
       let rebuild: RebuildSummary | null = null;
-      if (planRow && event.allow_training === "no") {
+      if (planRow && reshapesPlan) {
         const result = await rebuildPlanForBreak({
           userId: user.id,
           plan: planRow,

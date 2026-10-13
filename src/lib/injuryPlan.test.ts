@@ -16,13 +16,45 @@ import { describe, expect, it } from "vitest";
 import {
   buildInjuryBriefing,
   MAX_PLAN_WEEKS,
+  MAX_SITE_LENGTH,
   parseInjuryPlan,
   PERSONALISED_PLAN_MARKER,
   planHeadline,
   renderInjuryProtocol,
+  resolveInjurySite,
   splitStoredProtocol,
   type InjuryPlan,
 } from "./injuryPlan";
+
+// ─── Any injury, not just the ones on the list ───
+
+const KNOWN = ["Knee", "Hamstring", "Achilles", "Lower Back", "Other"];
+
+describe("the injury site that gets logged", () => {
+  it("keeps the athlete's own words instead of collapsing them to 'Other'", () => {
+    // This is what "create a plan for any injury" means in the data: the briefing
+    // the plan is written from carries the athlete's site, not a placeholder.
+    expect(resolveInjurySite({ listed: "Other", typed: "groin", known: KNOWN })).toBe("groin");
+    expect(resolveInjurySite({ listed: "Other", typed: "  rotator   cuff  ", known: KNOWN })).toBe("rotator cuff");
+  });
+
+  it("falls back to 'Other' only when there is genuinely nothing to name", () => {
+    expect(resolveInjurySite({ listed: "Other", typed: "   ", known: KNOWN })).toBe("Other");
+    expect(resolveInjurySite({ listed: "Other", typed: null, known: KNOWN })).toBe("Other");
+    expect(resolveInjurySite({ listed: "Something odd", typed: null, known: KNOWN })).toBe("Other");
+  });
+
+  it("keeps a listed site as it is", () => {
+    expect(resolveInjurySite({ listed: "Knee", typed: "ignored", known: KNOWN })).toBe("Knee");
+  });
+
+  it("bounds and cleans what it stores", () => {
+    const long = "x".repeat(200);
+    expect(resolveInjurySite({ listed: "Other", typed: long, known: KNOWN })).toHaveLength(MAX_SITE_LENGTH);
+    // Control characters cannot ride into the prompt or the column.
+    expect(resolveInjurySite({ listed: "Other", typed: "shi\u0000n\n\u0007", known: KNOWN })).toBe("shi n");
+  });
+});
 
 const validPlan = {
   summary: "Reported left knee pain after sprinting. This scaffold builds back tolerance.",

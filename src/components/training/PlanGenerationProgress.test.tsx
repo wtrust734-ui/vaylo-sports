@@ -12,8 +12,8 @@
 // 99% forever.
 // ============================================================================
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, act } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 
 import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
 
@@ -26,9 +26,18 @@ const advance = (seconds: number) => {
   });
 };
 
-beforeEach(() => {
+/** The component's only timer is a `setInterval` inside `useEffect`, so the
+ *  fake clock has to be on before the component mounts, or the interval is
+ *  scheduled on the real clock and advancing the fake one moves nothing. No
+ *  `runAllTimers` here: the interval never ends, so flushing "all" timers
+ *  would run until the runner aborts. Effects flush inside `render` already. */
+const renderWith = (children: React.ReactNode) => {
   vi.useFakeTimers();
-});
+  const utils = render(children);
+  return utils;
+};
+
+
 
 afterEach(() => {
   vi.useRealTimers();
@@ -37,7 +46,7 @@ afterEach(() => {
 
 describe("the plan generation progress panel", () => {
   it("names the plan it is building and the work actually being done", () => {
-    render(<PlanGenerationProgress weeks={6} />);
+    const utils = renderWith(<PlanGenerationProgress weeks={6} />);
 
     expect(screen.getByText(/Building your 6-week plan/i)).toBeInTheDocument();
     // The stages are the function's real pipeline, in order. If a stage name
@@ -50,7 +59,7 @@ describe("the plan generation progress panel", () => {
   });
 
   it("promises only what the server actually does on failure", () => {
-    render(<PlanGenerationProgress weeks={4} />);
+    const utils = renderWith(<PlanGenerationProgress weeks={4} />);
 
     // generate-plan refunds on every failure path, so this claim is true —
     // and it is the sentence an athlete reading a long wait needs.
@@ -58,7 +67,7 @@ describe("the plan generation progress panel", () => {
   });
 
   it("moves as the wait goes on, and never claims to be finished", () => {
-    render(<PlanGenerationProgress weeks={8} />);
+    const utils = renderWith(<PlanGenerationProgress weeks={8} />);
 
     const start = percent();
     expect(start).toBeGreaterThanOrEqual(0);
@@ -77,18 +86,46 @@ describe("the plan generation progress panel", () => {
   });
 
   it("stops promising a time and says it is still working instead", () => {
-    render(<PlanGenerationProgress weeks={12} />);
+    const utils = renderWith(<PlanGenerationProgress weeks={12} />);
 
     expect(screen.queryByText(/still working/i)).not.toBeInTheDocument();
 
-    // Twice the estimate is where the panel stops pretending to know.
+    // Twice the estimate is where the panel stops pretending to know. It says
+    // so in the header and in the bar track, so there is more than one match.
     advance(240);
 
-    expect(screen.getByText(/still working/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("covers the screen, and can be dismissed without cancelling the wait", () => {
+    const onHide = vi.fn();
+    const utils = renderWith(<PlanGenerationProgress weeks={6} onHide={onHide} />);
+
+    // Full screen, and above the floating tab bar (BottomNav is z-50) — a
+    // request in flight must not leave a tappable Create button underneath it.
+    const overlay = screen.getByTestId("plan-generation-overlay");
+    expect(overlay.className).toContain("fixed");
+    expect(overlay.className).toContain("inset-0");
+    expect(overlay.className).toContain("z-[70]");
+
+    // The way out. Covered-screen with no exit would be a trap, because the
+    // request cannot be cancelled from this component.
+    fireEvent.click(screen.getByRole("button", { name: /hide/i }));
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the same status inline once the overlay is hidden, with no second exit", () => {
+    const utils = renderWith(<PlanGenerationProgress weeks={6} variant="inline" />);
+
+    expect(screen.queryByTestId("plan-generation-overlay")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hide/i })).not.toBeInTheDocument();
+    // Same bar, same stages: hiding the overlay is not a downgrade in honesty.
+    expect(percent()).toBeGreaterThanOrEqual(0);
+    expect(screen.getByText(/refunded automatically/i)).toBeInTheDocument();
   });
 
   it("moves through the stages rather than sitting on the first one", () => {
-    render(<PlanGenerationProgress weeks={6} />);
+    const utils = renderWith(<PlanGenerationProgress weeks={6} />);
 
     // Asserted on the DETAIL line, not the stage name. Every stage name is on
     // screen from the first render — the list is the pipeline — so `getByText(

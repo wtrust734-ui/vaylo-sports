@@ -81,7 +81,15 @@ export function classifyBreak(days: number): BreakCategory {
 }
 
 /** What one week is for, which drives the copy and the styling. */
-export type ReturnFocus = "rebuild" | "restore" | "resume" | "compete" | "preload" | "holiday";
+export type ReturnFocus =
+  | "rebuild"
+  | "restore"
+  | "resume"
+  | "compete"
+  | "preload"
+  | "holiday"
+  /** A week the athlete said they would not train in, emptied rather than eased. */
+  | "paused";
 
 export interface ProgressionStep {
   /** 1 = the first week back. */
@@ -662,6 +670,94 @@ export function rebuildWeek(
   };
 }
 
+/**
+ * Empty a week the athlete has said they will not train in.
+ *
+ * `allowTraining: "no"` is the athlete saying "nothing here", and until this
+ * existed the app did not take them at their word in the place that mattered.
+ * The availability layer does record those sessions as
+ * `cancelled_due_to_availability` — but that is a record of a cancellation, not
+ * a change to the plan, and the week stored in `plan_data` still read as a
+ * normal week of training on the Training screen. An athlete who said "no
+ * training" and then opened their plan found five sessions waiting to be made
+ * up, which is the app arguing with them about their own holiday.
+ *
+ * So every session in the covered days becomes a rest day *in place*, in exactly
+ * the shape `rebuildWeek` writes when it drops one, and each is snapshotted
+ * first so undo restores the week byte for byte. Nothing is moved into the days
+ * after the break, and nothing is deleted: the week still holds seven days with
+ * a reason on each of them.
+ *
+ * The days before `fromDay` and any session the athlete has already acted on are
+ * left exactly as they are, for the same reason `rebuildWeek` leaves them: a
+ * break logged today cannot reach back into a Monday that has already happened.
+ */
+function clearWeek(
+  week: PlanWeekLike,
+  step: ProgressionStep & { weekNumber: number; fromDay?: number; toDay?: number },
+  lifeEventId: string,
+  locked?: Iterable<string>,
+): { week: PlanWeekLike; snapshot: SessionSnapshot[]; droppedTitles: string[] } {
+  const from = clamp(Math.trunc(step.fromDay ?? 1), 1, 7);
+  const to = clamp(Math.trunc(step.toDay ?? 7), 1, 7);
+  const lockedKeys = locked ? new Set(locked) : null;
+  const isLocked = (s: PlanSessionLike) =>
+    !!s.skipped || !!lockedKeys?.has(weekDayKey(week.week, s.day));
+
+  const snapshot: SessionSnapshot[] = [];
+  const droppedTitles: string[] = [];
+
+  const sessions = week.sessions.map((session) => {
+    if (isRestDay(session) || isLocked(session) || session.day < from || session.day > to) return session;
+
+    snapshot.push({ week: week.week, session: { ...session } });
+    droppedTitles.push(session.title);
+
+    return {
+      ...session,
+      title: "No training",
+      type: "rest",
+      duration_minutes: 0,
+      isRest: true,
+      isRecovery: false,
+      warmup: [],
+      exercises: [],
+      cooldown: [],
+      description: `${session.title} is not programmed — you told the app you are not training in these days. Nothing has been moved into the days after.`,
+      key: isKeySession(session),
+      returnFromBreak: {
+        lifeEventId,
+        weekBack: step.back,
+        volumePct: step.volumePct,
+        intensityPct: step.intensityPct,
+        originalDuration: session.duration_minutes ?? 0,
+        dropped: true,
+        originalTitle: session.title,
+      },
+    } satisfies PlanSessionLike;
+  });
+
+  return {
+    week: {
+      ...week,
+      sessions,
+      extraNote: weekNote(step),
+      returnFromBreak: {
+        lifeEventId,
+        weekBack: step.back,
+        volumePct: step.volumePct,
+        intensityPct: step.intensityPct,
+        focus: step.focus,
+        sessions: sessions.filter((s) => !isRestDay(s)).length,
+        dropped: droppedTitles.length,
+        droppedTitles,
+      },
+    },
+    snapshot,
+    droppedTitles,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Copy
 // ---------------------------------------------------------------------------
@@ -673,6 +769,7 @@ const WEEK_FOCUS_COPY: Record<ReturnFocus, { lead: string; ask: string }> = {
   compete: { lead: "Competition week", ask: "stay fresh rather than fit" },
   preload: { lead: "Loading week", ask: "bank a little extra before your break" },
   holiday: { lead: "Holiday week", ask: "easy movement only while you are away" },
+  paused: { lead: "No training", ask: "nothing is programmed while you are away" },
 };
 
 /** The line the Training screen shows above the week. */
@@ -683,6 +780,9 @@ export function weekNote(step: ProgressionStep): string {
   }
   if (step.focus === "holiday") {
     return `${copy.lead} — about ${step.volumePct}% of your usual volume, ${copy.ask} at up to ${step.intensityPct}% intensity. The fitness comes back after, not during.`;
+  }
+  if (step.focus === "paused") {
+    return `${copy.lead} — you said you are not training in these days, so ${copy.ask}. Nothing has been moved into the days after, and your rebuild starts the week the break ends.`;
   }
   return `${copy.lead} — about ${step.volumePct}% of your usual volume, ${copy.ask} at up to ${step.intensityPct}% intensity. Nothing was moved from your break into this week.`;
 }
@@ -755,6 +855,9 @@ export function rebuildExplanation(input: {
   }
   if (steps.some((s) => s.focus === "holiday")) {
     parts.push("The holiday week itself is eased right back to easy movement rather than left as normal training.");
+  }
+  if (steps.some((s) => s.focus === "paused")) {
+    parts.push("The days you are not training are cleared out of your plan, so there is nothing sitting there asking to be made up.");
   }
   if (credited >= 1) {
     parts.push(
@@ -931,22 +1034,57 @@ export function planRebuild(input: RebuildInput): RebuildOutcome {
       }
     }
 
-    // The weeks the break falls in: eased back to easy movement, so opening
-    // the plan mid-holiday shows sessions that are actually doable. Skipped
-    // when the athlete said they want no training — those sessions are already
-    // cancelled by the availability layer, and rewriting them would destroy
-    // the record of what was planned.
-    if (facts.allowTraining !== "no") {
+    // The weeks the break falls in. What happens to them turns on the one
+    // answer that actually changes the plan: whether the athlete is training.
+    //
+    //   • "no" — the week is emptied. This used to be skipped on the grounds
+    //     that the availability layer had already cancelled those sessions,
+    //     and that rewriting them "would destroy the record of what was
+    //     planned". Both halves of that were wrong. The cancellation is a
+    //     record, not a change: the plan itself still read as a normal week of
+    //     training, so an athlete who said "no training" opened their plan and
+    //     found five sessions waiting to be made up. And the record is not
+    //     destroyed by the rewrite — every session is snapshotted first and
+    //     `undoAdjustment` puts it back exactly.
+    //
+    //   • "optional" — eased back to easy movement, so opening the plan
+    //     mid-holiday shows sessions that are actually doable.
+    //
+    //   • "yes" — left alone. An athlete training through their holiday has
+    //     not been away; the loading week before and the ramp after are still
+    //     theirs, but nothing about their own week is second-guessed.
+    if (facts.allowTraining !== "yes") {
+      const paused = facts.allowTraining === "no";
       for (const week of weeks) {
         const startKey = weekStart(week.week);
         const endKey = addDays(startKey, 6);
         if (endKey < facts.startDate || startKey > facts.endDate) continue;
         if (endKey < today) continue;
-        if (rebuilt.has(week.week)) continue;
-        if (playableCount(week) === 0) continue;
-        const fromDay = today > startKey && today <= endKey ? dayOfWeek(today) : 1;
-        const step = { back: 0, volumePct: 50, intensityPct: 60, focus: "holiday" as ReturnFocus, weekNumber: week.week, fromDay };
-        const result = rebuildWeek(week, step, facts.eventId, locked);
+        // Which days of this week the break actually covers. A break that
+        // starts or ends mid-week must not reach past it: the days before it
+        // are the athlete's own training (and the loading step may already have
+        // banked them), and the days after it are the return, which is rebuilt
+        // by the progression below on top of whatever is left here.
+        const fromDay = Math.max(
+          dayOfWeek(facts.startDate > startKey ? facts.startDate : startKey),
+          today > startKey ? dayOfWeek(today) : 1,
+        );
+        const toDay = dayOfWeek(facts.endDate < endKey ? facts.endDate : endKey);
+        if (toDay < fromDay) continue;
+        // A week the loading step above already rewrote is the base here, so
+        // the banked days before a mid-week break and the break's own days
+        // compose rather than one of them overwriting the other.
+        const base = rebuilt.get(week.week) ?? week;
+        if (playableCount(base) === 0) continue;
+        const step = paused
+          ? { back: 0, volumePct: 0, intensityPct: 0, focus: "paused" as ReturnFocus, weekNumber: week.week, fromDay, toDay }
+          : { back: 0, volumePct: 50, intensityPct: 60, focus: "holiday" as ReturnFocus, weekNumber: week.week, fromDay, toDay };
+        const result = paused
+          ? clearWeek(base, step, facts.eventId, locked)
+          : rebuildWeek(base, step, facts.eventId, locked);
+        // Recorded against the *original* week, exactly as the return loop
+        // below does: the note and tag undo has to restore are the ones this
+        // week had before anything in this run touched it.
         if (result.snapshot.length) recordStep(week, step, result);
       }
     }

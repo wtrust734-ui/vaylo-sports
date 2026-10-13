@@ -303,7 +303,18 @@ describe("Scenario 1 — break → return → competition", () => {
     // every week except the one the race falls in. That is the specification's
     // "not abandoned but adjusted around the competition".
     expect(after).toHaveLength(before.length);
-    expect(after.map((s) => s.focus)).toEqual(before.map((s) => s.focus).map((f, i) => (i === 1 ? "compete" : f)));
+    // Compared week by week rather than slot by slot: the weeks away are their
+    // own kind of step in both runs, so the race's week is not always at the
+    // same index. What must hold is the rule — one week becomes the taper and
+    // every other week is exactly what it was.
+    // Compared step by step, because a week can carry two of them — the days
+    // the athlete is away and the return that follows them — and a map keyed by
+    // week would collapse those into one. The rule asserted is the one the
+    // specification states: every step is the week and focus it had without the
+    // race, except the race's own week, which becomes a taper.
+    expect(after.map((s) => [s.week, s.focus])).toEqual(
+      before.map((s) => [s.week, s.week === 4 ? "compete" : s.focus]),
+    );
 
     const competing = after.filter((s) => s.focus === "compete");
     expect(competing).toHaveLength(1);

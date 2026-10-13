@@ -29,10 +29,10 @@ const Development = () => {
   const flag = proj.slope > 1 ? "Late bloomer trajectory" : proj.slope > 0.3 ? "Steady upward trend" : proj.slope < -0.3 ? "Stagnation — change stimulus" : "Plateau";
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><TrendingUp size={14} /> Athlete Development Map</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Development <span className="text-gradient-electric">Trajectory</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Development Trajectory</h1>
         <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
           Projections use a linear regression on your VPR snapshots, age-adjusted against normative athlete data.
           Peak power output typically falls between ages 25–29 (Allen et al. 2015), endurance peaks 27–34

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "@/lib/errorReporting";
 
 interface Props {
   children: ReactNode;
@@ -24,6 +25,15 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled UI error:", error, info.componentStack);
+    // Render errors are reported from where they are caught, with their own
+    // source — never rethrown, so a render error cannot become a rejection
+    // too. reportError never throws, so this cannot break the boundary.
+    reportError({
+      source: "react",
+      name: error.name || "Error",
+      message: error.message || "Unknown error",
+      stack: error.stack ?? info.componentStack ?? null,
+    });
   }
 
   private reset = () => this.setState({ error: null });

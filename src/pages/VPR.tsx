@@ -99,13 +99,13 @@ const VPRPage = () => {
     if (error) { toast.error(error.message); }
   };
 
-  if (loading) return <div className="min-h-screen app-mesh flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <div className="min-h-screen app-mesh px-5 pt-[var(--vaylo-screen-top)] pb-28 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-28 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Activity size={14} /> Vaylo Sports Performance Rating</div>
-        <h1 className="text-4xl font-display font-bold mt-2">VPR <span className="text-gradient-electric">{vpr.overall_vpr}</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-2">VPR {vpr.overall_vpr}</h1>
         {archetype ? (
           <p className="text-muted-foreground mt-1">{archetype.name} — {archetype.description}</p>
         ) : (
@@ -117,8 +117,7 @@ const VPRPage = () => {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-        className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-6 overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+        className="rounded-2xl border border-border bg-card shadow-card p-6 overflow-hidden relative">
         <div className="relative">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="h-72">
@@ -151,8 +150,7 @@ const VPRPage = () => {
 
       {snapshots.length >= 2 && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-6 overflow-hidden relative">
-          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+          className="rounded-2xl border border-border bg-card shadow-card p-6 overflow-hidden relative">
           <div className="relative">
           <h2 className="font-semibold mb-3">Progression</h2>
           <div className="h-48">
@@ -170,8 +168,7 @@ const VPRPage = () => {
       )}
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-        className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-6 space-y-3 overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+        className="rounded-2xl border border-border bg-card shadow-card p-6 space-y-3 overflow-hidden relative">
         <div className="relative space-y-3">
         <h2 className="font-semibold flex items-center gap-2"><Plus size={16} /> Log a metric</h2>
         <div className="grid grid-cols-2 gap-2">

@@ -31,10 +31,10 @@ const SkillAnalytics = () => {
   const weaknesses = [...avgs].sort((a, b) => a.avg - b.avg).slice(0, 3);
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Target size={14} /> Skill Analytics</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Skill <span className="text-gradient-electric">Engine</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Skill Engine</h1>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

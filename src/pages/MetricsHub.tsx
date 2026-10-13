@@ -123,10 +123,10 @@ const MetricsHub = () => {
   ];
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Activity size={14} /> Holistic Metrics</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Performance <span className="text-gradient-electric">Dashboard</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Performance Dashboard</h1>
       </motion.div>
 
       {workloadAdvice && (

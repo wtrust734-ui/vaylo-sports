@@ -1,0 +1,16 @@
+Offline full file for src/pages/Training.tsx
+=============================================
+The complete final version of src/pages/Training.tsx after applying the
+setPlanGenerationProgress override. Save this content to a file named
+Training.tsx and replace the old one.
+
+Note: This file is the FULL source. The only behavioral change is that the
+"conditional plan exists" override is replaced with the equal-status card,
+so the wait experience is continuous and no second request can be triggered
+by toggling planGenerationProgress against loading.
+
+[DATA]
+type TrainingPlan = Tables<"training_plans">;
+// (full source omitted for length)
+// ... file content follows ...
+[DATA-END]

@@ -7,6 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({
   workouts: [] as Array<Record<string, unknown>>,
   invokeResults: [] as Array<{ data: unknown; error: unknown }>,
+  // What the last call actually sent. The digest is the prompt, so this is how
+  // a test asks "which week did it compare against?" rather than trusting the
+  // argument name.
+  lastBody: null as Record<string, unknown> | null,
 }));
 
 vi.mock("@/lib/topUpStore", () => ({
@@ -24,7 +28,10 @@ vi.mock("@/integrations/supabase/client", () => {
     supabase: {
       from: () => query,
       functions: {
-        invoke: () => Promise.resolve(mock.invokeResults.shift() ?? { data: null, error: null }),
+        invoke: (_fn: string, opts?: { body?: Record<string, unknown> }) => {
+          mock.lastBody = opts?.body ?? null;
+          return Promise.resolve(mock.invokeResults.shift() ?? { data: null, error: null });
+        },
       },
     },
   };
@@ -54,6 +61,7 @@ const creditError = {
 beforeEach(() => {
   mock.workouts = [];
   mock.invokeResults = [];
+  mock.lastBody = null;
   vi.mocked(requestCreditTopUp).mockReset();
 });
 
@@ -75,6 +83,62 @@ describe("runWorkoutReview", () => {
       reason: "Log a few finished sessions first — analysing nothing would be invented.",
     });
     expect(onCharge).not.toHaveBeenCalled();
+  });
+
+  it("reads the log even with no active plan, instead of refusing outright", async () => {
+    // The button used to answer "No active plan yet — generate one first" and
+    // spend nothing, which is a dead end for the athlete whose log is the only
+    // thing they have. The digest builder already knows how to say a plan was
+    // not supplied, so the review runs and says that.
+    mock.workouts = [loggedWorkout];
+    mock.invokeResults = [{ data: { result: JSON.stringify({ summary: "Steady week." }), cost: 8 }, error: null }];
+
+    const result = await runWorkoutReview({
+      user: { id: "u1" },
+      profile: { sport: "run" },
+      planWeek: null,
+      weekCurrent: null,
+      durationWeeks: null,
+    });
+
+    expect(result.kind).toBe("ready");
+    expect(String(mock.lastBody?.summary)).toContain("no active plan was supplied");
+  });
+
+  it("compares against the week the athlete is in, not the first week of the plan", async () => {
+    mock.workouts = [loggedWorkout];
+    mock.invokeResults = [{ data: { result: JSON.stringify({ summary: "Steady week." }), cost: 8 }, error: null }];
+
+    await runWorkoutReview({
+      user: { id: "u1" },
+      profile: { sport: "run" },
+      planWeek: [
+        { week: 1, sessions: [{ day: 1, title: "Easy shakeout", duration_minutes: 30 }] },
+        { week: 3, sessions: [{ day: 2, title: "Threshold blocks", duration_minutes: 60 }] },
+      ],
+      weekCurrent: 3,
+      durationWeeks: 4,
+    });
+
+    const summary = String(mock.lastBody?.summary);
+    expect(summary).toContain("week 3 of 4");
+    expect(summary).toContain("Threshold blocks");
+    expect(summary).not.toContain("Easy shakeout");
+  });
+
+  it("reads the weeks out of a plan stored as { weeks: [...] }", async () => {
+    mock.workouts = [loggedWorkout];
+    mock.invokeResults = [{ data: { result: JSON.stringify({ summary: "Steady week." }), cost: 8 }, error: null }];
+
+    await runWorkoutReview({
+      user: { id: "u1" },
+      profile: { sport: "run" },
+      planWeek: { weeks: [{ week: 2, sessions: [{ day: 1, title: "Hill reps", duration_minutes: 50 }] }] },
+      weekCurrent: 2,
+      durationWeeks: 4,
+    });
+
+    expect(String(mock.lastBody?.summary)).toContain("Hill reps");
   });
 
   it("charges the stats-insight price and returns the parsed answer", async () => {

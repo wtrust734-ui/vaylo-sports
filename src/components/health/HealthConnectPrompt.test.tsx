@@ -150,6 +150,39 @@ describe("once connected", () => {
     renderPrompt(connected);
     expect(screen.getByText(/Last sync/)).toBeInTheDocument();
   });
+
+  it("leaves the sheet, rather than trapping the athlete inside it", () => {
+    // The complaint this covers: once connected, the sheet's only prominent
+    // control was "Sync now" and the way out was a 28px-wide X in the header.
+    // A pop-up reported as "it doesn't let me click the X" is a pop-up whose
+    // footer offers no exit, so the exit is asserted here and not just assumed.
+    const { onClose } = renderPrompt(connected);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // ...and the header X still works, on both states.
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("names what it is reading now that the grant exists", () => {
+    // "Vaylo reads only what you approved" is only honest if the sheet says
+    // what that is: the list of six used to be rendered on the connect path
+    // alone, so the connected state pointed at something not on screen.
+    renderPrompt(connected);
+    expect(
+      screen.getByText(
+        /Reading Workouts · Heart rate · Distance · Steps · Sleep · Calories — nothing else\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("routes to the Wearables screen instead of only mentioning it", async () => {
+    const { onClose } = renderPrompt(connected);
+    fireEvent.click(screen.getByRole("button", { name: /Open the full Wearables screen/ }));
+    // Closing this sheet and opening the screen is one tap: the sheet covers
+    // the page it is telling the athlete about.
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("on the sign-up screen, with no session yet", () => {

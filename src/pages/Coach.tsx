@@ -41,19 +41,46 @@ const Coach = () => {
   const [newTitle, setNewTitle] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // What the screen believes is open. The select handler below reloads
+  // history explicitly, and this ref decides whether that late response is
+  // still wanted when it lands.
+  const activeConvRef = useRef<string | null>(null);
+  activeConvRef.current = activeConv;
+
+  // History loader, shared by the effect below and by selecting a
+  // conversation (including re-selecting the current one, which changes no
+  // state and would otherwise show whatever is on screen rather than what
+  // is stored). Both guards below ignore delayed responses from a previous
+  // account or conversation, so switching either mid-fetch cannot paint the
+  // wrong thread.
+  const loadMessages = async (conversationId: string, userId: string) => {
+    const { data } = await supabase.from("coach_messages").select("*").eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+    return { conversationId, userId, rows: (data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })) };
+  };
 
   useEffect(() => {
-    if (!user) return;
-    supabase.from("coach_conversations").select("*").eq("user_id", user.id)
-      .order("updated_at", { ascending: false }).then(({ data }) => setConvs(data || []));
+    if (!user) { setConvs([]); setActiveConv(null); setMessages([]); return; }
+    let alive = true;
+    const userId = user.id;
+    supabase.from("coach_conversations").select("*").eq("user_id", userId)
+      .order("updated_at", { ascending: false }).then(({ data }) => {
+        if (!alive) return;
+        setConvs(data || []);
+      });
+    return () => { alive = false; };
   }, [user]);
 
   useEffect(() => {
     if (!activeConv || !user) { setMessages([]); return; }
-    supabase.from("coach_messages").select("*").eq("conversation_id", activeConv)
-      .order("created_at", { ascending: true }).then(({ data }) => {
-        setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
-      });
+    let alive = true;
+    const conversationId = activeConv;
+    const userId = user.id;
+    loadMessages(conversationId, userId).then(({ rows }) => {
+      if (!alive) return;
+      setMessages(rows);
+    });
+    return () => { alive = false; };
   }, [activeConv, user]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -119,12 +146,14 @@ const Coach = () => {
 
   const send = async (text: string) => {
     if (!text.trim() || loading || !user) return;
+    // Locked before conversation creation, not after: two taps before the
+    // first insert resolves must not create two conversations.
+    setLoading(true);
 
     let convId = activeConv;
     if (!convId) {
       const { data, error } = await supabase.from("coach_conversations").insert({ user_id: user.id, title: text.slice(0, 40) }).select().single();
-      if (error) { toast({ title: "Couldn't start the chat", description: error.message, variant: "destructive" }); return; }
-      if (!data) return;
+      if (error || !data) { toast({ title: "Couldn't start the chat", description: error?.message ?? "Please try again.", variant: "destructive" }); setLoading(false); return; }
       convId = data.id;
       setConvs(prev => [data, ...prev]);
       setActiveConv(data.id);
@@ -133,7 +162,6 @@ const Coach = () => {
     const userMsg: Msg = { role: "user", content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
-    setLoading(true);
 
     const { error: saveMsgError } = await supabase.from("coach_messages").insert({ conversation_id: convId, user_id: user.id, role: "user", content: text });
     if (saveMsgError) {
@@ -169,15 +197,36 @@ const Coach = () => {
         return;
       }
 
-      const reader = resp.body!.getReader();
+      // A missing body means the upstream never answered at all — say so
+      // explicitly rather than throwing on `resp.body!`.
+      if (!resp.body) {
+        setMessages(prev => prev.filter(m => m !== userMsg));
+        setLoading(false);
+        toast({ title: "Coach Error", description: "The reply came back empty. Nothing was spent — please try again.", variant: "destructive" });
+        await refreshProfile();
+        return;
+      }
+      const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
+      let malformed = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+      const applyContent = (content: string) => {
+        assistantSoFar += content;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
+          }
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
+      };
 
+      // One frame per line. A line that is not valid JSON is kept for the
+      // next chunk only while the stream is still open — a truncated frame
+      // split across chunks — and is otherwise reported, never spun on.
+      const consumeLines = (final: boolean) => {
         let newlineIdx: number;
         while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
           let line = buffer.slice(0, newlineIdx);
@@ -185,22 +234,59 @@ const Coach = () => {
           if (line.endsWith("\r")) line = line.slice(0, -1);
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
+          if (jsonStr === "[DONE]") { completed = true; break; }
+          if (!jsonStr) continue;
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantSoFar += content;
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
-                }
-                return [...prev, { role: "assistant", content: assistantSoFar }];
-              });
-            }
-          } catch { buffer = line + "\n" + buffer; break; }
+            if (typeof content === "string" && content) applyContent(content);
+          } catch {
+            if (final) { malformed = true; }
+            else { buffer = line + "\n" + buffer; break; }
+          }
         }
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Split UTF-8 stays split-safe: the decoder holds partial code
+          // points across chunks, and is flushed once the stream ends.
+          buffer += decoder.decode(value, { stream: true });
+          consumeLines(false);
+          // DONE is terminal: stop reading and release the lock instead of
+          // draining whatever the server sends after it.
+          if (completed) { await reader.cancel().catch(() => undefined); break; }
+        }
+      } finally {
+        try { reader.releaseLock(); } catch { /* already released */ }
+      }
+      buffer += decoder.decode();
+      // An unterminated final line is still a frame: process it rather than
+      // dropping the tail of the reply.
+      if (buffer.trim()) buffer += "\n";
+      consumeLines(true);
+
+      if (malformed || (!completed && !assistantSoFar)) {
+        // Nothing usable arrived. The user's message is already saved, so it
+        // stays as a retryable reply — but the failure is said out loud.
+        setLoading(false);
+        toast({ title: "Coach Error", description: "The reply was interrupted before anything arrived. Your message is saved — please try again.", variant: "destructive" });
+        await refreshProfile();
+        return;
+      }
+      if (!completed && assistantSoFar) {
+        // Interrupted mid-reply: what arrived is shown, labelled as what it
+        // is, so a cut-off sentence never reads as the coach's full answer.
+        assistantSoFar += "\n\n(Response incomplete — the connection was interrupted.)";
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
+          }
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
       }
 
       if (assistantSoFar) {
@@ -279,7 +365,21 @@ const Coach = () => {
         </div>
 
         <ConvSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} convs={convs}
-          onSelect={(id) => { setActiveConv(id); setSidebarOpen(false); }} onDelete={deleteConversation}
+          onSelect={(id) => {
+            // Reloaded on every select, including re-selecting the current
+            // conversation: the effect above only runs when the id changes,
+            // so without this the screen could show a stale thread.
+            setActiveConv(id);
+            activeConvRef.current = id;
+            setSidebarOpen(false);
+            if (user) {
+              const userId = user.id;
+              void loadMessages(id, userId).then(({ rows }) => {
+                if (activeConvRef.current !== id) return;
+                setMessages(rows);
+              });
+            }
+          }} onDelete={deleteConversation}
           onNew={createConversation} editingTitle={editingTitle} setEditingTitle={setEditingTitle}
           newTitle={newTitle} setNewTitle={setNewTitle} onRename={renameConversation} />
         <MemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} memories={memories} onDelete={deleteMemory} />

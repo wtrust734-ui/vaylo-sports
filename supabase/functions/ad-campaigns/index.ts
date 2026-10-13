@@ -43,6 +43,21 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       const body = await readJsonBody(req);
       if (!body) return json({ error: "Invalid body" }, 400);
+      // Handle concepts upsert
+      if (body.concepts) {
+        const { campaignId, concepts } = body;
+        if (!campaignId) return json({ error: "campaignId required" }, 400);
+        // concepts arrives over the wire: a non-array here used to throw a
+        // 500 inside .map. Reject it as a 400 like every other bad field.
+        if (!Array.isArray(concepts)) return json({ error: "concepts must be an array" }, 400);
+        const upserts = concepts.map((c: Record<string, unknown>) => ({ ...c, campaign_id: campaignId, owner_id: userId }));
+        const { data, error } = await admin
+          .from("ad_concepts")
+          .upsert(upserts, { onConflict: "campaign_id,concept_number" })
+          .select();
+        if (error) return json({ error: error.message }, 500);
+        return json({ concepts: data });
+      }
       const { data, error } = await admin
         .from("ad_campaigns")
         .insert({ ...body, owner_id: userId })
@@ -54,6 +69,18 @@ Deno.serve(async (req) => {
     
     if (req.method === "PATCH") {
       const body = await readJsonBody(req);
+      if (body?.conceptId) {
+        const { conceptId, ...updates } = body;
+        const { data, error } = await admin
+          .from("ad_concepts")
+          .update(updates)
+          .eq("id", conceptId)
+          .eq("owner_id", userId)
+          .select()
+          .single();
+        if (error) return json({ error: error.message }, 500);
+        return json({ concept: data });
+      }
       if (!body?.id) return json({ error: "id required" }, 400);
       const { id, ...updates } = body;
       const { data, error } = await admin

@@ -29,14 +29,25 @@ interface VideoQuotaSlot {
 // on both sides anyway — the client so the athlete is told before a long upload,
 // the server because a client check is a convenience, not a control.
 //
-// Why they moved: the clip used to travel as base64 inside the request body,
-// which capped it at 6 MiB — roughly five to fifteen seconds. That is not enough
-// footage to review a movement: no approach, no follow-through, and often not a
-// single complete rep. The clip now goes to a private Storage bucket
-// (form_videos, owner-scoped) and this function streams it to the Gemini Files
-// API, which is what allows a full minute.
-const MAX_BYTES = 25 * 1024 * 1024;
-const MAX_SECONDS = 60;
+// Why they moved twice. The clip used to travel as base64 inside the request
+// body, which capped it at 6 MiB — five to fifteen seconds, no approach, no
+// complete rep, no follow-through, so the report was written about a fragment
+// and read like one. It now goes to a private Storage bucket (form-videos,
+// owner-scoped) and this function streams it to the provider's Files API.
+//
+// Why ten minutes and not one. A single rep is a few seconds, but an athlete
+// filming a set wants the approach, several reps and the point where form breaks
+// down — and refusing at sixty seconds was refusing exactly the footage worth
+// reviewing. Ten minutes is where "almost any clip" stops being true: beyond it
+// the clip is a training session rather than a technique sample, and the
+// provider bill, which is per second of video, grows with it.
+//
+// The byte cap is deliberately generous because the bytes are never buffered:
+// they flow from Storage straight into the provider's upload, so this number is
+// not a memory limit. It exists to refuse an obvious mistake, not to pace the
+// athlete.
+const MAX_BYTES = 512 * 1024 * 1024;
+const MAX_SECONDS = 600;
 /** Bucket the client uploads to. Private: see the migration that creates it. */
 const VIDEO_BUCKET = "form-videos";
 const ALLOWED_MIME = ["video/mp4", "video/quicktime", "video/webm"];
@@ -271,31 +282,15 @@ Deno.serve(async (req) => {
     // clip would produce a report about footage the athlete cannot see.
     const durationSeconds =
       typeof duration_seconds === "number" && Number.isFinite(duration_seconds) ? duration_seconds : null;
+    // Worded like the client's own refusal ("up to 10 minutes"), from the same
+    // number, so the two sides of the cap do not read as two different rules —
+    // and the athlete who trimmed the clip on their phone recognises the limit.
     if (durationSeconds !== null && durationSeconds > MAX_SECONDS + 1)
       return json({
-        error: `That clip is ${Math.round(durationSeconds)} seconds long. Please upload a clip of up to ${MAX_SECONDS} seconds.`,
+        error: `That clip is ${Math.round(durationSeconds)} seconds long. Clips can be up to ${MAX_SECONDS / 60} minutes — trim it and try again.`,
       }, 413);
 
     const sport = typeof sport_type === "string" && sport_type.length <= 40 ? sport_type : "general";
-
-    // ---- Fetch the uploaded clip (server-side, owner-scoped) ----
-    // Downloading before the quota check and before the charge means a missing,
-    // empty or oversized object fails without spending anything, and the size
-    // is measured from the bytes themselves rather than from a client's claim.
-    const { data: blob, error: downloadError } = await service.storage
-      .from(VIDEO_BUCKET)
-      .download(uploadedPath as string);
-    if (downloadError || !blob) {
-      console.error("Uploaded clip download failed", "storage_error");
-      return json({ error: "The uploaded clip could not be read. Please try again." }, 400);
-    }
-    const videoBytes = new Uint8Array(await blob.arrayBuffer());
-    if (videoBytes.byteLength === 0)
-      return json({ error: "That file is empty. Please upload the clip again." }, 400);
-    if (videoBytes.byteLength > MAX_BYTES)
-      return json({
-        error: `That clip is over ${Math.round(MAX_BYTES / (1024 * 1024))}MB. Please trim it and upload again.`,
-      }, 413);
 
     // Subscription entitlement is still checked server-side. Expired or
     // cancelled rows never unlock the high-cost Pro model.
@@ -382,6 +377,37 @@ Deno.serve(async (req) => {
       // rather than accidentally replaying or double charging after a lost reply.
       return json({ error: "This video analysis request cannot be replayed. Start a new analysis." }, 409);
     }
+
+    // ---- Read the uploaded clip (server-side, owner-scoped) ----
+    // Streamed rather than buffered. `storage.download()` hands back a Blob —
+    // the whole clip in this function's memory, and then a second copy as it is
+    // sent on — which is what failed first on a long clip. Reading the object
+    // over the Storage REST endpoint gives the same service-role access with a
+    // readable body, and the size comes from the object's own `content-length`:
+    // Storage's metadata, not the caller's claim.
+    //
+    // Deliberately before the claim and before the charge, exactly as the
+    // buffered version was, so a missing, empty or oversized object costs the
+    // athlete nothing. The body is opened here and consumed once, at the
+    // provider call below.
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const objectPath = (uploadedPath as string).split("/").map(encodeURIComponent).join("/");
+    const download = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/${VIDEO_BUCKET}/${objectPath}`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+    );
+    if (!download.ok || !download.body) {
+      console.error("Uploaded clip download failed", download.status, "storage_error");
+      return json({ error: "The uploaded clip could not be read. Please try again." }, 400);
+    }
+    const declaredBytes = Number(download.headers.get("content-length"));
+    if (!Number.isFinite(declaredBytes) || declaredBytes <= 0)
+      return json({ error: "That file is empty. Please upload the clip again." }, 400);
+    if (declaredBytes > MAX_BYTES)
+      return json({
+        error: `That clip is over ${Math.round(MAX_BYTES / (1024 * 1024))}MB. Please trim it and upload again.`,
+      }, 413);
+    const clip = { body: download.body, byteLength: declaredBytes };
 
     const { data: claim, error: claimError } = await service.rpc("claim_video_analysis_request", {
       p_user_id: userId,
@@ -515,13 +541,15 @@ Deno.serve(async (req) => {
     const dossierBlock = dossierText ? `\n\nAthlete dossier (use to tailor feedback — do not contradict injuries/level):\n${dossierText}` : "";
 
     // ---- Upload the clip to the provider, then analyse it by reference ----
-    // A minute of video is far too large to inline in a request, so it goes
-    // through the Files API once and the call references the resulting URI. The
-    // file is registered here and deleted in the finally block, so the provider
-    // holds it only for the length of this request.
+    // A clip of any useful length is far too large to inline in a request, so it
+    // goes through the Files API once and the call references the resulting URI.
+    // The body is the stream opened above — never a copy of it — and the file is
+    // registered here and deleted in the finally block, so the provider holds it
+    // only for the length of this request.
     const uploaded = await geminiUploadFile({
       apiKey: GOOGLE_API,
-      bytes: videoBytes,
+      body: clip.body,
+      byteLength: clip.byteLength,
       mimeType: mime_type,
       displayName: "form-clip",
     });

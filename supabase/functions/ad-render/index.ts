@@ -55,8 +55,24 @@ Deno.serve(async (req) => {
             headers: { "x-render-token": RENDER_TOKEN },
           });
           if (res.ok) {
-            const wjob = (await res.json()) as any;
-            const updates: any = {
+            const wjob = (await res.json()) as {
+              state?: string;
+              progress?: number;
+              error?: string | null;
+              bytes?: number | null;
+              meta?: Record<string, unknown> | null;
+            };
+            const updates: {
+              status: string | undefined;
+              progress: number;
+              error: string | null;
+              bytes: number | null;
+              meta: unknown;
+              updated_at: string;
+              finished_at?: string;
+              storage_path?: string;
+              public_url?: string;
+            } = {
               status: wjob.state,
               progress: wjob.progress ?? 0,
               error: wjob.error ?? null,
@@ -66,7 +82,29 @@ Deno.serve(async (req) => {
             };
             if (wjob.state === "done") {
               updates.finished_at = new Date().toISOString();
-              updates.storage_path = job.storage_path ?? `renders/${userId}/${jobId}.mp4`;
+              const storagePath = job.storage_path ?? `renders/${userId}/${jobId}.mp4`;
+              updates.storage_path = storagePath;
+              updates.public_url = `${supabaseUrl}/storage/v1/object/public/renders/${userId}/${jobId}.mp4`;
+              // Create export record
+              try {
+                await admin.from("ad_exports").insert({
+                  campaign_id: job.campaign_id,
+                  concept_id: job.concept_id,
+                  owner_id: userId,
+                  preset_id: job.preset_id ?? "reels",
+                  storage_path: storagePath,
+                  public_url: updates.public_url,
+                  duration_seconds: Number(wjob.meta?.durationSeconds ?? 0),
+                  width: Number(wjob.meta?.width ?? 1080),
+                  height: Number(wjob.meta?.height ?? 1920),
+                  bytes: wjob.bytes,
+                  status: "done",
+                  render_job_id: jobId,
+                  cost_usd: 0,
+                });
+              } catch (e) {
+                console.warn("Failed to create export record", e);
+              }
             }
             await admin
               .from("ad_render_jobs")
@@ -132,7 +170,11 @@ Deno.serve(async (req) => {
         body: JSON.stringify(workerReq),
       });
 
-      const wbody = (await res.json().catch(() => ({}))) as any;
+      const wbody = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        state?: string;
+        progress?: number;
+      };
       if (!res.ok && res.status !== 202 && res.status !== 200) {
         await admin
           .from("ad_render_jobs")

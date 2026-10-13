@@ -185,3 +185,18 @@ verify_jwt = false
 # trusting anything, so the marketplace can ship before the Stripe account exists.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# The first-party failure reporter. Same reasoning as the website forms: a
+# device that is signed out must still be able to report — failures at
+# sign-in are exactly the kind that matter — so there is no JWT to present
+# and leaving the default would answer 401 to the reports the operator most
+# needs. Declared HERE rather than passed as a deploy flag, because a flag
+# is recorded nowhere and a later redeploy without it silently turns every
+# report into a 401 nobody sees (the same lesson support-request learned).
+#
+# Safe to expose for a structural reason: the function validates every field
+# against a closed set, derives its own fingerprint, caps what it stores,
+# throttles by client address without storing it, and writes only through a
+# service-role RPC no client role can call directly.
+[functions.report-error]
+verify_jwt = false

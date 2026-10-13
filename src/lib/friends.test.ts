@@ -146,7 +146,11 @@ describe("the notification respects the athlete's own switch", () => {
 
 describe("the copy retired with the old surface comes back with it", () => {
   it("restores the four friend achievements", () => {
-    const achievements = read("/src/pages/Achievements.tsx");
+    // The catalogue moved out of the Achievements page when the Trophy Room
+    // stopped being one screen with a tab bar (Achievements / Badges /
+    // Challenges are three screens now). The rule did not change: all four must
+    // be defined, and this is the file that defines them.
+    const achievements = read("/src/lib/achievements.ts");
     for (const id of ["first_friend", "5_friends", "10_friends", "25_friends"]) {
       expect(achievements, `${id} is missing`).toContain(`id: "${id}"`);
     }

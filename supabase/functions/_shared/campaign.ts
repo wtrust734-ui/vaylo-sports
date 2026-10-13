@@ -218,7 +218,7 @@ export interface ConceptValidation {
  */
 export const STAGE_DIRECTION_PATTERNS: Array<{ pattern: RegExp; what: string }> = [
   // A label anywhere in the line: VO:, Narrator:, End card:, On screen:, SFX:
-  { pattern: /(^|[\s"'\u201c\u201d(\[])(vo|v\.o\.|voice ?over|narrator|end ?card|on ?screen|text|sfx|music|camera|cut to)\s*:/i, what: "a speaker or scene label" },
+  { pattern: /(^|[\s"'\u201c\u201d([])(vo|v\.o\.|voice ?over|narrator|end ?card|on ?screen|text|sfx|music|camera|cut to)\s*:/i, what: "a speaker or scene label" },
   // Timing notes belong in the storyboard, where they are used for real.
   { pattern: /\b(total|duration|runtime|length)\s*:?\s*\d+\s*(s|sec|secs|seconds?)\b/i, what: "a duration note" },
   { pattern: /\b\d+\s*(s|sec|secs|seconds?)\b/i, what: "a duration note" },

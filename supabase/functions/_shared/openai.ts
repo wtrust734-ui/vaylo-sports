@@ -21,7 +21,27 @@ export const LIMITS = {
   historyChars: 20000,
   images: 3,
   imageDataUrl: 8_000_000, // ~6MB of base64
-  timeoutMs: 90_000,
+  /**
+   * The attempt budget: one call, and what the athlete waits through when it
+   * goes wrong.
+   *
+   * These are latency limits as much as safety limits, because they bound the
+   * experience of a stalled provider. They were 90_000 × 3 with a 500ms/1s
+   * backoff — a worst case of four and a half minutes of spinner before the app
+   * admitted anything had gone wrong, on a phone, with nothing the athlete
+   * could do but wait. Luna answers the app's heaviest feature in tens of
+   * seconds, so an attempt still running at 45s is not slow, it is stuck, and
+   * every second past the cap is spent on a request that has already failed.
+   *
+   * 45_000 × 2 replaces it: one retry, which is what a 429 or a 5xx is usually
+   * worth, and a worst case of roughly 90 seconds including the backoff. The
+   * cap is enforced with an AbortController below, so a timed-out attempt is
+   * genuinely dropped rather than left running.
+   */
+  timeoutMs: 45_000,
+  attempts: 2,
+  /** Wait before a retry. One retry does not need a growing backoff. */
+  retryBackoffMs: 500,
 } as const;
 
 export class AIServiceError extends Error {
@@ -242,7 +262,7 @@ export async function generateAIResponse(args: GenerateArgs): Promise<GenerateRe
   const v = validate(args);
   const body = buildRequestBody(v, args.userLocale);
   const started = Date.now();
-  const maxAttempts = 3;
+  const maxAttempts = LIMITS.attempts;
   let lastError: AIServiceError | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -306,7 +326,7 @@ export async function generateAIResponse(args: GenerateArgs): Promise<GenerateRe
       clearTimeout(timer);
     }
 
-    if (attempt < maxAttempts) await sleep(500 * 2 ** (attempt - 1));
+    if (attempt < maxAttempts) await sleep(LIMITS.retryBackoffMs);
   }
 
   throw lastError ?? new AIServiceError("AI request failed", 500);

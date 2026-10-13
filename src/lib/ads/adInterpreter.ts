@@ -71,7 +71,7 @@ export function parseReplacementText(instruction: string): string | null {
   if (quoted) return quoted[1].trim();
 
   const toClause = instruction.match(
-    /\b(?:to|into|reads?|says?|say)\b\s*[:\-]?\s*(.{1,200})$/i,
+    /\b(?:to|into|reads?|says?|say)\b\s*[:-]?\s*(.{1,200})$/i,
   );
   if (toClause) {
     const value = toClause[1].trim().replace(/[.!,;]+$/, "").trim();

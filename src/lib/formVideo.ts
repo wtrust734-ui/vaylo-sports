@@ -25,14 +25,31 @@
 export const FORM_VIDEO_BUCKET = "form-videos";
 
 /**
- * Longest clip accepted, in seconds. A minute fits several complete reps for
- * most movements and is the point at which the provider bill — which is per
- * second of video, not per request — stops being predictable.
+ * Longest clip accepted, in seconds.
+ *
+ * Ten minutes, raised from one on 2026-10-12 and for a product reason: a single
+ * rep is a few seconds, but an athlete filming a set wants the approach, several
+ * reps, and the point where form breaks down. A sixty-second ceiling refused
+ * exactly the footage worth reviewing, which is what "we cannot analyse this
+ * clip" meant in practice.
+ *
+ * Ten minutes is where "almost any clip" stops being true — past it the clip is
+ * a training session rather than a technique sample — and it is also where the
+ * provider's bill, which is per second of video and not per request, stops being
+ * predictable. The server applies the identical number.
  */
-export const MAX_FORM_VIDEO_SECONDS = 60;
+export const MAX_FORM_VIDEO_SECONDS = 600;
 
-/** Largest clip accepted. Measured on the server from the bytes themselves. */
-export const MAX_FORM_VIDEO_BYTES = 25 * 1024 * 1024;
+/**
+ * Largest clip accepted, measured on the server from the object's own metadata.
+ *
+ * Raised with the duration cap: at phone bitrates a ten-minute 1080p clip runs
+ * to several hundred megabytes, so a 25 MB ceiling would have bound long before
+ * the ten-minute one and made the length cap meaningless. Nothing buffers this —
+ * the bytes stream from Storage into the provider — so this is a sanity limit on
+ * a mistake, not a memory limit.
+ */
+export const MAX_FORM_VIDEO_BYTES = 512 * 1024 * 1024;
 
 /**
  * Containers the provider will read. Anything else is refused up front rather
@@ -43,11 +60,23 @@ export type FormVideoMime = (typeof FORM_VIDEO_MIME)[number];
 
 /**
  * A file whose length could not be read is still usable, but only while it is
- * small enough that it cannot plausibly be long: at phone bitrates 8 MiB is
- * well inside a minute. Above that, the honest answer is to ask for a trimmed
- * clip rather than to upload something whose cost nobody can predict.
+ * small enough that it cannot plausibly be long: at phone bitrates 64 MiB is a
+ * minute or two. Above that, the honest answer is to ask for a trimmed clip
+ * rather than to upload something whose cost nobody can predict.
  */
-export const UNVERIFIED_DURATION_MAX_BYTES = 8 * 1024 * 1024;
+export const UNVERIFIED_DURATION_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * The length cap as a person reads it — "10 minutes", not "600 seconds".
+ *
+ * Shared by the upload card and the refusal so the two can never disagree, and
+ * so raising the cap in one place does not leave the other telling the athlete
+ * a number that is no longer true. Declared next to the number it describes.
+ */
+export const FORM_VIDEO_LENGTH_LABEL =
+  MAX_FORM_VIDEO_SECONDS % 60 === 0
+    ? `${MAX_FORM_VIDEO_SECONDS / 60} minute${MAX_FORM_VIDEO_SECONDS / 60 === 1 ? "" : "s"}`
+    : `${MAX_FORM_VIDEO_SECONDS} seconds`;
 
 const EXTENSION_FOR_MIME: Record<string, string> = {
   "video/mp4": "mp4",
@@ -129,7 +158,7 @@ export function checkFormVideo(input: {
       return {
         ok: false,
         reason: "too-long",
-        message: `Clips must be up to ${MAX_FORM_VIDEO_SECONDS} seconds (this one is ${Math.round(seconds)}s). Trim it and try again.`,
+        message: `Clips can be up to ${FORM_VIDEO_LENGTH_LABEL}. This one is ${Math.round(seconds)} seconds — trim it and try again.`,
       };
     }
     return { ok: true };
@@ -139,7 +168,7 @@ export function checkFormVideo(input: {
     return {
       ok: false,
       reason: "length-unknown",
-      message: "We could not read this clip's length. Trim it to under a minute and try again.",
+      message: "We could not read this clip's length. Trim it to a shorter clip and try again.",
     };
   }
   return { ok: true };
@@ -147,7 +176,7 @@ export function checkFormVideo(input: {
 
 /** The limits, as one line for the upload card. Kept here so the copy and the rules cannot drift. */
 export const FORM_VIDEO_LIMITS_COPY =
-  `MP4, MOV or WebM · up to ${MAX_FORM_VIDEO_SECONDS} seconds · under ` +
+  `MP4, MOV or WebM · up to ${FORM_VIDEO_LENGTH_LABEL} · under ` +
   `${Math.round(MAX_FORM_VIDEO_BYTES / (1024 * 1024))}MB · full body in frame, side-on works best.`;
 
 /**

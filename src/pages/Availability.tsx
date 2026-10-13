@@ -215,11 +215,17 @@ const Availability = () => {
    *
    * Computed from the form's own dates with the same two pure functions the
    * save uses, so the preview cannot disagree with the outcome. Only shown for
-   * breaks the app will actually rebuild around — "no training" and longer than
-   * three days — because previewing a change that will not happen is noise.
+   * breaks the app will actually rebuild around — every break the athlete is not
+   * training through, plus a holiday or travel window they are training through,
+   * and longer than three days — because previewing a change that will not
+   * happen is noise. This has to track `reshapesPlan` in useLifeEvents: a
+   * preview that promised a rebuild the save then skipped is worse than no
+   * preview at all.
    */
   const rebuildPreview = useMemo(() => {
-    if (form.allow_training !== "no" || invalidRange) return null;
+    const reshapesPlan =
+      form.allow_training === "no" || form.event_type === "holiday" || form.event_type === "travel";
+    if (!reshapesPlan || invalidRange) return null;
     const category = classifyBreak(spanDays(form.start_date, form.end_date));
     if (category === "none") return null;
     // The same two modifiers the save will apply, so the preview cannot promise
@@ -316,7 +322,7 @@ const Availability = () => {
   const definition = LIFE_EVENT_TYPES.find((t) => t.id === form.event_type)!;
 
   return (
-    <div className="min-h-screen app-mesh bg-background pb-32">
+    <div className="min-h-screen bg-background pb-32">
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <p className="text-[12px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5">
           <CalendarRange size={12} /> Availability
@@ -376,7 +382,7 @@ const Availability = () => {
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl shadow-card p-4 space-y-4"
+            className="rounded-2xl border border-border bg-card shadow-card p-4 space-y-4"
           >
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold">{editingId ? "Edit this break" : "What's happening?"}</p>
@@ -500,10 +506,12 @@ const Availability = () => {
               </p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                 {form.allow_training === "no"
-                  ? `Sessions in these dates will be marked unavailable and left out of your completion percentage. They are not moved to later days.${definition.id === "holiday" || definition.id === "travel" ? " The week before is loaded a little harder, so nothing is programmed while you are away." : ""}`
+                  ? `Your plan is cleared for these dates: the sessions there become rest days and nothing is moved to later days. They also leave your completion percentage.${definition.id === "holiday" || definition.id === "travel" ? " The week before is loaded a little harder, so you bank fitness going in." : ""}`
                   : form.allow_training === "optional"
-                    ? "Your plan stays as it is. Sessions in these dates are marked optional and won't be counted against you if you skip them."
-                    : "Your plan is untouched — these dates are just recorded so the app knows where you are."}
+                    ? `Your plan stays as it is. Sessions in these dates are marked optional and won't be counted against you if you skip them.${definition.id === "holiday" || definition.id === "travel" ? " The days you are away are eased back, and the return climbs back through two weeks." : ""}`
+                    : definition.id === "holiday" || definition.id === "travel"
+                      ? "Sessions in these dates stay exactly as programmed. The week before is loaded a little harder and the weeks after it climb back gradually, because coming home to full volume is how a holiday turns into an injury."
+                      : "Your plan is untouched — these dates are just recorded so the app knows where you are."}
               </p>
               {rebuildPreview && (
                 <p className="text-xs text-primary mt-1.5 leading-relaxed">

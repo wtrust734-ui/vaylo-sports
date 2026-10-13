@@ -130,10 +130,10 @@ const Tactics = () => {
   const sportLabel = (profile?.sport || "").split(",")[0].trim() || "Multi-Sport";
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Swords size={14} /> Tactical Intelligence</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Tactical <span className="text-gradient-electric">Prep</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Tactical Prep</h1>
         <p className="text-xs text-muted-foreground mt-1">Tuned for <span className="text-primary font-semibold">{sportLabel}</span>. Describe your matchup in your own words — {creditCost("tactical_prep")} credits per plan.</p>
       </motion.div>
 

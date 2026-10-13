@@ -48,7 +48,13 @@ function renderNotice(profile: { terms_version: string | null } | null) {
   const refreshProfile = vi.fn().mockResolvedValue(undefined);
   // Force the mock to return a profile with the given terms_version, so the
   // banner renders when the athlete is behind and hides when they are not.
-  (useAuth as any).mockReturnValue({ profile: { terms_version: profile?.terms_version ?? null }, refreshProfile });
+  vi.mocked(useAuth).mockReturnValue({
+    profile: profile ? { terms_version: profile.terms_version ?? null } : null,
+    refreshProfile,
+    // The banner only reads profile + refreshProfile; the rest of the auth
+    // context is irrelevant to these tests, so the partial object is cast
+    // through unknown rather than faked field by field.
+  } as unknown as ReturnType<typeof useAuth>);
 
   render(
     <MemoryRouter initialEntries={["/"]}>

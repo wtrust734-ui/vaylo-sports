@@ -12,9 +12,11 @@ import { getAiLocale } from "@/i18n";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import {
   buildInjuryBriefing,
+  MAX_SITE_LENGTH,
   parseInjuryPlan,
   planHeadline,
   renderInjuryProtocol,
+  resolveInjurySite,
   splitStoredProtocol,
 } from "@/lib/injuryPlan";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
@@ -112,6 +114,12 @@ const Injury = () => {
   const [injuries, setInjuries] = useState<InjuryRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
+  // The athlete's own words for a site the list cannot name. The list is a set of
+  // shortcuts, not the set of injuries that exist: everything else used to be
+  // collapsed to "Other" on save, which threw away the one detail that makes a
+  // plan specific — a rehabilitation scaffold written for "Other, severity 4" is
+  // a plan for nobody.
+  const [otherSite, setOtherSite] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   // The injury whose personalised plan is being written right now. One at a
   // time: a double tap used to be two paid calls.
@@ -206,7 +214,10 @@ const Injury = () => {
     // body part from the product list, bounded note length. A malicious or
     // broken client cannot store a fabricated status/severity combination.
     const severity = Math.max(1, Math.min(10, Math.round(Number(form.severity) || 1)));
-    const bodyPart = BODY_PARTS.includes(form.body_part) ? form.body_part : "Other";
+    // How the injury is described IS the briefing the paid plan is written from,
+    // so the athlete's own words are kept when they gave them (see
+    // resolveInjurySite, which is where that rule is tested).
+    const bodyPart = resolveInjurySite({ listed: form.body_part, typed: otherSite, known: BODY_PARTS });
     const status = "active";
     const plan = planForInjury(bodyPart, severity);
     const { error } = await supabase.from("injury_logs").insert({
@@ -220,7 +231,7 @@ const Injury = () => {
     if (error) toast.error(error.message);
     else {
       toast.success("Injury logged — a free generic scaffold is below. A personalised plan costs credits.");
-      setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); load();
+      setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); setOtherSite(""); load();
     }
   };
 
@@ -333,9 +344,9 @@ const Injury = () => {
 
   if (!unlocked) {
     return (
-      <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-lg mx-auto">
+      <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-lg mx-auto">
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest mb-2"><ShieldAlert size={14} /> Training strain & recovery</div>
-        <h1 className="text-4xl font-display font-bold">Injury <span className="text-gradient-electric">Management</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Injury Management</h1>
         <div className="mt-8 p-6 rounded-2xl border-2 border-primary/40 bg-card/40 backdrop-blur space-y-4">
           <div className="text-sm text-muted-foreground">Unlock a training-strain reading, a free generic return-to-training scaffold with every injury, and personalised AI plans.</div>
           <ul className="text-sm space-y-1.5">
@@ -356,10 +367,10 @@ const Injury = () => {
   const chartData = loads.slice(-28).map((l) => ({ date: l.log_date.slice(5), load: l.total_rpe }));
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><ShieldAlert size={14} /> Training strain & recovery</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Injury <span className="text-gradient-electric">Management</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Injury Management</h1>
         <p className="text-muted-foreground mt-1 text-sm">How your recent load, recovery and trends add up — a training measure, not a medical assessment.</p>
       </motion.div>
 
@@ -419,10 +430,36 @@ const Injury = () => {
         {showForm && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
             className="space-y-3 mb-4 p-4 rounded-xl bg-background/40 border border-border">
-            <Select value={form.body_part} onValueChange={(v) => setForm({ ...form, body_part: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{BODY_PARTS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-            </Select>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-site">What is hurt</label>
+              <Select value={form.body_part} onValueChange={(v) => setForm({ ...form, body_part: v })}>
+                <SelectTrigger id="injury-site"><SelectValue /></SelectTrigger>
+                <SelectContent>{BODY_PARTS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            {/* Anything not on the list is still an injury, and it is the most
+                specific thing the plan is written from — so it is typed here
+                rather than reduced to "Other". */}
+            {form.body_part === "Other" && (
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-site-other">
+                  Name or describe it
+                </label>
+                <input
+                  id="injury-site-other"
+                  type="text"
+                  value={otherSite}
+                  maxLength={MAX_SITE_LENGTH}
+                  onChange={(e) => setOtherSite(e.target.value)}
+                  placeholder="e.g. groin, shin, lower back, rotator cuff"
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Your words go straight into the plan's briefing. Any injury can be logged and built for — the list
+                  above is only shortcuts.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-xs text-muted-foreground">Severity: {form.severity}/10</label>
               <input type="range" min={1} max={10} value={form.severity} onChange={(e) => setForm({ ...form, severity: Number(e.target.value) })} className="w-full" />

@@ -248,6 +248,7 @@ repository:
 | Messages | In-app messages (coach chat, community, DMs) | App functionality |
 | Photos and videos | Photos (profile, avatar), videos (form analysis uploads) | App functionality |
 | App activity | App interactions, other user-generated content | App functionality, analytics? → **no**, there is no analytics SDK |
+| Crash logs, diagnostics | Failure reports the app itself sends (error name/message, redacted stack, screen, platform, version — no tokens, no health values) | App functionality |
 
 **Not collected:**
 

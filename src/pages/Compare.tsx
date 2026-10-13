@@ -13,6 +13,7 @@ import {
   profilesInGroup,
   type EliteProfile,
 } from "@/lib/eliteProfiles";
+import { VPR_COMPARE_FEATURE, compareSpendMetadata, paidTargetsFrom } from "@/lib/vprCompare";
 import { Radar, RadarChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, ResponsiveContainer } from "recharts";
 
 /**
@@ -64,8 +65,12 @@ const Compare = () => {
     setPaying(true);
     setPayError(null);
     try {
+      // The target id is recorded on the receipt, not just held in state:
+      // "once per target" has to survive leaving this screen, and the credit
+      // balance it was spent from lives on the account.
       const spend = await spendWithTopUp("vpr_compare", {
         reason: `VPR comparison vs ${elite.name} (${elite.event})`,
+        metadata: compareSpendMetadata(elite.id),
       });
       if (!spend.success) {
         setPayError(
@@ -82,11 +87,34 @@ const Compare = () => {
     }
   };
 
+  /**
+   * Comparisons this account has already paid for.
+   *
+   * The screen used to keep these in component state, which made "once per
+   * target" true only within one visit: an athlete who compared against a
+   * target, left, and came back was charged 2 credits again for a comparison
+   * they already owned. The receipts are the `credit_transactions` rows the
+   * spend wrote, so the answer is the same on every device they sign in to.
+   *
+   * A failed read leaves the list as it was rather than clearing it: the worst
+   * case is the paywall showing for something already bought at the old price,
+   * which `credits_spend` still has to authorise.
+   */
   useEffect(() => { if (user) void load(); }, [user]);
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200);
+    const [{ data }, { data: receipts }] = await Promise.all([
+      supabase.from("performance_metrics").select("*").eq("user_id", user.id).limit(200),
+      supabase
+        .from("credit_transactions")
+        .select("metadata")
+        .eq("user_id", user.id)
+        .eq("feature", VPR_COMPARE_FEATURE)
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
     setMetrics(data || []);
+    if (receipts) setPaidIds(paidTargetsFrom(receipts));
     setLoading(false);
   };
 
@@ -125,10 +153,10 @@ const Compare = () => {
   };
 
   return (
-    <div className="min-h-screen px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-5">
+    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-4xl mx-auto space-y-5">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Trophy size={14} /> Athlete Comparison</div>
-        <h1 className="text-4xl font-display font-bold mt-2">Stack Up vs <span className="text-gradient-electric">Elite</span></h1>
+        <h1 className="text-2xl font-display font-bold mt-1">Stack Up vs Elite</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {ELITE_PROFILES.length} benchmarks across {ELITE_GROUPS_WITH_PROFILES.length} sports — one per event, so an 800m runner compares against an 800m runner.
         </p>

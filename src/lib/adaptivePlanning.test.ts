@@ -449,9 +449,18 @@ describe("rebuildPlanForBreak", () => {
     const plan = planRow();
     const result = await rebuildPlanForBreak({ userId: "u1", plan, event: holiday(), age: 30, today: TODAY });
     const written = db.writes[0].values.plan_data as PlanWeekLike[];
-    // The break is in week 2 and the return is in week 3. Week 2 (no training
-    // allowed) is the same object, so nothing inside it can have changed.
-    expect(written[1]).toBe(plan.plan_data[1]);
+    // The break is in week 2 and the return is in week 3. Week 2 is the week the
+    // athlete said they would not train in, so it is emptied: every session in
+    // it becomes a rest day that names what stood there, and nothing in it is
+    // left asking to be done.
+    const original = plan.plan_data as PlanWeekLike[];
+    const away = written[1];
+    expect(away).not.toBe(original[1]);
+    expect(away.sessions.filter((s) => !s.isRest && s.type !== "rest")).toEqual([]);
+    expect(away.sessions.find((s) => s.day === 1)!.returnFromBreak).toMatchObject({
+      dropped: true,
+      originalTitle: original[1].sessions.find((s) => s.day === 1)!.title,
+    });
     // Week 1 is the loading week before the holiday: still ahead of the
     // athlete, so it banks ~10% more volume (60 min -> 65) rather than being
     // rewritten as history.

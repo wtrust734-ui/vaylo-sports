@@ -1074,3 +1074,72 @@ supabase functions deploy legal --no-verify-jwt --project-ref vvwhausdjzdmsyxekr
 The website already carries the corrected text (it embeds `legal/*.html` and was
 regenerated), so the app, the Netlify site and the Supabase function will agree
 again once that deploy runs.
+
+---
+
+## Credit-cost drift: the price on the button vs the price the database charges — 2026-10-12
+
+> **STATUS: APPLIED to `vvwhausdjzdmsyxekrcl` on 2026-10-12**, with
+> `node scripts/run-sql-file.cjs supabase/migrations/20261012160000_credit_cost_drift_and_vpr_compare.sql`
+> (HTTP 201, no errors). Deliberately **not** `supabase db push` — the remote
+> migration history is still drifted (see the Friends section above), so a push
+> would try to re-run dozens of already-applied files.
+
+### What was wrong
+
+Reported as "the stack up versus elite bit doesn't really work". It was not the
+screen. `src/config/credits.ts` declares 22 spendable keys and the live
+`economy_config.feature_costs` row held 20 — four missing, two of them retired
+long ago and still live:
+
+| | keys |
+|---|---|
+| Missing in the row (client sold them) | `vpr_compare`, `training_insight`, `nutrition_review`, `injury_plan` |
+| Retired in the client, still in the row | `form_analysis_unlock` (110), `nutrition_pack_unlock` (30) |
+
+`public.credit_cost()` RAISES on a key it does not know, so `credits_spend()`
+answered with `Unknown credit feature: vpr_compare` instead of the
+402-with-a-shortfall the top-up sheet reads. The athlete saw 2 credits on the
+button and an error when they pressed it. Injury plans and nutrition reviews were
+the same failure waiting on the same fix.
+
+The committed `20261010150000_per_use_pricing.sql` was written to make exactly
+these two additions and two retirements, and **cannot be applied**: it asserts
+`credit_cost('nutrition_plan_week') = 8`, but
+`20261009160000_nutrition_plan_ai_pricing.sql` had already moved that key to 15
+(nutrition plans became a metered AI call). It aborts on its own assertion, which
+is why the additions never landed. `20261012160000_…` supersedes it and asserts
+nothing about that key.
+
+### The verification
+
+```sql
+SELECT k AS feature, public.credit_cost(k) AS credits
+FROM unnest(ARRAY['vpr_compare','training_insight','nutrition_review','injury_plan',
+                  'nutrition_plan_week','calorie_scan','video_form_analysis']) AS k
+ORDER BY credits;
+```
+
+```
+vpr_compare 2 · injury_plan 6 · nutrition_review 8 · training_insight 8
+plan_edit 10 · calorie_scan 12 · nutrition_plan_week 15 · training_plan_week 20
+```
+
+- `keys_in_row` = **22**, `form_analysis_unlock` and `nutrition_pack_unlock` both
+  **absent**. The row now mirrors the client exactly, which is the invariant
+  `src/lib/pricing.test.ts` pins from one side and the migration's own
+  assertion block now enforces from the other.
+- **No existing price moved.** `nutrition_plan_week` is still 15; the migration
+  adds four keys and removes two; nothing is repriced.
+- The migration is idempotent (`-` on an absent key is a no-op, `||` overwrites),
+  so re-running the file is safe.
+
+### Still owed
+
+- No end-to-end spend was exercised: `credits_spend()` requires an authenticated
+  session, and there is no test account on this project (195 real profiles — a
+  spend written to check would be a real athlete's credits). The blocker was the
+  raise inside `credit_cost('vpr_compare')`, which is now proven to resolve.
+- The other twelve migration files in `supabase/migrations/` were not audited for
+  application state; only the pricing keys were, because that is what the report
+  was about.

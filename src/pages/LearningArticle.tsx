@@ -180,7 +180,7 @@ export default function LearningArticle() {
 
   if (!lesson) {
     return (
-      <main className="min-h-screen pb-28 pt-[var(--vaylo-screen-top)]">
+      <main className="min-h-screen bg-background pb-28 pt-[var(--vaylo-screen-top)]">
         <div className="mx-auto max-w-md px-4 py-20 text-center">
           <p className="font-display text-2xl font-bold">Lesson not found</p>
           <p className="mt-2 text-sm text-muted-foreground">It may have been renamed or removed.</p>
@@ -202,7 +202,7 @@ export default function LearningArticle() {
   const paragraphs = lesson.body.split("\n\n");
 
   return (
-    <main className="min-h-screen pb-28 pt-[var(--vaylo-screen-top)]">
+    <main className="min-h-screen bg-background pb-28 pt-[var(--vaylo-screen-top)]">
       <article className="mx-auto max-w-2xl px-5">
         {/* Sticky reader bar */}
         <div className="sticky top-[var(--vaylo-inset-top)] z-20 -mx-5 mb-8 flex items-center justify-between gap-3 border-b border-border bg-background/90 px-5 py-3 backdrop-blur">
@@ -238,7 +238,7 @@ export default function LearningArticle() {
               </span>
             )}
           </div>
-          <h1 className="mt-4 font-display text-4xl font-black leading-tight sm:text-5xl">{lesson.title}</h1>
+          <h1 className="mt-1 font-display text-2xl font-bold">{lesson.title}</h1>
           <p className="mt-4 text-lg leading-7 text-muted-foreground">{lesson.summary}</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <span className="flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">

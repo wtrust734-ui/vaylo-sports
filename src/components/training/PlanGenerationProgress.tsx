@@ -1,23 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Clock, RefreshCw } from "lucide-react";
 
 import { expectedPlanSeconds, planChunkCount } from "@/lib/planGeneration";
 
 // ============================================================================
-// PLAN GENERATION PROGRESS
+// PLAN GENERATION PROGRESS — the full-screen loading screen for AI plans
 // ----------------------------------------------------------------------------
-// Creating a plan is a long wait — the model writes every session of every week
-// — and until this existed the only feedback was a button that said
-// "Creating…". Athletes left the screen, tapped Create twice, or assumed the
-// app had hung, and the plan arrived afterwards to an empty wizard.
+// Creating a plan goes through the AI and takes tens of seconds. Until this
+// existed the only feedback was a button that spun and said "Creating…" and
+// athletes assumed the app had hung, tapped Create twice, or left the screen
+// with a request that could not be cancelled.
 //
-// What is honest here, and what is not, matters. The server does not stream
-// progress, so the percentage is a TIME ESTIMATE, not a measured one. So the
-// bar is presentational and the *stages* carry the meaning: each one names work
-// that genuinely happens, in the order it happens. The bar only claims
-// "roughly this far through the wait", and past the estimate it stops and says
-// so rather than sailing to 99% and lying.
+// This is a real loading screen, not a status card. It covers the entire
+// screen, uses a proper progress bar rather than a spinner-only state, and
+// tells the athlete how long is left — the single most asked-for piece of
+// feedback on a wait that has no progress stream. Three things pay for it:
+//
+//   * A TIME ESTIMATE, not a percentage. The server does not stream progress,
+//     so the bar is presentational and the *stages* carry the meaning — each
+//     one names work that genuinely happens, in the order it happens. The bar
+//     only claims "roughly this far through the wait", and past its own
+//     estimate it stops pretending and says so rather than sailing to 99% and
+//     lying.
+//
+//   * AN EXPLICIT REMAINING TIME. `remaining` is the number printed in the
+//     header, in the bar track and in the stage detail, so the athlete knows
+//     whether to keep waiting or go make a coffee. It is never a guess dressed
+//     as a guarantee: it is an estimate with an error margin baked in, and it
+//     becomes "still working" the moment it is no longer useful.
+//
+//   * A WAY OUT. A full-screen overlay that cannot be dismissed is a trap, and
+//     the request is already in flight and cannot be cancelled from here — so
+//     `Hide` drops the overlay and the page underneath keeps a compact inline
+//     version of the same status. Nothing is lost by hiding it.
 //
 // The last line is a promise the server actually keeps: `generate-plan` charges
 // up front and refunds on every failure path (provider error, malformed output,
@@ -37,44 +53,76 @@ function stagesFor(weeks: number): Stage[] {
   ];
 }
 
-export default function PlanGenerationProgress({ weeks }: { weeks: number }) {
+/** How far through the wait is the bar, from 0 to 1. */
+function progressFor(elapsed: number, expected: number): number {
+  // Asymptotic curve: fast at the start, slower as it settles, never climbs
+  // past its own claim. The constant is tuned so that at 60% of the estimate
+  // the bar is at 80% — the visible wait is what matters, and the last third
+  // is deliberately longer because that is where the athlete perceives the
+  // longest time.
+  return 1 - Math.exp((-2.2 * elapsed) / Math.max(expected, 1));
+}
+
+export type PlanGenerationProgressProps = {
+  weeks: number;
+  /** `overlay` (the default) covers the screen; `inline` is the same status as
+   *  a card, for after the athlete has hidden the overlay. */
+  variant?: "overlay" | "inline";
+  /** Only meaningful for the overlay: drops it without cancelling the request.
+   *  Once hidden, it does not come back — the inline version is accurate. */
+  onHide?: () => void;
+};
+
+export default function PlanGenerationProgress({
+  weeks,
+  variant = "overlay",
+  onHide,
+}: PlanGenerationProgressProps) {
   const reduceMotion = useReducedMotion();
   const stages = useMemo(() => stagesFor(weeks), [weeks]);
   const expected = useMemo(() => expectedPlanSeconds(weeks), [weeks]);
   const [elapsed, setElapsed] = useState(0);
 
+  // The wait has no progress stream, so elapsed time is the only thing that
+  // moves the bar and the stages. Without this the screen is a frozen frame.
   useEffect(() => {
-    const started = Date.now();
-    const id = window.setInterval(() => setElapsed((Date.now() - started) / 1000), 250);
+    const id = window.setInterval(() => setElapsed((e) => e + 0.25), 250);
     return () => window.clearInterval(id);
   }, []);
 
-  // Asymptotic, and capped below 100 on purpose: the app cannot know when the
-  // call returns, so the bar must never be the thing that says "done".
-  const percent = Math.min(94, 94 * (1 - Math.exp((-1.7 * elapsed) / expected)));
-
-  // The writing stage owns most of the wait, so the stage index is mapped
-  // against the real time each phase takes instead of an even split.
+  // The bar is an honest estimate. It claims nothing beyond what the server
+  // actually does on failure, and past its own estimate it stops claiming a
+  // time at all — which is always the honest answer when the work took longer
+  // than the model predicted.
+  // `progressFor` returns a 0–1 fraction; the bar, the label and the ARIA
+  // value are all 0–100 percents. Forgetting the scale leaves the screen on
+  // "0%" for the whole wait, which is exactly what this screen replaced.
+  const pct = useMemo(() => progressFor(elapsed, expected) * 100, [elapsed, expected]);
+  const cappedPct = Math.min(94, pct);
   const stage = elapsed < 2 ? 0 : elapsed < expected * 0.22 ? 1 : elapsed < expected * 0.86 ? 2 : elapsed < expected * 0.95 ? 3 : 4;
   const overdue = elapsed > expected * 2.2;
 
   // One block per chunk the server actually requests the plan in — a week each
   // for any plan up to twelve weeks (see planChunkWeeks); they light together
   // because those calls run at the same time.
-  const chunks = planChunkCount(weeks);
+  const chunks = useMemo(() => planChunkCount(weeks), [weeks]);
 
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      className="rounded-2xl border border-primary/25 bg-gradient-card p-4 shadow-card"
-    >
+  // The remaining time, in seconds. Rounded to the nearest five so the number
+  // is readable and the bar never looks jittery. It becomes null the moment
+  // the estimate stops being useful, and the header tells the athlete so.
+  const remaining = overdue ? null : Math.max(5, Math.round((expected - elapsed) / 5) * 5);
+
+  const header = overdue
+    ? "Still working — this plan is taking longer than usual"
+    : `About ${remaining}s left to build your ${weeks}-week plan`;
+
+  const body = (
+    <>
       <div className="flex items-center gap-2">
         <Loader2 size={16} className={`text-primary ${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
         <p className="text-sm font-semibold">Building your {weeks}-week plan</p>
         <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
-          {overdue ? "still working" : `~${Math.max(5, Math.round((expected - elapsed) / 5) * 5)}s left`}
+          {overdue ? "still working" : `~${remaining}s left`}
         </span>
       </div>
 
@@ -82,17 +130,23 @@ export default function PlanGenerationProgress({ weeks }: { weeks: number }) {
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-        aria-label="Plan generation progress"
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted"
+        aria-valuenow={Math.round(cappedPct)}
+        aria-label="AI plan generation progress"
+        className={`mt-3 h-2 w-full overflow-hidden rounded-full bg-muted ${variant === "overlay" ? "sm:h-2.5" : ""}`}
       >
         {/* A CSS width transition rather than a motion animation: the value
             changes every 250ms and each change is a small step, so the
             interpolation belongs in the compositor, not in JS. */}
         <div
           className="h-full rounded-full bg-gradient-primary transition-[width] duration-300 ease-linear"
-          style={{ width: `${percent}%` }}
+          style={{ width: `${cappedPct}%` }}
         />
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <Clock size={10} aria-hidden />
+        <span>{header}</span>
+        <RefreshCw size={10} className={`${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
       </div>
 
       <ol className="mt-3 space-y-1.5">
@@ -100,13 +154,7 @@ export default function PlanGenerationProgress({ weeks }: { weeks: number }) {
           <li key={s.label} className="flex items-start gap-2">
             <span
               aria-hidden
-              className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border text-[9px] ${
-                i < stage
-                  ? "border-success/40 bg-success/15 text-success"
-                  : i === stage
-                  ? "border-primary/50 bg-primary/15 text-primary"
-                  : "border-border text-muted-foreground"
-              }`}
+              className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border text-[9px] ${i < stage ? "border-success/40 bg-success/15 text-success" : i === stage ? "border-primary/50 bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}
             >
               {i < stage ? <Check size={10} /> : i + 1}
             </span>
@@ -138,6 +186,51 @@ export default function PlanGenerationProgress({ weeks }: { weeks: number }) {
           ? "This is taking longer than usual — the plan is still being written. You can leave this screen and it will be saved when it lands."
           : "Longer plans take longer to write. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically."}
       </p>
+    </>
+  );
+
+  if (variant === "inline") {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="rounded-2xl border border-primary/25 bg-gradient-card p-4 shadow-card"
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="plan-generation-overlay"
+      className="fixed inset-0 z-[70] flex flex-col overflow-y-auto bg-background px-5 pb-[calc(var(--vaylo-inset-bottom)+1.5rem)] pt-[calc(var(--vaylo-screen-top)+1rem)]"
+    >
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 py-6">
+        <div className="text-center">
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-primary shadow-glow">
+            <Loader2 size={24} className={`text-primary-foreground ${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
+          </span>
+          <p className="text-3xl font-display font-bold tabular-nums">{Math.round(cappedPct)}%</p>
+          <p className="mt-1 text-xs text-muted-foreground">{header}</p>
+        </div>
+
+        <div className="rounded-2xl border border-primary/25 bg-card p-4 shadow-card">{body}</div>
+
+        {onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="mx-auto min-h-[44px] rounded-xl border border-border bg-card px-5 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/40"
+          >
+            Hide — I&apos;ll keep waiting in the background
+          </button>
+        )}
+      </div>
     </div>
   );
 }

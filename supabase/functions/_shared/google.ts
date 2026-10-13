@@ -80,10 +80,30 @@ export async function geminiGenerate(call: GeminiCall): Promise<GeminiResult> {
 
 /* ------------------------------------------------------- Files API (video) */
 
-const FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files";
+/**
+ * Generative Language API root — the base every Files API path is built on.
+ *
+ * Deliberately NOT ".../v1beta/files". A file resource's `name` is already
+ * `files/<id>`, and the retrieve and delete endpoints are addressed as
+ * `v1beta/{name}` — so appending a name to a base that ends in `/files` asks for
+ * `/v1beta/files/files/<id>`, which does not exist. That is what this constant
+ * used to do, and it is why every video analysis failed with a bare 404 the
+ * moment the provider reported the clip as PROCESSING and this module polled for
+ * the ACTIVE state. The upload itself had already succeeded both times; only the
+ * follow-up calls were wrong.
+ */
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const UPLOAD_URL = "https://generativelanguage.googleapis.com/upload/v1beta/files";
-/** How long to wait for Gemini to finish ingesting a clip before giving up. */
-const FILE_READY_TIMEOUT_MS = 30_000;
+/**
+ * How long to wait for Gemini to finish ingesting a clip before giving up.
+ *
+ * Two minutes, not thirty seconds. The provider processes a video asynchronously
+ * and its ingest time grows with the clip: a two-hour-long failure window is not
+ * wanted, but a thirty-second one failed ordinary one-minute clips whenever the
+ * service was busy. This is a timeout on our own poll, so a slow ingest costs a
+ * wait rather than a lost analysis.
+ */
+const FILE_READY_TIMEOUT_MS = 120_000;
 const FILE_READY_POLL_MS = 750;
 
 /** A clip uploaded to the Files API, ready to be referenced by a call. */
@@ -96,7 +116,23 @@ export interface GeminiUploadedFile {
 
 export interface GeminiUpload {
   apiKey: string;
-  bytes: Uint8Array;
+  /**
+   * The media itself, as a stream. Deliberately not a byte array: a few minutes
+   * of phone video is hundreds of megabytes, and holding that in an Edge
+   * Function's memory — twice, because it has to be sent on afterwards — is the
+   * first thing that fails on a long clip. This way the bytes go straight from
+   * the caller's source into the provider's upload request and are never all in
+   * one process at the same time, so length is bounded by policy rather than by
+   * the runtime's heap.
+   */
+  body: ReadableStream<Uint8Array>;
+  /**
+   * The exact size of `body`, in bytes, from the caller's own metadata. Sent as
+   * the resumable upload's declared total, which the protocol wants before the
+   * content request, and which the caller has already checked against the size
+   * cap — so a request that is too large is never streamed at all.
+   */
+  byteLength: number;
   mimeType: string;
   /** Human-readable label shown in the provider's dashboard. Never a user id. */
   displayName: string;
@@ -125,7 +161,7 @@ export async function geminiUploadFile(upload: GeminiUpload): Promise<GeminiUplo
       "Content-Type": "application/json",
       "X-Goog-Upload-Protocol": "resumable",
       "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(upload.bytes.byteLength),
+      "X-Goog-Upload-Header-Content-Length": String(upload.byteLength),
       "X-Goog-Upload-Header-Content-Type": upload.mimeType,
     },
     body: JSON.stringify({ file: { displayName: upload.displayName } }),
@@ -143,16 +179,11 @@ export async function geminiUploadFile(upload: GeminiUpload): Promise<GeminiUplo
     return { ok: false, status: 502 };
   }
 
-  // Content-Length is deliberately left to fetch: it is derived from the body,
-  // and a manual value that disagrees with it would truncate the clip.
-  //
-  // The bytes are re-wrapped in a Blob before they are sent. Not a copy we want,
-  // but the honest one: `storage.download()` hands back
-  // `Uint8Array<ArrayBufferLike>`, which the DOM lib refuses as a `BodyInit`
-  // because the buffer *could* be a SharedArrayBuffer. `new Uint8Array(existing)`
-  // yields the plain `Uint8Array<ArrayBuffer>` the type system wants, so the
-  // types and the runtime agree without a cast that would hide a real mismatch.
-  const body = new Blob([new Uint8Array(upload.bytes)], { type: upload.mimeType });
+  // The stream is sent as-is. `Content-Length` is deliberately left to fetch (it
+  // is derived from the body, and a manual value that disagreed with it would
+  // truncate the clip); the SIZE the provider was promised was declared on the
+  // start request above, from the caller's metadata, so a mismatch here is the
+  // provider's to report rather than ours to hide.
   const finish = await fetch(uploadUrl, {
     method: "POST",
     headers: {
@@ -160,7 +191,7 @@ export async function geminiUploadFile(upload: GeminiUpload): Promise<GeminiUplo
       "X-Goog-Upload-Command": "upload, finalize",
       "X-Goog-Upload-Offset": "0",
     },
-    body,
+    body: upload.body,
   });
   if (!finish.ok) {
     console.error("Gemini upload failed", finish.status, "upstream_error");
@@ -181,7 +212,7 @@ export async function geminiUploadFile(upload: GeminiUpload): Promise<GeminiUplo
   const deadline = Date.now() + FILE_READY_TIMEOUT_MS;
   while (state === "PROCESSING" && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, FILE_READY_POLL_MS));
-    const poll = await fetch(`${FILES_URL}/${name}?key=${upload.apiKey}`);
+    const poll = await fetch(`${API_BASE}/${name}?key=${upload.apiKey}`);
     if (!poll.ok) {
       console.error("Gemini file poll failed", poll.status, "upstream_error");
       return { ok: false, status: poll.status };
@@ -213,7 +244,7 @@ export async function geminiUploadFile(upload: GeminiUpload): Promise<GeminiUplo
  */
 export async function geminiDeleteFile(args: { apiKey: string; name: string }): Promise<void> {
   try {
-    const res = await fetch(`${FILES_URL}/${args.name}?key=${args.apiKey}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE}/${args.name}?key=${args.apiKey}`, { method: "DELETE" });
     if (!res.ok) console.error("Gemini file delete failed", res.status, "upstream_error");
   } catch {
     console.error("Gemini file delete failed", "transport_error");

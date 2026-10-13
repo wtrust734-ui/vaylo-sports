@@ -25,6 +25,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, Sparkles, X } from "lucide-react";
 
 import { DISCLAIMERS, disclaimerShort } from "@/config/disclaimers";
+import { earliestDob } from "@/lib/age";
 import {
   ACTIVITY_LEVELS,
   BIOLOGICAL_SEXES,
@@ -46,8 +47,23 @@ export type PlanDraft = {
 
 type Props = {
   initial: NutritionIntake;
-  /** Null when the profile has no date of birth — the screen has already refused. */
+  /**
+   * Null when the profile has no date of birth. Calorie and macro targets are
+   * only written for an adult, and an unknown date of birth is NOT an adult —
+   * the same rule `public.viewer_is_adult()` applies server-side.
+   *
+   * Null is not a refusal any more, it is a question this form asks. It used to
+   * dead-end here: the panel said "add your date of birth in Profile", the
+   * button still said "Write my plan", and tapping it produced a toast. Almost
+   * nobody has a date of birth on file, so almost nobody could build a plan.
+   */
   age: number | null;
+  /**
+   * Persists a date of birth and resolves to null, or to the reason it cannot
+   * be used. Owned by the screen: the wizard must not write to the database.
+   */
+  onSaveDob: (dob: string) => Promise<string | null>;
+  savingDob: boolean;
   /** What one week costs, for the price on the button. */
   costPerWeek: number;
   busy: boolean;
@@ -151,12 +167,18 @@ function ChoiceGroup<T extends string>({
   );
 }
 
-export default function NutritionPlanWizard({ initial, age, costPerWeek, busy, onSubmit, onClose }: Props) {
+export default function NutritionPlanWizard({ initial, age, onSaveDob, savingDob, costPerWeek, busy, onSubmit, onClose }: Props) {
   const [intake, setIntake] = useState<NutritionIntake>(initial);
   const [title, setTitle] = useState("");
   const [step, setStep] = useState(0);
   const [usingRecommended, setUsingRecommended] = useState(true);
   const [edited, setEdited] = useState({ calories: "", protein_g: "", carbs_g: "", fat_g: "" });
+  // The date of birth, when the profile has none. The upper bound is today: a
+  // date in the future is not a birthday, and `validateDob` rejects it again
+  // server-side of the field.
+  const [dob, setDob] = useState("");
+  const [dobError, setDobError] = useState<string | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
 
   // The recommendation is recomputed from the answers on screen, so the effect
   // of changing "4 days a week" to "6" is visible immediately rather than at the
@@ -396,9 +418,37 @@ export default function NutritionPlanWizard({ initial, age, costPerWeek, busy, o
         </div>
 
         {age === null ? (
-          <p className="text-xs text-muted-foreground">
-            Add your date of birth in Profile and the app can work out what you need.
-          </p>
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              We need your date of birth before this plan can be written. Calorie and macro targets are not
+              built for anyone under 18, and an account with no date of birth counts as one we cannot
+              write for — so this is the one question standing between you and the plan.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label className="sr-only" htmlFor="np-dob">Date of birth</label>
+              <input
+                id="np-dob"
+                type="date"
+                value={dob}
+                min={earliestDob()}
+                max={today}
+                onChange={(e) => { setDob(e.target.value); setDobError(null); }}
+                className={`${inputClass} sm:flex-1`}
+              />
+              <button
+                type="button"
+                disabled={savingDob || !dob}
+                onClick={async () => {
+                  const problem = await onSaveDob(dob);
+                  setDobError(problem);
+                }}
+                className="min-h-[44px] rounded-xl bg-electric-purple/10 px-4 text-sm font-semibold text-electric-purple disabled:opacity-50"
+              >
+                {savingDob ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {dobError && <p className="text-[11px] text-destructive">{dobError}</p>}
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-4 gap-1.5 mb-2">
@@ -487,7 +537,10 @@ export default function NutritionPlanWizard({ initial, age, costPerWeek, busy, o
           <motion.button
             type="button"
             whileTap={{ scale: 0.98 }}
-            disabled={busy}
+            // Blocked, not refused after the fact: with no date of birth the
+            // request cannot be made at all, so the button says what is missing
+            // rather than accepting a tap that ends in a toast.
+            disabled={busy || age === null}
             onClick={() =>
               onSubmit({
                 intake,
@@ -499,7 +552,11 @@ export default function NutritionPlanWizard({ initial, age, costPerWeek, busy, o
             className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow disabled:opacity-60"
           >
             {busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Sparkles size={16} aria-hidden />}
-            {busy ? "Writing your plan…" : `Write my plan (${cost} credits)`}
+            {busy
+              ? "Writing your plan…"
+              : age === null
+              ? "Add your date of birth to continue"
+              : `Write my plan (${cost} credits)`}
           </motion.button>
         )}
       </div>

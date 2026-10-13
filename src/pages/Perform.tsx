@@ -32,7 +32,7 @@ const Perform = () => {
       title: t("hub.perform.groupTrophyRoom"),
       links: [
         { icon: Trophy, label: t("hub.perform.achievements"), description: t("hub.perform.achievementsDesc"), path: "/achievements", feature: "perform.achievements" },
-        { icon: Medal, label: t("hub.perform.badges"), description: t("hub.perform.badgesDesc"), path: "/achievements?tab=badges", feature: "perform.achievements" },
+        { icon: Medal, label: t("hub.perform.badges"), description: t("hub.perform.badgesDesc"), path: "/badges", feature: "perform.achievements" },
         { icon: Flag, label: t("hub.perform.challenges"), description: t("hub.perform.challengesDesc"), path: "/challenges", feature: "perform.challenges" },
       ],
     },

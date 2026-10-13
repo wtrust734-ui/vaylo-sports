@@ -55,6 +55,11 @@ const CALLS = {
   plan_edit: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
   plan_edit_full: { model: "luna", outCap: 2000, util: 0.50, inTok: 10000 },
   calorie_scan: { model: "luna", outCap: 2000, util: 0.45, inTok: 2500 },
+  // One call writes TWO weeks of nutrition plan (~6k in / ~8k out on Luna), and
+  // the price is per week, so this entry is the per-week half of that call: 3k
+  // in, 4k out. Kept in per-spend units so the ceiling and the 8x floor below
+  // read the same way as every other feature.
+  nutrition_plan_week: { model: "luna", outCap: 8000, util: 0.5, inTok: 3000 },
   // A nutrition review reads a week of logged meals plus the dossier and answers
   // with a short structured review: text-only, so the input is the large half
   // and there is no image to bill.
@@ -69,6 +74,13 @@ const CALLS = {
   // Video runs on Gemini Flash for ordinary clips (GEMINI_MODELS.FLASH is the
   // default in video-form-analysis; PRO is reserved for premium analyses).
   // Priced on the default path because that is what the credit is sold against.
+  //
+  // inTok stays at the 60-second figure even though the clip cap became 10
+  // minutes on 2026-10-12. A 10-minute clip is ~174k input tokens (258 per
+  // sampled frame at 1 fps, plus ~32 per second of audio), so this is the short
+  // case rather than the worst case. Left unchanged on purpose: the ceiling it
+  // produces feeds the price, and moving a price is the owner's call, not the
+  // model's. The matching note is in src/config/credits.ts.
   video_form_analysis: { model: "geminiFlash", outCap: 8000, util: 0.38, inTok: 20000 },
   form_analysis: { model: "geminiFlash", outCap: 3500, util: 0.34, inTok: 2000 },
   limiter_fix_plan: { model: "sol", outCap: 8000, util: 0.63, inTok: 6000 },
@@ -104,7 +116,10 @@ const FEATURE_COSTS = {
   // No flat-rate products: one payment against unlimited metered AI calls
   // loses money to exactly the heavy users it attracts. Every analysis and
   // every scan carries its own price instead.
-  // No provider call — priced for value, not to cover a cost.
+  // A nutrition plan week is a metered call now (generate-nutrition-plan writes
+  // the weeks), so it has a ceiling like every other AI feature. Priced at 8
+  // rather than 15: 8 is what the button says, and 8 is what keeps the day-one
+  // basket below (see the STARTING_CREDITS check at the end of this file).
   nutrition_plan_week: 8,
   training_insight: 8,
   vpr_compare: 2,

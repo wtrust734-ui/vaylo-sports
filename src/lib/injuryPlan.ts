@@ -55,6 +55,43 @@ export type InjuryPlan = {
 
 /** The plan most the model may return; anything beyond this is dropped. */
 export const MAX_PLAN_WEEKS = 12;
+
+/**
+ * Longest site we store. The same 40 the briefing caps `Reported site` at, so
+ * the athlete's own words cannot be truncated to nothing between the form and
+ * the prompt.
+ */
+export const MAX_SITE_LENGTH = 40;
+
+/**
+ * The injury site to log, from a list or in the athlete's own words.
+ *
+ * The screen's list of body parts is a set of SHORTCUTS, not the set of injuries
+ * that exist. Everything off it used to be stored as "Other", which threw away
+ * the most specific thing the paid plan is written from — a scaffold for "Other,
+ * severity 4, no notes" is a plan for nobody. So "Other" means "describe it", and
+ * what the athlete typed is kept (control characters stripped, whitespace
+ * collapsed, length bounded) instead of being replaced.
+ *
+ * A site not on the list and not typed still falls back to "Other": the column
+ * is free text, but a blank one is not a site.
+ */
+export function resolveInjurySite(input: {
+  /** What the picker holds, including the "Other" entry. */
+  listed: string;
+  /** What the athlete typed when they picked "Other". */
+  typed?: string | null;
+  /** The shortcuts the picker offered. */
+  known: readonly string[];
+}): string {
+  const clean = (input.typed ?? "")
+    .replace(/\p{C}/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_SITE_LENGTH);
+  if (input.listed === "Other") return clean || "Other";
+  return input.known.includes(input.listed) ? input.listed : "Other";
+}
 const MAX_ITEMS_PER_WEEK = 8;
 
 /**

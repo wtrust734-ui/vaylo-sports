@@ -255,8 +255,7 @@ const HistoryImportCard = () => {
   const lastRun = runs[0];
 
   return (
-    <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+    <div className="mt-6 rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
       <div className="relative">
         <div className="flex items-center gap-2 mb-2">
           <div className="h-8 w-8 rounded-xl bg-gradient-primary flex items-center justify-center text-primary-foreground shadow-glow">
@@ -643,8 +642,7 @@ const HealthSync = () => {
     })();
 
     return (
-      <div className="rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
         <div className="relative">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -738,16 +736,13 @@ const HealthSync = () => {
   };
 
   return (
-    <div className="min-h-screen app-mesh pb-32 max-w-3xl mx-auto px-5 pt-[var(--vaylo-screen-top)]">
+    <div className="min-h-screen bg-background pb-32 max-w-3xl mx-auto px-5 pt-[var(--vaylo-screen-top)]">
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
         <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3 py-1">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_hsla(142_76%_36%_/_0.8)]" />
           <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Wearables</span>
         </div>
-        <h1 className="mt-3 text-[32px] font-display font-bold tracking-tight leading-none">
-          <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">Sync your</span>{" "}
-          <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">watches</span>
-        </h1>
+        <h1 className="mt-3 text-2xl font-display font-bold">Sync your watches</h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
           Connect once, sync when you tap. Everything a watch already records lands here through Health Connect — Samsung{isFlagOn("iphone") ? ", Apple" : ""} and the rest — as workouts, heart rate, distance, steps, sleep and calories in one normalized log.
         </p>
@@ -810,8 +805,7 @@ const HealthSync = () => {
       {isWearableAvailable(IMPORT_SOURCE) && <HistoryImportCard />}
 
       {/* ── Bridge tip ── */}
-      <div className="mt-6 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+      <div className="mt-6 rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
         <div className="relative">
           <div className="flex items-center gap-2 mb-2">
             <div className="h-8 w-8 rounded-xl bg-gradient-primary flex items-center justify-center text-primary-foreground shadow-glow"><Zap size={14} /></div>
@@ -825,8 +819,7 @@ const HealthSync = () => {
 
       {/* ── Data permissions ── */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
-        className="mt-4 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+        className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
         <div className="relative">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck size={15} className="text-emerald-400" />
@@ -864,8 +857,7 @@ const HealthSync = () => {
       {/* ── Synced from your wearables ── */}
       {(hcConnected || recentWorkouts.length > 0 || recentSamples.length > 0 || Object.values(cloudMap).some((c) => c?.connected)) && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="mt-4 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+          className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
           <div className="relative">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><Activity size={15} className="text-primary" />
@@ -930,8 +922,7 @@ const HealthSync = () => {
       )}
 
       {/* ── Manual import ── */}
-      <div className="mt-4 rounded-[22px] border border-white/[0.07] bg-card/60 backdrop-blur-xl p-4 shadow-card overflow-hidden relative">
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-card overflow-hidden relative">
         <div className="relative space-y-3">
           <h3 className="text-sm font-bold flex items-center gap-2"><ChevronRight size={14} className="text-muted-foreground" /> Manual workout import</h3>
           <p className="text-xs text-muted-foreground">No watch? Log a session by hand — it counts the same as a synced one.</p>

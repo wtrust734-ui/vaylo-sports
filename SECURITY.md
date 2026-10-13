@@ -2,10 +2,54 @@
 
 What an attacker can reach, what has been closed, and what is still open.
 
-Last assessed: **1 October 2026** (previously 30 September 2026), against the
+Last assessed: **12 October 2026** (previously 1 October 2026), against the
 live project by driving its own public API with the key that ships inside the
 app and by running the Supabase security advisor directly against the database.
 Every finding below was reproduced, not inferred from reading the schema.
+
+---
+
+## Video form analysis could not run at all — 12 October 2026
+
+Reported as "form analysis doesn't work", and it was worse than that: the feature
+had never completed a single analysis. Three independent faults, each found by
+driving the deployed function with a real clip rather than by reading it.
+
+- **Every request was refused as a duplicate of itself.**
+  `claim_video_analysis_request` inserted its claim row and then read that row
+  back to look for an existing claim, so it saw the lease it had just created
+  (`lease_expires_at = now() + 20 minutes`) as another caller's and answered
+  `claimed: false`. `video-form-analysis` turned that into 409 "This video
+  analysis is already in progress" for every athlete, on every clip, on the first
+  attempt. The old six-megabyte request-body path hid it, because those requests
+  failed earlier, on size. The function now decides liveness in ONE statement: an
+  insert means the claim is ours, and an update only takes over a `processing` row
+  whose lease has genuinely expired — the crash-recovery the schema always claimed
+  to provide. Rows left behind by earlier crashes (two on the review account
+  alone, from 3 October) are recovered by that same statement instead of blocking
+  the account permanently.
+- **The Files API was addressed wrongly, so processed clips 404'd.** The retrieve
+  and delete calls were built as a file name appended to a base that already ended
+  in `/files`, and a file resource's `name` is itself `files/<id>` — so the request
+  went to `/v1beta/files/files/<id>`, which does not exist. Any clip the provider
+  had not finished ingesting failed the whole analysis; the fault was invisible on
+  a fast clip and constant on a real one. Every file path is now built from the API
+  root. This is also a privacy fix and not only a functional one: the delete of the
+  provider-side copy failed for the same reason, so a clip was left at Google for
+  the full 48-hour retention window instead of being removed when the report was
+  written.
+- **A delivered analysis could not be replayed, and the clip was buffered.** The
+  idempotency lookup ran *after* the upload had been read and deleted, so a
+  transport retry of a completed analysis was answered 400 "the uploaded clip could
+  not be read" rather than with the saved report — the exact case the replay path
+  exists for. The lookup now runs first. The clip is also streamed from Storage
+  straight into the provider's upload rather than buffered, so the size cap is
+  policy rather than a memory limit, and the caps themselves moved from 60 seconds
+  / 25 MiB to 10 minutes / 512 MiB, measured from the object's own `content-length`
+  (Storage's metadata, never the caller's claim). The provider cost of a long clip
+  exceeds the ceiling `video_form_analysis` is priced against — that ceiling is
+  deliberately left at the 60-second figure and must move together with the price;
+  see the note in `src/config/credits.ts`.
 
 ---
 

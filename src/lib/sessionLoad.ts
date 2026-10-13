@@ -15,6 +15,12 @@
 // factor for field and court, distance × stroke factor for swimming — and every
 // result carries the confidence and the reasoning that produced it.
 //
+// Walking is the one sport the specification does not price at all, and it gets
+// an explicit discount of its own rather than a borrowed formula: an hour on
+// your feet is real training and must not read as nothing, and it is equally
+// not an hour of running. A sport with no formula *and* no replacement falls
+// through to `unknownLoad`, which says so out loud.
+//
 // Three rules run through all of it:
 //
 //   1. NO FALSE PRECISION. The output is a plain number in arbitrary but
@@ -63,6 +69,7 @@ export type SportKind =
   | "running"
   | "cycling"
   | "swimming"
+  | "walking"
   | "strength"
   | "field"
   | "court"
@@ -122,6 +129,7 @@ export interface SessionLoad {
 
 export type LoadMethod =
   | "duration-x-intensity"
+  | "walking-minutes-x-factor"
   | "volume-load-x-rpe"
   | "duration-x-rpe"
   | "distance-x-stroke"
@@ -145,6 +153,8 @@ export const loadExplanation = (input: SessionLoadInput, result: SessionLoad): s
       return `${minutes} of practice × 1.0 = ${result.load}`;
     case "duration-x-rpe":
       return `${minutes}${rpe} used as a stand-in for sets and reps = ${result.load}`;
+    case "walking-minutes-x-factor":
+      return `${minutes}${rpe} of walking × the walking factor (a walk is not a run) = ${result.load}`;
     case "unclassified":
       return `${minutes} of unclassified activity, priced at a moderate assumption = ${result.load}`;
     default:
@@ -172,12 +182,24 @@ export function classifySport(sport?: string | null, sessionType?: string | null
 
   // Swimming first: "swim", "swimming", "pool" and any stroke name.
   if (/swim|freestyle|backstroke|breaststroke|butterfly|\bpool\b/.test(text)) return "swimming";
+  // Walking before running and cycling, and separate from both. It has to be
+  // asked here rather than folded into the running branch, because the whole
+  // point of the kind is that it is priced differently: "power walk", "race
+  // walk" and "Nordic walk" are training, and none of them is a run. Nothing
+  // above or below this line contains "walk", "hike", "trek" or "rambl".
+  // `hik` rather than `hike`: "hiking" is h-i-k-i-n-g and does not contain
+  // "hike", so the obvious spelling of the branch silently left every imported
+  // hike — which `importHistory` labels "Hiking" — priced as an unknown sport.
+  if (/walk|hik|rambl|trek/.test(text)) return "walking";
   // Cycling before running: "trail running" and "cyclocross" both contain "run"
   // and "cross" in ways a substring test would otherwise get wrong.
   if (/cycl|bike|biking|ride|rowing|row\b|erg|spin|elliptical/.test(text)) return "cycling";
   if (/run|trail|jog|5k|10k|half marathon|running|cross.?country/.test(text)) return "running";
   if (/strength|gym|weight|lift|resistance|calisthenic|bodyweight|power\b/.test(text)) return "strength";
-  if (/football|soccer|hockey|rugby|field\b/.test(text)) return "field";
+  // Cricket is a field sport: long spells of standing, sprinting between the
+  // wickets and bowling, which is closer to the field/court model than to any
+  // duration-based one.
+  if (/football|soccer|hockey|rugby|cricket|field\b/.test(text)) return "field";
   if (/basketball|court|tennis|badminton|volley|netball/.test(text)) return "court";
   return "unknown";
 }
@@ -278,6 +300,25 @@ const STROKE_FACTOR_MIDPOINT: Record<Stroke, number> = {
 export const SWIM_DURATION_FACTOR = 0.7;
 
 /**
+ * What one minute of walking is worth against one minute of running.
+ *
+ * The specification gives no walking formula, and the alternative to assuming
+ * one is worse than it looks: leaving walking unclassified sends it through
+ * `unknownLoad`, which prices an unrecognised session as a MODERATE one — so a
+ * gentle hour on your feet would come back as hard as an hour of steady
+ * running, and over-counting load is the direction this module treats as the
+ * dangerous one (it is what tells a recovering athlete to stop training when
+ * they do not need to).
+ *
+ * 0.5 is a STATED ASSUMPTION, not a measured constant: walking costs roughly
+ * half of running the same minutes, and the figure is deliberately on the low
+ * side of that so the error is in the safe direction. It is exported so the
+ * assumption is visible to anyone reading the model, and a caveat travels with
+ * every walking result so the athlete is told the number is a proxy.
+ */
+export const WALK_DURATION_FACTOR = 0.5;
+
+/**
  * The intensity band for a session, from RPE if given and from the session's
  * own type otherwise.
  *
@@ -370,6 +411,7 @@ export function sessionLoad(input: SessionLoadInput): SessionLoad {
 
   if (sport === "strength") return strengthLoad(input, duration, rpe);
   if (sport === "swimming") return swimLoad(input, duration, rpe, band);
+  if (sport === "walking") return walkingLoad(input, duration);
   if (sport === "field" || sport === "court") return fieldLoad(input, sport, duration, rpe);
   if (sport === "unknown") return unknownLoad(input, duration);
 
@@ -485,6 +527,27 @@ function swimLoad(
     method: "distance-x-stroke",
     confidence: "low",
     caveat: "no distance or duration was recorded",
+  };
+}
+
+function walkingLoad(input: SessionLoadInput, duration: number | null): SessionLoad {
+  if (duration === null) {
+    return { load: null, sport: "walking", method: "walking-minutes-x-factor", confidence: "low", caveat: "no duration was recorded" };
+  }
+  // An effort rating still says how hard the walk was — a hilly hour with a
+  // pack is not an amble round the block — so it scales the walking factor
+  // rather than replacing it. That is the difference from the running branch:
+  // no reported effort can turn a walk into a run here.
+  const effort = factorBand(bandFor(input)) ?? INTENSITY_BANDS.moderate.factor;
+  return {
+    load: round(duration * effort * WALK_DURATION_FACTOR),
+    sport: "walking",
+    method: "walking-minutes-x-factor",
+    confidence: "low",
+    caveat:
+      num(input.rpe) !== null
+        ? "walking is priced at a stated fraction of running, so this is a proxy rather than a measured figure"
+        : "no effort was recorded, so a moderate walk is assumed",
   };
 }
 

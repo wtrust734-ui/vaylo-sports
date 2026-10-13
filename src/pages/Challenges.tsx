@@ -9,6 +9,7 @@ import { joinChallenge, leaveChallenge } from "@/lib/scoring";
 import { toast } from "sonner";
 import SponsoredSlot from "@/components/sponsor/SponsoredSlot";
 import { orderByFamily } from "@/lib/personalization/challengeSuggestions";
+import StandingChallenges from "@/components/challenges/StandingChallenges";
 
 
 interface Challenge {
@@ -294,6 +295,11 @@ const Challenges = () => {
       )}
 
       {creating && <CreateChallengeModal onClose={() => { setCreating(false); setPrefill(null); }} onCreated={() => { setCreating(false); setPrefill(null); load(); }} userId={user?.id || ""} prefill={prefill} />}
+
+      {/* The fixed catalogue of standing challenges, which used to be a tab
+          inside Achievements. It is challenges, so it lives on the Challenges
+          screen — folded away, because the joinable ones are above it. */}
+      <StandingChallenges />
     </div>
   );
 };

@@ -25,20 +25,79 @@ import { formatDate } from "@/i18n/format";
 // watch and is read by the recovery, streak and analytics screens.
 // ============================================================================
 
-/** The sports the manual path prices. Matches the list Wearables offers. */
-const SESSION_TYPES = ["run", "cycle", "swim", "gym", "hiit", "sport", "yoga", "row"] as const;
+/**
+ * The sports the manual path offers.
+ *
+ * Broad on purpose. This list was eight entries — run, ride, swim, gym, HIIT,
+ * sport, yoga, row — which is a runner's list, and an athlete who walked,
+ * bowled, climbed or played hockey had to log their session as "Sport" and
+ * lose the fact that it happened at all. Every value here is chosen so that
+ * `classifySport` in lib/sessionLoad has an answer for it: the ones it can price
+ * (run, walk, hike, cycle, swim, row, gym, cricket, football, rugby, hockey,
+ * basketball, tennis, badminton) get a real formula, and the ones it cannot price
+ * honestly — HIIT, yoga, pilates, climbing, skiing, golf, boxing, martial arts,
+ * dance — are deliberately unclassified, which prices them as a moderate session
+ * and says so rather than borrowing a formula that would be wrong.
+ *
+ * The values are stored in `workouts.type` and `workouts.sport`, so the load is
+ * priced from the same string the athlete chose rather than a second vocabulary
+ * that could drift from it.
+ */
+const SESSION_TYPES = [
+  "run",
+  "walk",
+  "hike",
+  "cycle",
+  "swim",
+  "row",
+  "gym",
+  "hiit",
+  "yoga",
+  "pilates",
+  "climb",
+  "ski",
+  "cricket",
+  "football",
+  "rugby",
+  "hockey",
+  "basketball",
+  "tennis",
+  "badminton",
+  "golf",
+  "boxing",
+  "mma",
+  "dance",
+  "sport",
+] as const;
 
 type SessionType = (typeof SESSION_TYPES)[number];
 
+/** Display names. Short enough to read on a phone, and none of them is "Other". */
 const TYPE_LABELS: Record<SessionType, string> = {
   run: "Run",
+  walk: "Walk",
+  hike: "Hike",
   cycle: "Ride",
   swim: "Swim",
+  row: "Row",
   gym: "Gym",
   hiit: "HIIT",
-  sport: "Sport",
   yoga: "Yoga",
-  row: "Row",
+  pilates: "Pilates",
+  climb: "Climbing",
+  ski: "Skiing",
+  cricket: "Cricket",
+  football: "Football",
+  rugby: "Rugby",
+  hockey: "Hockey",
+  basketball: "Basketball",
+  tennis: "Tennis",
+  badminton: "Badminton",
+  golf: "Golf",
+  boxing: "Boxing",
+  mma: "Martial arts",
+  dance: "Dance",
+  sport: "Other sport",
 };
 
 interface WorkoutRow {
@@ -402,7 +461,10 @@ const Workouts = () => {
             void runWorkoutReview({
               user: { id: user!.id },
               profile: { sport: profile?.sport ?? null },
-              planWeek: plan?.plan_data as unknown as Array<{ week: number; sessions: Array<{ day: number; title?: string | null; type?: string | null; duration_minutes?: number | null; description?: string | null; skipped?: boolean | null }> }> | null,
+              // Handed over as the column holds it: the review normalises the
+              // shape itself, so a plan stored as { weeks: [...] } is read the
+              // same as a bare array rather than looking like no plan at all.
+              planWeek: plan?.plan_data ?? null,
               weekCurrent: plan?.week_current ?? null,
               durationWeeks: plan?.duration_weeks ?? null,
               onCharge: (charged) => {

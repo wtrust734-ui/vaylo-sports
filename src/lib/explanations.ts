@@ -518,6 +518,7 @@ const FOCUS_LABELS: Record<ReturnFocus, string> = {
   // athlete and "rebuilding your base" over a holiday week would be wrong.
   preload: "banking a little extra before your break",
   holiday: "easy movement while you are away",
+  paused: "no training while you are away",
 };
 
 export interface RebuildExplanationInput {
