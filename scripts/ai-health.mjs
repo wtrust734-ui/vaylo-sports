@@ -52,8 +52,11 @@ const before = await balance();
 // video file or a real athlete dataset — a refusal for those reasons still
 // proves the key is present and the model answered.
 const PROBES = [
-  ["ai-service", { feature: "coach_chat", userPrompt: "Say 'ready' in five words." }],
-  ["coach-chat", { message: "Say 'ready' in five words." }],
+  // light_chat is the free, metered-by-no-one quick-chat feature the app calls
+  // through ai-service (askLightChat). ai_coach is not priced in the economy
+  // table and has no callers, so probing it reports a 402 for a path nothing uses.
+  ["ai-service", { feature: "light_chat", userPrompt: "Say 'ready' in five words." }],
+  ["coach-chat", { messages: [{ role: "user", content: "Say 'ready' in five words." }] }],
   // The stats-insight payload "Analyse my workouts" actually sends. The
   // function switches on `type` and prices the call as training_insight, so a
   // probe carrying free text (`{ text }`) is refused with "Invalid type" before
@@ -66,7 +69,7 @@ const PROBES = [
       sport: "General",
     },
   ],
-  ["generate-plan", { goal: "5k", sport: "running", weeks: 1 }],
+  ["generate-plan", { goal: "5k", sport: "running", level: "beginner", duration_weeks: 1 }],
   ["weekly-review", { stats: { workouts: 1, totalKm: 5 } }],
   ["learning-recommend", { topic: "threshold running" }],
   // The video probe needs a real clip: since 2026-10-12 the function takes a
@@ -173,6 +176,15 @@ for (const [fn, body0] of PROBES) {
     continue;
   }
 
+  // 402 = the review account has no credits, so the call was refused before the
+  // provider was reached. That says nothing about whether the feature works.
+  if (r.status === 402) {
+    inconclusive++;
+    console.log(`  ???    ${fn.padEnd(21)} ${r.status} ${text.slice(0, 60)}`);
+    console.log("         ^ refused for insufficient credits before the provider was reached; top up the review account to test it.");
+    continue;
+  }
+
   if (r.status === 400 && OWN_VALIDATION.test(text)) {
     inconclusive++;
     console.log(`  ???    ${fn.padEnd(21)} ${r.status} ${text.slice(0, 60)}`);
@@ -218,10 +230,10 @@ console.log(`\nreview account credits: ${before} -> ${after}`);
 console.log(
   `\n${alive} of ${PROBES.length} AI features are answering` +
   (off.length ? `; switched off: ${off.join(", ")}` : "") +
-  (inconclusive ? `; ${inconclusive} could not be tested (stale probe payload — fix the probe, then re-run)` : "")
+  (inconclusive ? `; ${inconclusive} could not be tested (refused before the provider: out of credits or a rejected probe payload)` : "")
 );
 console.log(off.length
   ? `\nTo switch them on: npx supabase secrets set OPENAI_API_KEY=... (and GOOGLE_API=... for video)`
   : inconclusive
-    ? `\nNo feature is switched off, but ${inconclusive} probe(s) above never reached a provider — repair them before trusting this run.`
+    ? `\nNo feature is switched off, but ${inconclusive} probe(s) above never reached a provider. Top up the review account (402) or fix the payload (400) before trusting this run.`
     : `\nAll AI features are live.`);

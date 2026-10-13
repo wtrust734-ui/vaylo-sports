@@ -69,7 +69,7 @@ const Mental = () => {
             className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-3 rounded-xl mb-3 disabled:opacity-60">
             <ShoppingBag size={18} /> {unlocking ? "Unlocking…" : `Unlock for ${creditCost("mental_gym_unlock")} credits`}
           </motion.button>
-          <p className="text-xs text-muted-foreground">One-time unlock. Also included with Unlimited.</p>
+          <p className="text-xs text-muted-foreground">One-time unlock.</p>
         </motion.div>
       </div>
     );
