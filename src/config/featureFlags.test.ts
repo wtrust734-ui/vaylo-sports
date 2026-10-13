@@ -65,10 +65,6 @@ describe("launch defaults", () => {
 });
 
 describe("isRouteVisible", () => {
-  it("shows the wearable route while the flag is on", () => {
-    expect(isRouteVisible("/health-sync")).toBe(true);
-  });
-
   it("leaves every unflagged route visible", () => {
     // Regression guard for the shape of the helper: a route that is not in the
     // map must never be hidden, or a typo in FLAGGED_ROUTES would silently

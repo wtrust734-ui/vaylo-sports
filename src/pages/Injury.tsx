@@ -282,7 +282,13 @@ const Injury = () => {
       });
 
       if (error) {
-        const message = await edgeErrorMessage(error);
+        const raw = await edgeErrorMessage(error);
+        // "Invalid type" means the server did not recognise the injury_plan
+        // request at all — a version mismatch, not something retrying will
+        // fix. Say so plainly instead of printing the wire error.
+        const message = /invalid type/i.test(raw)
+          ? "The server did not recognise this plan request. Update the app to the latest version and try again — if it persists, contact support rather than retrying."
+          : raw;
         const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
         if (status === 402) {
           const short = await shortfallFromEdgeError(error);

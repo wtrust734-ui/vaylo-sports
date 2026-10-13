@@ -254,6 +254,42 @@ describe("charging discipline across AI functions", () => {
   });
 });
 
+describe("ai-analyze: every type the client sends is accepted", () => {
+  // A type the client sends but the server allowlist drops answers
+  // `400 Invalid type` — the exact failure athletes hit on injury plans.
+  // Every invoke("ai-analyze", { body: { type } }) call site in src/ must
+  // appear in the server's allowlist below, or the button that sends it is
+  // a button that cannot work.
+  const src = read(AI_ANALYZE);
+
+  it.each([
+    ["form_analysis"],
+    ["calorie_scan"],
+    ["stats_insight"],
+    ["tactical_prep"],
+    ["nutrition_review"],
+    ["injury_plan"],
+  ])('accepts type "%s"', (type) => {
+    expect(src).toContain(`type !== "${type}"`);
+  });
+
+  it("every ai-analyze type the client sends is in the server allowlist", () => {
+    const client = [
+      read("/src/pages/Injury.tsx"),
+      read("/src/pages/Nutrition.tsx"),
+      read("/src/pages/Tactics.tsx"),
+      read("/src/lib/runWorkoutReview.ts"),
+    ].join("\n");
+    const sent = new Set(
+      [...client.matchAll(/invoke\("ai-analyze",\s*\{[\s\S]*?type:\s*"([a-z_]+)"/g)].map((m) => m[1]),
+    );
+    expect(sent.size).toBeGreaterThan(0);
+    for (const type of sent) {
+      expect(src).toContain(`type !== "${type}"`);
+    }
+  });
+});
+
 describe("log hygiene", () => {
   it("no AI function logs raw provider bodies", () => {
     for (const file of [AI_ANALYZE, WEEKLY, PLAN, VIDEO, LEARNING]) {
@@ -295,8 +331,8 @@ describe("health privacy", () => {
     expect(src).toMatch(/linked_at/);
   });
 
-  it("the health page offers explicit deletion of imported data", () => {
-    expect(read("/src/pages/HealthSync.tsx")).toMatch(/handleDeleteHealthData/);
-    expect(read("/src/pages/HealthSync.tsx")).toMatch(/Delete imported data/);
+  it("the Health Connect sheet offers explicit deletion of imported data", () => {
+    expect(read("/src/components/health/HealthConnectPrompt.tsx")).toMatch(/deleteImported/);
+    expect(read("/src/components/health/HealthConnectPrompt.tsx")).toMatch(/Delete imported data/);
   });
 });

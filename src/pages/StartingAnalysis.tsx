@@ -150,7 +150,7 @@ const StartingAnalysisPage = () => {
           how you actually train — volume, rhythm, workload — from the sessions themselves.
         </p>
         <Link
-          to="/health-sync"
+          to="/profile"
           // `min-h-11` is not decoration: the 44px floor in index.css covers
           // buttons and selects, but deliberately not anchors, so a link styled
           // as a button has to claim the height itself.

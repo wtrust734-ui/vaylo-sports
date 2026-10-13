@@ -24,6 +24,7 @@ import { readRecoveryForPlan, type RecoveryReadResult } from "@/lib/recoveryPlan
 import type { AdjustmentDecision } from "@/lib/recoveryAdjust";
 import { explainDecision, explainWeek } from "@/lib/explanations";
 import { WhyBody } from "@/components/insights/WhyDisclosure";
+import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
 
@@ -302,6 +303,25 @@ const Training = () => {
   // The estimate is the duration the server said the plan would take.
   const [planGenerationProgress, setPlanGenerationProgress] =
     useState<number | null>(null);
+  // The overlay traps the screen, so it must be dismissible: hiding drops to
+  // the inline card rather than cancelling (the request is already in flight
+  // and the plan lands either way). Reset whenever a new wait starts.
+  const [progressHidden, setProgressHidden] = useState(false);
+  // Rendered inside every view of this screen (plans, limiter, log, detail):
+  // the request outlives the view it started from, and a fixed overlay that
+  // unmounts mid-wait would silently strand the athlete with no status.
+  const generationOverlay = planGenerationProgress !== null && !progressHidden ? (
+    <PlanGenerationProgress
+      weeks={planGenerationProgress}
+      onHide={() => setProgressHidden(true)}
+    />
+  ) : null;
+  const generationInline =
+    planGenerationProgress !== null && progressHidden ? (
+      <div className="px-5 pt-[var(--vaylo-screen-top)]">
+        <PlanGenerationProgress weeks={planGenerationProgress} variant="inline" />
+      </div>
+    ) : null;
   const [activeView, setActiveView] = useState<"plans" | "limiter" | "log" | "planDetail">("plans");
   const [selectedPlan, setSelectedPlan] = useState<TrainingPlan | null>(null);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
@@ -470,6 +490,26 @@ const Training = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per profile, not on every tick
   }, [profile]);
 
+  // Seed the availability answers from what the athlete already told the app
+  // at signup (extended_profile.training_days_per_week). The form used to open
+  // on a hardcoded 4 days / 6 hours whatever the athlete had said, so the
+  // plan they bought was written for someone else's week. Only seeds while
+  // the athlete has not touched the fields: a tap here is newer intent than
+  // signup, and re-seeding over it would feel like the app ignoring them.
+  // Hours default from days at ~1h a session when nothing else is known.
+  const availabilityTouched = useRef(false);
+  const [availabilityFromProfile, setAvailabilityFromProfile] = useState(false);
+  useEffect(() => {
+    if (availabilityTouched.current) return;
+    const ext = profile?.extended_profile as Record<string, unknown> | null;
+    const days = Number(ext?.training_days_per_week);
+    if (!Number.isFinite(days) || days < 1 || days > 7) return;
+    setPlanDaysPerWeek(Math.round(days));
+    setPlanHoursPerWeek(Math.round(days * 1));
+    setAvailabilityFromProfile(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per profile, not on every tick
+  }, [profile]);
+
   const fetchPlans = async () => {
     if (!user) return;
     const { data } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
@@ -524,6 +564,7 @@ const Training = () => {
     // render — this is the window where a second tap is most likely, and the
     // screen already has to be covered to keep one request in flight.
     setPlanGenerationProgress(duration);
+    setProgressHidden(false);
     try {
       // The generate-plan function verifies auth, throttles and charges
       // training_plan_week credits server-side (with auto-refund on failure).
@@ -640,9 +681,12 @@ const Training = () => {
       // up. It is accurate at the end: past its own estimate it says so rather
       // than sailing to 99% and lying. Set it here so the interval starts on the
       // first frame and the athlete gets a `remaining` number from the first
-      // render — this is the window where a second tap is most likely, and the
-      setPlanGenerationProgress(duration);
-      
+      // The wait is over: the overlay must come down with the success toast,
+      // not linger over the new plan. (This used to re-set the estimate here,
+      // stranding the overlay on screen after the plan had landed.)
+      setPlanGenerationProgress(null);
+      setProgressHidden(false);
+
       await refreshProfile();
       toast({
         title: "Plan Created! 🎯",
@@ -1356,6 +1400,7 @@ const Training = () => {
   // === LIMITER TEST VIEW ===
   if (activeView === "limiter") return (
     <div className="min-h-screen bg-background">
+      {generationOverlay}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
         <motion.button onClick={() => { setActiveView("plans"); setLimiterStep(0); setLimiterAnswers({}); setLimiterResult(null); }} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
         <h1 className="text-xl font-display font-bold">Limiter Test</h1>
@@ -1427,6 +1472,7 @@ const Training = () => {
   // === PERFORMANCE LOG VIEW ===
   if (activeView === "log") return (
     <div className="min-h-screen bg-background">
+      {generationOverlay}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
         <motion.button onClick={() => setActiveView("plans")} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
         <h1 className="text-xl font-display font-bold">Performance Log</h1>
@@ -1513,6 +1559,7 @@ const Training = () => {
     const planData = selectedPlan.plan_data as PlanData | null;
     return (
       <div className="min-h-screen bg-background">
+      {generationOverlay}
         <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
           <motion.button onClick={() => { setActiveView("plans"); setSelectedPlan(null); setExpandedWeek(null); }} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
           <h1 className="text-lg font-display font-bold flex-1">{selectedPlan.title}</h1>
@@ -1819,6 +1866,8 @@ const Training = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {generationOverlay}
+      {generationInline}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Training</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Build your body. Sharpen your edge.</motion.p>
@@ -1908,15 +1957,20 @@ const Training = () => {
 
           {planQuizStep === 1 && (
             <div className="space-y-3">
+              {availabilityFromProfile && (
+                <p className="rounded-xl border border-primary/25 bg-primary/[0.06] px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+                  Prefilled from the availability you gave at signup — change it here and the plan is written for the new numbers.
+                </p>
+              )}
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Days per week you can train</label>
                 <div className="flex gap-1.5 flex-wrap">{[2,3,4,5,6,7].map(n => (
-                  <button key={n} onClick={() => setPlanDaysPerWeek(n)} className={`flex-1 ${chipClass(planDaysPerWeek === n)}`}>{n}</button>
+                  <button key={n} onClick={() => { availabilityTouched.current = true; setAvailabilityFromProfile(false); setPlanDaysPerWeek(n); }} className={`flex-1 ${chipClass(planDaysPerWeek === n)}`}>{n}</button>
                 ))}</div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Total hours per week</label>
-                <input type="number" min={1} max={30} step={0.5} value={planHoursPerWeek} onChange={e => setPlanHoursPerWeek(parseFloat(e.target.value) || 0)} className={inputClass} />
+                <input type="number" min={1} max={30} step={0.5} value={planHoursPerWeek} onChange={e => { availabilityTouched.current = true; setAvailabilityFromProfile(false); setPlanHoursPerWeek(parseFloat(e.target.value) || 0); }} className={inputClass} />
                 <p className="text-[12px] text-muted-foreground mt-1">Sessions will average ~{Math.round((planHoursPerWeek * 60) / Math.max(1, planDaysPerWeek))} min.</p>
               </div>
               <div>

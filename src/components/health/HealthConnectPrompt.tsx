@@ -1,14 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   ExternalLink,
   Loader2,
   RefreshCw,
   ShieldCheck,
   Smartphone,
+  Trash2,
   Unlink,
 } from "lucide-react";
 
@@ -23,18 +22,15 @@ import { formatDateTimeExact } from "@/i18n/format";
 // ============================================================================
 // The "connect your watch" pop-up
 // ----------------------------------------------------------------------------
-// One sheet, four entry points (sign-up, onboarding, Profile, and the Wearables
-// screen's own state), because the reasons to open it are the things an athlete
-// actually needs:
+// One sheet, three entry points (sign-up, onboarding and Profile), because the
+// reasons to open it are the things an athlete actually needs:
 //
-//   * connect, for the first time, without having to find the Wearables screen
-//     at all — the request that produced this file;
-//   * manage, once connected: sync now, fix a revoked permission, or stop the
-//     app reading anything.
+//   * connect, for the first time, from wherever the athlete is;
+//   * manage, once connected: sync now, fix a revoked permission, delete the
+//     imported data, or stop the app reading anything.
 //
-// It is the same `useHealthConnect()` hook the Wearables screen uses, so there
-// is exactly one implementation of consent, sync and disconnect — this is a
-// second door onto that state, not a second copy of it.
+// It is the only Health Connect surface: the sheet's own `useHealthConnect()`
+// is the one implementation of consent, sync, delete and disconnect.
 //
 // Android-only and flag-gated. The bridge does not exist on the web, so
 // offering to connect there would be a button that can only fail; callers hide
@@ -77,7 +73,6 @@ const StatusLine = ({ ok, children }: { ok: boolean; children: React.ReactNode }
 );
 
 const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps) => {
-  const navigate = useNavigate();
   const hc = useHealthConnect();
   const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(null);
 
@@ -139,6 +134,14 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
     } finally {
       setBusy(null);
     }
+  };
+
+  const deleteImported = async () => {
+    const confirmed = confirm(
+      "Delete ALL imported health data (workouts, samples, sleep, heart rate)? This cannot be undone.",
+    );
+    if (!confirmed) return;
+    await hc.deleteImported();
   };
 
   const body = () => {
@@ -210,16 +213,22 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
               : "No sync yet — the first one imports your recent sessions."}
           </p>
           {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}
-          {/* The full screen is what an athlete comes to this sheet to manage:
-              import history, per-provider controls, deleting what was
-              imported. It was a 12px text link at the very bottom of the body,
-              which is the wrong end of a sheet that this same tap closes. */}
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Disconnecting stops future syncs but keeps what was already imported. Delete imported
+            data to erase those workouts and samples from Vaylo now.
+          </p>
           <Button
-            onClick={() => { onClose(); navigate("/health-sync"); }}
+            onClick={() => void deleteImported()}
+            disabled={busy !== null || hc.deleting}
             variant="outline"
-            className="w-full h-10 rounded-xl"
+            className="w-full h-10 rounded-xl border-destructive/30 bg-destructive/10 text-destructive"
           >
-            <ArrowRight size={14} className="mr-1.5" /> Open the full Wearables screen
+            {hc.deleting ? (
+              <Loader2 size={14} className="mr-1.5 animate-spin" />
+            ) : (
+              <Trash2 size={14} className="mr-1.5" />
+            )}
+            Delete imported data
           </Button>
           <div className="flex flex-wrap gap-2">
             <Button

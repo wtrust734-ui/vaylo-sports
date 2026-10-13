@@ -193,21 +193,21 @@ const VideoFormAnalysis = () => {
     }
   };
 
-  // Discarding unsaves the row (saved=false), which also takes it out of the
-  // free-tier weekly window and puts it on the 30-day retention sweep. The
-  // clip itself is already gone — it is deleted when the analysis returns, and
-  // only the structured report row is kept.
+  // Clearing the workspace only clears the screen. The analysis the athlete
+  // paid for stays saved in History: the old behaviour unsaved the row here
+  // (saved=false), which took a paid report out of History and put it on the
+  // 30-day retention sweep — an X button that deletes what you just bought is
+  // a footgun, not a dismissal. Deleting lives in History, next to the report,
+  // where the athlete can see what they are removing. The clip itself is
+  // already gone — it is deleted when the analysis returns, and only the
+  // structured report row is kept.
   const discardAnalysis = async () => {
-    if (lastId) {
-      const { error } = await supabase
-        .from("video_form_analyses")
-        .update({ saved: false, deleted_at: new Date().toISOString() })
-        .eq("id", lastId);
-      if (error) { toast({ title: "Couldn't discard the analysis", description: error.message, variant: "destructive" }); return; }
-    }
+    const kept = !!lastId;
     loadHistory();
     reset();
-    toast({ title: "Analysis discarded" });
+    toast({
+      title: kept ? "Workspace cleared — analysis kept in History" : "Workspace cleared",
+    });
   };
 
   const deleteHistory = async (id: string) => {
@@ -313,6 +313,8 @@ const VideoFormAnalysis = () => {
                   </motion.button>
                   {result && (
                     <button onClick={discardAnalysis}
+                      aria-label="Clear workspace (keeps the saved analysis in History)"
+                      title="Clear workspace — the saved analysis stays in History"
                       className="flex items-center justify-center gap-2 bg-card border border-border px-4 py-3 rounded-xl text-muted-foreground">
                       <X size={18} />
                     </button>

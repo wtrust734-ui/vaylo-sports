@@ -60,6 +60,12 @@ interface LocalNotificationsPlugin {
       title: string;
       body: string;
       channelId?: string;
+      /**
+       * Explicit time to post. Passing it always (rather than omitting it) is
+       * what makes the OS post the notification on both Android and iOS; the
+       * plugin's "no schedule" path is not documented as an immediate show.
+       */
+      schedule?: { at: Date; allowWhileIdle?: boolean };
       extra?: Record<string, unknown>;
     }[];
   }) => Promise<unknown>;
@@ -78,6 +84,9 @@ export const LOCAL_CHANNEL_REMINDERS = "vaylo_reminders";
 
 /** Notification ids must be stable 32-bit ints; this is the "vaylo" namespace. */
 const BASE_ID = 8_100_000;
+
+/** How far ahead the OS is asked to post. Short enough to feel immediate. */
+const POST_DELAY_MS = 1_000;
 
 let permissionAsked = false;
 let channelReady = false;
@@ -139,10 +148,11 @@ export async function showDeviceNotification(
     await p.schedule({
       notifications: [
         {
-          id: BASE_ID + (Math.abs(Date.parse(new Date().toISOString())) % 10_000),
+          id: BASE_ID + (Date.now() % 10_000),
           title: notification.title,
           body: notification.body,
           channelId: LOCAL_CHANNEL_REMINDERS,
+          schedule: { at: new Date(Date.now() + POST_DELAY_MS) },
           extra: { link: notification.link ?? null },
         },
       ],
@@ -183,27 +193,35 @@ export async function enableDeviceNotifications(): Promise<DeviceNotifyOutcome> 
  * Only alongside the app's own router, so the destination goes through
  * safeNotificationLink (an in-app route) rather than being trusted here — the
  * value round-trips through the OS and comes back as untrusted input.
+ *
+ * The listener registration is async, so cleanup can run before it resolves.
+ * In that case the listener is removed as soon as it lands rather than leaked.
  */
 export function installNotificationTapHandler(
   onOpen: (link: string | null) => void,
 ): () => void {
-  let removed = false;
+  let disposed = false;
   let handle: { remove: () => Promise<void> } | null = null;
   void (async () => {
     const p = await plugin();
     if (!p || !deviceNotificationsSupported()) return;
     try {
-      handle = await p.addListener("localNotificationActionPerformed", (event) => {
+      const registered = await p.addListener("localNotificationActionPerformed", (event) => {
         const raw = event?.notification?.extra?.link;
         onOpen(typeof raw === "string" && raw ? raw : null);
       });
+      if (disposed) {
+        void registered.remove().catch(() => {});
+      } else {
+        handle = registered;
+      }
     } catch {
       // No listener support: taps simply open the app.
     }
   })();
   return () => {
-    removed = true;
+    disposed = true;
     void handle?.remove().catch(() => {});
-    void removed;
+    handle = null;
   };
 }

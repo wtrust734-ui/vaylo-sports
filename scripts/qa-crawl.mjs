@@ -73,7 +73,7 @@ const session = existsSync(SESSION_FILE) ? readFileSync(SESSION_FILE, "utf8") : 
 const DEFAULT_ROUTES = [
   "/", "/train", "/perform", "/profile", "/availability", "/training",
   "/metrics", "/stats", "/vpr", "/recovery", "/mental", "/nutrition", "/injury",
-  "/form", "/form/video", "/health-sync", "/coach", "/market", "/pricing",
+  "/form", "/form/video", "/coach", "/market", "/pricing",
   "/subscription", "/avatar", "/collection", "/identity", "/workouts",
   "/challenges", "/competition", "/events", "/pbs",
   "/compare", "/tactics",

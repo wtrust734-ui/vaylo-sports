@@ -12,6 +12,13 @@ import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
 const TYPES = ["shoes", "wearable", "bike", "racquet", "other"];
+const TYPE_LABELS: Record<string, string> = {
+  shoes: "Shoes",
+  wearable: "Wearable",
+  bike: "Bike",
+  racquet: "Racquet",
+  other: "Other",
+};
 
 const MetricsHub = () => {
   const { user, profile } = useAuth();
@@ -162,7 +169,7 @@ const MetricsHub = () => {
             <div className="grid grid-cols-2 gap-2">
               <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{TYPE_LABELS[t]}</SelectItem>)}</SelectContent>
               </Select>
               <Input type="number" placeholder="Max km" value={form.max_km} onChange={(e) => setForm({ ...form, max_km: Number(e.target.value) })} />
             </div>
@@ -178,19 +185,20 @@ const MetricsHub = () => {
             const tier = pct > 90 ? "destructive" : pct > 70 ? "energy" : "primary";
             return (
               <div key={e.id} className={`p-3 rounded-xl border ${e.active ? "border-border bg-background/40" : "border-border bg-background/20 opacity-60"}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <div><div className="font-semibold text-sm">{e.name} <span className="text-xs text-muted-foreground">· {e.type}</span></div>
-                    <div className="text-xs text-muted-foreground">{Math.round(e.usage_km)} / {e.max_km || "∞"} km</div>
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-sm break-words">{e.name} <span className="text-xs font-normal text-muted-foreground">· {TYPE_LABELS[e.type] ?? e.type}{!e.active && " · retired"}</span></div>
+                    <div className="text-xs text-muted-foreground tabular-nums">{Math.round(e.usage_km)} / {e.max_km > 0 ? `${e.max_km} km` : "no limit set"}</div>
                   </div>
-                  <div className="flex gap-1">
-                    {e.active && <>
-                      <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => logUsage(e.id, e.usage_km, 5)}>+5km</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => logUsage(e.id, e.usage_km, 10)}>+10km</Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-[12px]" onClick={() => retire(e.id)}>Retire</Button>
-                    </>}
-                  </div>
+                  {e.active && (
+                    <div className="flex shrink-0 gap-1">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => logUsage(e.id, e.usage_km, 5)}>+5 km</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => logUsage(e.id, e.usage_km, 10)}>+10 km</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => retire(e.id)}>Retire</Button>
+                    </div>
+                  )}
                 </div>
-                {e.max_km && (
+                {e.max_km > 0 && (
                   <>
                     <div className="w-full bg-muted/30 h-1.5 rounded-full overflow-hidden">
                       <motion.div initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }}

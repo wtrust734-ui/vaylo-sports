@@ -93,7 +93,7 @@ const ROWS: Row[] = [
   ["athletics-1500m", "Athletics", "1500m", "Hicham El Guerrouj", "Morocco", "World record 3:26.00 (1998)", [80, 70, 99, 96, 90, 78]],
   ["athletics-5000m", "Athletics", "5000m", "Joshua Cheptegei", "Uganda", "World record 12:35.36 (2020)", [78, 66, 100, 97, 90, 74]],
   ["athletics-10000m", "Athletics", "10000m", "Joshua Cheptegei", "Uganda", "World record 26:11.00 (2020)", [76, 62, 100, 97, 90, 72]],
-  ["athletics-marathon", "Athletics", "Marathon", "Kelvin Kiptum", "Kenya", "2:00:35 in Chicago (2023), then a world record", [72, 58, 100, 98, 90, 70]],
+  ["athletics-marathon", "Athletics", "Marathon", "Kelvin Kiptum", "Kenya", "World record 2:00:35, Chicago Marathon (2023)", [72, 58, 100, 98, 90, 70]],
   ["athletics-110mh", "Athletics", "110m hurdles", "Aries Merritt", "United States", "World record 12.80s (2012)", [96, 90, 70, 88, 96, 94]],
   ["athletics-400mh", "Athletics", "400m hurdles", "Karsten Warholm", "Norway", "World record 45.94s, Tokyo 2020 gold", [93, 90, 90, 94, 92, 86]],
 
@@ -106,11 +106,11 @@ const ROWS: Row[] = [
   ["athletics-decathlon", "Athletics", "Decathlon", "Kevin Mayer", "France", "World record 9,126 points (2018)", [86, 90, 90, 90, 90, 86]],
 
   // ── Swimming ─────────────────────────────────────────────────────────────
-  ["swim-50free", "Swimming", "50m freestyle", "Cameron McEvoy", "Australia", "Long-course world record 20.88s (2024)", [98, 94, 55, 84, 90, 86]],
+  ["swim-50free", "Swimming", "50m freestyle", "Cameron McEvoy", "Australia", "Long-course world record 20.88s (2026)", [98, 94, 55, 84, 90, 86]],
   ["swim-100free", "Swimming", "100m freestyle", "Pan Zhanle", "China", "World record 46.40s, Paris 2024 gold", [96, 92, 72, 88, 90, 86]],
   ["swim-200free", "Swimming", "200m freestyle", "Paul Biedermann", "Germany", "World record 1:42.00 (2009)", [90, 92, 90, 90, 88, 80]],
   ["swim-100fly", "Swimming", "100m butterfly", "Caeleb Dressel", "United States", "World record 49.45s (2021)", [94, 92, 78, 90, 92, 86]],
-  ["swim-200im", "Swimming", "200m individual medley", "Léon Marchand", "France", "World record 1:52.69 (2024)", [88, 88, 94, 94, 94, 84]],
+  ["swim-200im", "Swimming", "200m individual medley", "Léon Marchand", "France", "World record 1:52.69 (2025 World Championships)", [88, 88, 94, 94, 94, 84]],
   ["swim-800free", "Swimming", "800m freestyle", "Katie Ledecky", "United States", "Olympic 800m freestyle gold at four Games", [74, 70, 100, 97, 92, 72]],
   ["swim-1500free", "Swimming", "1500m freestyle", "Katie Ledecky", "United States", "World record 15:20.48 (2018)", [72, 68, 100, 97, 92, 70]],
   ["swim-10k", "Swimming", "Open water 10km", "Sharon van Rouwendaal", "Netherlands", "Olympic 10km gold 2016 and 2024", [76, 72, 99, 96, 90, 74]],
@@ -128,7 +128,7 @@ const ROWS: Row[] = [
   ["tri-ironman", "Triathlon", "Ironman", "Jan Frodeno", "Germany", "Three-time IRONMAN World Champion", [76, 76, 100, 97, 88, 72]],
 
   // ── Rowing ───────────────────────────────────────────────────────────────
-  ["rowing-1x", "Rowing", "Single sculls", "Mahé Drysdale", "New Zealand", "Two Olympic single-sculls golds; five world titles", [78, 92, 98, 96, 92, 76]],
+  ["rowing-1x", "Rowing", "Single sculls", "Mahé Drysdale", "New Zealand", "Olympic single-sculls gold, London 2012 and Rio 2016", [78, 92, 98, 96, 92, 76]],
 
   // ── Team sports ──────────────────────────────────────────────────────────
   ["football", "Team sports", "Football", "Lionel Messi", "Argentina", "2022 World Cup winner; record eight Ballon d'Or", [90, 82, 86, 90, 98, 92]],
@@ -143,7 +143,7 @@ const ROWS: Row[] = [
 
   // ── Racket sports ────────────────────────────────────────────────────────
   ["tennis", "Racket sports", "Singles tennis", "Novak Djokovic", "Serbia", "24 Grand Slam singles titles", [82, 82, 92, 95, 97, 96]],
-  ["tabletennis", "Racket sports", "Table tennis", "Ma Long", "China", "First man to win consecutive Olympic singles titles", [90, 84, 82, 90, 97, 96]],
+  ["tabletennis", "Racket sports", "Table tennis", "Ma Long", "China", "Olympic singles gold, Rio 2016 and Tokyo 2020", [90, 84, 82, 90, 97, 96]],
   ["badminton", "Racket sports", "Badminton", "Lin Dan", "China", "Consecutive Olympic men's singles golds 2008 and 2012", [92, 88, 86, 90, 95, 94]],
 
   // ── Combat sports ────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ const ROWS: Row[] = [
   ["gymnastics", "Gymnastics", "Artistic gymnastics", "Simone Biles", "United States", "Seven-time Olympic gold medallist", [88, 92, 84, 90, 98, 92]],
 
   // ── Climbing ─────────────────────────────────────────────────────────────
-  ["climbing", "Climbing", "Sport climbing", "Janja Garnbret", "Slovenia", "Olympic combined gold 2020 and 2024", [84, 90, 86, 92, 98, 88]],
+  ["climbing", "Climbing", "Sport climbing", "Janja Garnbret", "Slovenia", "Olympic boulder & lead combined gold, Tokyo 2020 and Paris 2024", [84, 90, 86, 92, 98, 88]],
 
   // ── Winter ───────────────────────────────────────────────────────────────
   ["ski-alpine", "Winter sports", "Alpine skiing", "Mikaela Shiffrin", "United States", "100 career World Cup victories", [86, 88, 92, 94, 97, 94]],

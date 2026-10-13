@@ -92,7 +92,6 @@ const Compare = lazy(() => import("./pages/Compare"));
 const Avatar = lazy(() => import("./pages/Avatar"));
 const Goals = lazy(() => import("./pages/Goals"));
 const Guardian = lazy(() => import("./pages/Guardian"));
-const HealthSync = lazy(() => import("./pages/HealthSync"));
 const StartingAnalysis = lazy(() => import("./pages/StartingAnalysis"));
 const Insights = lazy(() => import("./pages/Insights"));
 
@@ -511,14 +510,13 @@ const App = () => (
                     parent reading the sanitized summary of it. The permissions
                     themselves are enforced in Postgres, not here. */}
                 <Route path="/guardian" element={<Guardian />} />
-                {/* Wearable sync is launch-gated (featureFlags.ts). The vendor
-                    OAuth apps do not exist yet, so the screen lists providers
-                    that cannot be connected. Redirect rather than 404 so an old
-                    link or a stale shortcut lands somewhere real. */}
+                {/* The Wearables screen is gone: Health Connect lives in a sheet now
+                    (HealthConnectPrompt). Old /health-sync links redirect to Recover
+                    rather than 404, so a stale link or shortcut lands somewhere real. */}
                 <Route
                   path="/health-sync"
                   element={
-                    isFlagOn("wearableSync") ? <HealthSync /> : <Navigate to="/recover" replace />
+                    <Navigate to="/recover" replace />
                   }
                 />
                 {/* "Your Vaylo Starting Analysis". Deliberately NOT behind the

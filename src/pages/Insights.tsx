@@ -92,7 +92,7 @@ const InsightsPage = () => {
           what it adds up to.
         </p>
         <Link
-          to="/health-sync"
+          to="/profile"
           className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
         >
           Import your training history

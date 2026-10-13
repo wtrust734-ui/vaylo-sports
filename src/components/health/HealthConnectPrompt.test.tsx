@@ -61,6 +61,8 @@ function hookState(overrides: Partial<UseHealthConnect> = {}): UseHealthConnect 
     sync: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     disconnecting: false,
+    deleteImported: vi.fn().mockResolvedValue(true),
+    deleting: false,
     managePermissions: vi.fn().mockResolvedValue(undefined),
     clearError: vi.fn(),
     ...overrides,
@@ -176,12 +178,32 @@ describe("once connected", () => {
     ).toBeInTheDocument();
   });
 
-  it("routes to the Wearables screen instead of only mentioning it", async () => {
-    const { onClose } = renderPrompt(connected);
-    fireEvent.click(screen.getByRole("button", { name: /Open the full Wearables screen/ }));
-    // Closing this sheet and opening the screen is one tap: the sheet covers
-    // the page it is telling the athlete about.
-    expect(onClose).toHaveBeenCalledTimes(1);
+  it("deletes imported data from here, after confirming, and stays open", async () => {
+    // The Wearables screen used to own this control. It now lives in the sheet,
+    // so the sheet is the one place an athlete manages what Vaylo holds.
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const state = hookState({ status: "connected" });
+    const { onClose } = renderPrompt(state);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete imported data" }));
+    await act(async () => {});
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(state.deleteImported).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("does nothing if the athlete cancels the confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const state = hookState({ status: "connected" });
+    renderPrompt(state);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete imported data" }));
+    await act(async () => {});
+
+    expect(state.deleteImported).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });
 

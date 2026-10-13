@@ -102,10 +102,8 @@ const Profile = () => {
   const { toast } = useToast();
   const [showSettings, setShowSettings] = useState(false);
   const [showCosmetics, setShowCosmetics] = useState(false);
-  // Connect and manage Health Connect from here, not only from the Wearables
-  // screen: this is where an athlete looks for anything about their own account,
-  // and "how do I connect my watch" used to mean finding a screen that is two
-  // levels down inside the Recover hub.
+  // Health Connect is managed from here, in the sheet below. The separate
+  // Wearables screen was removed; this row is the one door to it.
   const [showHealthConnect, setShowHealthConnect] = useState(false);
   const wearableOffer = isAndroid() && isFlagOn("wearableSync");
   const { equippedDefs } = useCosmetics();
@@ -268,8 +266,8 @@ const Profile = () => {
     ...(wearableOffer
       ? [{
           icon: Watch,
-          label: "Wearables",
-          desc: "Connect and manage Health Connect",
+          label: "Health Connect",
+          desc: "Connect, sync and manage your health data",
           onClick: () => setShowHealthConnect(true),
         }]
       : []),

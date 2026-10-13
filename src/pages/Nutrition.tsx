@@ -14,6 +14,7 @@ import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { shortfallFromEdgeError } from "@/lib/shortfall";
 import { requestCreditTopUp } from "@/lib/topUpStore";
 import NutritionPlanWizard, { type PlanDraft } from "@/components/nutrition/NutritionPlanWizard";
+import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
 import SavedNutritionPlan from "@/components/nutrition/SavedNutritionPlan";
 import {
   normalizeIntake,
@@ -104,11 +105,28 @@ const Nutrition = () => {
   // something. Nothing here is a target until they accept the recommendation.
   const [planIntake, setPlanIntake] = useState<NutritionIntake>(() => prefillIntake({}));
   const [writingPlan, setWritingPlan] = useState(false);
+  // Dismissible wait for the AI-written plan: hiding drops to the inline card
+  // rather than cancelling — the plan lands either way.
+  const [planWaitHidden, setPlanWaitHidden] = useState(false);
+  const [planWaitWeeks, setPlanWaitWeeks] = useState(4);
   const [savingDob, setSavingDob] = useState(false);
   const [openPlanId, setOpenPlanId] = useState<string | null>(null);
 
+  // One job per tab instead of one long scroll: Today (water, macros, meals),
+  // Scan (photo estimate), Plans (AI meal plans), Review (week reading).
+  // Everything stays mounted in this component, so a half-filled meal form
+  // survives a tab switch.
+  const [nutriTab, setNutriTab] = useState<"today" | "scan" | "plans" | "review">("today");
   const [showScan, setShowScan] = useState(false);
-  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; description?: string; verdict?: "fuel" | "light" | "treat"; verdict_reason?: string } | null>(null);
+  // Everything the estimator returns that the screen can show. `fiber`,
+  // `serving` and `confidence` used to be dropped on the floor — the model
+  // returns them, and the confidence in particular is the honest answer to
+  // "how much should I trust this number".
+  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number; serving?: string; confidence?: "low" | "medium" | "high"; description?: string; verdict?: "fuel" | "light" | "treat"; verdict_reason?: string } | null>(null);
+  // The values as the athlete will log them. Prefilled from the estimate the
+  // moment it lands, but editable: a photo cannot weigh the plate, so the
+  // person who cooked it gets the last word before anything is logged.
+  const [scanEdits, setScanEdits] = useState<{ name: string; calories: string; protein: string; carbs: string; fat: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   // One in-flight destructive mutation at a time; a double-tap on a meal's
@@ -392,22 +410,60 @@ const Nutrition = () => {
     // validated from the client.
     setScanning(true);
     setScanResult(null);
+    setScanEdits(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-analyze", {
         body: { type: "calorie_scan", image_base64: base64, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
       });
       if (error) throw new Error(await edgeErrorMessage(error));
       const payload = (data ?? {}) as { result?: string; cost?: number; balance?: number | null };
+      let parsed: NonNullable<typeof scanResult>;
       try {
-        const parsed = JSON.parse(payload.result ?? "");
-        setScanResult(parsed);
+        parsed = JSON.parse(payload.result ?? "");
       } catch {
-        setScanResult({ name: "Scanned Meal", calories: 300, protein: 15, carbs: 35, fat: 12, description: payload.result });
+        parsed = null as unknown as NonNullable<typeof scanResult>;
       }
+      // The old code invented a meal here (300 kcal, 15g protein…) when the
+      // answer could not be read — a confident-looking lie logged as food.
+      // An unreadable answer is a failed scan: the server has already refunded
+      // the charge, and the athlete retries with the photo still on screen.
+      const num = (v: unknown): number | undefined => {
+        const n = Number(v);
+        return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : undefined;
+      };
+      const calories = num(parsed?.calories);
+      if (!parsed || typeof parsed !== "object" || calories === undefined) {
+        throw new Error("The scan came back unreadable — nothing was logged and the cost was refunded. Try a clearer, closer photo.");
+      }
+      const clean: NonNullable<typeof scanResult> = {
+        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 80) : "Scanned meal",
+        description: typeof parsed.description === "string" ? parsed.description.slice(0, 400) : undefined,
+        calories,
+        protein: num(parsed.protein),
+        carbs: num(parsed.carbs),
+        fat: num(parsed.fat),
+        fiber: num((parsed as { fiber?: unknown }).fiber),
+        serving: typeof (parsed as { serving?: unknown }).serving === "string"
+          ? ((parsed as { serving?: string }).serving ?? "").slice(0, 60) || undefined
+          : undefined,
+        confidence: (parsed as { confidence?: unknown }).confidence === "high" || (parsed as { confidence?: unknown }).confidence === "low"
+          ? (parsed as { confidence?: "low" | "high" }).confidence
+          : "medium",
+        verdict: parsed.verdict === "fuel" || parsed.verdict === "light" || parsed.verdict === "treat" ? parsed.verdict : undefined,
+        verdict_reason: typeof parsed.verdict_reason === "string" ? parsed.verdict_reason.slice(0, 200) : undefined,
+      };
+      setScanResult(clean);
+      setScanEdits({
+        name: clean.name,
+        calories: String(clean.calories),
+        protein: clean.protein !== undefined ? String(clean.protein) : "",
+        carbs: clean.carbs !== undefined ? String(clean.carbs) : "",
+        fat: clean.fat !== undefined ? String(clean.fat) : "",
+      });
       toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Included with Unlimited." });
       await refreshProfile();
     } catch (err) {
-      toast({ title: "Scan failed", description: err.message, variant: "destructive" });
+      toast({ title: "Scan failed", description: (err as Error).message, variant: "destructive" });
     } finally {
       setScanning(false);
     }
@@ -496,14 +552,28 @@ const Nutrition = () => {
 
   const addScanResult = async () => {
     if (!user || !scanResult) return;
+    // What is logged is what the athlete sees in the fields above — the
+    // estimate prefilled them, but a correction here is what lands in the log.
+    const edits = scanEdits ?? {
+      name: scanResult.name || "Scanned meal",
+      calories: scanResult.calories !== undefined ? String(scanResult.calories) : "",
+      protein: scanResult.protein !== undefined ? String(scanResult.protein) : "",
+      carbs: scanResult.carbs !== undefined ? String(scanResult.carbs) : "",
+      fat: scanResult.fat !== undefined ? String(scanResult.fat) : "",
+    };
+    const toNum = (v: string): number | null => {
+      const n = Number(v);
+      return v.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : null;
+    };
     const { error } = await supabase.from("meal_logs").insert({
-      user_id: user.id, name: scanResult.name || "Scanned Meal", calories: scanResult.calories || null,
-      protein_g: scanResult.protein || null, carbs_g: scanResult.carbs || null, fat_g: scanResult.fat || null,
+      user_id: user.id, name: edits.name.trim().slice(0, 80) || "Scanned meal", calories: toNum(edits.calories),
+      protein_g: toNum(edits.protein), carbs_g: toNum(edits.carbs), fat_g: toNum(edits.fat),
       meal_type: "meal", log_date: today,
     });
     if (error) { toast({ title: "Couldn't save the scanned meal", description: error.message, variant: "destructive" }); return; }
-    setScanResult(null); setShowScan(false);
+    setScanResult(null); setScanEdits(null); setShowScan(false);
     setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    setNutriTab("today");
     fetchMeals();
     toast({ title: "Scanned meal logged!" });
   };
@@ -568,6 +638,8 @@ const Nutrition = () => {
     const { intake, targets, title } = draft;
     const weeks = Math.max(1, Math.min(12, intake.weeks));
     setWritingPlan(true);
+    setPlanWaitHidden(false);
+    setPlanWaitWeeks(weeks);
 
     try {
       const { error: intakeError } = await supabase.from("user_settings").upsert({
@@ -692,12 +764,57 @@ const Nutrition = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {writingPlan && !planWaitHidden && (
+        <PlanGenerationProgress weeks={planWaitWeeks} onHide={() => setPlanWaitHidden(true)} />
+      )}
+      {writingPlan && planWaitHidden && (
+        <div className="px-5 pt-[var(--vaylo-screen-top)]">
+          <PlanGenerationProgress weeks={planWaitWeeks} variant="inline" />
+        </div>
+      )}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Nutrition</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Fuel your performance.</motion.p>
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="px-5">
+      {/* One job per tab. 44px floors, one active pill — the same segmented
+          control shape the rest of the app uses for two-option switches. */}
+      <div className="px-5" role="tablist" aria-label="Nutrition sections">
+        <div className="grid grid-cols-4 gap-1 rounded-2xl border border-border bg-card p-1">
+          {([
+            ["today", "Today"],
+            ["scan", "Scan"],
+            ["plans", "Plans"],
+            ["review", "Review"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={nutriTab === id}
+              onClick={() => { setNutriTab(id); if (id === "scan") setShowScan(true); }}
+              className={`min-h-[44px] rounded-xl text-sm font-semibold transition-colors ${
+                nutriTab === id ? "bg-gradient-primary text-primary-foreground shadow-glow" : "text-muted-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Under-18 refusal, stated once above the tabs rather than only in a
+          toast after a tap. */}
+      {!isAdultDob(profile?.date_of_birth) && (
+        <div className="px-5">
+          <p className="text-xs text-muted-foreground flex items-start gap-1 mt-3 mb-1">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
+            <span>{disclaimerShort("minor")}</span>
+          </p>
+        </div>
+      )}
+
+      {nutriTab === "today" && (
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="px-5 pt-4">
         {/* Hydration */}
         <div className="bg-card border border-border rounded-2xl p-4 mb-4 hover:border-electric-purple/20 transition-colors duration-300">
           <div className="flex items-center justify-between mb-3">
@@ -747,26 +864,63 @@ const Nutrition = () => {
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex gap-3 mb-5">
-          <motion.button whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              if (!canScanCalories) {
-                toast({ title: "Age restriction", description: CALORIE_SCAN_REFUSAL, variant: "destructive" });
-                return;
-              }
-              setShowScan(!showScan);
-            }}
-            aria-disabled={!canScanCalories}
-            className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3 rounded-xl ${canScanCalories ? "bg-gradient-primary text-primary-foreground shadow-glow" : "bg-muted text-muted-foreground"}`}>
-            <Camera size={18} /> Scan ({creditCost("calorie_scan")} <Zap size={12} className="inline" />)
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.98 }} onClick={() => setShowCreatePlan(!showCreatePlan)}
-            className="flex-1 flex items-center justify-center gap-2 bg-card border border-border text-foreground font-semibold py-3 rounded-xl hover:border-electric-purple/20 transition-colors">
-            <FileText size={18} /> Plan ({creditCost("nutrition_plan_week")} <Zap size={12} className="inline" />/wk)
-          </motion.button>
+        {/* Log Meal */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">Today's meals</h3>
+          <button onClick={() => setShowAddMeal(!showAddMeal)} className="text-xs text-electric-purple font-semibold min-h-[44px] px-2"><Plus size={14} className="inline" /> Add meal</button>
         </div>
 
+        {showAddMeal && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-4">
+            <input type="text" placeholder="Meal name *" value={mealName} onChange={e => setMealName(e.target.value)} className={inputClass} />
+            <div className="flex gap-1.5 flex-wrap">
+              {["breakfast", "lunch", "dinner", "snack", "pre-workout", "post-workout"].map(t => (
+                <button key={t} onClick={() => setMealType(t)} className={`px-2 py-1.5 min-h-[36px] text-[12px] capitalize ${mealType === t ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"} rounded-lg border`}>{t}</button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" placeholder="Calories" value={mealCalories} onChange={e => setMealCalories(e.target.value)} className={inputClass} />
+              <input type="number" placeholder="Protein (g)" value={mealProtein} onChange={e => setMealProtein(e.target.value)} className={inputClass} />
+              <input type="number" placeholder="Carbs (g)" value={mealCarbs} onChange={e => setMealCarbs(e.target.value)} className={inputClass} />
+              <input type="number" placeholder="Fat (g)" value={mealFat} onChange={e => setMealFat(e.target.value)} className={inputClass} />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddMeal(false)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground min-h-[44px]">Cancel</button>
+              <motion.button onClick={addMeal} disabled={!mealName.trim() || saving} whileTap={{ scale: 0.98 }}
+                className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl disabled:opacity-40 shadow-glow min-h-[44px]">Log meal</motion.button>
+            </div>
+          </motion.div>
+        )}
+
+        <div ref={mealsRef} className="space-y-2 mb-5">
+          {meals.map((meal, i) => (
+            <motion.div key={meal.id} initial={{ opacity: 0, x: -10 }} animate={mealsInView ? { opacity: 1, x: 0 } : {}} transition={{ delay: i * 0.05 }}
+              className="bg-card border border-border rounded-xl p-3 flex items-center justify-between hover:border-electric-purple/20 transition-colors">
+              <div>
+                <span className="text-sm font-semibold">{meal.name}</span>
+                <p className="text-[12px] text-muted-foreground capitalize">{meal.meal_type} · {meal.calories ? `${meal.calories} kcal` : ""}{meal.protein_g ? ` · ${meal.protein_g}g P` : ""}</p>
+              </div>
+              <button onClick={() => deleteMeal(meal.id, meal.name)} aria-label={`Delete meal: ${meal.name}`} disabled={deleting} className="text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={14} aria-hidden /></button>
+            </motion.div>
+          ))}
+          {meals.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No meals logged today.</p>}
+        </div>
+
+        {/* Shortcuts into the other tabs, so Today stays a summary rather than
+            growing its buttons back. */}
+        <div className="flex gap-2 mb-8">
+          <button onClick={() => { if (!canScanCalories) { toast({ title: "Age restriction", description: CALORIE_SCAN_REFUSAL, variant: "destructive" }); return; } setNutriTab("scan"); setShowScan(true); }} className="flex-1 flex items-center justify-center gap-2 bg-card border border-border font-semibold py-3 rounded-xl min-h-[48px] text-sm">
+            <Camera size={16} /> Scan a meal
+          </button>
+          <button onClick={() => setNutriTab("review")} className="flex-1 flex items-center justify-center gap-2 bg-card border border-border font-semibold py-3 rounded-xl min-h-[48px] text-sm">
+            <UtensilsCrossed size={16} /> Review my week
+          </button>
+        </div>
+      </motion.div>
+      )}
+
+      {nutriTab === "review" && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-4">
         {/* AI food review. A reading of the week's log against the training the
             athlete is actually doing — not a diet plan, and deliberately not a
             target to hit. The disclaimer is the same one the plan carries. */}
@@ -851,12 +1005,19 @@ const Nutrition = () => {
             </motion.div>
           )}
         </div>
+      </motion.div>
+      )}
 
-        {/* Scan UI with image upload */}
+      {nutriTab === "scan" && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-4">
+        {/* Scan UI with image upload. The tab itself opens the panel (see the
+            tab bar), so there is no separate collapsed state to discover. */}
         {showScan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-electric-purple/20 rounded-2xl p-4 space-y-3 mb-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan Food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; }); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
-            <p className="text-xs text-muted-foreground">Take a photo there and then, or upload one you already have. Our AI will estimate calories and macros.</p>
+            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanEdits(null); setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; }); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">1.</span> Photograph the plate · <span className="font-semibold text-foreground">2.</span> check the estimate · <span className="font-semibold text-foreground">3.</span> log it. Each scan costs {creditCost("calorie_scan")} credits; a failed scan is refunded automatically.
+            </p>
             {/* Camera: `capture` asks the device for the camera. */}
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanImage} className="hidden" />
             {/* Upload: no `capture`, so this is the gallery / file picker. */}
@@ -891,10 +1052,26 @@ const Nutrition = () => {
             {scanResult && (
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                 className="bg-gradient-card border border-electric-purple/20 rounded-xl p-4">
-                <h4 className="font-semibold text-sm mb-1">{scanResult.name}</h4>
-                {scanResult.description && <p className="text-xs text-muted-foreground mb-2">{scanResult.description}</p>}
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h4 className="font-semibold text-sm">{scanResult.name}</h4>
+                  {scanResult.confidence && (
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      scanResult.confidence === "high" ? "bg-emerald-500/10 text-emerald-300"
+                      : scanResult.confidence === "low" ? "bg-amber-500/10 text-amber-300"
+                      : "bg-muted text-muted-foreground"
+                    }`}>
+                      {scanResult.confidence === "high" ? "Confident estimate" : scanResult.confidence === "low" ? "Rough estimate — check it" : "Fair estimate"}
+                    </span>
+                  )}
+                </div>
+                {scanResult.description && <p className="text-xs text-muted-foreground mb-1">{scanResult.description}</p>}
+                {(scanResult.serving !== undefined || scanResult.fiber !== undefined) && (
+                  <p className="text-[11px] text-muted-foreground mb-2">
+                    {[scanResult.serving ? `Portion ~${scanResult.serving}` : null, scanResult.fiber !== undefined ? `Fibre ${scanResult.fiber}g` : null].filter(Boolean).join(" · ")}
+                  </p>
+                )}
                 {scanResult.verdict && (
-                  <div className={`mb-2 rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                  <div className={`mb-3 rounded-xl px-3 py-2 text-xs leading-relaxed ${
                     scanResult.verdict === "fuel" ? "bg-emerald-500/10 text-emerald-300"
                     : scanResult.verdict === "light" ? "bg-amber-500/10 text-amber-300"
                     : "bg-electric-purple/10 text-electric-purple"
@@ -905,29 +1082,71 @@ const Nutrition = () => {
                     {scanResult.verdict_reason && <span> — {scanResult.verdict_reason}</span>}
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-2 mb-3 sm:grid-cols-4">
-                  <div className="text-center"><p className="text-xs text-muted-foreground">Cal</p><p className="text-sm font-bold">{scanResult.calories}</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">P</p><p className="text-sm font-bold">{scanResult.protein}g</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">C</p><p className="text-sm font-bold">{scanResult.carbs}g</p></div>
-                  <div className="text-center"><p className="text-xs text-muted-foreground">F</p><p className="text-sm font-bold">{scanResult.fat}g</p></div>
+                {/* The estimate is a starting point, not a verdict: a photo cannot
+                    weigh the plate. Whatever stands here is what gets logged. */}
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Check before you log</p>
+                <div className="space-y-2 mb-3">
+                  <input
+                    aria-label="Meal name"
+                    value={scanEdits?.name ?? ""}
+                    onChange={(e) => setScanEdits((prev) => ({ ...(prev ?? { name: "", calories: "", protein: "", carbs: "", fat: "" }), name: e.target.value }))}
+                    className={inputClass}
+                  />
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {([
+                      ["calories", "Calories"],
+                      ["protein", "Protein (g)"],
+                      ["carbs", "Carbs (g)"],
+                      ["fat", "Fat (g)"],
+                    ] as const).map(([key, label]) => (
+                      <label key={key} className="block">
+                        <span className="mb-0.5 block text-[11px] text-muted-foreground">{label}</span>
+                        <input
+                          type="number" min={0} inputMode="decimal"
+                          aria-label={label}
+                          value={scanEdits?.[key] ?? ""}
+                          onChange={(e) => setScanEdits((prev) => ({ ...(prev ?? { name: "", calories: "", protein: "", carbs: "", fat: "" }), [key]: e.target.value }))}
+                          className={inputClass}
+                        />
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <motion.button onClick={addScanResult} whileTap={{ scale: 0.98 }} className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2 rounded-xl text-sm">Log This Meal</motion.button>
+                <motion.button onClick={addScanResult} whileTap={{ scale: 0.98 }} className="w-full bg-electric-purple/10 text-electric-purple font-semibold py-2.5 rounded-xl text-sm min-h-[44px]">Log this meal</motion.button>
               </motion.div>
             )}
           </motion.div>
         )}
-
-        {/* Under-18 refusal, stated where the plan button is rather than only in
-            a toast after a tap. */}
-        {!isAdultDob(profile?.date_of_birth) && (
-          <p className="text-xs text-muted-foreground flex items-start gap-1 mb-5">
-            <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
-            <span>{disclaimerShort("minor")}</span>
-          </p>
+        {!showScan && !scanResult && !scanning && (
+          <button onClick={() => setShowScan(true)} className="w-full mt-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow min-h-[48px] text-sm">
+            <Camera size={16} /> Scan a meal ({creditCost("calorie_scan")} credits)
+          </button>
         )}
+      </motion.div>
+      )}
 
+      {nutriTab === "plans" && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-4">
         {/* Build a plan: the questionnaire asks what decides an intake, and the
             recommendation panel answers the target question itself. */}
+        {!showCreatePlan && plans.length === 0 && (
+          <div className="bg-gradient-card border border-electric-purple/20 rounded-2xl p-5 mb-4 text-center">
+            <FileText size={22} className="mx-auto text-electric-purple" />
+            <h3 className="font-display font-bold mt-2">Eat for your training</h3>
+            <p className="text-xs text-muted-foreground mt-1 mb-3 leading-relaxed">
+              A week-by-week plan built around your goal, training days and foods you avoid — {creditCost("nutrition_plan_week")} credits per week.
+            </p>
+            <motion.button whileTap={{ scale: 0.98 }} onClick={() => setShowCreatePlan(true)}
+              className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow min-h-[48px] text-sm">
+              Build my plan
+            </motion.button>
+          </div>
+        )}
+        {!showCreatePlan && plans.length > 0 && (
+          <button onClick={() => setShowCreatePlan(true)} className="w-full mb-4 flex items-center justify-center gap-2 bg-card border border-border font-semibold py-3 rounded-xl min-h-[48px] text-sm">
+            <Plus size={16} /> Build another plan ({creditCost("nutrition_plan_week")}/wk)
+          </button>
+        )}
         {showCreatePlan && (
           <NutritionPlanWizard
             initial={intakeInitial}
@@ -941,52 +1160,10 @@ const Nutrition = () => {
           />
         )}
 
-        {/* Log Meal */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground">Today's Meals</h3>
-          <button onClick={() => setShowAddMeal(!showAddMeal)} className="text-xs text-electric-purple font-semibold"><Plus size={14} className="inline" /> Add Meal</button>
-        </div>
-
-        {showAddMeal && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-4">
-            <input type="text" placeholder="Meal name *" value={mealName} onChange={e => setMealName(e.target.value)} className={inputClass} />
-            <div className="flex gap-1.5">
-              {["breakfast", "lunch", "dinner", "snack", "pre-workout", "post-workout"].map(t => (
-                <button key={t} onClick={() => setMealType(t)} className={`px-2 py-1 text-[12px] capitalize ${mealType === t ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"} rounded-lg border`}>{t}</button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="number" placeholder="Calories" value={mealCalories} onChange={e => setMealCalories(e.target.value)} className={inputClass} />
-              <input type="number" placeholder="Protein (g)" value={mealProtein} onChange={e => setMealProtein(e.target.value)} className={inputClass} />
-              <input type="number" placeholder="Carbs (g)" value={mealCarbs} onChange={e => setMealCarbs(e.target.value)} className={inputClass} />
-              <input type="number" placeholder="Fat (g)" value={mealFat} onChange={e => setMealFat(e.target.value)} className={inputClass} />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowAddMeal(false)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground">Cancel</button>
-              <motion.button onClick={addMeal} disabled={!mealName.trim() || saving} whileTap={{ scale: 0.98 }}
-                className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl disabled:opacity-40 shadow-glow">Log Meal</motion.button>
-            </div>
-          </motion.div>
-        )}
-
-        <div ref={mealsRef} className="space-y-2 mb-5">
-          {meals.map((meal, i) => (
-            <motion.div key={meal.id} initial={{ opacity: 0, x: -10 }} animate={mealsInView ? { opacity: 1, x: 0 } : {}} transition={{ delay: i * 0.05 }}
-              className="bg-card border border-border rounded-xl p-3 flex items-center justify-between hover:border-electric-purple/20 transition-colors">
-              <div>
-                <span className="text-sm font-semibold">{meal.name}</span>
-                <p className="text-[12px] text-muted-foreground capitalize">{meal.meal_type} · {meal.calories ? `${meal.calories} kcal` : ""}{meal.protein_g ? ` · ${meal.protein_g}g P` : ""}</p>
-              </div>
-              <button onClick={() => deleteMeal(meal.id, meal.name)} aria-label={`Delete meal: ${meal.name}`} disabled={deleting} className="text-muted-foreground hover:text-destructive"><Trash2 size={14} aria-hidden /></button>
-            </motion.div>
-          ))}
-          {meals.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No meals logged today.</p>}
-        </div>
-
         {/* Nutrition Plans */}
         {plans.length > 0 && (
           <div className="mb-8">
-            <h3 className="text-sm font-semibold text-muted-foreground mb-3">Your Plans</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3">Your plans</h3>
             <div className="space-y-2">
               {plans.map((plan, i) => (
                 <motion.div key={plan.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
@@ -1016,6 +1193,7 @@ const Nutrition = () => {
           </div>
         )}
       </motion.div>
+      )}
     </div>
   );
 };

@@ -35,7 +35,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   MapPin,
-  Watch,
   Users,
   ChevronDown,
   type LucideIcon,
@@ -110,7 +109,6 @@ const navGroups: NavGroup[] = [
     icon: HeartPulse,
     items: [
       { icon: HeartPulse, labelKey: "sidebar.recovery", path: "/recovery" },
-      { icon: Watch, labelKey: "sidebar.wearables", path: "/health-sync" },
       { icon: Apple, labelKey: "sidebar.nutrition", path: "/nutrition" },
       { icon: Brain, labelKey: "sidebar.mental", path: "/mental" },
       { icon: ShieldAlert, labelKey: "sidebar.injury", path: "/injury" },
@@ -228,8 +226,7 @@ const AppSidebar = () => {
         }))
         // Launch flags, applied after personalisation so a feature that is off
         // for the build cannot reappear because the athlete's sport happens to
-        // match it. Without this the sidebar would link to /health-sync, which
-        // now redirects to /recover — a menu entry that bounces.
+        // match it. A route that is flagged off must not stay in the menu.
         .filter((it) => isRouteVisible(it.path));
       if (items.length === 0) return null; // whole group irrelevant
       return {

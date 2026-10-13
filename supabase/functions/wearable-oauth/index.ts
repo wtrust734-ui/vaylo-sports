@@ -523,17 +523,16 @@ Deno.serve(async (req) => {
     //   2. Android user agent → the app's own scheme, so the return link lands
     //      INSIDE the app: the custom tab follows the Location through the
     //      manifest intent-filter, appUrlOpen fires, and parseDeepLink routes
-    //      `?wearable=` to /health-sync.
+    //      `?wearable=` to /profile.
     //   3. PUBLIC_APP_URL (the secret link-preview and waitlist-campaigns
-    //      already use) + /health-sync, so web lands on the page that reads
-    //      the params back.
+    //      already use) + /profile, so web lands on the Health Connect row.
     // Whatever happens, the fallback is this request's own origin — a target
     // that is unusable must never crash the callback again.
     const isAndroidCallback = /Android/i.test(req.headers.get("user-agent") ?? "");
     const configured = env("WEARABLE_OAUTH_APP_URL");
     const deepLink = "com.vaylosports.app://auth-callback";
     const webBase = (env("PUBLIC_APP_URL") ?? env("VITE_PUBLIC_APP_URL") ?? "").replace(/\/+$/, "");
-    const appTarget = configured ?? (isAndroidCallback ? deepLink : webBase ? `${webBase}/health-sync` : null);
+    const appTarget = configured ?? (isAndroidCallback ? deepLink : webBase ? `${webBase}/profile` : null);
 
     let redirect: URL;
     try {

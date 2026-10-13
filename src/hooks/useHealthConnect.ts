@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   bridgeAvailability,
   bridgeOpenSettings,
@@ -40,6 +41,9 @@ export interface UseHealthConnect {
   /** Stops syncing everywhere and clears this device's stored sync state. */
   disconnect: () => Promise<void>;
   disconnecting: boolean;
+  /** Erases the workouts and samples imported from Health Connect. Separate from disconnecting. */
+  deleteImported: () => Promise<boolean>;
+  deleting: boolean;
   managePermissions: () => Promise<void>;
   clearError: () => void;
 }
@@ -54,6 +58,7 @@ export function useHealthConnect(): UseHealthConnect {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -135,6 +140,44 @@ export function useHealthConnect(): UseHealthConnect {
     }
   }, [user, disconnecting, refresh]);
 
+  const deleteImported = useCallback(async (): Promise<boolean> => {
+    if (!user || deleting) return false;
+    setDeleting(true);
+    setError(null);
+    try {
+      // Erase the rows Vaylo imported for this athlete. Each table is scoped
+      // to the signed-in user, so this can never touch another account.
+      for (const table of ["health_workouts", "health_samples"] as const) {
+        const { error: deleteError } = await supabase
+          .from(table)
+          .delete()
+          .eq("user_id", user.id);
+        if (deleteError) throw new Error(deleteError.message);
+      }
+      // Reset the sync cursor so the next connect starts clean.
+      const { error: resetError } = await supabase.from("health_sync_state").upsert({
+        user_id: user.id,
+        connected: false,
+        last_sync_at: null,
+        last_incremental_cursor: null,
+        synced_workout_count: 0,
+      });
+      if (resetError) throw new Error(resetError.message);
+      try {
+        localStorage.removeItem(`vaylo:hc:state:${user.id}`);
+      } catch {
+        /* private mode: nothing stored to clear */
+      }
+      await refresh();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't delete the imported data.");
+      return false;
+    } finally {
+      setDeleting(false);
+    }
+  }, [user, deleting, refresh]);
+
   const managePermissions = useCallback(async () => {
     await bridgeOpenSettings();
   }, []);
@@ -152,6 +195,8 @@ export function useHealthConnect(): UseHealthConnect {
     sync,
     disconnect,
     disconnecting,
+    deleteImported,
+    deleting,
     managePermissions,
     clearError: () => setError(null),
   };

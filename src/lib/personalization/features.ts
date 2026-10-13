@@ -42,7 +42,6 @@ export type FeatureKey =
   | "perform.insights"
   // Recover
   | "recover.recovery"
-  | "recover.wearables"
   | "recover.nutrition"
   | "recover.mental"
   | "recover.injury"
@@ -129,9 +128,8 @@ export const FEATURE_CATALOG: Record<FeatureKey, FeatureDef> = {
   // Recover — injury, mental and nutrition are universal. Every sport breaks,
   // stresses and eats: hiding the nutrition tab from pure-skill athletes made
   // the tab feel missing rather than personal, and fueling matters whatever
-  // the sport. Wearables stay scoped to where readiness data exists.
+  // the sport.
   "recover.recovery": { key: "recover.recovery", families: ["*"], route: "/recovery" },
-  "recover.wearables": { key: "recover.wearables", families: ["endurance", "team", "multi"], route: "/health-sync" },
   "recover.nutrition": { key: "recover.nutrition", families: ["*"], route: "/nutrition" },
   "recover.mental": { key: "recover.mental", families: ["*"], route: "/mental" },
   "recover.injury": { key: "recover.injury", families: ["*"], route: "/injury" },

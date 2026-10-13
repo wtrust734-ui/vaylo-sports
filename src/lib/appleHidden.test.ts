@@ -42,31 +42,12 @@ describe("the flag", () => {
 });
 
 describe("app surfaces", () => {
-  it("gates the HealthKit card", () => {
-    // The single call site. Everything Apple-ish in HealthSync hangs off this
-    // component, so gating the call site gates all of it.
-    const page = read("src/pages/HealthSync.tsx");
-    expect(page).toContain('{isFlagOn("iphone") && <ProviderCard id="healthkit" />}');
-    // Exactly one render site, and it is the guarded one — an unguarded second
-    // call elsewhere on the screen would otherwise slip through.
-    const sites = page.split("\n").filter((l) => l.includes('<ProviderCard id="healthkit" />'));
-    expect(sites).toHaveLength(1);
-    expect(sites[0]).toContain('isFlagOn("iphone")');
-  });
-
-  it("gates the iPhone copy that sits outside the card", () => {
-    const page = read("src/pages/HealthSync.tsx");
-    // Three strings promise the app exists on iPhone. Each must carry the flag
-    // on its own line so a reviewer cannot miss it in a diff.
-    for (const needle of [
-      "on iPhone, use Apple Health below",
-      "Samsung{isFlagOn(\"iphone\") ? \", Apple\" : \"\"}",
-      "on iPhone, Apple Watch syncs via HealthKit automatically",
-    ]) {
-      const line = page.split("\n").find((l) => l.includes(needle));
-      expect(line, `no line containing: ${needle}`).toBeDefined();
-      expect(line, `unguarded Apple copy: ${needle}`).toContain('isFlagOn("iphone")');
-    }
+  it("keeps HealthKit and Apple copy out of the Health Connect sheet", () => {
+    // The Wearables screen (which held the HealthKit card and the iPhone copy)
+    // is gone. The sheet that replaced it is Android-only and must not grow an
+    // unguarded Apple surface.
+    const sheet = read("src/components/health/HealthConnectPrompt.tsx");
+    expect(sheet).not.toMatch(/HealthKit|Apple|iPhone/);
   });
 
   it("gates Apple sign-in", () => {

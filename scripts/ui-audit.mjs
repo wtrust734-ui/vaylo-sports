@@ -200,7 +200,6 @@ const ROUTES = [
   ["referrals", "/referrals"],
   ["challenges", "/challenges"],
   ["friends", "/friends"],
-  ["health-sync", "/health-sync"],
   ["subscription", "/subscription"],
   ["collection", "/collection"],
 ];

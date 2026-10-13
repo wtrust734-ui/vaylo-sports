@@ -77,7 +77,6 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     feature: null,
     items: [
       { feature: "recover.recovery", labelKey: "sidebar.recovery", path: "/recovery", newFirst: true },
-      { feature: "recover.wearables", labelKey: "sidebar.wearables", path: "/health-sync" },
       { feature: "recover.nutrition", labelKey: "sidebar.nutrition", path: "/nutrition" },
       // Mental Gym and Injury Management are one-off purchases: an athlete who
       // has not bought them does not have these entries at all. The Market's

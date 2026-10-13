@@ -153,7 +153,7 @@ describe("profile", () => {
   const page = read(PROFILE);
 
   it("manages Health Connect from the account screen", () => {
-    expect(page).toContain('label: "Wearables"');
+    expect(page).toContain('label: "Health Connect"');
     expect(page).toContain("onClick: () => setShowHealthConnect(true)");
     expect(page).toContain("<HealthConnectPrompt open={showHealthConnect}");
   });

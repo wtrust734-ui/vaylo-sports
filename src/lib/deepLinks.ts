@@ -94,7 +94,9 @@ export function parseDeepLink(rawUrl: string): ParsedDeepLink {
       const value = url.searchParams.get(key);
       if (value && /^[a-z0-9_:]{0,64}$/.test(value)) params.set(key, value);
     }
-    return { path: `/health-sync?${params.toString()}`, isAuthCallback: false };
+    // Health Connect lives on the Profile screen now (the Wearables row), so a
+    // wearable return lands there, not on the retired Wearables page.
+    return { path: `/profile?${params.toString()}`, isAuthCallback: false };
   }
 
   const hash = url.hash.replace(/^#/, "");

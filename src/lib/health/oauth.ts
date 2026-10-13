@@ -56,9 +56,9 @@ export async function oauthStatus(
 
 /**
  * Where the edge callback's payload can live, depending on the shell:
- *   web   — the real query:   /health-sync?wearable=garmin&connected=1
+ *   web   — the real query:   /profile?wearable=garmin&connected=1
  *   native — HashRouter keeps the query INSIDE the fragment:
- *           http://localhost/index.html#/health-sync?wearable=garmin&connected=1
+ *           http://localhost/index.html#/profile?wearable=garmin&connected=1
  * URL.searchParams only sees the first shape, so on Android the second one has
  * to be read out of the hash — otherwise the connection succeeds server-side
  * and the page stays silent.
@@ -73,7 +73,7 @@ function redirectParams(url: string): URLSearchParams {
 
 /**
  * Parses a deep-link or redirect URL that carries `?wearable=garmin&connected=1`
- * (set by the edge callback) so the HealthSync page can toast and refresh
+ * (set by the edge callback) so the Profile screen can toast and refresh
  * without polling. Reads both locations (see redirectParams).
  */
 export function parseWearableRedirect(url: string): {

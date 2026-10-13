@@ -24,7 +24,7 @@ const OAUTH = "/src/lib/nativeOAuth.ts";
 const APP = "/src/App.tsx";
 const SYNC = "/src/lib/health/sync.ts";
 const HOOK = "/src/hooks/useHealthConnect.ts";
-const HC_PAGE = "/src/pages/HealthSync.tsx";
+const HC_PAGE = "/src/components/health/HealthConnectPrompt.tsx";
 const BRIDGE = "/src/lib/health/bridge.ts";
 const NUTRITION = "/src/pages/Nutrition.tsx";
 

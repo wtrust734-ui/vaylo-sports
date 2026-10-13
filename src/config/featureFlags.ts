@@ -17,7 +17,7 @@
 //   marketplace reads as "nobody uses this". Flip on when the coach roster is
 //   seeded and you're ready to sell it.
 //
-//   wearableSync — /health-sync and every entry point to it. ON, because the
+//   wearableSync — the Health Connect sheet (Profile and sign-up). ON, because the
 //   Health Connect path is complete and shipping: the native plugin, the six
 //   read permissions and the incremental pull. Every other provider stays
 //   declared in src/lib/health/providers.ts as structure for later, but only
@@ -48,7 +48,7 @@
 // ============================================================================
 
 //   iphone — everything that presents Apple as a platform: the HealthKit card
-//   and its iPhone copy on the Wearables screen, "Continue with Apple" on the
+//   and its iPhone copy (both retired with the Wearables screen), "Continue with Apple" on the
 //   sign-in screen, the Apple mention in the Recover hub copy, and the Apple
 //   mentions on the website's privacy page. OFF until Vaylo Sports ships an
 //   iPhone build. Hiding it is not a branding preference — a screen telling an
@@ -113,9 +113,7 @@ export const isFlagOn = (key: FeatureFlagKey): boolean => FEATURE_FLAGS[key];
  * menu entry pointing at a redirected page. Filtering by path means a new entry
  * point is covered by construction, as long as it routes here.
  */
-export const FLAGGED_ROUTES: Record<string, FeatureFlagKey> = {
-  "/health-sync": "wearableSync",
-};
+export const FLAGGED_ROUTES: Record<string, FeatureFlagKey> = {};
 
 export const isRouteVisible = (path: string): boolean => {
   const key = FLAGGED_ROUTES[path];

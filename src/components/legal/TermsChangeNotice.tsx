@@ -142,8 +142,13 @@ const TermsChangeNotice = () => {
       /* Above the tab bar's z-50 and clear of it: bottom-anchored content has to
          clear the floating bar's own height plus the device inset, or the
          Accept button ends up underneath the navigation. On large screens the
-         bar is not rendered, so the offset is small. */
-      className="fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.5rem)] z-[65] lg:inset-x-auto lg:right-6 lg:bottom-6 lg:max-w-md"
+         phone tab bar is hidden but the centred QuickCommandBar (`lg:block`,
+         z-40) takes its place. That bar is `max-w-md` and centred, so at 1024px
+         it spans x 288-736 and this card, pinned to the right, spans 552-1000:
+         they overlap horizontally. The `lg` offset therefore has to clear the
+         command bar's ~100px height plus its raised centre button, not just the
+         1.5rem gutter. */
+      className="fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.5rem)] z-[65] lg:inset-x-auto lg:right-6 lg:bottom-[calc(var(--vaylo-inset-bottom)+7.5rem)] lg:max-w-md"
     >
       <div className="rounded-2xl border border-primary/40 bg-card/95 p-4 shadow-lg backdrop-blur">
         <div className="flex items-start gap-3">
