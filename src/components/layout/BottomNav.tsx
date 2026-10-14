@@ -47,25 +47,32 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
       // element outside the viewport, in any language.
       className="press relative flex min-w-[48px] min-h-[56px] flex-1 flex-col items-center justify-center gap-1 overflow-hidden px-2 py-2 max-[400px]:px-1"
     >
-      {/* Native active marker: a short top bar, iOS-style. The old filled
-          pill behind the whole tab read as a web chip; a real tab bar tints
-          icon + label and marks the active one with a hairline, nothing more.
-          No layout animation here on purpose — the tint swaps instantly like a
-          native tab, and the tactile tick comes from haptics on press. */}
+      {/* Native active marker: a Material-3 style pill hugging the icon. The
+          short bar floating at the tab's top edge read as detached — a stray
+          blue dash hovering over the icon rather than part of it. The pill
+          wraps the icon itself, so the selected state is unmistakably
+          attached to its tab. No layout animation on purpose: the state swaps
+          instantly like a native tab, and the tactile tick comes from haptics
+          on press. */}
+      {/* `px-3` (not a fixed width): the pill hugs the 22px icon at 46px,
+          inside the tab's 48px floor. A fixed `w-16` pill set each tab's
+          min-content to 64px and pushed the Profile tab 48px off a 320px
+          screen — caught by `ui:check` on phone-320. `max-w-full` keeps the
+          pill inside tabs narrower than the hug width in any language. */}
       <span
         aria-hidden
-        style={{ height: 3 }}
-        className={`absolute top-0 w-8 rounded-full transition-opacity duration-150 ${
-          isActive ? "bg-primary opacity-100" : "opacity-0"
+        className={`relative z-10 flex h-8 w-auto max-w-full items-center justify-center rounded-full px-3 transition-colors duration-150 ${
+          isActive ? "bg-primary/15" : "bg-transparent"
         }`}
-      />
-      <Icon
-        size={22}
-        strokeWidth={isActive ? 2.25 : 2}
-        className={`relative z-10 transition-colors duration-150 ${
-          isActive ? "text-primary" : "text-muted-foreground/60"
-        }`}
-      />
+      >
+        <Icon
+          size={22}
+          strokeWidth={isActive ? 2.25 : 2}
+          className={`transition-colors duration-150 ${
+            isActive ? "text-primary" : "text-muted-foreground/60"
+          }`}
+        />
+      </span>
       <span
         // `w-full` so the truncation happens against the tab's real width
         // rather than the label's own max-content, which is what let the row

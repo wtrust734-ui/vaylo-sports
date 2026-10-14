@@ -46,6 +46,7 @@ const CoachStudio = lazy(() => import("./pages/CoachStudio"));
 const CoachSignup = lazy(() => import("./pages/CoachSignup"));
 
 import OfflineBanner from "@/components/OfflineBanner";
+import BootVeil from "@/components/BootVeil";
 import TermsChangeNotice from "@/components/legal/TermsChangeNotice";
 
 import Auth from "./pages/Auth";
@@ -374,6 +375,10 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
     <TooltipProvider delayDuration={isTouchUI() ? 1500 : 300}>
       <Sonner />
+      {/* Smooth boot handoff: holds the brand mark a beat, then crossfades
+          into the app instead of popping. Mounted outside the Router — it
+          never navigates — and above everything while up. */}
+      <BootVeil />
       <Router {...routerProps}>
         {/* Inside the Router: this component now uses useNavigate() for deep
             links, and react-router throws on router hooks rendered outside

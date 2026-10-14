@@ -163,18 +163,24 @@ const DailyTrainingCard = () => {
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
       <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl opacity-20 sm:opacity-25 hidden sm:block" style={{ background: "radial-gradient(circle at center, hsl(var(--primary) / 0.35), transparent 68%)" }} />
       <div className="relative p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-primary shadow-glow animate-pulse-glow" />
-            <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-primary">Today's Schedule</span>
+        {/* Wrap-safe: the label (~140px tracked-out) plus the readiness pill
+            plus the week tag exceed a 320px content box (~248px), so a strict
+            single row squeezed them into each other. The row may now wrap —
+            the week tag drops to its own line — and the label steps down a
+            size on narrow phones instead of forcing it. Nothing truncates: a
+            clipped section header reads as broken, a wrapped one does not. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-primary shadow-glow animate-pulse-glow" />
+            <span className="whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.16em] text-primary max-[400px]:text-[10.5px] max-[400px]:tracking-[0.1em]">Today's Schedule</span>
             {zoneDot && (
-              <span className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+              <span className="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
                 <span className={`h-2 w-2 rounded-full ${zoneDot.color}`} />
                 <span className="text-[12px] font-bold tabular-nums text-muted-foreground">{readiness}/100</span>
               </span>
             )}
           </div>
-          {activePlan && <span className="text-[12px] font-medium tabular-nums text-muted-foreground">Week {planWeekOf(activePlan)}/{activePlan.duration_weeks}</span>}
+          {activePlan && <span className="shrink-0 text-[12px] font-medium tabular-nums text-muted-foreground">Week {planWeekOf(activePlan)}/{activePlan.duration_weeks}</span>}
         </div>
 
         {activeBreak && (

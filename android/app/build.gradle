@@ -285,9 +285,18 @@ android {
         // selection on chrome, iOS field zoom). WebView + CSS only — no
         // manifest, permission or plugin change.
         //
+        // 40 / 1.2.36 is the smooth-launch + layout-truth release. Boot no
+        // longer pops: a brand veil holds a beat then crossfades into the
+        // app, and the green "Synced" banner stays silent for the first 8s
+        // (the launch drain is not news). The tab bar's active marker is a
+        // pill hugging the icon instead of a bar floating above it, and the
+        // Today's Schedule + Equipment Tracker headers wrap instead of
+        // squeezing on 320px phones. WebView + CSS only — no manifest,
+        // permission or plugin change.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 39
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.35"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 40
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.36"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -9,7 +9,7 @@ import {
 } from "@/lib/offlineQueue";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { useAuth } from "@/contexts/AuthContext";
-import { syncNeedsAttention, type SyncState, type SyncTone } from "@/lib/syncStatus";
+import { inBootGrace, syncNeedsAttention, type SyncState, type SyncTone } from "@/lib/syncStatus";
 
 /**
  * The app's one offline and sync surface.
@@ -65,6 +65,12 @@ const OfflineBanner = () => {
   // "synced" — flashing then would drop a banner over the app on every launch,
   // which is the opposite of the confirmation this is for.
   const previousState = useRef<SyncState | null>(null);
+  // When this mount started. The queue drains ~1.2s after every launch, and
+  // without a grace window that drain resolves into a green "Synced" banner
+  // over the home screen on every single open — the green flash at the top
+  // right after loading. A confirmation for work the athlete did not do is
+  // boot noise, so the flash stays silent until the launch is no longer fresh.
+  const mountedAt = useRef<number>(Date.now());
 
   useEffect(() => subscribeToQueue(() => setConflicted(pendingConflicts())), []);
 
@@ -72,6 +78,7 @@ const OfflineBanner = () => {
     const previous = previousState.current;
     previousState.current = sync.state;
     if (previous === null || sync.state !== "synced") return;
+    if (inBootGrace(mountedAt.current, Date.now())) return;
     setFlashSynced(true);
     const timer = window.setTimeout(() => setFlashSynced(false), 2600);
     return () => window.clearTimeout(timer);

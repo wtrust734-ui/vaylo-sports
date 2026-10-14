@@ -157,9 +157,14 @@ const MetricsHub = () => {
 
       <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
         className="p-5 rounded-2xl bg-card/40 border border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div><h3 className="font-semibold">Equipment Tracker</h3><p className="text-xs text-muted-foreground">Rotate gear before it kills your performance.</p></div>
-          <Button size="sm" onClick={() => setShowForm(!showForm)}><Plus size={14} className="mr-1" /> Add</Button>
+        {/* items-start + min-w-0: the subtitle wraps to three lines on a
+            320px phone, and a centred Add button beside a three-line block
+            sat at the block's middle with the text crushed against it. The
+            button now pins to the top corner and the copy gets the full
+            remaining width. */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0 flex-1"><h3 className="font-semibold">Equipment Tracker</h3><p className="text-xs text-muted-foreground">Rotate gear before it kills your performance.</p></div>
+          <Button size="sm" className="shrink-0" onClick={() => setShowForm(!showForm)}><Plus size={14} className="mr-1" /> Add</Button>
         </div>
 
         {showForm && (

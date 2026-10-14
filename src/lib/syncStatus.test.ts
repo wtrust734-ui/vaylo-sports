@@ -7,8 +7,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  BOOT_FLASH_GRACE_MS,
   EMPTY_SYNC_FACTS,
   deriveSyncState,
+  inBootGrace,
   syncNeedsAttention,
   syncStatusCopy,
   type SyncFacts,
@@ -105,5 +107,19 @@ describe("syncNeedsAttention", () => {
     expect(syncNeedsAttention("syncing")).toBe(false);
     expect(syncNeedsAttention("synced")).toBe(false);
     expect(syncNeedsAttention("idle")).toBe(false);
+  });
+});
+
+describe("inBootGrace", () => {
+  it("silences the Synced flash while the launch drain is still resolving", () => {
+    // The queue drains ~1.2s after launch: without the grace window that
+    // drain becomes a green banner on every open.
+    expect(inBootGrace(0, 1200)).toBe(true);
+    expect(inBootGrace(0, BOOT_FLASH_GRACE_MS - 1)).toBe(true);
+  });
+
+  it("lets genuine mid-session confirmations through once boot is over", () => {
+    expect(inBootGrace(0, BOOT_FLASH_GRACE_MS)).toBe(false);
+    expect(inBootGrace(0, BOOT_FLASH_GRACE_MS + 60_000)).toBe(false);
   });
 });

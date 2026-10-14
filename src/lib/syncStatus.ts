@@ -137,3 +137,18 @@ export function syncStatusCopy(state: SyncState, facts: SyncFacts): SyncCopy {
 export function syncNeedsAttention(state: SyncState): boolean {
   return state === "offline" || state === "error";
 }
+
+/**
+ * How long after launch the "Synced" confirmation stays silent.
+ *
+ * The queue drains ~1.2s after every launch, so without this the app drops a
+ * green "Synced" banner over the home screen on every single open — a
+ * confirmation for work the athlete did not do, arriving exactly when they
+ * are orienting. Nobody opens an app to be told nothing happened.
+ */
+export const BOOT_FLASH_GRACE_MS = 8000;
+
+/** True while the launch is still fresh enough that a sync flash is boot noise. */
+export function inBootGrace(mountedAtMs: number, nowMs: number): boolean {
+  return nowMs - mountedAtMs < BOOT_FLASH_GRACE_MS;
+}
