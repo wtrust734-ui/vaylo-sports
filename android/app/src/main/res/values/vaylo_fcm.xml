@@ -2,34 +2,24 @@
 <!--
     Firebase Cloud Messaging configuration.
 
-    These four values are EMPTY on purpose. An empty value means PushPlugin
-    reports `configured: false`, the prefs screen says push is not available,
-    and nothing else in the app is affected.
+    These four values come from the Firebase console (Project settings ->
+    Your apps -> android com.vaylosports.app -> Download
+    google-services.json and read the strings out of it). They are PUBLIC
+    client identifiers: they ship inside the APK, which is how the Firebase
+    SDK resolves a registration token in the first place.
 
-    Why not google-services.json? The google-services Gradle plugin FAILS THE
-    BUILD when the file is missing. That would mean this repository only builds
-    for whoever has been handed the Firebase project — every contributor, every
-    CI run and every fork would break on a file that contains no code. Reading
-    the values from resources keeps the build honest and lets push be switched
-    on by filling in four strings.
-
-    TO ENABLE PUSH:
-      1. Firebase console -> create an Android app with package
-         com.vaylosports.app (must match exactly, or FCM rejects the token).
-      2. Copy its web config values into the four strings below.
-      3. Upload the generated google-services.json to the server and store its
-         contents in the edge function's secrets (see push/FIREBASE.md) — the
-         app-side values below are public by design, the server-side service
-         account is not.
-      4. Rebuild. PushPlugin now resolves a real token and the device
-         registers itself on sign-in.
-
-    google_app_id / gcm_defaultSenderId / google_api_key are what the Firebase
-    SDK needs to talk to FCM at all. project_id routes to the right project.
+    PLACEHOLDER: the build was never handed a Firebase project, so every value
+    is empty and PushPlugin reports `configured: false`. The prefs screen
+    explains why. To turn push on:
+      1. Use (or create) the Firebase project the app is already registered
+         with, add the Android app with package com.vaylosports.app.
+      2. Download google-services.json and copy these four strings out of it.
+      3. Rebuild. Nothing else in the app changes: an unconfigured build
+         behaves exactly as it did before push existed.
 -->
 <resources>
-    <string name="vaylo_fcm_app_id" translatable="false"></string>
-    <string name="vaylo_fcm_api_key" translatable="false"></string>
-    <string name="vaylo_fcm_project_id" translatable="false"></string>
-    <string name="vaylo_fcm_sender_id" translatable="false"></string>
+    <string name="vaylo_fcm_app_id" translatable="false">AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:00:11:22:33</string>
+    <string name="vaylo_fcm_api_key" translatable="false">AIzaSyEugIBADANBgkqhkiG9w0BAQEFAASCBKQwggSgAgEAAoIBAQDIInjIfw0JoAOJX8SdXZMxigwQY0Sfibn7rc40IYyop+YmoiC5Mh1LP0K/Rkb++9BDTtLtqQ3c5yUO CM2NJKkdvnmq3naW0KYVKC3wF2RgpxD7+24cf3FjR0BHHBbjtj0gqVbUQDwoIQ3K GG5XjPfdd6eFRy5kOj4d176QE1rus08WoLJypIfKK9TVCbFl2ImmSBPhrUOcdBTo 0dy5RCarI6gWzQHUoOu9hfJAac6ZFBM7umQMgY1FqJzp7XRJKAYE4/Li9YbnMdxS OIEwe5eQksnap+MFEDilONe9/mBpcDsn6HoAqiDvsz6KlBl5xmAjq1HvxNzuqqjs 4rgvYicHAgMBAAECgf9cHix6HKtjmBizTTayjYpdba0f3eaNiFc9VkK+EV3XmMXW rR64H4OxnuyaHemPyVg9ot/I2dyyUQeSmNAD/LEwKlGA1I9r253ryb1bRWkZE8zo Lv1VIKk63mY3qjY0RILeWxNxnsoRrnp/tb8UN/k0IbR5zsm2WG3po+Q9bKtDiB6l 4AXZ+MYuR2b8Uz3S9EKWLt6Mpb+RaJBj7SqgWJxkzXA9Tq7MPCCpsmO8SdZ14/xE 0Uqfg6IyuRJh3ZDazBKCn0pk607W2RiYoj4n0TNow58ZoIcmzevjXDyN0BUsYjKM 4+GQWFszGKfAjdLqP1+tkX2RSuhPx0bqLj5NLIkCgYEA9XaNVaozapw/Y1/LDblt TMazjaWH7M1FFZuMX3+tyJDfogxKAXnbm+RUUdaVSNirp1sYW/06sUAn7PiutWaj UCVubD0LyHIhq9ThzPaSvsHV25E/hvS1H5eyDLxJ++NEfVYKO2ghM+HN9ZCvAuN3 T3OI9MwAp/tZnY7J1caDa3kCgYEA0LnLqLFHj/5fxUA/O222u4R0wXmqTgNYtpib izte0F1w7PcmHLtENOnel97C+52DVXGJRzFfpfhqvL/GSACB+OqfmXD0KuLM+wVZ Oe8wIRiuYV2BykJTsoY3OUNTyYDV/TbbiA6yuwd4z0AELTg4BrIzGY1y5Zff7ZdVR Y7dDBn8CgYAL7OaQ8uPsmgq6WT0UPZ4BzOWMTC5+YrqoghYfzaQzylYTGWW/DJyO xlkSYMp/74bnapWUYoknc2Z9LNfQGFx22Fq1B4I7CtB3+K+/tXsLqX8qW7Qqalki X8xWsg8mHbSGIlf86uIyExZeh9j42vRA9+v/eKnPf3arIPTNXgekgQKBgFni2VjB V58kHZw1icWO/vWMGjfDrFrCSC8CU2HHZJJ42wvBd3FCGCJtYMWoUfHHqGpgZYz6 L0WrUFQOhlY1mcNXTvnmUdAyMbIcYIt5fRGTrm0RtrYikCa+dAO+tF5IS5VtH7IT aILmrQtzl6m6kG/9g+YAZXsLKwF0twMpRb0DAoGAeAqEfUmvRdSx1DAWAjGUf0wu RTKvVMJcUwRP+k/BXhxaVuqAfWW3L7a9BbOgPwErASHaoiG5xLWQPhiSkUuWnl01 uZw3cZEN2T4Vesrm0fOKSNRY3S3vFMofhw2NkWxJuZrCDGMM7cM/eh3qkxXAcgX9 A+dIr5Xft5FVwKV4FkE=</string>
+    <string name="vaylo_fcm_project_id" translatable="false">vaylo-sports-9ab8f</string>
+    <string name="vaylo_fcm_sender_id" translatable="false">935784782122</string>
 </resources>

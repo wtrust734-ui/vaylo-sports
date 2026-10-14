@@ -53,7 +53,10 @@ interface LocalNotificationsPlugin {
     description?: string;
     importance?: number;
     visibility?: number;
+    sound?: string;
+    vibration?: boolean;
   }) => Promise<void>;
+  deleteChannel?: (args: { id: string }) => Promise<void>;
   schedule: (options: {
     notifications: {
       id: number;
@@ -65,10 +68,12 @@ interface LocalNotificationsPlugin {
        * what makes the OS post the notification on both Android and iOS; the
        * plugin's "no schedule" path is not documented as an immediate show.
        */
-      schedule?: { at: Date; allowWhileIdle?: boolean };
+      schedule?: { at: Date; allowWhileIdle?: boolean; repeats?: boolean };
       extra?: Record<string, unknown>;
     }[];
   }) => Promise<unknown>;
+  getPending: () => Promise<{ notifications: { id: string | number }[] }>;
+  cancel: (options: { notifications: { id: number }[] }) => Promise<void>;
   addListener: (
     eventName: "localNotificationActionPerformed",
     listener: (event: { notification?: { extra?: Record<string, unknown> } }) => void,
@@ -85,11 +90,56 @@ export const LOCAL_CHANNEL_REMINDERS = "vaylo_reminders";
 /** Notification ids must be stable 32-bit ints; this is the "vaylo" namespace. */
 const BASE_ID = 8_100_000;
 
+/**
+ * Stable ids for scheduled (future) notifications, so re-scheduling the same
+ * day overwrites rather than duplicates.
+ *
+ * Morning briefings live in 8_110_000 + MMDD (e.g. Oct 14 -> 8_111_014): one
+ * slot per calendar day, unique within a year, stable across re-schedules.
+ * The reengagement ping owns a single id: each app open cancels and re-arms
+ * it 72h out, so there is never more than one.
+ */
+export const REENGAGEMENT_NOTIFICATION_ID = 8_120_000;
+
+export function morningIdForDate(date: Date): number {
+  const mmdd = (date.getMonth() + 1) * 100 + date.getDate();
+  return 8_110_000 + mmdd;
+}
+
 /** How far ahead the OS is asked to post. Short enough to feel immediate. */
 const POST_DELAY_MS = 1_000;
 
 let permissionAsked = false;
 let channelReady = false;
+
+/**
+ * Channel generation. Bumped to 2 when the channel moved from DEFAULT to
+ * HIGH importance (the heads-up fix, 2026-10-14): Android ignores importance
+ * changes on an existing channel, so the old one must be deleted and
+ * recreated — otherwise every phone that installed before the fix keeps the
+ * silent channel for ever.
+ *
+ * Bumped to 3 with the icon fix: a fresh delete-and-recreate also clears any
+ * per-channel choice the athlete made while the channel was silent (e.g. a
+ * long-press "Silent" from the weeks it never popped), which an in-place
+ * channel would keep honouring for ever.
+ */
+const CHANNEL_VERSION = 3;
+const CHANNEL_VERSION_KEY = "vaylo_channel_v1";
+
+function storedChannelVersion(): number {
+  try {
+    return Number(localStorage.getItem(CHANNEL_VERSION_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function markChannelVersion(): void {
+  try {
+    localStorage.setItem(CHANNEL_VERSION_KEY, String(CHANNEL_VERSION));
+  } catch { /* private mode — migration re-runs, harmlessly */ }
+}
 
 const plugin = async (): Promise<LocalNotificationsPlugin | null> =>
   (await loadPlugin<LocalNotificationsPlugin>("local-notifications")) ?? null;
@@ -117,18 +167,34 @@ async function ensurePermission(p: LocalNotificationsPlugin): Promise<boolean> {
 
 async function ensureChannel(p: LocalNotificationsPlugin): Promise<void> {
   if (channelReady) return;
-  await p
-    .createChannel({
-      id: LOCAL_CHANNEL_REMINDERS,
-      name: "Training reminders",
-      description: "Training plan nudges, streak warnings and challenge deadlines.",
-      importance: 3,
-      visibility: 0,
-    })
-    .catch(() => {
-      // Channel creation fails on old API levels, where the concept does not
-      // exist. The notification still posts, so this is not worth failing on.
-    });
+  // HIGH importance (4) is what makes the notification peek from the top of
+  // the screen with sound instead of landing silently in the shade — the
+  // owner report of 2026-10-14 was exactly this: DND off, notification
+  // arrived, but nothing popped. visibility 1 shows the full text on the
+  // lock screen rather than a redacted "contents hidden".
+  const channel = {
+    id: LOCAL_CHANNEL_REMINDERS,
+    name: "Training reminders",
+    description: "Training plan nudges, streak warnings and challenge deadlines.",
+    importance: 4,
+    visibility: 1,
+    vibration: true,
+  };
+  try {
+    if (storedChannelVersion() < CHANNEL_VERSION && p.deleteChannel) {
+      // The pre-fix install already owns this channel id at DEFAULT
+      // importance, and Android keeps the old importance no matter what
+      // createChannel says now. Delete-then-recreate is the only upgrade
+      // path that does not orphan the athlete's per-channel setting under a
+      // new id.
+      await p.deleteChannel({ id: LOCAL_CHANNEL_REMINDERS }).catch(() => {});
+    }
+    await p.createChannel(channel);
+    markChannelVersion();
+  } catch {
+    // Channel creation fails on old API levels, where the concept does not
+    // exist. The notification still posts, so this is not worth failing on.
+  }
   channelReady = true;
 }
 
@@ -160,6 +226,68 @@ export async function showDeviceNotification(
     return "shown";
   } catch {
     return "failed";
+  }
+}
+
+/**
+ * Schedule one notification for a future moment. The OS owns the timer from
+ * here: it fires with the app backgrounded or closed, which is the whole
+ * point — the morning briefing cannot depend on the app being open at 07:10.
+ *
+ * Same id twice overwrites (stable ids per day), never throws, and respects
+ * the same once-per-session permission discipline as the immediate path.
+ */
+export async function scheduleDeviceNotificationAt(
+  notification: DeviceNotification & { at: Date; id: number },
+): Promise<DeviceNotifyOutcome> {
+  if (!deviceNotificationsSupported()) return "unsupported";
+  if (notification.at.getTime() <= Date.now()) return "failed";
+  const p = await plugin();
+  if (!p) return "unsupported";
+  try {
+    if (!(await ensurePermission(p))) return "denied";
+    await ensureChannel(p);
+    await p.schedule({
+      notifications: [
+        {
+          id: notification.id,
+          title: notification.title,
+          body: notification.body,
+          channelId: LOCAL_CHANNEL_REMINDERS,
+          schedule: { at: notification.at, allowWhileIdle: true },
+          extra: { link: notification.link ?? null },
+        },
+      ],
+    });
+    return "shown";
+  } catch {
+    return "failed";
+  }
+}
+
+/** Ids of notifications currently scheduled on the device (pending). */
+export async function pendingDeviceNotificationIds(): Promise<Set<number>> {
+  try {
+    if (!deviceNotificationsSupported()) return new Set();
+    const p = await plugin();
+    if (!p || !p.getPending) return new Set();
+    const pending = await p.getPending().catch(() => null);
+    const ids = pending?.notifications ?? [];
+    return new Set(ids.map((n) => Number(n.id)).filter((n) => Number.isFinite(n)));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Cancel scheduled notifications by id. Never throws. */
+export async function cancelDeviceNotifications(ids: number[]): Promise<void> {
+  try {
+    if (!deviceNotificationsSupported() || !ids.length) return;
+    const p = await plugin();
+    if (!p || !p.cancel) return;
+    await p.cancel({ notifications: ids.map((id) => ({ id })) }).catch(() => {});
+  } catch {
+    // Cancelling is hygiene, never worth failing a flow over.
   }
 }
 

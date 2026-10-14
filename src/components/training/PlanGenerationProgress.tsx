@@ -14,21 +14,21 @@ import { expectedPlanSeconds, planChunkCount } from "@/lib/planGeneration";
 //
 // This is a real loading screen, not a status card. It covers the entire
 // screen, uses a proper progress bar rather than a spinner-only state, and
-// tells the athlete how long is left — the single most asked-for piece of
-// feedback on a wait that has no progress stream. Three things pay for it:
+// tells the athlete the wait is real and moving — elapsed seconds plus the
+// usual wait, because a wait with no progress stream cannot honestly answer
+// "how long is left". Three things pay for it:
 //
-//   * A TIME ESTIMATE, not a percentage. The server does not stream progress,
-//     so the bar is presentational and the *stages* carry the meaning — each
-//     one names work that genuinely happens, in the order it happens. The bar
-//     only claims "roughly this far through the wait", and past its own
-//     estimate it stops pretending and says so rather than sailing to 99% and
-//     lying.
-//
-//   * AN EXPLICIT REMAINING TIME. `remaining` is the number printed in the
-//     header, in the bar track and in the stage detail, so the athlete knows
-//     whether to keep waiting or go make a coffee. It is never a guess dressed
-//     as a guarantee: it is an estimate with an error margin baked in, and it
-//     becomes "still working" the moment it is no longer useful.
+//   * A TIME ESTIMATE, not a percentage and never a countdown. The server
+//     does not stream progress, so the bar is presentational and the *stages*
+//     carry the meaning — each one names work that genuinely happens, in the
+//     order it happens. The screen shows ELAPSED time ("23s so far", always
+//     true) next to the usual wait ("usually about 40s", an honest average),
+//     and never the arithmetic `expected - elapsed` dressed as "Xs left":
+//     that number parks at "5 seconds left" for up to a minute when the
+//     wait overruns, which is exactly the lie this screen used to tell.
+//     Past 1.5× its own estimate it stops claiming a time at all and says
+//     the plan is taking longer than usual — which is always the honest
+//     answer when the work outlasted the model.
 //
 //   * A WAY OUT. A full-screen overlay that cannot be dismissed is a trap, and
 //     the request is already in flight and cannot be cancelled from here — so
@@ -100,21 +100,27 @@ export default function PlanGenerationProgress({
   const pct = useMemo(() => progressFor(elapsed, expected) * 100, [elapsed, expected]);
   const cappedPct = Math.min(94, pct);
   const stage = elapsed < 2 ? 0 : elapsed < expected * 0.22 ? 1 : elapsed < expected * 0.86 ? 2 : elapsed < expected * 0.95 ? 3 : 4;
-  const overdue = elapsed > expected * 2.2;
+  // 1.5×, not 2.2×: the old threshold kept saying "5 seconds left" for the
+  // whole overrun. The moment the wait outlasts the model by half again, the
+  // estimate has stopped being useful and the screen says so.
+  const overdue = elapsed > expected * 1.5;
+  // Elapsed, floored — the only number on this screen that is a measurement
+  // rather than a model. It ticks every second, never backwards, never stuck.
+  const elapsedSecs = Math.floor(elapsed);
 
   // One block per chunk the server actually requests the plan in — a week each
   // for any plan up to twelve weeks (see planChunkWeeks); they light together
   // because those calls run at the same time.
   const chunks = useMemo(() => planChunkCount(weeks), [weeks]);
 
-  // The remaining time, in seconds. Rounded to the nearest five so the number
-  // is readable and the bar never looks jittery. It becomes null the moment
-  // the estimate stops being useful, and the header tells the athlete so.
-  const remaining = overdue ? null : Math.max(5, Math.round((expected - elapsed) / 5) * 5);
-
+  // No countdown is ever derived here. `expected - elapsed` used to be
+  // printed as "About Xs left" with a 5-second floor, which parked the
+  // screen on "5 seconds left" for the entire overrun — tens of seconds of
+  // a promise the app could not keep. The header states the usual wait and
+  // the body states the elapsed wait; neither claims to know the future.
   const header = overdue
     ? "Still working — this plan is taking longer than usual"
-    : `About ${remaining}s left to build your ${weeks}-week plan`;
+    : `Usually about ${expected}s for a ${weeks}-week plan`;
 
   const body = (
     <>
@@ -122,7 +128,7 @@ export default function PlanGenerationProgress({
         <Loader2 size={16} className={`text-primary ${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
         <p className="text-sm font-semibold">Building your {weeks}-week plan</p>
         <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
-          {overdue ? "still working" : `~${remaining}s left`}
+          {overdue ? "still working" : `${elapsedSecs}s so far`}
         </span>
       </div>
 
@@ -184,7 +190,7 @@ export default function PlanGenerationProgress({
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
         {overdue
           ? "This is taking longer than usual — the plan is still being written. You can leave this screen and it will be saved when it lands."
-          : "Longer plans take longer to write. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically."}
+          : `Most ${weeks}-week plans take about ${expected}s. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically.`}
       </p>
     </>
   );
@@ -215,7 +221,13 @@ export default function PlanGenerationProgress({
           <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-primary shadow-glow">
             <Loader2 size={24} className={`text-primary-foreground ${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
           </span>
-          <p className="text-3xl font-display font-bold tabular-nums">{Math.round(cappedPct)}%</p>
+          {/* Elapsed seconds, not a percent: with no progress stream a "87%"
+              headline is fabricated precision — it climbs toward a cap and
+              parks there, which reads as "almost done" for a wait that may
+              not be. Seconds-so-far is always true, and next to the usual
+              wait it tells the athlete everything they need: keep waiting or
+              make coffee. */}
+          <p className="text-3xl font-display font-bold tabular-nums">{elapsedSecs}s</p>
           <p className="mt-1 text-xs text-muted-foreground">{header}</p>
         </div>
 

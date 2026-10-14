@@ -32,7 +32,8 @@ registered.
    `android/app/src/main/res/values/vaylo_fcm.xml`:
    `google_app_id`, `api_key`, `project_id`, `gcm_sender_id`.
    These are public-by-design client identifiers; shipping them in the APK is
-   how FCM works.
+   how FCM works. The repo's `google-services.json` has them in it, so you can
+   also copy the four strings straight out of it.
 4. Download `google-services.json` and place it at `android/app/`. It is
    already handled by a guarded block in `android/app/build.gradle`, so the file
    being absent never breaks a build.
@@ -46,13 +47,23 @@ Service accounts → Generate new private key). Do not commit that key.
 supabase secrets set \
   FCM_PROJECT_ID="your-project-id" \
   FCM_CLIENT_EMAIL="firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com" \
-  FCM_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+  FCM_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n... \n-----END PRIVATE KEY-----\n"
 ```
 
-The key comes back from Firebase with literal `\n` sequences; the function
+The key comes back from Firebase with literal `\n` sequences. The function
 un-escapes them, so paste it exactly as downloaded.
 
+To check what is set, run:
+
+```bash
+npx --yes supabase secrets list --project-ref $(grep project_id supabase/config.toml | awk '{print $3}' | tr -d '"')
+```
+
 ### 3. Deploy and run the migration
+
+The `push-notify` function is deployed without a JWT check — only an
+authenticated caller can use it, and even then an athlete can only target
+themselves.
 
 ```bash
 supabase db push

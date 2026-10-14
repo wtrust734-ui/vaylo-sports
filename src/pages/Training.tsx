@@ -27,6 +27,7 @@ import { WhyBody } from "@/components/insights/WhyDisclosure";
 import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
+import { notifyPlanCreated } from "@/lib/notificationTriggers";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -558,10 +559,10 @@ const Training = () => {
     // long it will take and what has happened so far, so the wait is not a
     // black box — that is what `PlanGenerationProgress` displays, and it is
     // mounted over the whole screen so nothing else can be tapped while it is
-    // up. It is accurate at the end: past its own estimate it says so rather
-    // than sailing to 99% and lying. Set it here so the interval starts on the
-    // first frame and the athlete gets a `remaining` number from the first
-    // render — this is the window where a second tap is most likely, and the
+    // up. It shows elapsed seconds against the usual wait and never a fake
+    // countdown, and past 1.5× its estimate it admits the plan is taking
+    // longer than usual. Set it here so the interval starts on the first
+    // frame — this is the window where a second tap is most likely, and the
     // screen already has to be covered to keep one request in flight.
     setPlanGenerationProgress(duration);
     setProgressHidden(false);
@@ -678,9 +679,8 @@ const Training = () => {
       // long it took and what has happened so far, so the wait is not a
       // black box — that is what `PlanGenerationProgress` displays, and it is
       // mounted over the whole screen so nothing else can be tapped while it is
-      // up. It is accurate at the end: past its own estimate it says so rather
-      // than sailing to 99% and lying. Set it here so the interval starts on the
-      // first frame and the athlete gets a `remaining` number from the first
+      // up. Past 1.5× its estimate it admits the plan is taking longer than
+      // usual rather than parking on a fake countdown.
       // The wait is over: the overlay must come down with the success toast,
       // not linger over the new plan. (This used to re-set the estimate here,
       // stranding the overlay on screen after the plan had landed.)
@@ -694,6 +694,17 @@ const Training = () => {
           ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
           : undefined,
       });
+      // The plan-created moment: inbox row + device ping + arming the next 7
+      // morning briefings from this plan's own week template. Best-effort —
+      // the plan exists and works without it.
+      void notifyPlanCreated(user.id, {
+        id: inserted.id,
+        title: title.trim() || `${goals.join(" + ")} ${sport} Plan`,
+        sport,
+        week_current: 1,
+        duration_weeks: duration,
+        plan_data: planData,
+      }).catch(() => {});
       void inserted;
       setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
     } catch (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }

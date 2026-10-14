@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================================
 // PUSH READINESS
-// ----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Reports exactly what is still missing before server-sent push can deliver
 // anything, and nothing else. It is deliberately a checklist rather than a
 // setup script: every missing piece is a credential that has to come from a
@@ -92,7 +92,7 @@ for (const line of MISSING) console.log(`  TO DO ${line}`);
 
 console.log("");
 if (MISSING.length === 0) {
-  console.log("READY — server-sent push can deliver. Send a test with:");
+  console.log("READY — server-sent push can deliver. Test with:");
   console.log("  supabase functions invoke push-notify --body '{\"title\":\"Test\",\"body\":\"Hello\"}'");
   process.exit(0);
 }

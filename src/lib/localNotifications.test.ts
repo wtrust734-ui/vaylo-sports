@@ -22,6 +22,7 @@ const makePlugin = (display: string) => ({
   checkPermissions: vi.fn(async () => ({ display })),
   requestPermissions: vi.fn(async () => ({ display: "granted" })),
   createChannel: vi.fn(async () => undefined),
+  deleteChannel: vi.fn(async () => undefined),
   schedule: vi.fn(async () => ({})),
   addListener: vi.fn(async () => ({ remove: vi.fn(async () => undefined) })),
 });
@@ -66,6 +67,26 @@ describe("showDeviceNotification", () => {
     expect(h.plugin!.createChannel).toHaveBeenCalledWith(
       expect.objectContaining({ id: LOCAL_CHANNEL_REMINDERS }),
     );
+  });
+
+  it("creates the channel at HIGH importance with public visibility (heads-up)", async () => {
+    const { showDeviceNotification } = await load();
+    await showDeviceNotification({ title: "t", body: "b" });
+    expect(h.plugin!.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ importance: 4, visibility: 1 }),
+    );
+  });
+
+  it("deletes the pre-fix channel once so the new importance takes effect", async () => {
+    // Earlier tests in this file already migrated the stored version, so
+    // reset it: the point under test is version 0/1 -> delete + recreate.
+    localStorage.removeItem("vaylo_channel_v1");
+    const { showDeviceNotification, LOCAL_CHANNEL_REMINDERS } = await load();
+    await showDeviceNotification({ title: "t", body: "b" });
+    expect(h.plugin!.deleteChannel).toHaveBeenCalledWith({ id: LOCAL_CHANNEL_REMINDERS });
+    // Second post in the same run reuses the channel without re-migrating.
+    await showDeviceNotification({ title: "t", body: "b" });
+    expect(h.plugin!.deleteChannel).toHaveBeenCalledTimes(1);
   });
 
   it("asks for permission once, and reports denied without posting", async () => {

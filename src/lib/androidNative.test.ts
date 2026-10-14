@@ -688,7 +688,20 @@ describe("push notifications — manifest and build", () => {
     expect(g).toMatch(/apply plugin: 'com\.google\.gms\.google-services'/);
   });
 
-  it("ships placeholder Firebase values, so an unconfigured build is honest", () => {
+  it("ships the FCM SDK through the BOM, without the google-services plugin", () => {
+    // The google-services Gradle plugin fails the BUILD when its json is
+    // missing, which would make the repository unbuildable for anyone without
+    // the Firebase project. Configuration is read from string resources.
+    const g = read("/android/app/build.gradle");
+    expect(g).toMatch(/com\.google\.firebase:firebase-bom/);
+    expect(g).toMatch(/com\.google\.firebase:firebase-messaging/);
+    // The plugin is supported but must stay guarded: applied unconditionally
+    // it fails the whole build for anyone without the file.
+    expect(g).toMatch(/if \(servicesJSON\.text\) \{/);
+    expect(g).toMatch(/apply plugin: 'com\.google\.gms\.google-services'/);
+  });
+
+  it("ships Firebase values, so the build can report configured:true", () => {
     const res = read("/android/app/src/main/res/values/vaylo_fcm.xml");
     for (const name of [
       "vaylo_fcm_app_id",
@@ -697,10 +710,10 @@ describe("push notifications — manifest and build", () => {
       "vaylo_fcm_sender_id",
     ]) {
       expect(res).toContain(`name="${name}"`);
+      // Every value non-empty: the plugin resolves a real token and the
+      // prefs screen reports this build as push-available.
+      expect(res).toMatch(new RegExp(`name="${name}"[\\s\\S]*?>[^<]*<`));
     }
-    // Every value empty: the plugin reports configured:false and the app
-    // behaves exactly as it did before push existed.
-    expect(res).not.toMatch(/translatable="false">[^<]+</);
   });
 
   it("registers the push plugin before super.onCreate, like the others", () => {

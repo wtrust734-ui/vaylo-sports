@@ -110,13 +110,22 @@ class PushPlugin : Plugin() {
         defaults.setShowBadge(true)
         manager.createNotificationChannel(defaults)
 
-        // Reminders are the quiet-hours case: low importance so a streak alert
-        // does not buzz the phone at 6am.
+        // Reminders post at HIGH importance so they peek from the top of the
+        // screen with sound (heads-up) instead of landing silently in the
+        // shade — the owner report of 2026-10-14, with DND off and nothing
+        // popping. Quiet hours are NOT handled here: the JS layer simply does
+        // not post during them, so lowering the channel would only punish the
+        // notifications the athlete did ask for.
         val reminders = NotificationChannel(
             PushChannels.REMINDERS_ID,
             "Workout reminders",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         )
+        reminders.setShowBadge(true)
+        // Full content on the lock screen, not "contents hidden". The JS side
+        // asks for the same via visibility 1; the native channel is the FCM
+        // path's equivalent and must not disagree with it.
+        reminders.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         manager.createNotificationChannel(reminders)
     }
 

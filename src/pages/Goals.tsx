@@ -38,7 +38,7 @@ import {
   type GoalIntent,
 } from "@/lib/goalSetup";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
-import { checkStreakAlert } from "@/lib/notificationTriggers";
+import { checkStreakAlert, checkStreakFinalPush } from "@/lib/notificationTriggers";
 
 
 
@@ -121,6 +121,9 @@ const Goals = () => {
         const stk = currentStreak(fetchedActions, fetchedLogs);
         if (stk > 0) {
           checkStreakAlert(user.id, fetchedActions, fetchedLogs, stk).catch(() => { /* never block the page */ });
+          // Exactly one action left: the final-push variant (own once-a-day
+          // key) rather than a second generic alert.
+          checkStreakFinalPush(user.id, fetchedActions, fetchedLogs, stk).catch(() => { /* never block the page */ });
         }
       }
     }

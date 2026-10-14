@@ -34,6 +34,16 @@ const config: CapacitorConfig = {
   },
 
   plugins: {
+    // The icon on every notification the app posts itself. Without this the
+    // plugin falls back to android.R.drawable.sym_def_app_icon — the generic
+    // system glyph — which is why notifications looked broken in the shade.
+    // The drawable MUST stay white-on-transparent: the status bar tints all
+    // non-transparent pixels with iconColor, so anything colourful becomes a
+    // white blob. iconColor is electric-purple (hsl(272 84% 62%) ≈ #A34DEF).
+    LocalNotifications: {
+      smallIcon: "ic_stat_vaylo",
+      iconColor: "#A34DEF",
+    },
     // Dark navy foundation, matching the brand. Values mirror index.html.
     SplashScreen: {
       backgroundColor: "#05070f",

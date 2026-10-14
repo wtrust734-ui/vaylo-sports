@@ -227,9 +227,57 @@ android {
         // numbers and prices go through the locale formatters. WebView-only —
         // no manifest, permission or plugin change.
         //
+        // 33 / 1.2.29 is the notification-schedule release. The app now
+        // decides the full notification line-up itself: a plan-created
+        // celebration on save ("Your <Sport> plan is ready", naming week 1's
+        // first session), a 07:30 morning briefing pre-scheduled 7 days out
+        // so it fires with the app closed (personalised to today's session,
+        // recovery line on rest days, shifted past quiet-hours end), the
+        // evening nudge only after 17:00 (the old once-per-day gate marked
+        // done in the morning meant it could never fire), challenge
+        // deadlines at 3 days / 1 day / ends-today, and a reengagement ping
+        // armed 72h out on every open. No manifest, permission or plugin
+        // change — WebView-only.
+        //
+        // 34 / 1.2.30 moved the morning briefing from 07:30 to 07:00 sharp
+        // and added a "Send a test notification now" button on the
+        // notification settings screen. It was superseded within minutes:
+        // the owner changed the time to 07:10 before testing it.
+        //
+        // 35 / 1.2.31 is the 07:10 build — the morning briefing posts at
+        // 07:10 sharp, and the test button says so. No manifest, permission
+        // or plugin change — WebView-only.
+        //
+        // 36 / 1.2.32 is the heads-up + new-reasons release. The reminders
+        // channel posts at HIGH importance (peeks from the top with sound)
+        // instead of landing silently — with a delete-and-recreate migration
+        // so phones that installed earlier get the loud channel too, and the
+        // same bump natively in PushPlugin. New triggers: low credits
+        // (≤ 15, at most every 3 days, never for Unlimited), poor recovery
+        // (today's readiness ≤ 35, gentle, once a day), and a streak final
+        // push when exactly one action is left. Anti-bombardment: at most 2
+        // shade pings a day across all kinds (inbox always written); mornings
+        // and the plan moment bypass as the anchor and the one-off.
+        // WebView + one native importance constant — no manifest change.
+        //
+        // 37 / 1.2.33 is the honest-wait release. The plan-creation screen no
+        // longer prints a fake countdown: the old `max(5, …)` floor parked it
+        // on "5 seconds left" for the whole overrun, so it now shows elapsed
+        // seconds against the usual wait and admits at 1.5× the estimate that
+        // the plan is taking longer than usual. WebView-only.
+        //
+        // 38 / 1.2.34 is the popup-and-icon release. The banner still did not
+        // peek and the row looked wrong: the plugin falls back to the generic
+        // system glyph with no smallIcon configured, so notifications now
+        // carry a white VAYLO "V" (electric-purple tint) instead; the native
+        // reminders channel shows full content on the lock screen; and the
+        // channel generation is bumped so every phone deletes and recreates
+        // it once — which also clears any "Silent" the athlete set while the
+        // channel never popped. One drawable + config, no manifest change.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 32
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.28"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 38
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.34"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

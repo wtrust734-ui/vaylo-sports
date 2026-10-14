@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Bell, BellOff, CheckCircle2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { pushAvailability, registerPush } from "@/lib/push";
-import { deviceNotificationsSupported, enableDeviceNotifications } from "@/lib/localNotifications";
+import { deviceNotificationsSupported, enableDeviceNotifications, showDeviceNotification } from "@/lib/localNotifications";
 
 const KEYS: { key: string; label: string; desc: string }[] = [
   { key: "workout_reminders", label: "Workout reminders", desc: "Daily nudges to keep you on plan." },
@@ -19,6 +19,13 @@ const KEYS: { key: string; label: string; desc: string }[] = [
   { key: "streak_alerts", label: "Streak alerts", desc: "Warnings before your streak breaks." },
   { key: "challenge_deadlines", label: "Challenge deadlines", desc: "Reminders for joined challenges." },
   { key: "reengagement", label: "We miss you", desc: "Occasional re-engagement after inactivity." },
+  // New with the 07:10 schedule release: a warning at ≤ 15 credits (at most
+  // every 3 days — money talk fatigues fast), and a gentle note when today's
+  // recovery check-in scores badly. Both need their columns (migration
+  // 20261014120000); until it is applied the switches read on and toggling
+  // one reports the error instead of pretending it saved.
+  { key: "low_balance", label: "Low credit warnings", desc: "A heads-up when your credits run low. At most every 3 days." },
+  { key: "recovery_alerts", label: "Recovery warnings", desc: "A gentle note when today's readiness is very low." },
 ];
 
 /**
@@ -226,6 +233,32 @@ export default function NotificationPrefs() {
             )}
             {localOn && (
               <p className="mt-2 text-xs font-semibold text-success">Reminders are on for this device.</p>
+            )}
+            {/* Immediate proof the shade path works, without waiting for 07:00.
+                Posts the same way the morning briefing does (same channel,
+                same permission), so a test that arrives means 07:10 arrives. */}
+            {deviceNotificationsSupported() && (
+              <button
+                onClick={async () => {
+                  setRegistering(true);
+                  try {
+                    const outcome = await showDeviceNotification({
+                      title: "Test from Vaylo ✅",
+                      body: "If you can read this, notifications reach this phone. The morning briefing arrives at 07:10.",
+                      link: "/training",
+                    });
+                    if (outcome === "shown") toast.success("Test sent — check your notification shade");
+                    else if (outcome === "denied") toast.error("Notifications are blocked for Vaylo in your device settings.");
+                    else if (outcome !== "unsupported") toast.error("Could not send the test. Try again later.");
+                  } finally {
+                    setRegistering(false);
+                  }
+                }}
+                disabled={registering}
+                className="mt-3 text-sm font-semibold text-electric-purple underline disabled:opacity-50"
+              >
+                {registering ? "Sending…" : "Send a test notification now"}
+              </button>
             )}
           </div>
         </div>

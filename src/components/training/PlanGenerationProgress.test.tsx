@@ -90,11 +90,40 @@ describe("the plan generation progress panel", () => {
 
     expect(screen.queryByText(/still working/i)).not.toBeInTheDocument();
 
-    // Twice the estimate is where the panel stops pretending to know. It says
-    // so in the header and in the bar track, so there is more than one match.
+    // Past 1.5× the estimate the panel stops pretending to know. It says so
+    // in the header and in the bar track, so there is more than one match.
     advance(240);
 
     expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("never prints a fake countdown, even mid-overrun", () => {
+    // The reported lie: the screen parked on "5 seconds left" for the whole
+    // overrun (the old `max(5, …)` floor held until 2.2× the estimate). A
+    // countdown of remaining seconds must never appear — elapsed seconds
+    // and the usual wait are the only numbers allowed.
+    const utils = renderWith(<PlanGenerationProgress weeks={4} />);
+    // expectedPlanSeconds(4) ≈ 38s; 45s is past the estimate but the screen
+    // must still show no countdown, only elapsed + usual.
+    advance(45);
+    expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/about \d+s left/i)).not.toBeInTheDocument();
+    // The header renders in both the overlay headline and the status card.
+    expect(screen.getAllByText(/usually about \d+s/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/\d+s so far/i)).toBeInTheDocument();
+
+    // Well past 1.5× (≈57s): "longer than usual", still no countdown.
+    advance(60);
+    expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
+  });
+
+  it("shows elapsed seconds in the headline instead of a fabricated percent", () => {
+    const utils = renderWith(<PlanGenerationProgress weeks={4} />);
+    advance(10);
+    // The big figure is a measurement (10s waited), not a model claiming
+    // the wait is N% done with no progress stream behind it.
+    expect(screen.getByText("10s")).toBeInTheDocument();
   });
 
   it("covers the screen, and can be dismissed without cancelling the wait", () => {

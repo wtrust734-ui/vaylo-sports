@@ -13,8 +13,16 @@ import CookieNotice from "@/components/CookieNotice";
 import { isGuestUser } from "@/lib/guestMode";
 import {
   checkChallengeDeadlines,
+  checkLowBalance,
+  checkMorningBriefing,
+  checkPoorRecovery,
+  checkReengagement,
   checkWorkoutReminder,
+  markAppOpen,
   markDailyCheckDone,
+  type TriggerPrefs,
+  scheduleMorningReminders,
+  scheduleReengagementPing,
   shouldRunDailyCheck,
 } from "@/lib/notificationTriggers";
 
@@ -22,20 +30,26 @@ const AppLayout = () => {
   const { session, profile, loading, profileError, guestError, signOut } = useAuth();
   const location = useLocation();
 
-  // Once-per-day in-app notification check while the app is open. These are
-  // inbox + realtime notifications, not lock-screen push — no push
-  // infrastructure exists, and this keeps every notification traceable to
-  // real logged data.
+  // Notification checks while the app is open (inbox + device shade through
+  // the OS scheduler — no push infrastructure needed).
+  //
+  // Timing split on purpose: the morning briefing runs on opens before noon,
+  // the evening nudge on opens after 17:00. The old shape ran everything
+  // behind one once-per-day gate and marked it done in the morning, which
+  // meant the evening nudge could never fire on a day the app had already
+  // been opened. Each trigger still dedups itself (once per day per kind),
+  // so running on every app open is safe.
   useEffect(() => {
-    if (!session?.user || !shouldRunDailyCheck()) return;
+    if (!session?.user) return;
     let alive = true;
     const uid = session.user.id;
+    const { daysAway } = markAppOpen();
     (async () => {
       try {
-        const [plansRes, joinedRes] = await Promise.all([
+        const [plansRes, joinedRes, prefsRes, profileRes] = await Promise.all([
           supabase
             .from("training_plans")
-            .select("id, title, week_current, duration_weeks, plan_data")
+            .select("id, title, sport, week_current, duration_weeks, plan_data")
             .eq("user_id", uid)
             .eq("active", true)
             .limit(1)
@@ -44,9 +58,45 @@ const AppLayout = () => {
             .from("challenge_participants")
             .select("challenge_id, progress, status")
             .eq("user_id", uid),
+          supabase
+            .from("notification_prefs")
+            .select("*")
+            .eq("user_id", uid)
+            .maybeSingle(),
+          // One small row for the low-credit warning: the balance and the
+          // unlimited flag. Skipped silently when unreadable.
+          supabase
+            .from("profiles")
+            .select("credits, infinite_credits")
+            .eq("user_id", uid)
+            .maybeSingle(),
         ]);
         if (!alive) return;
         if (joinedRes.error || plansRes.error) return;
+        const plan = plansRes.data ?? null;
+        const prefs = (prefsRes.data as unknown as TriggerPrefs | null) ?? {};
+        const hour = new Date().getHours();
+        // Pre-scheduled device timers (mornings 07:10 x7, reengagement +72h)
+        // are refreshed on a once-per-day gate — rescheduling rewrites the
+        // same stable ids, so the gate is thrift, not correctness.
+        const refreshTimers = shouldRunDailyCheck();
+        await checkReengagement(uid, daysAway);
+        if (!alive) return;
+        if (hour < 12) await checkMorningBriefing(uid, plan);
+        if (!alive) return;
+        if (hour >= 17) await checkWorkoutReminder(uid, plan);
+        if (!alive) return;
+        // Low credits (≤ 15, at most every 3 days) and poor recovery
+        // (today's readiness ≤ 35, once a day). Both write the inbox always
+        // and compete for the same 2-pings-a-day shade budget as everything
+        // else, so a bad-recovery day with an empty wallet is still at most
+        // two banners, never a barrage.
+        const prof = (profileRes.data as { credits?: unknown; infinite_credits?: unknown } | null) ?? null;
+        const balance = typeof prof?.credits === "number" ? prof.credits : null;
+        await checkLowBalance(uid, balance, prof?.infinite_credits === true);
+        if (!alive) return;
+        await checkPoorRecovery(uid);
+        if (!alive) return;
         const joined = joinedRes.data ?? [];
         if (joined.length) {
           const ids = joined.map((p) => p.challenge_id);
@@ -57,11 +107,18 @@ const AppLayout = () => {
           if (!alive) return;
           if (chs?.length) await checkChallengeDeadlines(uid, chs, joined);
         }
-        await checkWorkoutReminder(uid, plansRes.data ?? null);
+        if (!alive) return;
+        if (refreshTimers) {
+          await scheduleMorningReminders(plan, prefs);
+          await scheduleReengagementPing(uid, daysAway);
+          markDailyCheckDone();
+        } else {
+          // Reengagement re-arms cheaply (one timer) on every open so the
+          // 72h window always counts from the latest visit.
+          await scheduleReengagementPing(uid, daysAway);
+        }
       } catch {
         // A failed check retries on the next app open; never break the layout.
-      } finally {
-        if (alive) markDailyCheckDone();
       }
     })();
     return () => {

@@ -1,0 +1,18 @@
+<!-- Status-bar / notification icon for Vaylo Sports.
+     White-on-transparent ONLY: the status bar tints every non-transparent
+     pixel (with iconColor from the Capacitor config), so a colourful launcher
+     icon here renders as a solid white blob. A bold "V" keeps it recognisable
+     at 24dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,4h4.2L12,15.2 16.8,4H21L12,20.5 3,4z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,17.5l1.6,2.9h-3.2L12,17.5z" />
+</vector>
