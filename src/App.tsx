@@ -356,11 +356,23 @@ const NotificationTapNavigator = () => {
   return null;
 };
 
+/**
+ * Touch-first pointer (the native shell, and touch browsers). Hover tooltips
+ * are a desktop pattern: under a thumb there is no hover, and a tooltip that
+ * fires on long-press sits on top of the button being pressed. A long delay
+ * effectively disables hover tooltips on touch while leaving focus tooltips
+ * (keyboard / screen reader) intact.
+ */
+const isTouchUI = (): boolean =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
 const App = () => (
   <ErrorBoundary>
     <MotionConfig reducedMotion="user">
     <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
+    <TooltipProvider delayDuration={isTouchUI() ? 1500 : 300}>
       <Sonner />
       <Router {...routerProps}>
         {/* Inside the Router: this component now uses useNavigate() for deep

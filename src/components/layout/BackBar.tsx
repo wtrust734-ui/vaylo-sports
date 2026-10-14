@@ -23,8 +23,9 @@
 // ============================================================================
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { isTabRoot } from "./TabShell";
+import { hapticTap } from "@/lib/haptics";
 
 /**
  * Screens that already render their own back control, so the global bar must
@@ -64,30 +65,29 @@ const BackBar = () => {
   const canGoBack = location.key !== "default";
 
   return (
-    <div className="px-5 pt-[var(--vaylo-screen-top)]">
+    <div className="px-3 pt-[var(--vaylo-screen-top)]">
+      {/* Native back row: iOS-style chevron + label, no pill border. The old
+          bordered pill with hover states was a web button — hover does not
+          exist under a thumb, and a bordered chip is not how either platform
+          draws back navigation. 44px target, chevron-led, tinted like the tab
+          bar's active state, with a haptic tick on press. */}
       <button
         type="button"
         data-page-back
-        onClick={() => (canGoBack ? navigate(-1) : navigate("/"))}
-        className="group inline-flex items-center gap-2 rounded-full border border-white/[0.10] bg-white/[0.05] py-2 pl-3 pr-4 text-[13px] font-semibold text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.25)] will-change-transform hover:border-white/[0.18] hover:bg-white/[0.09] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:scale-[0.96] motion-reduce:transform-none"
-        style={{
-          // ONE transition for every property the button changes on hover and
-          // press. The old version transitioned colour only, so the tap gave
-          // no feedback at all until the next screen arrived — the thing that
-          // makes a back button feel unsmooth rather than look it. No
-          // `transition-colors` utility here: it would overwrite the transform
-          // half and the press would snap.
-          transition:
-            "transform 140ms cubic-bezier(0.4, 0, 0.2, 1), border-color 180ms ease, background-color 180ms ease, color 180ms ease",
+        onClick={() => {
+          void hapticTap();
+          if (canGoBack) navigate(-1);
+          else navigate("/");
         }}
+        className="group inline-flex min-h-[44px] items-center gap-0.5 rounded-lg px-2 py-2 text-[17px] font-normal text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 active:opacity-60"
         aria-label={canGoBack ? "Go back" : "Go to the home screen"}
       >
-        <ArrowLeft
-          size={16}
+        <ChevronLeft
+          size={22}
           aria-hidden
           // The chevron leans the way the tap will go — the directional cue
           // that makes a back press read as movement rather than a click.
-          className="transition-transform duration-200 ease-out group-active:-translate-x-0.5 motion-reduce:transition-none"
+          className="transition-transform duration-150 ease-out group-active:-translate-x-0.5 motion-reduce:transition-none"
         />
         Back
       </button>

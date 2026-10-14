@@ -4,6 +4,22 @@ import VayloLoader from "./components/VayloLoader";
 import { initI18n } from "./i18n";
 import "./index.css";
 import { installGlobalErrorReporting, reportError } from "@/lib/errorReporting";
+import { isNativeShell } from "@/lib/platform";
+
+// Native-shell + touch flags, set synchronously before first paint so CSS can
+// target the app shell (`[data-native="true"]`) without a flash of web
+// styling. matchMedia only — no plugin calls, so this never blocks startup.
+try {
+  if (isNativeShell()) document.documentElement.dataset.native = "true";
+  if (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  ) {
+    document.documentElement.dataset.touch = "true";
+  }
+} catch {
+  // Flags are progressive enhancement; a failure leaves the web styling.
+}
 
 // Uncaught event-handler/plugin errors had no handler at all and vanished in
 // the WebView without even a toast. Installed once here, at startup, so every

@@ -1,8 +1,8 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Home, Dumbbell, Gauge, User } from "lucide-react";
-import { motion } from "framer-motion";
 import QuickActionSheet from "./QuickActionSheet";
+import { hapticTap } from "@/lib/haptics";
 
 const LEFT = [
   { icon: Home, labelKey: "navigation.home", path: "/", exact: true },
@@ -27,9 +27,14 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
   return (
     <button
       type="button"
+      role="tab"
       aria-label={label}
+      aria-selected={isActive}
       aria-current={isActive ? "page" : undefined}
-      onClick={() => navigate(item.path)}
+      onClick={() => {
+        void hapticTap();
+        navigate(item.path);
+      }}
       // `flex-1` + `min-w-[48px]` + `overflow-hidden` are what keep this row
       // inside the screen on a 320px phone. `min-w-[48px]` alone was not
       // enough: a tab's width was set by its label's intrinsic width (a
@@ -40,23 +45,25 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
       // space evenly, `min-w-[48px]` keeps the 44px touch floor intact, and
       // `overflow-hidden` means the worst case is an ellipsis rather than an
       // element outside the viewport, in any language.
-      className="press relative flex min-w-[48px] min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-2xl px-2 py-1.5 max-[400px]:px-1"
+      className="press relative flex min-w-[48px] min-h-[56px] flex-1 flex-col items-center justify-center gap-1 overflow-hidden px-2 py-2 max-[400px]:px-1"
     >
-      {isActive && (
-        <motion.div
-          layoutId="nav-indicator"
-          className="absolute inset-0 rounded-2xl bg-primary/15 border border-primary/25"
-          transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        />
-      )}
-      {/* Contrast, not just colour: the active tab is full-strength primary with
-          a filled pill behind it, the inactive ones drop to 60% muted. The icon
-          also lifts 1px and scales 6% on selection, which is the difference
-          between "the colour changed" and "the tab responded to me". */}
+      {/* Native active marker: a short top bar, iOS-style. The old filled
+          pill behind the whole tab read as a web chip; a real tab bar tints
+          icon + label and marks the active one with a hairline, nothing more.
+          No layout animation here on purpose — the tint swaps instantly like a
+          native tab, and the tactile tick comes from haptics on press. */}
+      <span
+        aria-hidden
+        style={{ height: 3 }}
+        className={`absolute top-0 w-8 rounded-full transition-opacity duration-150 ${
+          isActive ? "bg-primary opacity-100" : "opacity-0"
+        }`}
+      />
       <Icon
-        size={18}
-        className={`relative z-10 transition-[color,transform] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          isActive ? "text-primary -translate-y-px scale-105" : "text-muted-foreground/60"
+        size={22}
+        strokeWidth={isActive ? 2.25 : 2}
+        className={`relative z-10 transition-colors duration-150 ${
+          isActive ? "text-primary" : "text-muted-foreground/60"
         }`}
       />
       <span
@@ -65,7 +72,7 @@ const NavButton = ({ item }: { item: (typeof LEFT)[number] | (typeof RIGHT)[numb
         // overflow. Below 400px the type steps down from 12px/tracking-widest
         // to 10.5px/tracking-normal, which is enough for the longest English
         // label ("Perform") to fit a 320px phone without an ellipsis.
-        className={`relative z-10 w-full max-w-[64px] truncate text-center text-[12px] font-bold tracking-widest transition-colors duration-200 max-[400px]:text-[10.5px] max-[400px]:tracking-normal ${
+        className={`relative z-10 w-full max-w-[72px] truncate text-center text-[11px] font-semibold transition-colors duration-150 max-[400px]:text-[10px] ${
           isActive ? "text-primary" : "text-muted-foreground/60"
         }`}
       >
@@ -102,18 +109,22 @@ const BottomNav = () => {
   return (
     <nav
       aria-label={t("navigation.primaryNav")}
-      className="fixed inset-x-3 bottom-[max(0.5rem,var(--vaylo-inset-bottom))] z-50 lg:hidden pointer-events-none"
+      className="fixed inset-x-0 bottom-0 z-50 lg:hidden"
     >
-      {/* `nav-glass` carries the 16px backdrop blur + 72% card fill (see
-          --vaylo-nav-glass). It replaces the previous `bg-card/95 sm:bg-card/75
-          sm:backdrop-blur-2xl`, which was opaque on phones — where the bar
-          actually needs the separation — and only blurred on larger screens. */}
-      <div className="nav-glass pointer-events-auto mx-auto max-w-[520px] rounded-[22px] border border-white/[0.08] shadow-card">
+      {/* Native tab bar: full-bleed, hairline top edge, translucent blur. The
+          old floating pill (inset-x-3, rounded card hovering over content) is
+          the clearest "web page in a wrapper" tell — iOS and Android tab bars
+          both run edge to edge. The bottom inset is consumed as padding on
+          this surface (not position), so the hairline sits exactly above the
+          gesture bar. `bottom-[max(0.5rem,…)]` is intentionally kept as the
+          padding token so the inset contract tests keep guarding it. */}
+      <div className="native-tabbar pb-[max(0.5rem,var(--vaylo-inset-bottom))]">
+        <div className="mx-auto max-w-[520px] flex items-stretch gap-1 px-2 pt-1.5">
         {/* Five slots: Home | Train | [FAB] | Perform | Profile.
 
             The 48px floor on each tab (rather than 56px) is what buys this
-            row its gap. At 320px the content box is 320 - 24 (inset-x-3) - 16
-            (px-2) = 280px, and the old 56px floor consumed all of it: four
+            row its gap. At 320px the full-bleed content box is 320 - 16
+            (px-2) = 304px, and the old 56px floor consumed all of it: four
             tabs plus the 56px action button came to exactly 280, leaving the
             centre button flush against its neighbours with no separation at
             all. 4x48 + 56 + 4 gaps of 4px = 264, so 16px of slack survives on
@@ -129,7 +140,7 @@ const BottomNav = () => {
             48px wide, but a tab's width came from its label, so the row still
             overflowed a 320px screen by 15px. See the NavButton's own note for
             what actually holds the width now. */}
-        <div className="flex items-center gap-1 px-2 py-2">
+        <div className="flex items-stretch gap-1">
           {/* Two equal-width groups around the action button, rather than four
               `justify-around` siblings of it.
 
@@ -159,6 +170,7 @@ const BottomNav = () => {
               <NavButton key={item.path} item={item} />
             ))}
           </div>
+        </div>
         </div>
       </div>
     </nav>

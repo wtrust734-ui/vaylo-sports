@@ -105,6 +105,17 @@ const prefersReducedMotion = (): boolean =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/**
+ * Touch-first pointer (the native shell, and touch browsers). Tab switches
+ * swap instantly here instead of crossfading: a native tab bar never fades
+ * between tabs, it just shows the tab — and a 120ms+240ms crossfade on every
+ * tap is one of the things that makes tab navigation feel like a web page
+ * rather than an app. Detail-screen pushes keep their own transition.
+ */
+const isCoarsePointer = (): boolean =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
 const TabShell = () => {
   const location = useLocation();
   const [mounted, setMounted] = useState<string[]>([location.pathname]);
@@ -179,9 +190,15 @@ const TabShell = () => {
     };
 
     // First visit of this tab, a return from a detail screen (nothing is on
-    // screen to fade out), an already-spent panel, or reduced motion: swap now.
+    // screen to fade out), an already-spent panel, reduced motion, or a touch
+    // pointer: swap now. The touch case is the native tab contract — instant.
     const hasSomethingToFade = shownRef.current !== null && shownRef.current !== target;
-    if (!hasSomethingToFade || shownRef.current === spentRef.current || prefersReducedMotion()) {
+    if (
+      !hasSomethingToFade ||
+      shownRef.current === spentRef.current ||
+      prefersReducedMotion() ||
+      isCoarsePointer()
+    ) {
       commit();
       return;
     }

@@ -139,9 +139,13 @@ describe("safe-area insets", () => {
   });
 
   it("keeps the tab bar anchored to the bottom inset, not to a fixed height", () => {
-    expect(bottomNav).toContain("bottom-[max(0.5rem,var(--vaylo-inset-bottom))]");
+    // Native contract: the bar is full-bleed (`bottom-0`, edge to edge) and
+    // consumes the inset as *padding* on its own surface, so the hairline top
+    // edge always sits exactly above the gesture bar with no floating gap.
+    expect(bottomNav).toContain("fixed inset-x-0 bottom-0");
+    expect(bottomNav).toContain("pb-[max(0.5rem,var(--vaylo-inset-bottom))]");
     // A fixed pixel height on the bar or its row is what squashes the icons
-    // when the inset grows. The lookbehind keeps `min-h-[48px]` on the
+    // when the inset grows. The lookbehind keeps `min-h-[56px]` on the
     // buttons — which is a floor, and is fine — from counting as a hit.
     expect(bottomNav).not.toMatch(/(?<![a-z-])h-\[\d+px\]/);
   });
@@ -208,7 +212,7 @@ describe("safe-area insets", () => {
 
     const drawerZ = bracketZ(sidebar, /start-0/);
     const scrimZ = bracketZ(sidebar, /fixed inset-0/);
-    const navZ = plainZ(bottomNav, /fixed inset-x-3/);
+    const navZ = plainZ(bottomNav, /fixed inset-x-0/);
     const actionScrimZ = bracketZ(quickAction, /fixed inset-0/);
     const actionSheetZ = bracketZ(quickAction, /fixed inset-x-3/);
 
@@ -275,18 +279,18 @@ describe("safe-area insets", () => {
   });
 
   it("leaves each half of the tab row real slack on a 320px phone", () => {
-    // 320 - 24 (inset-x-3) - 16 (px-2) = 280px of content box, split as
+    // Full-bleed bar: 320 - 16 (px-2) = 304px of content box, split as
     // [left group][56px button][right group] with the row's own 4px gaps.
     // The button keeps its natural width, so each group gets
-    // (280 - 56 - 8) / 2 = 108px for two tabs and one gap.
-    const rowGap = Number(/flex items-center gap-(\d) px-2 py-2/.exec(bottomNav)?.[1]);
+    // (304 - 56 - 8) / 2 = 120px for two tabs and one gap.
+    const rowGap = Number(/flex items-stretch gap-(\d)/.exec(bottomNav)?.[1]);
     const groupGap = Number(/justify-around gap-(\d)/.exec(bottomNav)?.[1]);
     const minW = Number(/min-w-\[(\d+)px\]/.exec(bottomNav)?.[1]);
     const actionW = Number(/h-14 w-14/.test(quickAction) ? 56 : 0);
 
     expect(minW).toBeGreaterThanOrEqual(44); // touchTargets floor
     expect(groupGap).toBeGreaterThanOrEqual(0);
-    const group = (280 - actionW - 2 * rowGap) / 2;
+    const group = (304 - actionW - 2 * rowGap) / 2;
     expect(2 * minW + groupGap).toBeLessThanOrEqual(group);
 
     // The arithmetic above is necessary but was NOT sufficient, and the app

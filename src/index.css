@@ -679,3 +679,84 @@
 ) {
   min-height: 44px;
 }
+
+/* ── Native app shell ──────────────────────────────────────────────────────
+   Everything here closes the gap between "web page" and "app" inside the
+   Capacitor shell (and on touch browsers, where the same tells apply).
+   Each rule undoes one browser default that no native app ever shows:
+
+   - `touch-action: manipulation` kills the 300ms tap delay AND double-tap
+     zoom, without disabling pan/pinch — the map-style gestures keep working.
+   - `user-select: none` outside editable text stops long-press selecting the
+     UI chrome and popping the copy callout over buttons. Real content opts
+     back in with `[data-selectable]`; inputs are never affected.
+   - `-webkit-touch-callout: none` is the iOS companion: without it a
+     long-press still offers Copy/Lookup over a natively-styled button.
+   - No tap highlight: the grey Android flash over every tap is the single
+     most visible "this is a WebView" tell. Press feedback comes from the
+     `.press` scale + haptics instead.
+   - `overscroll-behavior: none` on the root stops pull-to-refresh and the
+     rubber-band from ever firing — native screens never stretch past their
+     own bounds. (The y-only rule earlier stays; this is the belt.)
+   - Scrollbars overlay in native apps rather than taking layout space. The
+     WebView's permanent gutter is hidden on touch pointers only — desktop
+     keeps its visible scrollbar as an affordance.
+   - iOS zooms any field under 16px on focus and never zooms back out, which
+     strands the whole layout magnified. The coarse-pointer floor keeps the
+     type the designer chose on desktop and guarantees 16px where a thumb
+     types.
+   - Toasts dock above the tab bar on the shell instead of behind it. Sonner
+     positions its viewport 32px off the floor by default, which is exactly
+     where the native bar now lives. */
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+[data-native="true"] body {
+  overscroll-behavior: none;
+}
+
+[data-native="true"] :not(input):not(textarea):not(select):not([contenteditable="true"]):not([data-selectable]) {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+[data-native="true"] img,
+[data-native="true"] video {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}
+
+[data-native="true"] [data-sonner-toaster] {
+  bottom: calc(var(--vaylo-inset-bottom) + 5.5rem) !important;
+}
+
+/* Native tab-bar surface: full-bleed, hairline top edge, translucent blur.
+   The bar reads its bottom inset as padding (not position), so the hairline
+   always sits exactly on top of the gesture bar with no floating gap. */
+.native-tabbar {
+  background-color: hsl(var(--card) / 0.92);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border-top: 1px solid hsla(0 0% 100% / 0.08);
+}

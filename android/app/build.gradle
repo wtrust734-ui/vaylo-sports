@@ -275,9 +275,19 @@ android {
         // it once — which also clears any "Silent" the athlete set while the
         // channel never popped. One drawable + config, no manifest change.
         //
+        // 39 / 1.2.35 is the native-shell release. The app stops reading as
+        // a web page in a wrapper: the floating pill tab bar is a full-bleed
+        // edge-to-edge bar with a hairline top edge, the pill back button is
+        // a native chevron row, tabs switch instantly on touch instead of
+        // crossfading, every tab/back press answers with a haptic tick, hover
+        // tooltips no longer fire on long-press, and the shell kills the
+        // WebView tells (tap flash, double-tap zoom, pull-to-refresh, text
+        // selection on chrome, iOS field zoom). WebView + CSS only — no
+        // manifest, permission or plugin change.
+        //
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 38
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.34"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 39
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.35"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
