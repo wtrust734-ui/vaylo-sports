@@ -28,9 +28,18 @@ interface Props {
  * Profile cosmetics: buy with Coins, equip, unequip. Badges are shown but not
  * sold — they are earned.
  *
+ * Disclaimers follow the same contract as the Shop sheet. Coins buy avatar
+ * cosmetics only — they have no cash value, cannot be cashed out, and are not
+ * money; the one-way 1 credit = 7.5 Coins conversion is the only bridge
+ * between the two economies. Cosmetics do not touch training.
+ *
  * Purchasing/equipping goes through the same RPCs as before
  * (`purchase_cosmetic`, `equip_cosmetic`, `unequip_cosmetic`) — only the shell
  * changed here, to the shared bottom sheet.
+ *
+ * The Profile page now hosts this as a full tab as well (see Profile.tsx), so the
+ * same disclaimers that apply here also apply inside the tab — the tab is the same
+ * catalogue, priced by the same server, with the same coin/credit conversion.
  */
 export default function CosmeticShop({ open, onClose, initialType = "title" }: Props) {
   const { profile, refreshProfile } = useAuth();
@@ -49,8 +58,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
       setTopUp({ gap: cost - coins, itemName: name });
       return;
     }
-    setBusy(id);
-    const { error } = await buy(id);
+    setBusy(id);        const { error } = await buy(id);
     setBusy(null);
     if (error) {
       toast({ title: "Purchase failed", description: error, variant: "destructive" });
@@ -85,7 +93,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
         onClose={onClose}
         size="lg"
         title="Profile cosmetics"
-        subtitle="Identity only — nothing here changes your training."
+        subtitle="Identity only — nothing here changes your training. Cosmetics are virtual items with no cash value."
         headerRight={
           <span className="flex items-center gap-1 self-center rounded-full border border-energy/30 bg-energy/10 px-2.5 py-1 text-[12px] font-bold text-energy">
             <Coins size={11} /> {formatNumber(coins)}
@@ -155,34 +163,8 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
                     onClick={() => handleUnequip(slot)}
                     disabled={busy !== null}
                     className="shrink-0 rounded-xl border border-border px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground disabled:opacity-60"
-                  >
-                    {busy === slot ? <Loader2 size={12} className="animate-spin" /> : "Unequip"}
-                  </button>
-                ) : owned ? (
-                  <button
-                    type="button"
-                    onClick={() => handleEquip(def.id, cosmeticLabel(def))}
-                    disabled={busy !== null}
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"
-                  >
-                    {busy === def.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    Equip
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleBuy(def.id, cosmeticLabel(def), price ?? 0)}
-                    disabled={busy !== null || !price}
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-energy px-3 py-2 text-[12px] font-bold text-background disabled:opacity-40"
-                  >
-                    {busy === def.id ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <>
-                        <Coins size={12} /> {price != null ? formatNumber(price) : "—"}
-                      </>
-                    )}
-                  </button>
+                  >        {busy === slot ? <Loader2 size={12} className="animate-spin" /> : "Unequip"}
+                  </button>                ) : owned ? (                  <button                type="button"                onClick={() => handleEquip(def.id, cosmeticLabel(def))}                disabled={busy !== null}                className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"              >                {busy === def.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}                Equip              </button>            ) : (              <button                type="button"                onClick={() => handleBuy(def.id, cosmeticLabel(def), price ?? 0)}                disabled={busy !== null || !price}                className="flex shrink-0 items-center gap-1 rounded-xl bg-energy px-3 py-2 text-[12px] font-bold text-background disabled:opacity-40"              >                {busy === def.id ? (                  <Loader2 size={12} className="animate-spin" />                ) : (                  <>                    <Coins size={12} /> {price != null ? formatNumber(price) : "—"}                  </>                )}              </button>
                 )}
               </div>
             );

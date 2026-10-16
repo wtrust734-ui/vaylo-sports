@@ -136,6 +136,7 @@ export function useCosmetics(): UseCosmetics {
     const { error } = await supabase.rpc("purchase_cosmetic" as never, { p_reward_id: id } as never);
     if (error) return { error: error.message };
     await refresh();
+    void revalidateOwnedIds();
     return { error: null };
   }, [refresh]);
 
@@ -143,6 +144,7 @@ export function useCosmetics(): UseCosmetics {
     const { error } = await supabase.rpc("equip_cosmetic" as never, { p_reward_id: id } as never);
     if (error) return { error: error.message };
     await refresh();
+    void revalidateOwnedIds();
     return { error: null };
   }, [refresh]);
 
@@ -150,8 +152,16 @@ export function useCosmetics(): UseCosmetics {
     const { error } = await supabase.rpc("unequip_cosmetic" as never, { p_slot: slot } as never);
     if (error) return { error: error.message };
     await refresh();
+    void revalidateOwnedIds();
     return { error: null };
   }, [refresh]);
+
+  const revalidateOwnedIds = useCallback(async () => {
+    const { data, error } = await supabase.from("user_rewards").select("reward_id").eq("user_id", user.id);
+    if (!error && data) {
+      setOwnedIds(new Set(data.map((r: { reward_id: string }) => r.reward_id)));
+    }
+  }, [user]);
 
   const defById = useCallback(
     (id?: string | null) => (id ? defs.find((d) => d.id === id) : undefined),
