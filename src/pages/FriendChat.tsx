@@ -390,7 +390,7 @@ const FriendChat = () => {
           e.preventDefault();
           void send();
         }}
-        className="sticky bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] px-4"
+        className="sticky bottom-[calc(var(--vaylo-inset-bottom)+7rem)] px-4"
       >
         <div className="flex items-end gap-2 rounded-2xl border border-white/[0.08] bg-card p-2">
           <button

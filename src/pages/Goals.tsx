@@ -96,10 +96,21 @@ const Goals = () => {
   const load = async () => {
     if (!user) return;
     setLoading(true);
+    // Column lists per audit finding 3.1: these rows are consumed across many
+    // typed handlers on this screen, and the only genuinely heavy column here
+    // is `milestones`/`development_areas` (roadmap JSON) — everything else is
+    // small. The logs table is tiny and fully consumed, so it keeps its explicit
+    // full read rather than risking a missed field in the streak alert below.
     const [o, p, a, l] = await Promise.all([
-      supabase.from("outcome_goals").select("*").eq("user_id", user.id).order("created_at"),
-      supabase.from("process_goals").select("*").eq("user_id", user.id).order("created_at"),
-      supabase.from("daily_actions").select("*").eq("user_id", user.id).eq("active", true),
+      supabase.from("outcome_goals").select(
+        "id, user_id, title, description, category, phase, target_value, metric_unit, current_value, current_level, deadline, progress_status, milestones, development_areas, roadmap_updated_at, created_at",
+      ).eq("user_id", user.id).order("created_at"),
+      supabase.from("process_goals").select(
+        "id, user_id, title, description, outcome_goal_id, weekly_target, active, created_at, updated_at",
+      ).eq("user_id", user.id).order("created_at"),
+      supabase.from("daily_actions").select(
+        "id, user_id, title, process_goal_id, active, created_at",
+      ).eq("user_id", user.id).eq("active", true),
       supabase.from("daily_action_logs").select("*").eq("user_id", user.id)
         .gte("log_date", isoDate(new Date(Date.now() - 30 * 86400000))),
     ]);

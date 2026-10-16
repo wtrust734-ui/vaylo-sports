@@ -474,7 +474,7 @@ const EventPacks = () => {
             34–99px above the floor and this CTA only had 16px of padding, so
             "Add to basket" was completely hidden and untappable on a phone.
             Same treatment as the Coach composer and the Ar save bar. */}
-        <div className="fixed inset-x-0 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-40 px-5">
+        <div className="fixed inset-x-0 bottom-[calc(var(--vaylo-inset-bottom)+7rem)] z-40 px-5">
           <div className="mx-auto max-w-md">
           {isOwned ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-energy/40 bg-energy/10 py-3.5 text-sm font-bold text-energy">

@@ -329,7 +329,8 @@ Deno.serve(async (req) => {
     // Everything here arrives from the browser, so nothing in it is trusted:
     // every product id must exist in a server table, the recorded price comes
     // from those tables, and one-time products are checked against history.
-    const resolved: { productId: string; productType: string; priceCents: number }[] = [];
+    const resolved: { productId: string; productType: string; priceCents: number; purchaseId?: string }[] = [];
+    let transactionReferenceAssigned = false;
 
     // Credit-priced products are checked for affordability HERE, before any row
     // is written. The grant loop below used to insert the `user_purchases` row
@@ -461,7 +462,11 @@ Deno.serve(async (req) => {
     let coinsToAdd = 0;
     let infiniteGrant: { period: string } | null = null;
 
-    for (const { productId, productType, priceCents } of resolved) {
+    for (const resolvedEntry of resolved) {
+      const { productId, productType, priceCents } = resolvedEntry;
+      const transactionReference = priceCents > 0 && !transactionReferenceAssigned
+        ? body.verification?.reference ?? null
+        : null;
       const { data: purchaseRow, error: purchaseErr } = await supabase
         .from("user_purchases")
         .insert({
@@ -471,18 +476,32 @@ Deno.serve(async (req) => {
           price_cents: priceCents,
           // Store provenance: a unique index on provider_reference is what makes
           // the idempotency check above race-proof.
-          provider_reference: body.verification?.reference ?? null,
+          // One store transaction can contain several basket items, but the
+          // global idempotency constraint permits its transaction reference on
+          // only one row. Attach it to the first positive-price item only.
+          provider_reference: transactionReference,
           platform: body.platform ?? null,
         })
         .select("id")
         .maybeSingle();
       const purchaseId: string | undefined = purchaseRow?.id;
+
+      // Preserve the exact basket row identity (product IDs may repeat), so the
+      // referral qualification is linked to the purchase created for that item.
+      if (purchaseId) resolvedEntry.purchaseId = purchaseId;
+      if (transactionReference && purchaseId) transactionReferenceAssigned = true;
       // 23505 = the unique index rejected a replayed store transaction. Bail
       // before granting, so two concurrent retries can never double-credit.
       if (purchaseErr?.code === "23505") {
         return new Response(
           JSON.stringify({ error: "This purchase has already been applied.", duplicate: true }),
           { status: 409, headers: corsHeaders }
+        );
+      }
+      if (purchaseErr || !purchaseId) {
+        return new Response(
+          JSON.stringify({ error: `Could not record purchase: ${purchaseErr?.message ?? "missing purchase row"}` }),
+          { status: 500, headers: corsHeaders }
         );
       }
       // An entitlement row must never outlive a payment that did not happen.
@@ -627,6 +646,29 @@ Deno.serve(async (req) => {
     }
 
     await supabase.from("basket_items").delete().eq("user_id", user.id);
+
+    // Referral qualification confirms only that the invited athlete made a
+    // positive-price, provider-verified purchase. The transaction reference is
+    // an idempotency token, not a payment instrument or identity signal.
+    //
+    // Best effort by design: the athlete's purchase is complete before this
+    // runs, so a settle failure must never surface as a failed purchase.
+    try {
+      // Qualify exactly the first paid row that owns the unique transaction
+      // reference. Free/test purchases and credit-priced unlocks do not qualify.
+      const qualifying = resolved.find((r) => r.priceCents > 0 && r.purchaseId && body.verification?.reference);
+      if (qualifying && qualifying.purchaseId && body.verification?.reference) {
+        const { error: settleErr } = await supabase.rpc("settle_referral" as never, {
+          p_referee: user.id,
+          p_purchase_id: qualifying.purchaseId,
+          p_product_kind: qualifying.productId,
+          p_transaction_reference: body.verification.reference,
+        } as never);
+        if (settleErr) console.error("referral settle failed:", settleErr.message);
+      }
+    } catch (e) {
+      console.error("referral settle threw:", e);
+    }
 
     // Recompute the spending segment after any purchase. Best-effort by design:
     // the purchase is already granted and recorded by this point, so a failure

@@ -26,25 +26,25 @@ export default function CreditCostsList({ costs }: { costs?: Partial<Record<Feat
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="rounded-2xl border border-border bg-card p-4"
+      className="rounded-2xl border border-border bg-card/95 p-4"
     >
       <div className="flex items-center gap-2">
         <Sparkles size={16} className="text-primary" />
         <h4 className="font-display text-sm font-bold">What credits unlock</h4>
       </div>
       <p className="mt-1 text-[12px] text-muted-foreground">
-        Credits never expire. One-off unlocks are bought in the Unlocks tab; per-use features charge when you use them.
+        Credits never expire. One‑off unlocks are bought in the Unlocks tab; per‑use features charge only when you activate them.
       </p>
 
       <div className="mt-3">
-        <p className="mb-1 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
           <Lock size={10} /> One-off unlocks — yours forever
         </p>
         {unlocks.map((k) => <Row key={k} k={k} />)}
       </div>
 
       <div className="mt-4">
-        <p className="mb-1 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1 text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
           Per use
         </p>
         {perUse.map((k) => <Row key={k} k={k} />)}

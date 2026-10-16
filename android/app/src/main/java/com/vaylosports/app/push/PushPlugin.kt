@@ -64,8 +64,14 @@ class PushPlugin : Plugin() {
         val apiKey = readString("vaylo_fcm_api_key")
         val projectId = readString("vaylo_fcm_project_id")
         val senderId = readString("vaylo_fcm_sender_id")
-        // Any one of them missing means the placeholders are still in place.
+        // Empty is the supported unconfigured state. Reject malformed values
+        // before FirebaseApp.initializeApp, so bogus resources cannot advertise
+        // readiness and fail later during token registration.
         if (appId.isEmpty() || apiKey.isEmpty() || projectId.isEmpty() || senderId.isEmpty()) return false
+        if (!appId.matches(Regex("1:\\d{6,}:android:[0-9a-fA-F]{8,}"))) return false
+        if (!apiKey.matches(Regex("AIza[0-9A-Za-z_-]{35}"))) return false
+        if (!projectId.matches(Regex("[a-z][a-z0-9-]{4,28}[a-z0-9]"))) return false
+        if (!senderId.matches(Regex("\\d{6,}"))) return false
 
         return try {
             val options = FirebaseOptions.Builder()
@@ -74,8 +80,7 @@ class PushPlugin : Plugin() {
                 .setProjectId(projectId)
                 .setGcmSenderId(senderId)
                 .build()
-            FirebaseApp.initializeApp(ctx, options)
-            true
+            FirebaseApp.initializeApp(ctx, options) != null
         } catch (e: Exception) {
             // A malformed project id throws here. Push stays off; nothing else
             // in the app depends on it.

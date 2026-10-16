@@ -17,7 +17,7 @@
 | P3 | **OpenAI** | Intended AI provider | **Nothing — no provider is deployed.** `ai-analyze`, `ai-service` and `video-form-analysis` return 401 with no API key configured | Function list and the 401 responses |
 | P4 | **OAuth identity providers** (Google, Discord, Facebook, passkey) | Authentication, athlete-initiated | Email, name, provider subject id, and any profile fields the provider returns | `auth.identities`, 12 rows across 11 accounts |
 | P5 | **Wearable / health platform providers** | Data source, athlete-initiated | Activity, heart rate, sleep, workouts, GPS — **only after the athlete connects one** | Feature exists; **no connections are live**, and no provider is named anywhere in the code |
-| P6 | **Payment providers** | Payment processing | Transaction references. Full card details are **not** held — the app records a purchase event, not a card | Purchases are recorded as events |
+| P6 | **Google Play Billing and Stripe** | Payment processing | Transaction references only. Play handles in-app purchases; Stripe handles website card payments for coach membership and marketplace orders (stripe_payment_intent / stripe_session_id on marketplace orders). Full card details are **not** held anywhere | billing.ts, coachMarketplace.ts, CoachSignup.tsx; verified 2026-10-14 |
 | P7 | **Email delivery** | Not configured | None | **No provider is configured.** Sign-in and support mail are effectively unverified |
 | P8 | **Error/analytics service (third party)** | Deliberately absent | None | No analytics is installed, by choice, and the Privacy Policy says so |
 

@@ -33,6 +33,11 @@
 -- ---------------------------------------------------------------------------
 drop policy if exists "read points" on public.points_events;
 
+-- The remote history contains earlier, file-less migrations whose effects this
+-- file re-states; drop by the current name so a re-run stays a no-op instead
+-- of aborting on 42710.
+drop policy if exists "Athletes read their own point events" on public.points_events;
+
 create policy "Athletes read their own point events"
   on public.points_events
   for select to authenticated

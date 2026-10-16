@@ -178,7 +178,7 @@ const RaceMode = ({ cueWords, onExit }: Props) => {
           )}
 
           {cueWords.length > 1 && (
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2 min-w-0">
               {cueWords.map((word) => (
                 <button
                   key={word}

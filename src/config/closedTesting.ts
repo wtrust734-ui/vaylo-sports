@@ -40,6 +40,13 @@ export type ClosedTestingConfig = {
   freeCredits: boolean;
   /** Shown next to every price so a tester is never misled about being charged. */
   label: string;
+  /**
+   * The same statement where width is scarce — pack buttons, price columns,
+   * confirm sheets. The full `label` in those slots wraps to five lines and
+   * crushes the card (seen in the browser, 2026-10-15); the honest context
+   * still lives in the basket, the receipt and `explanation`.
+   */
+  shortLabel: string;
   /** One sentence, used in the basket and the receipt. */
   explanation: string;
 };
@@ -47,6 +54,7 @@ export type ClosedTestingConfig = {
 export const CLOSED_TESTING: ClosedTestingConfig = {
   freeCredits: true,
   label: "Free during closed testing",
+  shortLabel: "Free",
   explanation:
     "You are in a closed test, so credits are free right now. Nothing is charged and no card is taken. " +
     "Paid credits arrive with Google Play billing after closed testing ends.",

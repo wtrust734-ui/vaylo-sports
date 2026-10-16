@@ -6,8 +6,7 @@ import { appHref } from "@/lib/routerBase";
 
 /**
  * Public referral leaderboard (/referral-leaderboard) — "Top recruiters this
- * month". Turns every existing user into a salesperson: a public, dated,
- * prize-backed competition. Shared widely; the join CTA harvests signups.
+ * month". Lists purchase-confirmed referral totals without promising a prize.
  */
 const ReferralLeaderboard = () => {
   const { session } = useAuth();
@@ -35,15 +34,14 @@ const ReferralLeaderboard = () => {
         <p className="text-[12px] font-semibold uppercase tracking-widest text-energy">Vaylo Sports</p>
         <h1 className="mt-1 text-3xl font-display font-bold">Top recruiters</h1>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          The athletes who brought the most friends to Vaylo Sports this month. The leader wins a
-          <span className="text-foreground font-semibold"> free month of Unlimited</span>.
+          Athletes ranked by purchase-confirmed referrals in the last 30 days. No prize is currently offered.
         </p>
 
         <div className="mt-6 rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
           {loading && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
           {!loading && rows.length === 0 && (
             <div className="p-4 text-sm text-muted-foreground">
-              Nobody has recruited yet this month. <span className="text-foreground font-medium">First entry wins by default.</span>
+              No qualifying referrals in the last 30 days yet.
             </div>
           )}
           {rows.map((r) => (

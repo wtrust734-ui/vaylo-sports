@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { scanText } from "../../scripts/secret-scan.mjs"
+import { createRequire } from "node:module"
+
+const require = createRequire(import.meta.url)
+const { scanText } = require("../../scripts/secret-scan.mjs") as { scanText: (text: string) => { id: string }[] }
 
 /**
  * These tests exist because the first version of the scanner did not work.
@@ -194,5 +197,15 @@ describe("secret-scan calibration for the 2026-10-06 audit false positives", () 
     // after `token=` closes the string literal "token=", not a credential.
     const line = 'const peek = (u) => u.split("token=")[1] ?? ""'
     expect(ids(line)).not.toContain("hardcoded-password")
+  })
+
+  it("ignores translated password field labels in generated JS dictionaries", () => {
+    for (const label of ["Password", "Contraseña", "Passwort", "Wachtwoord", "Mot de passe", "كلمة المرور"]) {
+      expect(ids(`const locale = { password: "${label}" };`)).not.toContain("hardcoded-password")
+    }
+  })
+
+  it("ignores a minified runtime fragment captured after a token query key", () => {
+    expect(ids('token:",u)),this.rest=new Qr(new URL("rest/v1",i).href')).not.toContain("hardcoded-password")
   })
 })

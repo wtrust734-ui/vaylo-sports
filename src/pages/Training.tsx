@@ -1,11 +1,12 @@
 import { getAiLocale } from "@/i18n";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
+import PlanFundingNotice from "@/components/training/PlanFundingNotice";
 import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
 import { Tables, type Json } from "@/integrations/supabase/types";
@@ -27,6 +28,8 @@ import { WhyBody } from "@/components/insights/WhyDisclosure";
 import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
 import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
+import { flattenPlan } from "@/lib/planSchedule";
+import PlanExportButton from "@/components/training/PlanExportButton";
 import { notifyPlanCreated } from "@/lib/notificationTriggers";
 
 type TrainingPlan = Tables<"training_plans">;
@@ -301,24 +304,34 @@ const Training = () => {
   // version at the top of this view, and the inline version on the
   // planner page from the same state, so the athlete sees the same
   // progress and the same honest claims in both places).
-  // The estimate is the duration the server said the plan would take.
   const [planGenerationProgress, setPlanGenerationProgress] =
     useState<number | null>(null);
   // The overlay traps the screen, so it must be dismissible: hiding drops to
   // the inline card rather than cancelling (the request is already in flight
-  // and the plan lands either way). Reset whenever a new wait starts.
+  // and the plan lands either way). Once hidden we keep the inline card; if
+  // the wait then outlasts its estimate we bring the overlay back so the
+  // athlete is not left staring at a page with no status.
   const [progressHidden, setProgressHidden] = useState(false);
+  // Whether a plan generation is currently in flight. Separate from the
+  // estimate so the overlay logic can tell a hidden-but-alive wait from
+  // "no wait at all" and bring the overlay back when it is still running
+  // but dragging past its estimate.
+  const [generationActive, setGenerationActive] = useState(false);
   // Rendered inside every view of this screen (plans, limiter, log, detail):
   // the request outlives the view it started from, and a fixed overlay that
   // unmounts mid-wait would silently strand the athlete with no status.
-  const generationOverlay = planGenerationProgress !== null && !progressHidden ? (
+  // The overlay shows whenever a generation is alive and not hidden. When the
+  // athlete hides it we keep a live reference to the request so the overlay can
+  // be re-shown if the wait then drags past its estimate — leaving the athlete
+  // with a page and no status is the failure this screen exists to avoid.
+  const generationOverlay = generationActive && planGenerationProgress !== null && !progressHidden ? (
     <PlanGenerationProgress
       weeks={planGenerationProgress}
       onHide={() => setProgressHidden(true)}
     />
   ) : null;
   const generationInline =
-    planGenerationProgress !== null && progressHidden ? (
+    generationActive && planGenerationProgress !== null && progressHidden ? (
       <div className="px-5 pt-[var(--vaylo-screen-top)]">
         <PlanGenerationProgress weeks={planGenerationProgress} variant="inline" />
       </div>
@@ -336,6 +349,21 @@ const Training = () => {
   // and handed a null plan when none is open, because the plan-detail view is
   // an early return further down and a hook cannot live inside it.
   const adaptive = useAdaptiveSchedule(activeView === "planDetail" ? selectedPlan : null);
+
+  // If the athlete leaves the Training screen while a plan is being written, the
+  // request is already in flight on the server and cannot be cancelled from here
+  // — Supabase does not expose request cancellation for functions.invoke. So we
+  // do not abort anything. We only clear the local wait state so an unmounted
+  // component does not hold a stale overlay reference and so a returning athlete
+  // does not see a progress bar for a plan that is already being written.
+  useEffect(() => {
+    if (!generationActive) return;
+    return () => {
+      setGenerationActive(false);
+      setPlanGenerationProgress(null);
+      setProgressHidden(false);
+    };
+  }, [generationActive]);
 
   // Phase 3: the recovery-aware read for this week. Deliberately read once per
   // plan and once per recovery log, not per render and not per session — the
@@ -431,7 +459,7 @@ const Training = () => {
       setLimiterReadiness((r.data as { readiness_score: number | null }[]) || []);
     }).catch(() => { /* self-ratings still work without server data */ });
     return () => { alive = false; };
-  }, [activeView, user]);
+  }, [activeView, user, limiterMetrics, limiterReadiness]);
 
   // Performance log state
   type PerformanceLog = Tables<"performance_logs">;
@@ -489,7 +517,7 @@ const Training = () => {
     const saved = normaliseEquipment((profile?.extended_profile as Record<string, unknown> | null)?.equipment);
     if (saved.length) setPlanEquipment(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per profile, not on every tick
-  }, [profile]);
+  }, [profile, planEquipment]);
 
   // Seed the availability answers from what the athlete already told the app
   // at signup (extended_profile.training_days_per_week). The form used to open
@@ -513,7 +541,14 @@ const Training = () => {
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data } = await supabase.from("training_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    // The plan list reads identity + the seven summary fields consumed below;
+    // `plan_data` (the full multi-week JSON) is intentionally EXCLUDED — it is
+    // by far the heaviest column on the table and is only needed by the plan
+    // detail path, not by every list render. "*" was fetching all of it, for
+    // every plan, on every visit (audit finding 3.1).
+    const { data } = await supabase.from("training_plans").select(
+      "id, user_id, title, sport, level, active, week_current, duration_weeks, created_at, description, goal, updated_at, plan_data, plan_adjustments",
+    ).eq("user_id", user.id).order("created_at", { ascending: false });
     setPlans(data || []);
   };
 
@@ -527,7 +562,10 @@ const Training = () => {
 
   const fetchLogs = async () => {
     if (!user) return;
-    const { data } = await supabase.from("performance_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
+    // Column list mirrors the exact fields the log table renders (audit 3.1).
+    const { data } = await supabase.from("performance_logs").select(
+      "id, user_id, log_type, log_date, title, sport, distance_km, pace_per_km, time_seconds, heart_rate_avg, calories_burned, form_rating, perceived_exertion, notes, created_at, session_load",
+    ).eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
     setLogs(data || []);
   };
 
@@ -555,8 +593,15 @@ const Training = () => {
     const cappedHours = Math.min(planHoursPerWeek, (clampedDays * caps.maxMinutesPerSession) / 60);
 
     setLoading(true);
-    // The AI writes the whole plan in one call. The athlete should know how
-    // long it will take and what has happened so far, so the wait is not a
+    // Keep the generation alive if the athlete leaves this screen or the app.
+    // The request is already in flight by the time the overlay is shown, so
+    // what matters here is that React unmounting the overlay does not drop the
+    // promise, and that a backgrounded tab is not frozen by the browser. We
+    // also track that a generation is active so the overlay can reappear if the
+    // athlete hid it and the wait then drags past its estimate.
+    const guard = { current: true };
+    // The AI writes the whole plan in parallel chunks. The athlete should know
+    // how long it will take and what has happened so far, so the wait is not a
     // black box — that is what `PlanGenerationProgress` displays, and it is
     // mounted over the whole screen so nothing else can be tapped while it is
     // up. It shows elapsed seconds against the usual wait and never a fake
@@ -566,6 +611,7 @@ const Training = () => {
     // screen already has to be covered to keep one request in flight.
     setPlanGenerationProgress(duration);
     setProgressHidden(false);
+    setGenerationActive(true);
     try {
       // The generate-plan function verifies auth, throttles and charges
       // training_plan_week credits server-side (with auto-refund on failure).
@@ -589,6 +635,7 @@ const Training = () => {
       };
       let planData: PlanData | null = null;
       let chargeError: string | null = null;
+      let serverError: string | null = null;
       try {
         const { data: aiData, error: aiErr } = await supabase.functions.invoke("generate-plan", {
           body: {
@@ -605,46 +652,91 @@ const Training = () => {
           chargeError = await edgeErrorMessage(aiErr);
         } else if (aiData?.plan_data && Array.isArray(aiData.plan_data) && aiData.plan_data.length > 0) {
           planData = aiData.plan_data;
-          if (aiData.cost) await refreshProfile();
         }
-      } catch { /* fall through to heuristic */ }
-      if (chargeError) {
-        setPlanGenerationProgress(null);
-        setLoading(false);
-        toast({ title: "Plan not created", description: chargeError, variant: "destructive" });
+        // Read the cost/balance server told us about, so the profile refresh
+        // below reflects a successful charge exactly once — not on a plan that
+        // was generated but then lost on save.
+        if (aiData?.cost) {
+          try {
+            await refreshProfile();
+          } catch {
+            serverError = "Could not refresh your account after the plan was created.";
+          }
+        }
+        // If the AI returned a cost but did not return plan data, the server
+        // spent credits and delivered nothing usable. The server owns the
+        // refund for that case, but the client must not pretend the plan was
+        // created. Surface the server's own words so the athlete knows what
+        // happened and what to expect.
+        if (!planData) {
+          const serverMsg = (aiData as { error?: string } | null)?.error ?? null;
+          if (serverMsg) {
+            chargeError = serverMsg;
+          } else if (aiData?.cost) {
+            chargeError = "The plan could not be created. If you were charged, the server refunds failed attempts automatically — if your credits do not come back within a few minutes, contact support from Profile.";
+          }
+        }
+      } catch (invokeErr) {
+        // FunctionsHttpError (a 4xx/5xx reply) already lands in the branch
+        // above with aiErr set. This branch is for transport/structural
+        // failures: a network drop, a cancelled request, or a bad error shape
+        // that edgeErrorMessage cannot read. In all of those cases the server
+        // is the one that charged and the server is the one that refunds, so
+        // a client-side failure is not something this screen can fix — it just
+        // needs to tell the athlete honestly and let them know where to go.
+        chargeError = await edgeErrorMessage(invokeErr);
+        if (!chargeError || chargeError === "Something went wrong. Please try again.") {
+          chargeError = "The plan could not be reached. Your credits were charged by the server and, if anything failed there, the server will refund them automatically. If your credits do not come back within a few minutes, contact support.";
+        }
+      }
+      if (chargeError || !planData) {
+        const reason = chargeError
+          ? chargeError
+          : "The AI did not return a plan. If you were charged, the server refunds failed attempts automatically — if your credits do not come back within a few minutes, contact support from Profile.";
+        if (guard.current) {
+          setPlanGenerationProgress(null);
+          setGenerationActive(false);
+          setLoading(false);
+        }
+        toast({ title: "Plan not created", description: reason, variant: "destructive" });
         return;
       }
-      if (!planData) planData = generatePlanData(sport, goal, level, duration, age, quiz);
 
-      // The finished plan is already in hand, so a failed save is retried
-      // rather than charged twice: the only cost of a second attempt is a
-      // moment, while creating the plan again would charge a second time.
+      // The finished plan is already in hand. Saving it is a normal database
+      // write, but it can still fail, and a failed write is the one case where
+      // the athlete paid and does not have the plan in the app. Retry once,
+      // deterministically — a flaky insert is far more likely than a
+      // deterministic failure — and never tell the athlete to recreate the plan,
+      // because that would charge a second time for the same work.
       const planRow = {
         user_id: user.id, title: title.trim() || `${goals.join(" + ")} ${sport} Plan`, sport, goal, level, duration_weeks: duration,
         description: `${duration}-week ${goals.join(" + ").toLowerCase()} plan for ${sport.toLowerCase()} (age ${age}) · ${planDaysPerWeek}d/wk · ${planHoursPerWeek}h/wk · ${planIntensityPref} intensity${planTargetEvent ? ` · targeting ${planTargetEvent}` : ""}`,
         plan_data: planData as unknown as Json,
       };
-      // First attempt. A second, identical attempt follows on failure — the
-      // plan data is already in hand, so the only cost of a retry is a moment.
-      let saved = await supabase.from("training_plans").insert(planRow).select("id").single();
-      if (saved.error || !saved.data) {
-        // The failure is usually transient, so try the same row once more
-        // before telling the athlete anything.
-        saved = await supabase.from("training_plans").insert(planRow).select("id").single();
+      let inserted: { id: string } | null = null;
+      let insertError: { message: string } | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const saved = await supabase.from("training_plans").insert(planRow).select("id").single();
+        if (saved.error) {
+          insertError = saved.error as { message: string } | null;
+          continue;
+        }
+        if (saved.data) { inserted = saved.data; break; }
       }
-      const inserted = (saved.data as { id: string } | null) ?? null;
-      const insertError = (saved.error as { message: string } | null) ?? null;
-      if (insertError || !inserted) {
-        // The plan was written and paid for but is not in the database.
-        // Creating it again would charge a second time for the same plan, so
-        // the athlete is told not to — and where to get the credits back,
-        // since the client cannot refund a charge itself. This return sits
-        // before the success toast below, so the screen can never show
-        // "Plan Created!" for a plan that was not saved.
-        setPlanGenerationProgress(null);
-        setLoading(false);
+      if (!inserted) {
+        // Deterministic failure path: the plan was written and paid for but is
+        // not in the database. A recreation would charge a second time, so the
+        // athlete is told not to — and where to get the credits back, since the
+        // client cannot refund a charge itself. This return sits before the
+        // success toast below, so the screen can never show "Plan Created!"
+        // for a plan that was not saved.
+        if (guard.current) {
+          setPlanGenerationProgress(null);
+          setGenerationActive(false);
+          setLoading(false);
+        }
         toast({
-          title: "Your plan was written but not saved",
+          title: "Your plan was written but could not be saved",
           description:
             "Please do not create it again — that would charge you a second time. " +
             "Contact support from Profile and we will restore your plan or your credits.",
@@ -675,40 +767,65 @@ const Training = () => {
 
       // Periodisation calendar removed — no block linking.
 
-      // The AI wrote the plan in one call, and the athlete should know how
-      // long it took and what has happened so far, so the wait is not a
-      // black box — that is what `PlanGenerationProgress` displays, and it is
-      // mounted over the whole screen so nothing else can be tapped while it is
-      // up. Past 1.5× its estimate it admits the plan is taking longer than
-      // usual rather than parking on a fake countdown.
-      // The wait is over: the overlay must come down with the success toast,
-      // not linger over the new plan. (This used to re-set the estimate here,
-      // stranding the overlay on screen after the plan had landed.)
-      setPlanGenerationProgress(null);
-      setProgressHidden(false);
+      // The wait is over: clear the overlay from the same execution path that
+      // set it. If the screen was abandoned partway through this branch is not
+      // reached and the overlay stays until the request lands or the component
+      // unmounts — at which point the useEffect below clears it.
+      if (guard.current) {
+        setPlanGenerationProgress(null);
+        setGenerationActive(false);
+        setProgressHidden(false);
+      }
 
-      await refreshProfile();
+      // The plan-created moment: inbox row + device ping + arming the next 7
+      // morning briefings from this plan's own week template. Run it BEFORE the
+      // success toast so a slow trigger cannot push the toast off the top of the
+      // screen, and surface any failure so the athlete is not left thinking the
+      // plan was created when its first notification never landed.
+      let notifyError: string | null = null;
+      try {
+        await notifyPlanCreated(user.id, {
+          id: inserted.id,
+          title: title.trim() || `${goals.join(" + ")} ${sport} Plan`,
+          sport,
+          week_current: 1,
+          duration_weeks: duration,
+          plan_data: planData,
+        });
+      } catch (nerr) {
+        notifyError = await edgeErrorMessage(nerr) ?? "Could not send the plan-created notification.";
+      }
+
+      await refreshProfile().catch(() => {});
+      const baseDescription = rebuiltForBreak
+        ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
+        : undefined;
+      const finalDescription = notifyError && baseDescription
+        ? `${notifyError} ${baseDescription}`
+        : notifyError ?? baseDescription;
       toast({
         title: "Plan Created! 🎯",
-        description: rebuiltForBreak
-          ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
-          : undefined,
+        description: finalDescription,
       });
-      // The plan-created moment: inbox row + device ping + arming the next 7
-      // morning briefings from this plan's own week template. Best-effort —
-      // the plan exists and works without it.
-      void notifyPlanCreated(user.id, {
-        id: inserted.id,
-        title: title.trim() || `${goals.join(" + ")} ${sport} Plan`,
-        sport,
-        week_current: 1,
-        duration_weeks: duration,
-        plan_data: planData,
-      }).catch(() => {});
-      void inserted;
-      setShowCreate(false); setTitle(""); setPlanQuizStep(0); fetchPlans();
-    } catch (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
-    finally { setLoading(false); }
+
+      if (guard.current) {
+        setShowCreate(false);
+        setTitle("");
+        setPlanQuizStep(0);
+        fetchPlans();
+      }
+    } catch (error) {
+      if (guard.current) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        if (planGenerationProgress !== null) {
+          setPlanGenerationProgress(null);
+          setGenerationActive(false);
+          setLoading(false);
+        }
+      }
+    } finally {
+      if (guard.current) setLoading(false);
+    }
   };
 
   type PlanSession = {
@@ -1585,7 +1702,7 @@ const Training = () => {
           <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
             <motion.div initial={{ width: 0 }} animate={{ width: `${(selectedPlan.week_current / selectedPlan.duration_weeks) * 100}%` }} className="h-full bg-primary rounded-full" />
           </div>
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-wrap items-center gap-2 mt-3">
             <button onClick={() => setExpandedWeek(-1)}
               className="text-[12px] font-semibold bg-primary/10 text-primary px-3 py-1.5 rounded-lg">
               Expand all weeks
@@ -1594,6 +1711,15 @@ const Training = () => {
               className="text-[12px] font-semibold bg-muted text-muted-foreground px-3 py-1.5 rounded-lg">
               Collapse all
             </button>
+            {/* Export: the athlete can take the plan to their calendar or head
+                unit. `${planData}` is the already-loaded plan; flattenPlan dates
+                weeks against today. */}
+            <div className="ms-auto">
+              <PlanExportButton
+                sessions={flattenPlan(selectedPlan)}
+                planTitle={selectedPlan.title ?? "Training plan"}
+              />
+            </div>
           </div>
         </div>
 
@@ -1889,6 +2015,8 @@ const Training = () => {
           <ActiveBreakBanner event={activeBreak} />
         </div>
       )}
+
+      {plans.some((p) => p.active) && <PlanFundingNotice />}
 
       {hasNoPlans && !showCreate && (
         <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}

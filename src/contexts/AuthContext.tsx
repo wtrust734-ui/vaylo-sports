@@ -145,12 +145,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let active = true;
     let initialized = false;
 
+    // Bounded wait. A session check that never settles (a stalled network, a
+    // hung profile request) used to hold the full-page loader forever. After
+    // 15 seconds the app is released and the failure is logged instead.
+    const withBootTimeout = (work: Promise<void>) =>
+      Promise.race([
+        work,
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            console.error("Auth hydrate timed out");
+            resolve();
+          }, 15_000),
+        ),
+      ]);
+
     const hydrateAuth = (nextSession: Session | null, isInitial: boolean) => {
       if (!active) return;
       // Only show full-page loader on the very first hydrate.
       // Token refreshes and other auth events should NOT unmount the app.
       if (isInitial) setLoading(true);
-      void syncSession(nextSession)
+      void withBootTimeout(syncSession(nextSession))
         .catch((err) => {
           // Surface instead of throwing unhandled: the athlete stays signed in
           // with profileError set, and AppLayout offers a retry.
@@ -227,7 +241,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      const { data: guest, error } = await supabase.auth.signInAnonymously();
+      // Bounded like the session check above: a guest sign-in that never answers
+      // must release the loader too, not leave the visitor on the boot screen.
+      const guestAttempt = await Promise.race([
+        supabase.auth.signInAnonymously(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Guest sign-in timed out")), 15_000),
+        ),
+      ]).catch((err: unknown) => ({
+        data: { user: null, session: null },
+        error: err instanceof Error ? err : new Error(String(err)),
+      }));
+      const { data: guest, error } = guestAttempt;
       if (!active) return;
       if (error || !guest.session) {
         setGuestError(error?.message ?? "Couldn't start a guest session.");
@@ -301,7 +326,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const { data: guest, error } = await supabase.auth.signInAnonymously();
+    const guestAttempt = await Promise.race([
+      supabase.auth.signInAnonymously(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Guest sign-in timed out")), 15_000),
+      ),
+    ]).catch((err: unknown) => ({
+      data: { user: null, session: null },
+      error: err instanceof Error ? err : new Error(String(err)),
+    }));
+    const { data: guest, error } = guestAttempt;
     if (error || !guest.session) {
       // Could not mint the replacement. Record it rather than leaving a blank
       // screen; AppLayout falls through to /auth, which still works for a

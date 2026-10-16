@@ -38,7 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
  * current Terms (src/components/legal/TermsChangeNotice.tsx). Section 17 of
  * `legal/terms.html` promises exactly that, so the two move together.
  */
-export const TERMS_VERSION = "1.4";
+export const TERMS_VERSION = "1.5";
 
 /**
  * Stamp acceptance of the Terms and Privacy Policy.

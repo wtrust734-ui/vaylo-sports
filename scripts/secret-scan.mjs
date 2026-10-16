@@ -174,6 +174,11 @@ export const RULES = [
     why: "A credential assigned as a literal string.",
     capture: firstOf(1, 2),
     reject: [
+      // Translation objects legitimately contain keys such as `password: "Password"`.
+      // A value that is the exact field label in any common translation, or a
+      // single punctuation token from minified source text, is not a credential.
+      /^(?:password|contraseña|passwort|wachtwoord|mot de passe|كلمة المرور)$/i,
+      /^,\s*[a-z_$][\w$]*\)\),?\s*(?:this\.)?[a-z_$][\w$]*\s*=/i,
       /^\.{2,}$/,                       // "..." — the placeholder in ui-audit.mjs
       /^\*+$/,                          // "***"
       /^<.*>$/,                         // "<your-key>"

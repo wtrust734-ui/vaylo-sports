@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRightLeft, Check, Coins, Loader2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BottomSheet from "@/components/ui/bottom-sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useLocalPrice } from "@/hooks/useLocalPrice";
 import { formatNumber } from "@/i18n/format";
-import { formatLocalPrice, loadEconomyConfig } from "@/lib/creditEconomy";
 import {
   purchaseItems,
   isPaymentsUnavailable,
@@ -31,39 +31,10 @@ interface Props {
 }
 
 /**
- * A bundle price in the athlete's own currency.
- *
- * This used to be a hand-rolled `$${(cents / 100).toFixed(2)}`, which showed
- * dollars to everyone — including the athlete who had just seen the same bundle
- * in pounds on the Market tab. The currency is resolved the same way the Market
- * resolves it: the configured region, overridden by the athlete's own setting.
+ * A bundle price in the athlete's own currency — shared with the cosmetics
+ * tab's quick buy (see @/hooks/useLocalPrice), which needs the same answer.
  */
-const usePrice = (userId: string | undefined) => {
-  const [currency, setCurrency] = useState("USD");
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      let value = await loadEconomyConfig()
-        .then((cfg) => cfg.region.currency)
-        .catch(() => "USD");
-      if (userId) {
-        const { data } = await supabase
-          .from("user_settings")
-          .select("currency")
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (data?.currency) value = data.currency;
-      }
-      if (alive) setCurrency(value);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [userId]);
-
-  return (cents: number) => formatLocalPrice(cents, currency);
-};
+const usePrice = useLocalPrice;
 
 /**
  * Shown at the moment an athlete cannot afford a cosmetic. Sells the cheapest

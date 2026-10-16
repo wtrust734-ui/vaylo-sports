@@ -200,9 +200,16 @@ describe("it is hidden", () => {
     );
     // ...and the tab itself is removed from the nav, so a hidden feature is not an
     // empty tab. That was the state before this work: the tab was listed
-    // unconditionally while its contents were gated.
-    expect(read(join(root, "src", "components", "market", "MarketSectionNav.tsx"))).toMatch(
+    // unconditionally while its contents were gated. The filter lives in the
+    // section CONFIG now (shared with Market.tsx's section guard, extracted
+    // from the nav component during the 2026-10-15 lint pass).
+    expect(read(join(root, "src", "config", "marketSections.ts"))).toMatch(
       /s\.key !== "coaching" \|\| isFlagOn\("coachMarketplace"\)/,
+    );
+    // The nav must consume ONLY the filtered list — the component file itself
+    // no longer holds the filter, but it must not regain a way to bypass it.
+    expect(read(join(root, "src", "components", "market", "MarketSectionNav.tsx"))).toMatch(
+      /visibleMarketSections\(\)/,
     );
     const app = read(join(root, "src", "App.tsx"));
     expect(app).toMatch(/isFlagOn\("coachMarketplace"\)/);

@@ -7,7 +7,7 @@
 // setup script: every missing piece is a credential that has to come from a
 // Firebase project, so there is nothing here a machine can safely fill in.
 //
-// Run it before and after pasting the values from the Firebase console:
+// Run it before and after adding the client config from google-services.json:
 //
 //   npm run push:ready
 //
@@ -47,15 +47,38 @@ if (!existsSync(FCM_XML)) {
   const xml = readFileSync(FCM_XML, "utf8");
   for (const name of CLIENT_VALUES) {
     const value = new RegExp(`name="${name}"[^>]*>([^<]*)<`).exec(xml)?.[1]?.trim() ?? "";
-    if (value) OK.push(`${name} = ${value}`);
-    else MISSING.push(`${name} is empty in android/app/src/main/res/values/vaylo_fcm.xml`);
+    // Firebase client config must match the SDK formats. Never echo the value:
+    // this diagnostic is frequently copied into CI and issue logs.
+    const valid = name === "vaylo_fcm_app_id"
+      ? /^1:\d{6,}:android:[0-9a-f]{8,}$/i.test(value)
+      : name === "vaylo_fcm_api_key"
+      ? /^AIza[0-9A-Za-z_-]{35}$/.test(value)
+      : name === "vaylo_fcm_project_id"
+      ? /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value)
+      : /^\d{6,}$/.test(value);
+    if (valid) OK.push(`${name} is present and well-formed`);
+    else MISSING.push(`${name} is missing or invalid in android/app/src/main/res/values/vaylo_fcm.xml`);
   }
 }
 
-// Optional on purpose: the Gradle block only applies the google-services plugin
-// when this file is present, so an absent file is a supported state.
-if (existsSync(GOOGLE_SERVICES)) OK.push("google-services.json present (gradle plugin will apply)");
-else OK.push("google-services.json absent — fine, the gradle block is guarded");
+// Optional only while the explicit client resources remain unconfigured.
+if (existsSync(GOOGLE_SERVICES)) {
+  try {
+    const services = JSON.parse(readFileSync(GOOGLE_SERVICES, "utf8"));
+    const app = services.client?.find((client) =>
+      client.client_info?.android_client_info?.package_name === "com.vaylosports.app",
+    );
+    if (app?.client_info?.mobilesdk_app_id && app?.api_key?.some((key) => key.current_key)) {
+      OK.push("google-services.json has a matching Android client and API key");
+    } else {
+      MISSING.push("google-services.json has no valid com.vaylosports.app client");
+    }
+  } catch {
+    MISSING.push("google-services.json is not valid JSON");
+  }
+} else {
+  OK.push("google-services.json absent — optional only while FCM client config is empty");
+}
 
 /* ------------------------------------------------------------- server side -- */
 

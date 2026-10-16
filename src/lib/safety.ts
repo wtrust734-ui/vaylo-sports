@@ -39,7 +39,16 @@ export const REPORT_REASONS = [
 ] as const;
 
 export type ReportReason = (typeof REPORT_REASONS)[number]["value"];
-export type ReportTargetType = "activity" | "profile" | "community" | "message" | "other";
+export type ReportTargetType =
+  | "activity"
+  | "profile"
+  | "community"
+  | "message"
+  /** Published training plans in the marketplace (coach-authored). */
+  | "marketplace_plan"
+  /** Coach/creator profiles and listings in the marketplace. */
+  | "marketplace_profile"
+  | "other";
 
 export interface ReportContentInput {
   targetType: ReportTargetType;

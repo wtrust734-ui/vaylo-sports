@@ -15,6 +15,7 @@ const read = (p: string) =>
 
 const HARDENING = "/supabase/migrations/20260930064813_security_hardening_ownership_and_grants.sql";
 const DENY = "/supabase/migrations/20260930064921_explicit_deny_policies_for_service_only_tables.sql";
+const REFERRAL_GATE = "/supabase/migrations/20261014220000_referral_qualification_gate.sql";
 
 describe("security hardening migration", () => {
   const src = read(HARDENING);
@@ -76,6 +77,37 @@ describe("service-only tables are explicitly closed (advisor lint 0008)", () => 
   it("creates deny-all policies for every service-role-only table", () => {
     expect(src).toMatch(/'ai_call_events','brands','brand_placements','brand_metrics'/);
     expect(src).toMatch(/for all using \(false\) with check \(false\)/i);
+  });
+});
+
+describe("referral qualification gate", () => {
+  const src = read(REFERRAL_GATE);
+
+  it("moves referral redemption to pending and awards no referrer reward upfront", () => {
+    expect(src).toMatch(/VALUES \(v_referrer, v_user, 'pending', NULL\)/);
+    const redeem = src.slice(src.indexOf("CREATE OR REPLACE FUNCTION public.redeem_referral"), src.indexOf("-- Purchase transaction reference"));
+    expect(redeem).toContain("referral:referee:");
+    expect(redeem).not.toContain("referral:referrer:");
+    expect(src).toMatch(/GRANT EXECUTE ON FUNCTION public\.redeem_referral\(text\) TO authenticated, service_role/i);
+  });
+
+  it("settles only when the positive-price referee purchase owns the verified reference", () => {
+    expect(src).toMatch(/v_purchase_user IS DISTINCT FROM p_referee OR COALESCE\(v_purchase_price, 0\) <= 0/);
+    expect(src).toMatch(/v_purchase_reference IS DISTINCT FROM p_transaction_reference/);
+    expect(src).toMatch(/referral_id uuid NOT NULL UNIQUE REFERENCES public\.referrals\(id\)/);
+    expect(src).toMatch(/purchase_id uuid NOT NULL UNIQUE REFERENCES public\.user_purchases\(id\)/);
+  });
+
+  it("blocks client-side reward minting and restricts settlement to the service role", () => {
+    expect(src).toMatch(/RAISE EXCEPTION 'Reward must be claimed through its verified server flow'/);
+    expect(src).toMatch(/REVOKE ALL ON FUNCTION public\.credits_claim_reward\(text, text, text\) FROM PUBLIC, anon, authenticated/i);
+    expect(src).toMatch(/GRANT EXECUTE ON FUNCTION public\.settle_referral\(uuid, uuid, text, text\) TO service_role/i);
+  });
+
+  it("exposes only own-user aggregate qualification counts", () => {
+    expect(src).toMatch(/p_referrer = auth\.uid\(\)/);
+    expect(src).toMatch(/REVOKE ALL ON FUNCTION public\.referral_qualification_count\(uuid\) FROM PUBLIC, anon/i);
+    expect(src).toMatch(/GRANT EXECUTE ON FUNCTION public\.referral_qualification_count\(uuid\) TO authenticated/i);
   });
 });
 

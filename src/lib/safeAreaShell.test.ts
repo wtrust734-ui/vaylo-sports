@@ -210,7 +210,10 @@ describe("safe-area insets", () => {
     const plainZ = (src: string, anchor: RegExp) =>
       Number(new RegExp(anchor.source + "[^\\n]*?\\bz-(\\d+)\\b").exec(src)?.[1]);
 
-    const drawerZ = bracketZ(sidebar, /start-0/);
+    // The drawer is anchored `right-0` since it was moved to slide from the
+    // right (the earlier `start-0` anchor now matches the desktop aside,
+    // which carries a non-bracketed z-30 and read as NaN here).
+    const drawerZ = bracketZ(sidebar, /right-0/);
     const scrimZ = bracketZ(sidebar, /fixed inset-0/);
     const navZ = plainZ(bottomNav, /fixed inset-x-0/);
     const actionScrimZ = bracketZ(quickAction, /fixed inset-0/);
@@ -233,7 +236,7 @@ describe("safe-area insets", () => {
     // exists for is unchanged, so it asserts the parts that must survive: a
     // 56px box, shrink-0, and the lift.
     expect(quickAction).toMatch(/className="[^"]*\bshrink-0[^"]*"/);
-    expect(quickAction).toMatch(/className="[^"]*\bh-14 w-14\b[^"]*\bshrink-0\b/);
+    expect(quickAction).toMatch(/className="[^"]*h-\[62px\] w-\[62px\][^"]*\bshrink-0\b[^"]*"/);
 
     // The lift is 4px, and a top margin on a centred flex item moves it by
     // *half* the margin — so the class has to be -mt-2 (8px), not -mt-6.
@@ -286,7 +289,7 @@ describe("safe-area insets", () => {
     const rowGap = Number(/flex items-stretch gap-(\d)/.exec(bottomNav)?.[1]);
     const groupGap = Number(/justify-around gap-(\d)/.exec(bottomNav)?.[1]);
     const minW = Number(/min-w-\[(\d+)px\]/.exec(bottomNav)?.[1]);
-    const actionW = Number(/h-14 w-14/.test(quickAction) ? 56 : 0);
+    const actionW = Number(/h-\[60px\] w-\[60px\]/.test(quickAction) ? 60 : 0);
 
     expect(minW).toBeGreaterThanOrEqual(44); // touchTargets floor
     expect(groupGap).toBeGreaterThanOrEqual(0);
@@ -350,30 +353,33 @@ describe("floating tab bar clearance", () => {
     // row grows a padding step or the action button's negative margin changes,
     // this fails here instead of on a phone.
     const REM_PX = 16;
-    const CARD_H = 65; // the nav card's rendered height
+    // The nav card's rendered height after the M3 re-proportion: 64px tab
+    // floor + 6px pt + 8px padding floor = 78px, 90px with a 34px inset...
+    // rounded up to the measured worst case the budget below uses.
+    const CARD_H = 90;
     // How far the action button rises above the card. This was 8 while the
     // button carried `-mt-6`; `-mt-2` brought its top edge ~1.5px *inside* the
     // card (measured on the release APK: button y824.4..880.0 against a card at
-    // y822.9..889.5), so the honest value is now 0. It is left as the measured
-    // pre-fix 8 because the assertion below is a budget: keeping the slack
-    // means a future lift is caught here instead of on a phone.
+    // y822.9..889.5). The 60px FAB still sits between the groups with the same
+    // -mt-2, so the honest value is 0; it is kept at the pre-fix 8 as slack —
+    // the assertion below is a budget, and a future lift is caught here.
     const FAB_PROUD = 8;
     const BAR_FLOOR = 8; // max(0.5rem, inset) with no inset, i.e. every browser
     const WORST_INSET = 34; // a gesture-bar inset
 
     // With an inset the bar's top is inset + CARD_H, so an offset of
-    // inset + 5.25rem clears it by 5.25rem - CARD_H.
-    expect(5.25 * REM_PX).toBeGreaterThanOrEqual(CARD_H);
+    // inset + 7rem clears it by 7rem - CARD_H.
+    expect(7 * REM_PX).toBeGreaterThanOrEqual(CARD_H);
     // With no inset the bar sits BAR_FLOOR up, and the same expression is
     // compared against the full stack including the button.
-    expect(5.25 * REM_PX).toBeGreaterThanOrEqual(BAR_FLOOR + CARD_H + FAB_PROUD);
+    expect(7 * REM_PX).toBeGreaterThanOrEqual(BAR_FLOOR + CARD_H + FAB_PROUD);
   });
 
   it("anchors every bottom bar to the inset instead of a hardcoded offset", () => {
     // `bottom-20` (80px) and `bottom-24` (96px) both landed inside the bar.
     for (const p of BOTTOM_BARS) {
       const src = read(p);
-      expect(src, p).toContain("bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)]");
+      expect(src, p).toContain("bottom-[calc(var(--vaylo-inset-bottom)+7rem)]");
       expect(src, p).not.toMatch(/className="[^"]*\bfixed\b[^"]*\bbottom-(?:20|24)\b/);
     }
   });
@@ -389,7 +395,7 @@ describe("floating tab bar clearance", () => {
     // other whatever either one's copy wraps to. jsdom cannot see any of this —
     // it has no layout — which is why it is asserted as wiring.
     const cookie = read("src/components/CookieNotice.tsx");
-    expect(cookie).toContain("bottom-[calc(var(--vaylo-inset-bottom)+5.5rem+var(--vaylo-notice-lift))]");
+    expect(cookie).toContain("bottom-[calc(var(--vaylo-inset-bottom)+7rem+var(--vaylo-notice-lift))]");
     expect(cookie).not.toMatch(/className="[^"]*\bbottom-20\b/);
 
     const terms = read("src/components/legal/TermsChangeNotice.tsx");

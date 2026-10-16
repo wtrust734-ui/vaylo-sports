@@ -269,7 +269,7 @@ const AppSidebar = () => {
       }
       return next;
     });
-  }, [activeGroupKey]);
+  }, [activeGroupKey, expanded]);
 
   const persist = useCallback((next: Record<string, boolean>) => {
     try {
@@ -315,9 +315,9 @@ const AppSidebar = () => {
 
   // Opened by openAppNav() rather than by a button rendered here.
   useEffect(() => {
-    const open = () => setOpen(true);
-    window.addEventListener(OPEN_NAV_EVENT, open);
-    return () => window.removeEventListener(OPEN_NAV_EVENT, open);
+    const handleOpen = () => setOpen(true);
+    window.addEventListener(OPEN_NAV_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_NAV_EVENT, handleOpen);
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -491,9 +491,9 @@ const AppSidebar = () => {
               className="fixed inset-0 z-[57] bg-[#060712]/70 lg:hidden"
             />
             <motion.aside
-              initial={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
+              initial={{ x: '100%' }}
               animate={{ x: 0 }}
-              exit={{ x: document.documentElement.dir === "rtl" ? "100%" : "-100%" }}
+              exit={{ x: '100%' }}
               transition={{ type: "spring", stiffness: 340, damping: 32 }}
               /* Above the tab bar, not level with it.
 
@@ -507,8 +507,12 @@ const AppSidebar = () => {
 
                  57/58 clears the whole floating stack: BottomNav z-50, the
                  quick-action scrim z-55 and its sheet z-56. A drawer is
-                 modal, so it belongs over all of them. */
-              className="fixed inset-y-0 start-0 z-[58] flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A] lg:hidden shadow-2xl"
+                 modal, so it belongs over all of them.
+
+                 On mobile: the drawer should slide in from the RIGHT side (not left)
+                 and be aligned to the right edge so it doesn't appear to go "off the
+                 left side of the screen" which was the bug reported. */
+              className="fixed inset-y-0 right-0 z-[58] flex w-[84vw] max-w-[320px] flex-col border-e border-white/[0.08] bg-[#0B0C1A] lg:hidden shadow-2xl"
             >
               <div className="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,var(--vaylo-inset-top))] border-b border-white/[0.06]">
                 <div className="flex items-center gap-2.5">

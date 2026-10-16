@@ -5196,6 +5196,10 @@ export type Database = {
       }
       redeem_guardian_invite: { Args: { p_code: string }; Returns: Json }
       redeem_referral: { Args: { p_code: string }; Returns: Json }
+      settle_referral: {
+        Args: { p_product_kind: string; p_referee: string; p_purchase_id: string; p_transaction_reference: string }
+        Returns: Json
+      }
       release_video_analysis_request: {
         Args: { p_request_id: string; p_user_id: string }
         Returns: boolean

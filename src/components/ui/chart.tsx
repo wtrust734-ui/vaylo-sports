@@ -68,6 +68,13 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
+      /* SECURITY NOTE (audit 2026-10-15, finding 4d): this is the one
+         `dangerouslySetInnerHTML` in the client tree. It is safe as wired —
+         only developer-owned theme colors from chart config reach the string —
+         but it is a latent XSS sink if chart colors ever start coming from
+         user or server data. If that ever happens, validate against a color
+         grammar (hex/hsl only) BEFORE this point, or move to CSS variables
+         set via inline style. Do not pass server strings through here. */
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(

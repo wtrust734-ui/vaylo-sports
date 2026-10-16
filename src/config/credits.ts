@@ -497,11 +497,19 @@ export const MONTHLY_ALLOWANCE = {
 export type PromoBonusKey =
   | "referral_referrer"
   | "referral_referee"
+  // Relay tier ladder: milestone bonuses at 3/5/10 qualifying referrals.
+  // Mirrors economy_config.promo_bonuses via scripts/gen-money-mirror.cjs.
+  | "referral_tier_3"
+  | "referral_tier_5"
+  | "referral_tier_10"
   | "winback";
 
 export const PROMO_BONUSES: Record<PromoBonusKey, number> = {
-  referral_referrer: 50,
-  referral_referee: 25,
+  referral_referrer: 15,
+  referral_referee: 10,
+  referral_tier_3: 25,
+  referral_tier_5: 50,
+  referral_tier_10: 125,
   winback: 20,
 };
 

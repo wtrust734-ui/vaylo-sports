@@ -45,7 +45,7 @@ export interface VprSystemState {
   readiness: number | null;
   /** readiness minus the most recent earlier log; null without a comparison. */
   readinessDelta: number | null;
-  /** Consecutive check-in days ending today (0 when none). */
+  /** Consecutive recovery check-in days ending today (0 when none). */
   checkInStreak: number;
 }
 
@@ -96,25 +96,6 @@ export function readinessFromLogs(
   };
 }
 
-/** Pure: consecutive check-in days ending today. */
-export function checkInStreakFromLogs(logs: { log_date: string }[], today: string): number {
-  const dates = new Set(logs.map((l) => l.log_date));
-  let streak = 0;
-  // Parse as a local calendar day — `new Date("YYYY-MM-DD")` is UTC and would
-  // shift the whole streak a day west of UTC (see lib/dates.ts).
-  const [y, m, dNum] = today.split("-").map(Number);
-  const d = new Date(y, (m ?? 1) - 1, dNum ?? 1);
-  // The streak counts back from today; a missing today does not zero yesterday's.
-  if (!dates.has(today)) d.setDate(d.getDate() - 1);
-  for (;;) {
-    const key = localDateKey(d);
-    if (!dates.has(key)) break;
-    streak++;
-    d.setDate(d.getDate() - 1);
-  }
-  return streak;
-}
-
 /**
  * Loads everything the VPR system needs in one round trip per table.
  * `sport` changes the factor weighting, so it is part of the key.
@@ -151,7 +132,7 @@ export function useVprSystem(sport: string | null | undefined, userId: string | 
         factors: vpr ? rankFactors(vpr, sportName) : [],
         readiness: readinessState.readiness,
         readinessDelta: readinessState.delta,
-        checkInStreak: checkInStreakFromLogs((recovery.data ?? []) as never, localDateKey()),
+        checkInStreak: 0, // streak now lives in the anonymous recovery session (src/lib/recoveryStreak.ts)
       });
     })();
 

@@ -185,6 +185,16 @@ const VPRPage = () => {
         <Button onClick={addMetric} disabled={saving || !value} className="w-full">
           {saving ? <Loader2 className="animate-spin" size={16} /> : <><Sparkles size={16} className="mr-1" /> Save & Recalculate</>}
         </Button>
+        {/* The submit is disabled until a value exists. A bare disabled button
+            reads as broken (the audit flagged it as an abandonment risk), so
+            the reason is stated under it. `aria-live=polite` because a screen
+            reader should hear why the button is quiet the moment they tab to
+            it, not on their next tab stop. */}
+        {!value && !saving && (
+          <p aria-live="polite" className="text-xs text-muted-foreground">
+            Enter a value above to unlock Save — there is nothing to recalculate with until you do.
+          </p>
+        )}
         </div>
       </motion.div>
 

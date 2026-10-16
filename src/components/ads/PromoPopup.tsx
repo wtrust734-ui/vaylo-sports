@@ -1,14 +1,57 @@
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { claimCreditReward, creditCost } from "@/lib/credits";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Crown, Brain, ScanLine, Star, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { UNLIMITED_PLAN, formatPence } from "@/config/subscriptionPlans";
 
+// Prices come from the source of truth, not literals: subscriptionPlans.ts is
+// the single catalogue (the DB row wins at runtime, this config is the
+// fallback), and every credit-feature price is creditCost(). The old literals
+// ("$12.99/mo", "$3.99", dollars and all) were invented and drifted from both
+// currencies the app actually charges — the market page read £ and these
+// cards read $. One catalogue, zero drift.
+const proMonthly = UNLIMITED_PLAN.options.find((o) => o.period === "month");
 const promos = [
-  { id: "pro", icon: Crown, title: "Unlock Pro", desc: "Unlimited credits, all features, priority support.", price: "$12.99/mo", color: "text-energy", bg: "bg-energy/10" },
-  { id: "mental", icon: Brain, title: "Mental Gym", desc: "Breathing, visualization, cognitive tools.", price: "$4.99", color: "text-electric-purple", bg: "bg-electric-purple/10" },
-  { id: "form", icon: ScanLine, title: "AI Form Analysis", desc: "Upload a photo, get expert technique feedback.", price: "$3.99", color: "text-primary", bg: "bg-primary/10" },
-  { id: "coach", icon: Star, title: "Coach Pro", desc: "Advanced AI coaching personas.", price: "$2.99", color: "text-energy", bg: "bg-energy/10" },
+  {
+    id: "pro",
+    icon: Crown,
+    title: "Unlimited credits",
+    desc: "Every feature, no balance to watch. Best value when you train daily.",
+    price: proMonthly ? `${formatPence(proMonthly.price_pence)}/month` : "see the Market",
+    color: "text-energy",
+    bg: "bg-energy/10",
+  },
+  {
+    id: "mental",
+    icon: Brain,
+    title: "Mental Gym",
+    desc: "Breathing, visualisation, cognitive tools — a permanent unlock.",
+    price: `${creditCost("mental_gym_unlock")} credits, once`,
+    color: "text-electric-purple",
+    bg: "bg-electric-purple/10",
+  },
+  {
+    id: "form",
+    icon: ScanLine,
+    title: "AI Video Form Analysis",
+    desc: "Send a clip, get expert technique feedback with coaching cues.",
+    price: `${creditCost("video_form_analysis")} credits`,
+    color: "text-primary",
+    bg: "bg-primary/10",
+  },
+  {
+    id: "coach",
+    icon: Star,
+    title: "Your AI coach",
+    desc: "Message Vaylo's coach whenever you need direction between reviews.",
+    price: `from ${creditCost("vaylo_coach_message")} credits`,
+    color: "text-energy",
+    bg: "bg-energy/10",
+  },
 ];
 
 const WINBACK_DISMISS_KEY = "vaylo_winback_dismissed_until";
@@ -23,6 +66,8 @@ const PROMO_SNOOZE_MS = 7 * 86400_000;
 
 const PromoPopup = () => {
   const { hasUnlimitedCredits, entitlements } = useSubscription();
+  const { user } = useAuth();
+  const [claimingWinback, setClaimingWinback] = useState(false);
   const isPremium = hasUnlimitedCredits;
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
@@ -79,8 +124,9 @@ const PromoPopup = () => {
       <AnimatePresence>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={dismiss}
-          className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center px-6">
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-6">
           <motion.div initial={{ scale: 0.85, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 30 }}
+            transition={{ type: "spring", stiffness: 260, damping: 26 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-card border border-electric-purple/40 rounded-2xl p-6 max-w-sm w-full shadow-electric relative">
             <button
@@ -91,7 +137,10 @@ const PromoPopup = () => {
             >
               <X size={18} aria-hidden />
             </button>
-            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 1.6, repeat: Infinity }}
+            <motion.div
+              initial={{ scale: 0.85 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
               className="w-16 h-16 rounded-2xl bg-electric-purple/15 border border-electric-purple/30 flex items-center justify-center mx-auto mb-4">
               <Heart size={30} className="text-electric-purple" />
             </motion.div>
@@ -101,13 +150,20 @@ const PromoPopup = () => {
               Come back and pick up right where you left off.
             </p>
             <div className="bg-gradient-to-r from-electric-purple/15 to-primary/15 border border-electric-purple/30 rounded-xl px-3 py-2.5 mb-4 text-center">
-              <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Limited-time code</p>
-              <p className="text-lg font-display font-bold text-electric-purple tracking-widest">COMEBACK30</p>
-              <p className="text-[12px] text-muted-foreground">30% off your first 3 months</p>
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Comeback offer</p>
+              <p className="text-sm text-muted-foreground">Resume your plan and keep your training moving.</p>
             </div>
-            <motion.button onClick={() => { setShow(false); navigate("/subscription"); }} whileTap={{ scale: 0.98 }}
+            <motion.button onClick={async () => {
+              if (!user || claimingWinback) return;
+              setClaimingWinback(true);
+              const result = await claimCreditReward("winback", { idempotencyKey: `winback:${user.id}` });
+              setClaimingWinback(false);
+              if (!result.success) { toast.error(result.error || "The comeback reward is unavailable right now."); return; }
+              toast.success(result.granted > 0 ? `${result.granted} comeback credits added` : "Welcome back");
+              setShow(false);
+            }} disabled={!user || claimingWinback} whileTap={{ scale: 0.98 }}
               className="w-full bg-gradient-to-r from-electric-purple to-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow mb-2">
-              Resume my plan
+              {claimingWinback ? "Applying…" : "Claim comeback reward"}
             </motion.button>
             <button onClick={dismiss} className="w-full text-sm text-muted-foreground text-center py-2">
               Maybe later
@@ -124,8 +180,9 @@ const PromoPopup = () => {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={dismiss}
-        className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center px-6">
+        className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center px-6">
         <motion.div initial={{ scale: 0.85, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 30 }}
+          transition={{ type: "spring", stiffness: 260, damping: 26 }}
           onClick={(e) => e.stopPropagation()}
           className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full shadow-electric relative">
           <button

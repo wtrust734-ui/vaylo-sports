@@ -5,10 +5,12 @@ import { useTranslation } from "react-i18next";
 import { HeartPulse, Sparkles, Calendar, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVprSystem } from "@/lib/vprSystem";
+import { getCurrentStreak as getRecoveryStreak } from "@/lib/recoveryStreak";
 import VprHero from "@/components/vpr/VprHero";
 import { SectionHeader, Delta, Metric } from "@/components/ui/section";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
 import StarterOfferCard from "@/components/dashboard/StarterOfferCard";
+import RaceOfferCard from "@/components/dashboard/RaceOfferCard";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -93,12 +95,13 @@ const Insights = () => {
       path: "/events",
     });
   }
-  if (sys.checkInStreak >= 3) {
+  const recoveryStreak = getRecoveryStreak();
+  if (recoveryStreak.current >= 3) {
     insights.push({
       icon: Sparkles,
-      text: t("dashboard.insightStreak", { days: sys.checkInStreak }),
+      text: t("dashboard.insightStreak", { days: recoveryStreak.current }),
       cta: t("dashboard.viewMetrics"),
-      path: "/metrics",
+      path: "/recovery",
     });
   }
 
@@ -163,6 +166,8 @@ const Index = () => {
       </header>
 
       <StarterOfferCard />
+
+      <RaceOfferCard />
 
       <section className="px-5 pb-5 sm:pb-6" aria-label="Your performance">
         <VprHero />

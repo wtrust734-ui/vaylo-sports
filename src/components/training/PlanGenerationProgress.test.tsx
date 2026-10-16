@@ -153,6 +153,25 @@ describe("the plan generation progress panel", () => {
     expect(screen.getByText(/refunded automatically/i)).toBeInTheDocument();
   });
 
+  it("describes the nutrition pipeline when a meal plan is being built", () => {
+    // The overlay was training-shaped for every caller: creating a nutrition
+    // plan showed "Reading your training history" and "Setting the
+    // periodisation" — steps generate-nutrition-plan never runs. The stages
+    // must name the real nutrition work instead.
+    const utils = renderWith(<PlanGenerationProgress weeks={6} kind="nutrition" />);
+
+    expect(screen.getByText(/Building your 6-week meal plan/i)).toBeInTheDocument();
+    expect(screen.getByText("Reading your goals and intake")).toBeInTheDocument();
+    expect(screen.getByText("Setting your calorie and macro targets")).toBeInTheDocument();
+    expect(screen.getByText("Writing the meals")).toBeInTheDocument();
+    expect(screen.getByText("Checking the safety limits")).toBeInTheDocument();
+    expect(screen.getByText("Saving your plan")).toBeInTheDocument();
+
+    expect(screen.queryByText("Reading your training history")).not.toBeInTheDocument();
+    expect(screen.queryByText("Setting the periodisation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Writing the sessions")).not.toBeInTheDocument();
+  });
+
   it("moves through the stages rather than sitting on the first one", () => {
     const utils = renderWith(<PlanGenerationProgress weeks={6} />);
 

@@ -5,11 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "./BottomNav";
 import VayloLoader from "@/components/VayloLoader";
+import { holdBootVeil, markBootReady } from "@/components/BootVeil";
 import QuickCommandBar from "./QuickCommandBar";
 import TabShell, { isTabRoot } from "./TabShell";
 import BackBar from "./BackBar";
 import { RefreshCw, LogOut } from "lucide-react";
-import CookieNotice from "@/components/CookieNotice";
 import { isGuestUser } from "@/lib/guestMode";
 import {
   checkChallengeDeadlines,
@@ -23,12 +23,25 @@ import {
   type TriggerPrefs,
   scheduleMorningReminders,
   scheduleReengagementPing,
+  scheduleStreakReminder,
   shouldRunDailyCheck,
 } from "@/lib/notificationTriggers";
+import { getCurrentStreak } from "@/lib/recoveryStreak";
 
 const AppLayout = () => {
   const { session, profile, loading, profileError, guestError, signOut } = useAuth();
   const location = useLocation();
+
+  // Boot handoff: while this gate is up, the BootVeil stays up with it — the
+  // veil is what the athlete sees during session restore, guest entry and the
+  // profile fetch, so the app never crossfades into a spinner. The moment the
+  // layout has something real to render, release it and let the fade reveal a
+  // finished screen. Without this signal the veil would have to guess with a
+  // timer, and a slow network would turn the guess into a visible second cut.
+  useEffect(() => {
+    if (loading) holdBootVeil();
+    else markBootReady();
+  }, [loading]);
 
   // Notification checks while the app is open (inbox + device shade through
   // the OS scheduler — no push infrastructure needed).
@@ -117,6 +130,18 @@ const AppLayout = () => {
           // 72h window always counts from the latest visit.
           await scheduleReengagementPing(uid, daysAway);
         }
+        // The morning streak reminder arms on EVERY open, in both branches:
+        // it is the one notification aimed at someone who has NOT opened the
+        // app (the person whose streak is about to break), so it cannot depend
+        // on the once-a-day refresh path above. Pre-scheduled for 08:00 so the
+        // OS fires it with the app closed; the streak it quotes comes from the
+        // anonymous recovery ledger on this device.
+        const recoveryStreak = getCurrentStreak();
+        await scheduleStreakReminder(
+          recoveryStreak.current,
+          recoveryStreak.checkInToday,
+          prefs,
+        ).catch(() => {});
       } catch {
         // A failed check retries on the next app open; never break the layout.
       }
@@ -200,8 +225,7 @@ const AppLayout = () => {
     <div className="min-h-screen app-mesh bg-background text-foreground antialiased">
       {/* Subtle top hairline + mesh stays fixed via body, but this adds a soft vignette on large screens */}
       <div aria-hidden className="pointer-events-none fixed inset-0 hidden lg:block" style={{ background: "radial-gradient(900px 500px at 50% -10%, hsla(217 100% 60% / 0.06), transparent 70%)" }} />
-      <AppSidebar />
-      {/* pb-28 clears the floating tab bar.
+      <AppSidebar />          {/* pb-36 clears the floating tab bar (below).
 
           The top inset is NOT applied here. It lives on `body` in index.css,
           which is the only place it belongs: /auth and /onboarding render
@@ -222,7 +246,18 @@ const AppLayout = () => {
       {/* The left reservation is the sidebar's own token, not a `pl-60`
           literal: 240px did not match the 272px aside, so the translucent
           panel sat over the first 32px of every page at `lg:` and up. */}
-      <main className="relative pb-28 lg:pl-[var(--vaylo-sidebar-w)]">
+      {/* 112px of scroll headroom is UNDER the bar's real footprint: the bar
+          itself ends ~90px above the floor (64px tab floor + 6px top pad +
+          ~8px on the surface), but anything scrollable that stops there sits
+          flush against its translucent edge, and fixed bottom overlays — the
+          quick-action sheet scrim, the cookie notice — cover the last ~230px
+          of the page at full scroll. The old 112px is now 144px (pb-36),
+          which leaves exactly one full tab-band + one notice band above the
+          floor: the last card on any tab is never entombed behind the bar or
+          a bottom notice on first scroll end. Fixed overlays still overlap
+          while scrolling (that is what fixed means); what this buys back is
+          the bottom-of-page state, which is where users actually look. */}
+      <main className="relative pb-36 lg:pb-28 lg:pl-[var(--vaylo-sidebar-w)]">
         {/* `min-w-0` on the flex/grid child is what actually stops a wide
             descendant (a long username, an AI response, a stat grid) from
             pushing the page wider than the viewport. Without it the child is
@@ -275,7 +310,6 @@ const AppLayout = () => {
       </main>
       <QuickCommandBar />
       <BottomNav />
-      <CookieNotice />
     </div>
   );
 };

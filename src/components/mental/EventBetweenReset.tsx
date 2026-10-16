@@ -87,7 +87,7 @@ const EventBetweenReset = ({ cueWords, pinnedCue, next, onBreathe, onExit }: Pro
       {!started ? (
         <>
           <p className="mt-8 text-xs text-muted-foreground">How long until you need to move?</p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <div className="mt-3 flex flex-wrap justify-center gap-2 min-w-0">
             {RESET_MINUTES.map((mins) => (
               <button
                 key={mins}

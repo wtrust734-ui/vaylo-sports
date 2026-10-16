@@ -25,7 +25,7 @@ const KEYS: { key: string; label: string; desc: string }[] = [
   // 20261014120000); until it is applied the switches read on and toggling
   // one reports the error instead of pretending it saved.
   { key: "low_balance", label: "Low credit warnings", desc: "A heads-up when your credits run low. At most every 3 days." },
-  { key: "recovery_alerts", label: "Recovery warnings", desc: "A gentle note when today's readiness is very low." },
+  { key: "recovery_alerts", label: "Recovery warnings", desc: "A gentle note when today's readiness is very low, plus the morning reminder that keeps your streak alive." },
 ];
 
 /**

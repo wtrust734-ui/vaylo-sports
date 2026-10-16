@@ -67,7 +67,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
 
   <h1>Terms of Service</h1>
-  <p class="meta">Version 1.4 &middot; Effective 8 October 2026</p>
+  <p class="meta">Version 1.5 &middot; Effective 14 October 2026</p>
   <p class="meta">Operator: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
@@ -82,8 +82,11 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     <strong>18&ndash;30-year-old athletes</strong>, from developing athletes through
     serious and competitive athletes. That is who it is built for. It is <strong>not a
     technical age gate</strong>: we do not verify anyone's age and we do not block
-    anyone by age, so the app can be used by an athlete under 18. You must be at least
-    13 years old to hold an account. If you are under 18, you may only use the app with
+    anyone by age, so the app can be used by an athlete under 18.    You must be at least 13 years old to hold an account. If you are under 18,
+    extra limits apply to your account on top of these terms — no sponsored
+    content, a private profile, no nutrition features, capped training volumes
+    and no promotional nudges — as described in
+    <a href="child-safety">Child &amp; Young Athlete Safety</a>. If you are under 18, you may only use the app with
     the involvement of a parent or guardian, and a purchase made on an account
     registered to someone under 18 must involve them and is refunded in full when it is
     called up, by the athlete or by a parent or guardian, with no reason required
@@ -196,9 +199,10 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2>6. Subscriptions</h2>
   <div class="warn">
-    <strong>Buying is not currently switched on.</strong> Checkout is disabled in the
-    app, nothing is on offer for sale today, and you cannot currently spend money in
-    Vaylo Sports. This section and section 7 explain how paid plans, purchases and
+    <strong>Buying inside the app is not currently switched on.</strong> Checkout is disabled in the
+    app, nothing is on offer for sale there today, and you cannot currently spend money in
+    Vaylo Sports. The one exception is coach membership, which is sold on our website
+    and paid through Stripe — see section 7a. This section and section 7 explain how paid plans, purchases and
     refunds will work when checkout is enabled. See
     <a href="purchases">Credits, Subscriptions &amp; Virtual Currency</a> and
     <a href="refunds">Refunds &amp; Cancellation</a> for the detail.
@@ -220,7 +224,9 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <h2>7. Buying and refunds</h2>
   <p>
     Purchases on Android are processed by Google Play, and Google's payment terms and
-    refund policy apply. We never see or store your card details.
+    refund policy apply. Coach membership is sold on our website instead and paid by
+    card through Stripe; Stripe's terms apply to that payment, and we never see or
+    store your card details for either route.
   </p>
   <p>
     Because credits, coins and Event Packs are consumed inside the app, they are not
@@ -233,6 +239,22 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     We verify every purchase with Google's servers before granting anything. If a
     purchase is charged back, reversed or found to be fraudulent, the credits, coins
     or access it granted will be removed.
+  </p>
+
+  <h2>7a. Coaching marketplace</h2>
+  <p>
+    Becoming a coach happens on our website, not in the app, and involves a
+    membership fee shown at checkout, paid by card through Stripe. Athletes buy a
+    coach's plans with coaching credit, which is topped up through Google Play;
+    our server quotes the price before you confirm, and each feature shows its
+    cost before you confirm it.
+  </p>
+  <p>
+    If you coach, every sale is recorded as owed to you, but <strong>payouts to
+    coaches are not connected yet</strong>: nothing is transferred automatically
+    today, and the balance is what will be paid when payouts are switched on.
+    A coach's plans are their own work and their own responsibility, not ours,
+    and if you earn as a coach, declaring that income for tax is yours.
   </p>
 
   <h2>8. Sponsored content</h2>
@@ -494,7 +516,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
 
   <h1>Privacy Policy</h1>
-  <p class="meta">Version 1.4 &middot; Effective 8 October 2026</p>
+  <p class="meta">Version 1.5 &middot; Effective 14 October 2026</p>
   <p class="meta">Data controller: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
@@ -595,7 +617,9 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <p>
     Sessions you log or track, plus everything derived from them: training load,
     personal bests, streaks, points, achievements, readiness and recovery scores.
-    Workouts you track with GPS include the route and its start and end points.
+    The app does not track your location: there is no live GPS workout tracking,
+    so a distance is either a value you entered yourself or one that arrived from
+    Health Connect or a wearable you connected.
   </p>
 
   <h3>Content you create</h3>
@@ -610,7 +634,18 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     Your coin and credit balance, what you bought, and subscription status. Payment
     for Android purchases is handled entirely by Google Play; we receive a purchase
     token and a receipt, never your card number, and we do not store your billing
-    address.
+    address. Coach membership and marketplace payments made on our website are
+    handled by Stripe in the same way: we receive a payment reference, never your
+    card number.
+  </p>
+
+  <h3>Coaching</h3>
+  <p>
+    If you become a coach, we hold what you publish — display name, bio and
+    specialties — plus the payout email address you give us, the plans you list,
+    the orders placed for them, and the earnings recorded against them. Payouts to
+    coaches are not connected yet, so the payout email is stored and no transfer
+    is made. If you buy a coach plan, we hold the order and what was delivered.
   </p>
 
   <h3>Waiting list</h3>
@@ -664,12 +699,10 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     <tr>
       <td>Your device sensors</td>
       <td>
-        While you have a workout actively tracking, the app reads your device
-        location to measure how far you have gone. It calculates the distance on
-        your device and stores only the resulting distance — your coordinates and
-        the route are never saved, and location is never read in the background.
-        Your country for leaderboards is a value you pick, not something derived
-        from location.
+        Location is not read. Live GPS workout tracking was removed from the app:
+        nothing reads your coordinates in the foreground or the background, and no
+        route is recorded. Your country for leaderboards is a value you pick, not
+        something derived from location.
       </td>
     </tr>
     <tr>
@@ -775,7 +808,8 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     <tr><th>Provider</th><th>Purpose and data</th></tr>
     <tr><td>Supabase</td><td>Database, authentication, file storage and the server functions that generate your content. All data you create lives here.</td></tr>
     <tr><td>OpenAI</td><td>Generating coaching text, as described in section 3.</td></tr>
-    <tr><td>Google</td><td>Play Billing for purchases; the Gemini API for video form analysis; Health Connect on your device.</td></tr>
+    <tr><td>Google</td><td>Play Billing for purchases; the Gemini API for photo and video form analysis; Health Connect on your device.</td></tr>
+    <tr><td>Stripe</td><td>Card payments made on our website for coach membership and marketplace orders. Stripe receives the payment details; we receive only a payment reference, never a card number.</td></tr>
     <tr><td>Google (Gmail)</td><td>Sending waiting-list email and replying to support requests from our own support account. Only the recipient address and the message are involved.</td></tr>
     <tr><td>Wearable providers you connect</td><td>Reading your activities from them, with the access you granted on their own consent screen.</td></tr>
   </table>
@@ -2315,7 +2349,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>Vaylo Sports</span></div>
 
   <h1>Competitions &amp; Promotion Terms</h1>
-  <p class="meta">Version 1.0 &middot; 2 October 2026</p>
+  <p class="meta">Version 1.1 &middot; 15 October 2026 &middot; adds the official-rules appendix and the free-entry commitment</p>
   <p class="meta">Operated by Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <div class="note">
@@ -2332,6 +2366,8 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
       <li><a href="#what">What competitions and promotions are</a></li>
       <li><a href="#entry">Entering, and what it costs</a></li>
       <li><a href="#rewards">What a reward actually is</a></li>
+      <li><a href="#official-rules">Official rules for prize promotions</a></li>
+      <li><a href="#free-entry">Free entry, always</a></li>
       <li><a href="#fairness">How we keep it fair</a></li>
       <li><a href="#under18">Competitions and under-18s</a></li>
       <li><a href="#no-warranty">No guarantee, and no reliance</a></li>
@@ -2388,6 +2424,53 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     will say so plainly, including any eligibility, time limit and condition. We
     are not going to describe a reward in a way that leaves you guessing whether
     it is money.
+  </p>
+
+  <h2 id="official-rules">Official rules for prize promotions</h2>
+  <p>
+    Most of what Vaylo Sports runs falls under the sections above: your result is
+    your own logged activity, the reward is virtual currency, and everything is
+    free to enter. If we ever run a promotion with a prize draw, a random element,
+    or a reward with real-world value, that promotion runs on its own
+    <strong>official rules</strong>, published before it opens and in force before
+    anyone enters. Those rules will state, for that promotion:
+  </p>
+  <ul>
+    <li>who the organiser is (the operator named at the top of this page);</li>
+    <li>who may enter — eligibility, minimum age and the countries it runs in, and
+        which countries it is closed in;</li>
+    <li>the exact dates and time zone the promotion runs between;</li>
+    <li>how to enter, with every entry method listed and none hidden behind a
+        payment;</li>
+    <li>how winners are picked — by judging against stated criteria, or (only if a
+        draw is genuinely part of the promotion) by random selection, with the class
+        or odds stated plainly;</li>
+    <li>the prizes, their number, their nature and their approximate value, and
+        whether any part of them is taxable income to you (it is, if your own tax
+        law says so — the promotion does not pay your tax);</li>
+    <li>when and how we notify winners and how prizes are delivered;</li>
+    <li>what we do with entrants' personal data, using the published
+        <a href="privacy">Privacy Policy</a> purposes only;</li>
+    <li>a statement of any platform rules we follow, including any platform's rule
+        that the promotion is not sponsored by or associated with the platform.</li>
+  </ul>
+  <p>
+    If a promotion like that never appears in your app, this section was written
+    for a promotion that does not exist yet, and the first sections of this page
+    are the whole contract for what you did enter.
+  </p>
+
+  <h2 id="free-entry">Free entry, always</h2>
+  <p>
+    <strong>No purchase is ever a condition of winning a prize promotion.</strong>
+    If a promotion is ever connected in any way with buying credits, subscribing,
+    or any other payment, an equally-weighted free route into the same promotion
+    will always exist and will be published in that promotion's official rules and
+    at the point of entry. The free route will not be made harder to use than the
+    paid route: no purchase screens before it, no waiting, no smaller prize. If you
+    cannot see a free route in a promotion's rules, the promotion is not one of
+    ours, and complaints about it go to the
+    <a href="complaints">complaints procedure</a>.
   </p>
 
   <h2 id="fairness">How we keep it fair</h2>
@@ -2544,7 +2627,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>Vaylo Sports</span></div>
 
   <h1>Credits, Subscriptions &amp; Virtual Currency</h1>
-  <p class="meta">Version 1.3 &middot; 4 October 2026</p>
+  <p class="meta">Version 1.4 &middot; 14 October 2026</p>
   <p class="meta">Operated by Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <div class="warn">
@@ -2552,7 +2635,10 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     The app can show you what things would cost, but checkout is disabled: the
     subscription screen says checkout is coming soon, and the store says payments
     are not available in this build. <strong>You cannot currently spend money in the
-    app, and nothing here is on offer for sale today.</strong></p>
+    app, and nothing here is on offer for sale today.</strong> The one exception
+    lives outside the app: coach membership is sold on our website and paid
+    through Stripe (see sections 5 and 7 of the
+    <a href="terms">Terms of Service</a>).</p>
     <p style="margin-bottom:0">This page explains how buying will work when it is
     switched on, so that when checkout appears you know what you are agreeing to. It
     does not constitute an offer to sell anything.</p>
@@ -2577,7 +2663,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2 id="what">1. What credits and coins are</h2>
   <p>
-    Vaylo Sports has two kinds of in-app item:
+    Vaylo Sports has three kinds of in-app item:
   </p>
   <ul>
     <li><strong>Credits</strong> buy access to individual AI features and analysis
@@ -2684,7 +2770,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <ul>
     <li><strong>260 at sign-up.</strong></li>
     <li><strong>A daily reward</strong> for consecutive days, on a ladder that increases through the week.</li>
-    <li><strong>Rewards for referring a friend</strong>, for both of you.</li>
+    <li><strong>Rewards for referring a friend</strong>, for both of you: 50 credits for the referrer and 25 for the friend who joins.</li>
     <li><strong>Rewards for certain activities</strong> in the app.</li>
     <li><strong>Any promotion we choose to run,</strong> stated in the app when it is running.</li>
   </ul>
@@ -2692,6 +2778,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <h2 id="buying">5. How buying works</h2>
   <ul>
     <li><strong>Payments are taken by Google Play</strong> on Android, using Google Play Billing. We never see or store your card details.</li>
+    <li><strong>Coach membership is the exception: it is sold on our website</strong>, paid by card through Stripe, and never sold inside the app. We receive a payment reference from Stripe, never your card number.</li>
     <li><strong>Google's payment terms and refund policy apply</strong> to the transaction itself, alongside your rights under our terms.</li>
     <li><strong>We verify every purchase with Google before granting anything.</strong> The app cannot grant credits on its own.</li>
     <li><strong>Currency and price are shown at checkout</strong> and may differ by country. You are charged the amount displayed before you confirm.</li>
@@ -2702,7 +2789,9 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <p>
     If a subscription is offered, it renews automatically at the interval shown at
     checkout, at the price displayed there, until you cancel. Unlimited access, where
-    offered, removes the per-use credit cost for the features it covers.
+    offered, removes the per-use credit cost for the features it covers, subject to a
+    daily fair-use ceiling on AI calls that is enforced automatically; the current
+    ceiling is shown in the app.
   </p>
   <ul>
     <li><strong>Cancel in the Play Store</strong> under <em>Payments &amp; subscriptions</em>. Cancelling stops the next renewal and lets the current paid period run out.</li>
@@ -2716,7 +2805,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <ul>
     <li><strong>Spending is immediate and final</strong> once a feature runs.</li>
     <li><strong>Nothing is reserved</strong> &mdash; credits are taken when you confirm, and if the feature then fails to run, tell us and we will refund the credits.</li>
-    <li><strong>Unused credits roll over</strong> between months on a subscription, up to a cap, rather than expiring.</li>
+    <li><strong>Unused credits roll over</strong> between months on a subscription, up to 300 credits, rather than expiring.</li>
     <li><strong>If we shut a feature down,</strong> credits already spent on it are not refunded, but any locked unlock stays unlocked.</li>
     <li><strong>Deleting your account loses everything.</strong> Ask for an export first &mdash; see <a href="account-deletion">Deleting Your Account</a>.</li>
   </ul>
@@ -5028,7 +5117,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     reported &mdash; the site, how bad it is, what hurts and what does not, and how
     long it has been going on &mdash; to an external AI service, and writes back a
     week-by-week scaffold with sets, reps or times, the checkpoint for moving on,
-    and the signs that mean stop. <strong>Each plan is charged at 6 credits</strong>,
+    and the signs that mean stop. <strong>Each plan is charged at 20 credits per week</strong>,
     on top of the unlock, because each one is a paid call to that service.
   </p>
   <p>

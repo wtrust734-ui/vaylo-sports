@@ -61,7 +61,7 @@
   <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
 
   <h1>Privacy Policy</h1>
-  <p class="meta">Version 1.4 &middot; Effective 8 October 2026</p>
+  <p class="meta">Version 1.5 &middot; Effective 14 October 2026</p>
   <p class="meta">Data controller: %%OPERATOR_NAME%% &middot; Contact: <a href="mailto:%%CONTACT_EMAIL%%">%%CONTACT_EMAIL%%</a></p>
 
   <p>
@@ -162,7 +162,9 @@
   <p>
     Sessions you log or track, plus everything derived from them: training load,
     personal bests, streaks, points, achievements, readiness and recovery scores.
-    Workouts you track with GPS include the route and its start and end points.
+    The app does not track your location: there is no live GPS workout tracking,
+    so a distance is either a value you entered yourself or one that arrived from
+    Health Connect or a wearable you connected.
   </p>
 
   <h3>Content you create</h3>
@@ -177,7 +179,18 @@
     Your coin and credit balance, what you bought, and subscription status. Payment
     for Android purchases is handled entirely by Google Play; we receive a purchase
     token and a receipt, never your card number, and we do not store your billing
-    address.
+    address. Coach membership and marketplace payments made on our website are
+    handled by Stripe in the same way: we receive a payment reference, never your
+    card number.
+  </p>
+
+  <h3>Coaching</h3>
+  <p>
+    If you become a coach, we hold what you publish — display name, bio and
+    specialties — plus the payout email address you give us, the plans you list,
+    the orders placed for them, and the earnings recorded against them. Payouts to
+    coaches are not connected yet, so the payout email is stored and no transfer
+    is made. If you buy a coach plan, we hold the order and what was delivered.
   </p>
 
   <h3>Waiting list</h3>
@@ -231,12 +244,10 @@
     <tr>
       <td>Your device sensors</td>
       <td>
-        While you have a workout actively tracking, the app reads your device
-        location to measure how far you have gone. It calculates the distance on
-        your device and stores only the resulting distance — your coordinates and
-        the route are never saved, and location is never read in the background.
-        Your country for leaderboards is a value you pick, not something derived
-        from location.
+        Location is not read. Live GPS workout tracking was removed from the app:
+        nothing reads your coordinates in the foreground or the background, and no
+        route is recorded. Your country for leaderboards is a value you pick, not
+        something derived from location.
       </td>
     </tr>
     <tr>
@@ -342,7 +353,8 @@
     <tr><th>Provider</th><th>Purpose and data</th></tr>
     <tr><td>Supabase</td><td>Database, authentication, file storage and the server functions that generate your content. All data you create lives here.</td></tr>
     <tr><td>OpenAI</td><td>Generating coaching text, as described in section 3.</td></tr>
-    <tr><td>Google</td><td>Play Billing for purchases; the Gemini API for video form analysis; Health Connect on your device.</td></tr>
+    <tr><td>Google</td><td>Play Billing for purchases; the Gemini API for photo and video form analysis; Health Connect on your device.</td></tr>
+    <tr><td>Stripe</td><td>Card payments made on our website for coach membership and marketplace orders. Stripe receives the payment details; we receive only a payment reference, never a card number.</td></tr>
     <tr><td>Google (Gmail)</td><td>Sending waiting-list email and replying to support requests from our own support account. Only the recipient address and the message are involved.</td></tr>
     <tr><td>Wearable providers you connect</td><td>Reading your activities from them, with the access you granted on their own consent screen.</td></tr>
   </table>

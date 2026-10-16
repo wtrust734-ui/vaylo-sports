@@ -24,13 +24,14 @@ import { describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(path.resolve(__dirname, "../.." + p), "utf8");
 
 const training = read("/src/pages/Training.tsx");
+const nutrition = read("/src/pages/Nutrition.tsx");
 
 describe("a plan the athlete paid for is either saved or reported", () => {
   it("retries the insert instead of giving up on the first failure", () => {
     // Two attempts of the same row: the plan data is already in hand, so the
     // only cost of a retry is a moment.
-    const attempts = training.match(/\.insert\(planRow\)/g) ?? [];
-    expect(attempts.length).toBeGreaterThanOrEqual(2);
+    expect(training).toMatch(/for\s*\(let attempt = 1; attempt <= 2; attempt\+\+\)/);
+    expect(training).toContain(".insert(planRow)");
   });
 
   it("tells the athlete not to re-create the plan, in the branch that gives up", () => {
@@ -38,7 +39,7 @@ describe("a plan the athlete paid for is either saved or reported", () => {
     // satisfied by a comment — and this file is mostly comments — so the three
     // phrases are only evidence when they sit in the code that runs after the
     // insert has failed and before the function returns.
-    const failureBranch = training.indexOf("Your plan was written but not saved");
+    const failureBranch = training.indexOf("Your plan was written but could not be saved");
     expect(failureBranch, "the plan-not-saved branch is gone").toBeGreaterThan(-1);
     const branch = training.slice(failureBranch, training.indexOf("return;", failureBranch));
 
@@ -50,7 +51,7 @@ describe("a plan the athlete paid for is either saved or reported", () => {
   });
 
   it("never reaches the success toast when the save failed", () => {
-    const failureBranch = training.indexOf("Your plan was written but not saved");
+    const failureBranch = training.indexOf("Your plan was written but could not be saved");
     const successToast = training.indexOf('title: "Plan Created!');
 
     expect(failureBranch).toBeGreaterThan(-1);
@@ -58,5 +59,17 @@ describe("a plan the athlete paid for is either saved or reported", () => {
     // The failure branch has to leave the function before the success path can
     // run — a toast alone would still let the wizard close on a missing plan.
     expect(training.slice(failureBranch, successToast)).toMatch(/return;/);
+  });
+
+  it("pins equivalent no-recreation, support, and failure-before-success handling for nutrition plans", () => {
+    const failureBranch = nutrition.indexOf("Your plan was written but not saved");
+    const successToast = nutrition.indexOf('title: "Your plan is ready 🥗"');
+    expect(failureBranch).toBeGreaterThan(-1);
+    expect(successToast).toBeGreaterThan(failureBranch);
+    const failureWindow = nutrition.slice(failureBranch, successToast);
+    expect(failureWindow).toMatch(/do not generate it again/i);
+    expect(failureWindow).toMatch(/second time/i);
+    expect(failureWindow).toMatch(/contact support/i);
+    expect(failureWindow).toMatch(/return;/);
   });
 });

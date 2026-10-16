@@ -106,6 +106,7 @@ export interface PlanWeekLike {
 
 export interface TrainingPlanLike {
   id: string;
+  title?: string | null;
   created_at?: string | null;
   week_current?: number | null;
   duration_weeks?: number | null;

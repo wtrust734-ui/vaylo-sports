@@ -1,8 +1,497 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap')
+layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';  @plugin 'tailwindcss-animate';
+  /* The typography plugin was carried as a dependency but never registered in
+     the old v3 config, so `prose` classes rendered unstyled. Registering it
+     makes the markdown in Goals and Coach actually typographic. v4 loads
+     plugins from CSS rather than a JS config file. */
+  @plugin '@tailwindcss/typography';
+
+
+@custom-variant dark (&:is(.dark *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@theme {
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-display: Space Grotesk, Inter, sans-serif;
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-energy: hsl(var(--energy));
+  --color-energy-foreground: hsl(var(--energy-foreground));
+
+  --color-electric: hsl(var(--electric));
+  --color-electric-glow: hsl(var(--electric-glow));
+  --color-electric-purple: hsl(var(--electric-purple));
+  --color-electric-purple-glow: hsl(var(--electric-purple-glow));
+
+  --color-navy: hsl(var(--navy));
+  --color-navy-deep: hsl(var(--navy-deep));
+
+  --color-warning: hsl(var(--warning));
+  --color-info: hsl(var(--info));
+  --color-success: hsl(var(--success));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --shadow-elev-1: 0 1px 2px hsl(222 50% 3% / 0.5);
+  --shadow-elev-2: 0 8px 24px hsl(222 50% 3% / 0.45);
+  --shadow-elev-3: 0 18px 48px hsl(222 50% 3% / 0.55);
+  --shadow-glow-electric: 0 0 22px hsla(217, 100%, 58%, 0.4);
+  --shadow-glow-electric-soft: 0 0 22px hsla(217, 100%, 58%, 0.35);
+  --shadow-glow-energy: 0 0 30px hsl(38 92% 50% / 0.4);
+  --shadow-glow-energy-strong: 0 0 60px hsl(38 92% 50% / 0.5);
+  --shadow-glow-primary: 0 0 22px hsla(270, 80%, 60%, 0.35);
+
+  --spacing-safe-b: max(1rem, env(safe-area-inset-bottom));
+  --spacing-safe-t: env(safe-area-inset-top);
+  --spacing-tab: 4.5rem;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-slide-up: slide-up 0.4s ease-out;
+  --animate-electric-pulse: electric-pulse 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-shimmer-sweep: shimmer-sweep 1.6s linear infinite;
+  --animate-tap-bounce: tap-bounce 0.18s ease-out;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-glow-border: glow-border 2s ease-in-out infinite;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes electric-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 20px hsla(217, 100%, 58%, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 40px hsla(217, 100%, 58%, 0.5);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes shimmer-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes tap-bounce {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(0.97);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  @keyframes glow-border {
+    0%,
+    100% {
+      border-color: hsla(217, 100%, 58%, 0.3);
+    }
+    50% {
+      border-color: hsla(217, 100%, 58%, 0.7);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility app-mesh {
+  background-image: var(--gradient-mesh);
+  background-attachment: fixed;
+}
+
+@utility hairline-top {
+  box-shadow: 0 1px 0 hsla(0 0% 100% / 0.06) inset;
+}
+
+@utility hairline-bottom {
+  box-shadow: 0 -1px 0 hsla(0 0% 100% / 0.06) inset;
+}
+
+@utility glass {
+  background: linear-gradient(
+    180deg,
+    hsla(0 0% 100% / 0.08),
+    hsla(0 0% 100% / 0.03)
+  );
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid hsla(0 0% 100% / 0.08);
+}
+
+@utility glass-card {
+  background: linear-gradient(
+    180deg,
+    hsla(233 28% 11% / 0.88),
+    hsla(233 28% 7% / 0.94)
+  );
+  backdrop-filter: blur(16px) saturate(1.08);
+  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  border: 1px solid hsla(0 0% 100% / 0.07);
+  box-shadow: var(--shadow-card);
+}
+
+@utility ring-focus {
+  &:focus-visible {
+    box-shadow: 0 0 0 4px hsla(217 100% 60% / 0.18);
+  }
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility text-gradient-primary {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility text-gradient-energy {
+  background: var(--gradient-energy);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility text-gradient-electric {
+  background: var(--gradient-electric);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility bg-gradient-primary {
+  background: var(--gradient-primary);
+}
+
+@utility bg-gradient-energy {
+  background: var(--gradient-energy);
+}
+
+@utility bg-gradient-card {
+  background: var(--gradient-card);
+}
+
+@utility bg-gradient-electric {
+  background: var(--gradient-electric);
+}
+
+@utility bg-glass {
+  background: var(--gradient-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+@utility shadow-electric {
+  box-shadow: var(--shadow-electric);
+}
+
+@utility press {
+  /* hide-scrollbar was intentionally removed because it was causing horizontal scrolling on mobile buttons and layout issues */
+  @apply transition-transform duration-200 ease-out will-change-transform active:scale-[0.97];
+
+  /* ── Tactile press ───────────────────────────────────────────────────── */
+  /* CSS, not a JS animation: the press has to start on touch-down, and a
+     motion component's whileTap waits for the gesture to be recognised.
+     140ms in, so a fast tap still shows a visible dip. Disabled and
+     aria-disabled controls do not move — a press that announces itself on an
+     unavailable action is worse than no press. */
+  transition: transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+  &:active {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    transform: none;
+  }
+  &[aria-disabled='true'] {
+    transform: none;
+  }
+}
+
+@utility press-card {
+  @apply transition-[transform,box-shadow] duration-200 ease-out will-change-transform active:scale-[0.985] hover:shadow-electric;
+}
+
+@utility icon-tap {
+  @apply transition-transform duration-150 ease-out active:scale-90;
+}
+
+@utility overflow-wrap-anywhere {
+  /* ── Long-content containment ───────────────────────────────────────────
+     `break-words` is `overflow-wrap: break-word`, which only breaks a word once
+     it has already overflowed its line box — so a long unbroken token still
+     establishes a min-content width, and in a flex or grid parent that is
+     enough to widen the whole screen. `anywhere` also affects intrinsic
+     sizing, so the container can actually shrink to fit. This is the
+     difference between wrapping a UUID and drawing it off the right edge. */
+  overflow-wrap: anywhere;
+}
+
+@utility nav-fade {
+  /* Navigation fade — the two halves of a crossfade.
+
+     An *animation*, not a transition, and that is the whole trick: a tab panel
+     that is inactive is `display: none` (the `hidden` attribute), and a
+     transition cannot fire on an element coming back from `display: none` — it
+     has no previous rendered value to interpolate from, so the screen would
+     pop in fully opaque and the fade would silently do nothing. An animation
+     restarts every time the element starts being rendered, so the fade fires
+     on every activation, including the first.
+
+     Two rules, because there are two phases. The panel that is leaving keeps
+     its place in layout and animates `data-leaving`; the one arriving takes
+     `data-active`. They are never both true at once, so exactly one panel is
+     painted at any moment and the page height changes only on the swap frame.
+
+     Only `opacity` moves, with no layout properties in play: the cost is one
+     compositor pass instead of a layout + paint + the old y-offset slide. No
+     `will-change` is set — the animation is short and infrequent, and a
+     permanent promotion of a full-page panel is a permanent extra layer on a
+     low-end Android WebView. */
+  /* The scroll offset is set by hand in TabShell (per-tab scroll memory).
+       Scroll anchoring would compete with it and win on the frame the two
+       panels swap, because the incoming panel is a different height. */
+  overflow-anchor: none;
+  &[data-active='true'] {
+    animation: vaylo-nav-fade var(--vaylo-nav-fade, 280ms)
+      cubic-bezier(0, 0, 0.2, 1) both;
+  }
+  &[data-leaving='true'] {
+    animation: vaylo-nav-out var(--vaylo-nav-fade-out, 140ms)
+      cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
+@utility nav-enter {
+  /* Detail screens (AppLayout's keyed wrapper) — the SAME curve and duration
+     as the arriving tab phase, but starting from 0.2 opacity rather than 0.
+
+     Measured before this existed: the keyed swap removes the outgoing screen
+     in one frame and animates the incoming one from opacity 0, so the main
+     content area showed bare background for the first ~50ms of every drill-in
+     and every back — a blink on each navigation, and the kind of roughness
+     that reads worse on the APK's WebView than on a desktop browser, where a
+     faster frame makes the ramp less noticeable.
+
+     0.2 is the balance the owner's feedback asked for: high enough that the
+     first painted frame is the screen itself rather than bare background — the
+     blink this rule exists to prevent — and low enough that the ramp is
+     visible as movement instead of reading as an instant swap. It is the same
+     duration, so nothing about it is slower; it is only more legible as a
+     transition. It still honours prefers-reduced-motion through the
+     global zero-duration rule above: instant swap, same as every other
+     animation here. Tabs keep the full 0→1 crossfade in .nav-fade — they have
+     a phase-1 fade-out behind them, so starting them mid-way would pop. */
+  /* Same reason as .nav-fade: the scroll offset is set by hand on swap, and
+       scroll anchoring would compete with it on the frame panels change. */
+  overflow-anchor: none;
+  animation: vaylo-nav-enter var(--vaylo-nav-fade, 280ms)
+    cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@utility gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+@utility will-transform {
+  will-change: transform;
+}
+
+@utility cv-auto {
+  /* Note there is deliberately no `.will-transform-settled` escape hatch: the
+     rule is that `will-transform` is applied by conditional class only while an
+     element is actually moving. A permanent will-change is a permanent extra
+     compositor layer, and on a low-end Android WebView that is memory the
+     compositor cannot reclaim while the screen stays open. */
+
+  /* `--cv-size` is the browser's guess at the section's height while it is off
+     screen. Getting it roughly right is what stops the scrollbar (and any
+     scroll anchoring) from jumping when the section does get rendered, so it is
+     a per-section value with a conservative default rather than one number for
+     every list in the app. `auto <size>` remembers the real measured size after
+     the first render, so a wrong guess costs one frame, not one per scroll. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--cv-size, 360px);
+}
+
+@utility card-surface {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  /* The card treatment, in one class, so a list item, an action tile and a
+     metrics card cannot end up with three different borders. Use with an
+     explicit radius utility when the surface is not a 16px card. */
+  background-color: hsl(var(--card));
+  border: var(--vaylo-surface-border);
+  border-radius: 1rem;
+  box-shadow: var(--vaylo-elev-card);
+}
+
+@utility card-pad {
+  padding: var(--vaylo-card-pad);
+}
+
+@utility nav-glass {
+  /* ── Bottom-bar glass ────────────────────────────────────────────────── */
+  /* The ONE surface where a backdrop blur earns its cost: it is small, it is
+     the only element that continuously scrolls over live content, and without
+     it the bar reads as a slab laid over the page. Applied here and not
+     app-wide — the app-wide blur was stacking 4–6 layers deep and was the
+     single biggest composite cost on low-end Android WebViews (see the perf
+     block at the bottom of this file, which re-disables it everywhere else). */
+  background-color: var(--vaylo-nav-surface);
+  backdrop-filter: var(--vaylo-nav-glass);
+  -webkit-backdrop-filter: var(--vaylo-nav-glass);
+}
+
+@utility recharts-surface {
+  /* ── Charts: let the axis labels paint outside the svg ───────────────────
+     Recharts draws a polar chart's angle-axis labels at the outer end of each
+     axis, anchored at the label's own start on the right-hand side. A word wide
+     enough therefore runs past the svg's right edge — and the svg clips to its
+     viewport by default, so it is cut mid-word. The VPR radar rendered
+     "Endurance" as "Enduranc" for exactly this reason.
+
+     The room the label needs already exists: the chart sits inside a card whose
+     24px padding is empty. `overflow: visible` lets the text use it, instead of
+     shrinking the chart or abbreviating every axis name to fit a box that was
+     never the real boundary. The card still clips, so the worst case is a label
+     that reaches the card's own edge rather than one that loses letters. */
+  overflow: visible;
+}
 
 @layer base {
   :root {
@@ -156,6 +645,14 @@
      the body bottom padding as well would lift page content twice. Content
      clears the tab bar with pb-28 in AppLayout, which is what that padding is
      for. */
+
+  /* Fix for sidebar positioning on mobile - ensure it doesn't go off-screen left */
+  @media (max-width: 1023px) {
+    .sidebar-mobile-fixed {
+      right: 0;
+      left: auto;
+    }
+  }
   /* ── The insets, resolved once ───────────────────────────────────────
      Every inset in the app reads one of these four variables. Nothing
      calls `env()` directly any more, and the reason is that `env()` alone
@@ -294,127 +791,13 @@
 }
 
 @layer utilities {
-  .app-mesh {
-    background-image: var(--gradient-mesh);
-    background-attachment: fixed;
-  }
-  .hairline-top { box-shadow: 0 1px 0 hsla(0 0% 100% / 0.06) inset; }
-  .hairline-bottom { box-shadow: 0 -1px 0 hsla(0 0% 100% / 0.06) inset; }
-  .glass {
-    background: linear-gradient(180deg, hsla(0 0% 100% / 0.08), hsla(0 0% 100% / 0.03));
-    backdrop-filter: blur(18px) saturate(1.15);
-    -webkit-backdrop-filter: blur(18px) saturate(1.15);
-    border: 1px solid hsla(0 0% 100% / 0.08);
-  }
-  .glass-card {
-    background: linear-gradient(180deg, hsla(233 28% 11% / 0.88), hsla(233 28% 7% / 0.94));
-    backdrop-filter: blur(16px) saturate(1.08);
-    -webkit-backdrop-filter: blur(16px) saturate(1.08);
-    border: 1px solid hsla(0 0% 100% / 0.07);
-    box-shadow: var(--shadow-card);
-  }
-  .ring-focus:focus-visible { box-shadow: 0 0 0 4px hsla(217 100% 60% / 0.18); }
-
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .text-gradient-primary {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-energy {
-    background: var(--gradient-energy);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-electric {
-    background: var(--gradient-electric);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .bg-gradient-primary {
-    background: var(--gradient-primary);
-  }
-
-  .bg-gradient-energy {
-    background: var(--gradient-energy);
-  }
-
-  .bg-gradient-card {
-    background: var(--gradient-card);
-  }
-
-  .bg-gradient-electric {
-    background: var(--gradient-electric);
-  }
-
-  .bg-glass {
-    background: var(--gradient-glass);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-  }
-
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-
-  .shadow-card {
-    box-shadow: var(--shadow-card);
-  }
-
-  .shadow-electric {
-    box-shadow: var(--shadow-electric);
-  }
-
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .press {
-    @apply transition-transform duration-200 ease-out will-change-transform active:scale-[0.97];
-  }
-  .press-card {
-    @apply transition-[transform,box-shadow] duration-200 ease-out will-change-transform active:scale-[0.985] hover:shadow-electric;
-  }
-  .icon-tap {
-    @apply transition-transform duration-150 ease-out active:scale-90;
-  }
-
-  /* ── Long-content containment ───────────────────────────────────────────
-     `break-words` is `overflow-wrap: break-word`, which only breaks a word once
-     it has already overflowed its line box — so a long unbroken token still
-     establishes a min-content width, and in a flex or grid parent that is
-     enough to widen the whole screen. `anywhere` also affects intrinsic
-     sizing, so the container can actually shrink to fit. This is the
-     difference between wrapping a UUID and drawing it off the right edge. */
-  .overflow-wrap-anywhere {
-    overflow-wrap: anywhere;
-  }
-}
-
-/* RTL: mirror chevrons/arrows that imply "forward" direction. Applied to the
+  /* RTL: mirror chevrons/arrows that imply "forward" direction. Applied to the
    icons on list rows and links; layout itself uses logical properties. */
-[dir="rtl"] .rtl-flip {
-  transform: scaleX(-1);
-}
+  [dir='rtl'] .rtl-flip {
+    transform: scaleX(-1);
+  }
 
-/* ── UI overhaul: motion + compositing primitives ───────────────────────────
+  /* ── UI overhaul: motion + compositing primitives ───────────────────────────
    Three jobs, one place, so a screen never hand-rolls its own timing:
 
      1. ONE navigation curve and duration for every screen change. The app
@@ -431,150 +814,6 @@
      3. `.gpu-layer` / `.will-transform` for anything that moves under a
         finger (sheets, drawers). Promoting the layer up-front is what removes
         the first-frame jitter on swipe-to-dismiss. */
-@layer utilities {
-  /* Navigation fade — the two halves of a crossfade.
-
-     An *animation*, not a transition, and that is the whole trick: a tab panel
-     that is inactive is `display: none` (the `hidden` attribute), and a
-     transition cannot fire on an element coming back from `display: none` — it
-     has no previous rendered value to interpolate from, so the screen would
-     pop in fully opaque and the fade would silently do nothing. An animation
-     restarts every time the element starts being rendered, so the fade fires
-     on every activation, including the first.
-
-     Two rules, because there are two phases. The panel that is leaving keeps
-     its place in layout and animates `data-leaving`; the one arriving takes
-     `data-active`. They are never both true at once, so exactly one panel is
-     painted at any moment and the page height changes only on the swap frame.
-
-     Only `opacity` moves, with no layout properties in play: the cost is one
-     compositor pass instead of a layout + paint + the old y-offset slide. No
-     `will-change` is set — the animation is short and infrequent, and a
-     permanent promotion of a full-page panel is a permanent extra layer on a
-     low-end Android WebView. */
-  .nav-fade {
-    /* The scroll offset is set by hand in TabShell (per-tab scroll memory).
-       Scroll anchoring would compete with it and win on the frame the two
-       panels swap, because the incoming panel is a different height. */
-    overflow-anchor: none;
-  }
-  .nav-fade[data-active="true"] {
-    animation: vaylo-nav-fade var(--vaylo-nav-fade, 280ms) cubic-bezier(0, 0, 0.2, 1) both;
-  }
-  .nav-fade[data-leaving="true"] {
-    animation: vaylo-nav-out var(--vaylo-nav-fade-out, 140ms) cubic-bezier(0.4, 0, 1, 1) both;
-  }
-
-  /* Detail screens (AppLayout's keyed wrapper) — the SAME curve and duration
-     as the arriving tab phase, but starting from 0.2 opacity rather than 0.
-
-     Measured before this existed: the keyed swap removes the outgoing screen
-     in one frame and animates the incoming one from opacity 0, so the main
-     content area showed bare background for the first ~50ms of every drill-in
-     and every back — a blink on each navigation, and the kind of roughness
-     that reads worse on the APK's WebView than on a desktop browser, where a
-     faster frame makes the ramp less noticeable.
-
-     0.2 is the balance the owner's feedback asked for: high enough that the
-     first painted frame is the screen itself rather than bare background — the
-     blink this rule exists to prevent — and low enough that the ramp is
-     visible as movement instead of reading as an instant swap. It is the same
-     duration, so nothing about it is slower; it is only more legible as a
-     transition. It still honours prefers-reduced-motion through the
-     global zero-duration rule above: instant swap, same as every other
-     animation here. Tabs keep the full 0→1 crossfade in .nav-fade — they have
-     a phase-1 fade-out behind them, so starting them mid-way would pop. */
-  .nav-enter {
-    /* Same reason as .nav-fade: the scroll offset is set by hand on swap, and
-       scroll anchoring would compete with it on the frame panels change. */
-    overflow-anchor: none;
-    animation: vaylo-nav-enter var(--vaylo-nav-fade, 280ms) cubic-bezier(0, 0, 0.2, 1) both;
-  }
-
-  .gpu-layer {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-  }
-  .will-transform {
-    will-change: transform;
-  }
-  /* Note there is deliberately no `.will-transform-settled` escape hatch: the
-     rule is that `will-transform` is applied by conditional class only while an
-     element is actually moving. A permanent will-change is a permanent extra
-     compositor layer, and on a low-end Android WebView that is memory the
-     compositor cannot reclaim while the screen stays open. */
-
-  /* `--cv-size` is the browser's guess at the section's height while it is off
-     screen. Getting it roughly right is what stops the scrollbar (and any
-     scroll anchoring) from jumping when the section does get rendered, so it is
-     a per-section value with a conservative default rather than one number for
-     every list in the app. `auto <size>` remembers the real measured size after
-     the first render, so a wrong guess costs one frame, not one per scroll. */
-  .cv-auto {
-    content-visibility: auto;
-    contain-intrinsic-size: auto var(--cv-size, 360px);
-  }
-
-  /* ── Surface ─────────────────────────────────────────────────────────── */
-  /* The card treatment, in one class, so a list item, an action tile and a
-     metrics card cannot end up with three different borders. Use with an
-     explicit radius utility when the surface is not a 16px card. */
-  .card-surface {
-    background-color: hsl(var(--card));
-    border: var(--vaylo-surface-border);
-    border-radius: 1rem;
-    box-shadow: var(--vaylo-elev-card);
-  }
-  .card-pad {
-    padding: var(--vaylo-card-pad);
-  }
-
-  /* ── Tactile press ───────────────────────────────────────────────────── */
-  /* CSS, not a JS animation: the press has to start on touch-down, and a
-     motion component's whileTap waits for the gesture to be recognised.
-     140ms in, so a fast tap still shows a visible dip. Disabled and
-     aria-disabled controls do not move — a press that announces itself on an
-     unavailable action is worse than no press. */
-  .press {
-    transition: transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
-    -webkit-tap-highlight-color: transparent;
-  }
-  .press:active {
-    transform: scale(0.97);
-  }
-  .press:disabled,
-  .press[aria-disabled="true"] {
-    transform: none;
-  }
-
-  /* ── Bottom-bar glass ────────────────────────────────────────────────── */
-  /* The ONE surface where a backdrop blur earns its cost: it is small, it is
-     the only element that continuously scrolls over live content, and without
-     it the bar reads as a slab laid over the page. Applied here and not
-     app-wide — the app-wide blur was stacking 4–6 layers deep and was the
-     single biggest composite cost on low-end Android WebViews (see the perf
-     block at the bottom of this file, which re-disables it everywhere else). */
-  .nav-glass {
-    background-color: var(--vaylo-nav-surface);
-    backdrop-filter: var(--vaylo-nav-glass);
-    -webkit-backdrop-filter: var(--vaylo-nav-glass);
-  }
-
-  /* ── Charts: let the axis labels paint outside the svg ───────────────────
-     Recharts draws a polar chart's angle-axis labels at the outer end of each
-     axis, anchored at the label's own start on the right-hand side. A word wide
-     enough therefore runs past the svg's right edge — and the svg clips to its
-     viewport by default, so it is cut mid-word. The VPR radar rendered
-     "Endurance" as "Enduranc" for exactly this reason.
-
-     The room the label needs already exists: the chart sits inside a card whose
-     24px padding is empty. `overflow: visible` lets the text use it, instead of
-     shrinking the chart or abbreviating every axis name to fit a box that was
-     never the real boundary. The card still clips, so the worst case is a label
-     that reaches the card's own edge rather than one that loses letters. */
-  .recharts-surface {
-    overflow: visible;
-  }
 }
 
 @keyframes vaylo-nav-fade {
@@ -756,6 +995,11 @@ body {
    always sits exactly on top of the gesture bar with no floating gap. */
 .native-tabbar {
   background-color: hsl(var(--card) / 0.92);
+  /* Very short, very faint top sheen: with content scrolling under the blur
+     a flat translucent surface reads as fog, while this hairline highlight
+     gives the edge the same lit-from-above treatment the app's other raised
+     surfaces already have (same recipe as the HubPage card tops). */
+  background-image: linear-gradient(to bottom, hsla(0 0% 100% / 0.035), transparent 42%);
   backdrop-filter: blur(20px) saturate(1.2);
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
   border-top: 1px solid hsla(0 0% 100% / 0.08);

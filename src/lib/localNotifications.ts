@@ -88,17 +88,6 @@ interface LocalNotificationsPlugin {
 export const LOCAL_CHANNEL_REMINDERS = "vaylo_reminders";
 
 /** Notification ids must be stable 32-bit ints; this is the "vaylo" namespace. */
-const BASE_ID = 8_100_000;
-
-/**
- * Stable ids for scheduled (future) notifications, so re-scheduling the same
- * day overwrites rather than duplicates.
- *
- * Morning briefings live in 8_110_000 + MMDD (e.g. Oct 14 -> 8_111_014): one
- * slot per calendar day, unique within a year, stable across re-schedules.
- * The reengagement ping owns a single id: each app open cancels and re-arms
- * it 72h out, so there is never more than one.
- */
 export const REENGAGEMENT_NOTIFICATION_ID = 8_120_000;
 
 export function morningIdForDate(date: Date): number {
@@ -106,8 +95,30 @@ export function morningIdForDate(date: Date): number {
   return 8_110_000 + mmdd;
 }
 
+/**
+ * The morning STREAK reminder's own id namespace, per date.
+ *
+ * Separate from morningIdForDate on purpose: the 07:10 briefing and the 08:00
+ * streak nudge are two different notifications that must be able to coexist on
+ * the same morning, and a shared id would make scheduling one silently cancel
+ * the other. 8_115_000 + mmdd (max 8_116_231) sits clear of the briefing range
+ * (8_110_000-8_111_231) and the reengagement id (8_120_000).
+ */
+export function streakReminderIdForDate(date: Date): number {
+  const mmdd = (date.getMonth() + 1) * 100 + date.getDate();
+  return 8_115_000 + mmdd;
+}
+
 /** How far ahead the OS is asked to post. Short enough to feel immediate. */
 const POST_DELAY_MS = 1_000;
+
+// Monotonic counter for immediate (now-ish) posts so rapid bursts never share
+// an id. Starts inside the vaylo immediate namespace and wraps safely.
+let immediateSeq = 0;
+export function nextImmediateId(): number {
+  immediateSeq = (immediateSeq + 1) % 9_000_000;
+  return 8_100_000 + immediateSeq;
+}
 
 let permissionAsked = false;
 let channelReady = false;
@@ -181,12 +192,17 @@ async function ensureChannel(p: LocalNotificationsPlugin): Promise<void> {
     vibration: true,
   };
   try {
-    if (storedChannelVersion() < CHANNEL_VERSION && p.deleteChannel) {
+    const stored = storedChannelVersion();
+    if (stored < CHANNEL_VERSION && p.deleteChannel) {
       // The pre-fix install already owns this channel id at DEFAULT
       // importance, and Android keeps the old importance no matter what
       // createChannel says now. Delete-then-recreate is the only upgrade
       // path that does not orphan the athlete's per-channel setting under a
       // new id.
+      // Delete once per channel version gap: if two codepaths in the same run
+      // both need the channel, the first one migrates and the second reuses it
+      // without re-deleting (channelReady is set after create, so the second
+      // call returns at the top of this function).
       await p.deleteChannel({ id: LOCAL_CHANNEL_REMINDERS }).catch(() => {});
     }
     await p.createChannel(channel);
@@ -214,7 +230,7 @@ export async function showDeviceNotification(
     await p.schedule({
       notifications: [
         {
-          id: BASE_ID + (Date.now() % 10_000),
+          id: nextImmediateId(),
           title: notification.title,
           body: notification.body,
           channelId: LOCAL_CHANNEL_REMINDERS,
@@ -263,6 +279,42 @@ export async function scheduleDeviceNotificationAt(
   } catch {
     return "failed";
   }
+}
+
+/**
+ * Batched scheduling — one `p.schedule()` call for a whole week of morning
+ * reminders. Same validation and permission gates as the single-shot function
+ * (it delegates to it for those checks); the only difference is that the
+ * requests array goes to the native plugin once instead of seven times.
+ *
+ * Falls back to per-notification calls when the plugin surface lacks the batch
+ * key (e.g. a stubbed plugin in tests or an older Capacitor), so behavior is
+ * identical either way. The array shape matches the Capacitor LocalNotifications
+ * `schedule({ notifications: [...] })` contract.
+ */
+export async function scheduleDeviceNotificationsBatch(
+  notifications: (DeviceNotification & { at: Date; id: number })[],
+): Promise<void> {
+  if (notifications.length === 0) return;
+  if (notifications.length === 1) {
+    await scheduleDeviceNotificationAt(notifications[0]);
+    return;
+  }
+  if (!deviceNotificationsSupported()) return;
+  const p = await plugin();
+  if (!p) return;
+  if (!(await ensurePermission(p))) return;
+  await ensureChannel(p);
+  const valid = notifications.filter((n) => n.at.getTime() > Date.now());
+  if (valid.length === 0) return;
+  await p.schedule({ notifications: valid.map((n) => ({
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    channelId: LOCAL_CHANNEL_REMINDERS,
+    schedule: { at: n.at, allowWhileIdle: true },
+    extra: { link: n.link ?? null },
+  })) });
 }
 
 /** Ids of notifications currently scheduled on the device (pending). */

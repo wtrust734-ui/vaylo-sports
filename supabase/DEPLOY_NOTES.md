@@ -1134,6 +1134,47 @@ plan_edit 10 · calorie_scan 12 · nutrition_plan_week 15 · training_plan_week 
 - The migration is idempotent (`-` on an absent key is a no-op, `||` overwrites),
   so re-running the file is safe.
 
+## Content-report moderation escalation (2026-10-15)
+
+The largest operational gap from the release audits — nobody read
+`content_reports` — is closed by migration `20261015210000_content_report_escalation.sql`
+plus the `content-report-escalate` edge function: every new report row triggers a
+fire-and-forget webhook which emails the operator inbox (the support inbox, whose
+delivery is proven rather than assumed — probe `VYL-D7TNMX78`).
+
+The shared secret lives in two places, exactly like the waitlist cron secret:
+
+```
+sh scripts/set-report-escalation-secret.sh
+```
+
+It sets `REPORT_ESCALATION_KEY` as a function secret and stores the same value in
+`public.private_secrets` (row `content_report_escalation_key`, readable by the
+trigger's SECURITY DEFINER owner and by `service_role` only). One deliberate
+difference from the waitlist script: Vault is used for the waitlist secret, but the
+Management API query role cannot write Vault (42501 on the pgsodium crypto
+functions), so the escalation secret uses a service-owner-owned table instead — same
+protection shape, no hand-run dashboard step. Re-running the script rotates the
+secret in both places.
+
+### Applied state
+
+- Migration applied and recorded on `vvwhausdjzdmsyxekrcl` (trigger
+  `content_reports_escalation_trg`, function `notify_content_report_escalation()`,
+  table `public.private_secrets` with grants revoked from anon/authenticated).
+- `content-report-escalate` deployed with `verify_jwt = false`, gated on the
+  `x-escalation-key` header; refuses loudly (503 `not_configured`) while the
+  function secret is unset.
+
+### Verified live (2026-10-15)
+- End-to-end probe: a report filed via `report_content()` produced a
+  `net._http_response` row with **status 200** — the function fetched the report
+  and handed the email to SMTP.
+- Wiring pinned across both sides by `src/lib/moderationEscalation.test.ts`
+  (7/7): the trigger exists, posts unauthenticated nothing, emails the operator
+  inbox with urgent tags for `self_harm`/`sexual`, authenticates the webhook,
+  and refuses instead of escalating to nobody when unconfigured.
+
 ### Still owed
 
 - No end-to-end spend was exercised: `credits_spend()` requires an authenticated

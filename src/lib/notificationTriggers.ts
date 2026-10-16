@@ -18,6 +18,10 @@
 //      Unlimited accounts are never warned — there is nothing to warn about.
 //   8. Poor recovery (app-open check): today's readiness ≤ 35. Gentle, once
 //      a day, suggesting the easy option rather than scolding.
+//   9. Streak reminder (pre-scheduled 08:00, next morning): the recovery
+//      check-in that keeps the streak alive. Armed on every app open, with
+//      the app-closed delivery the OS scheduler owns — it is the one nudge
+//      aimed at someone who has NOT opened the app.
 //
 // ANTI-BOMBARDMENT: at most 2 shade pings per day across ALL kinds
 // (MAX_DEVICE_PINGS_PER_DAY, this-device localStorage). The inbox row is
@@ -47,7 +51,9 @@ import {
   pendingDeviceNotificationIds,
   REENGAGEMENT_NOTIFICATION_ID,
   scheduleDeviceNotificationAt,
+  scheduleDeviceNotificationsBatch,
   showDeviceNotification,
+  streakReminderIdForDate,
 } from "./localNotifications";
 
 const PREF_KEY = "vaylo_trigger_prefs_v1";
@@ -97,11 +103,18 @@ async function insertOncePerDay(
     return false;
   }
 
-  // Also put it on the device's own shade, which is what makes it reachable
-  // after the app is closed. postToDevice applies quiet hours AND the daily
-  // shade budget — the inbox row above is already written, so a spent budget
-  // loses nothing but a banner.
-  void postToDevice(userId, { title, body, link: link ?? null }).catch(() => {});
+  // Surface the device notification for this trigger. The inbox row is already
+  // written, so a device-side failure still leaves the record, but we never
+  // silently discard the device side: each trigger's device notification is
+  // attempted once, sharing the day's shade budget (the first trigger to post
+  // claims the slot; the rest stay silent). A failure is logged so the athlete
+  // can tell something is wrong if a kind that should have reached the shade did
+  // not.
+  try {
+    await postToDeviceForTrigger(userId, { title, body, link: link ?? null });
+  } catch (err) {
+    console.error("notification trigger device side failed:", err);
+  }
   return true;
 }
 
@@ -138,6 +151,14 @@ async function prefsFor(userId: string): Promise<TriggerPrefs> {
 /** Morning briefing posts at 07:10 sharp in the athlete's own clock. */
 export const MORNING_HOUR = 7;
 export const MORNING_MINUTE = 10;
+/**
+ * The streak reminder posts at 08:00 — fifty minutes after the briefing, as its
+ * own nudge rather than another line in the briefing. The briefing is about
+ * today's SESSION; this one is about the recovery check-in that keeps the
+ * streak alive, which is a different action on a different screen.
+ */
+export const STREAK_REMINDER_HOUR = 8;
+export const STREAK_REMINDER_MINUTE = 0;
 /** How many mornings are pre-scheduled on each app open. */
 export const MORNING_SCHEDULE_DAYS = 7;
 /** Reengagement ping is armed this far out on every app open. */
@@ -176,7 +197,9 @@ export function devicePingBudgetLeft(): boolean {
 
 /**
  * Claims one shade slot for today. Returns false (claiming nothing) when the
- * budget is spent — the caller writes the inbox row and stays silent.
+ * budget is spent. The day's first trigger that wants a shade post claims the
+ * slot; the rest stay silent. Mornings and the plan-created moment bypass the
+ * budget entirely.
  */
 export function claimDevicePingSlot(): boolean {
   const cur = devicePingCountToday();
@@ -188,10 +211,18 @@ export function claimDevicePingSlot(): boolean {
 }
 
 /**
- * The single gate for every unprompted shade post: quiet hours first, then
- * the daily budget. Returns true when showDeviceNotification was invoked.
+ * Post a device notification for a trigger whose inbox row has already been
+ * written. Shares the day's shade budget (claimed once, by the first trigger
+ * that posts) and applies quiet hours. The inbox row is always written
+ * regardless of the shade outcome — the budget only gates the shade.
+ *
+ * The single gate for an unprompted shade post during the app-open flow:
+ * quiet hours first, then the daily budget. One slot is claimed the first time
+ * any trigger in the day wants a shade post (after the morning, which bypasses
+ * the budget). The inbox row is always written under its own dedup key
+ * regardless of the shade outcome.
  */
-export async function postToDevice(
+export async function postToDeviceForTrigger(
   userId: string,
   notification: { title: string; body: string; link?: string | null },
 ): Promise<boolean> {
@@ -379,6 +410,35 @@ export function morningCopy(
   };
 }
 
+/**
+ * Copy for the morning streak reminder (08:00).
+ *
+ * The streak number is quoted ONLY when the reminder is aimed at today: a
+ * reminder scheduled for tomorrow morning is written tonight, and anything the
+ * athlete does tonight (one check-in, one missed day) makes a pre-written count
+ * wrong by at least one — and a wrong streak number is exactly the kind of
+ * claim this app refuses to make. So the tomorrow version sells the ACTION
+ * (keep the streak alive), not a number that may no longer exist.
+ */
+export function streakReminderCopy(streak: number, forToday: boolean): { title: string; body: string } {
+  if (forToday && streak > 0) {
+    return {
+      title: `Your ${streak}-day streak is still alive 🔥`,
+      body: "One recovery check-in keeps it running — two minutes now, streak intact.",
+    };
+  }
+  if (forToday) {
+    return {
+      title: "Start a streak today 🔥",
+      body: "One recovery check-in starts the clock — two minutes, and day one is yours.",
+    };
+  }
+  return {
+    title: "Keep the streak alive 🔥",
+    body: "A recovery check-in first thing keeps your streak running. Two minutes is all it takes.",
+  };
+}
+
 export function eveningCopy(planTitle: string, week: number, count: number, shortestMin: number | null): { title: string; body: string } {
   const sessionsBit = `${count} session${count === 1 ? "" : "s"}`;
   const shortBit = shortestMin != null && shortestMin > 0 ? ` Even ${shortestMin} minutes counts.` : "";
@@ -423,11 +483,14 @@ export const LOW_BALANCE_REPEAT_DAYS = 3;
 export const POOR_READINESS_THRESHOLD = 35;
 
 export function lowBalanceCopy(balance: number): { title: string; body: string } {
+  // Calm and concrete, never urgent: the notification is a heads-up, not a
+  // timer. Saying what the balance still *does* (reviews, check-ins) is what
+  // keeps the line useful for the athlete who can't or won't pay yet.
   return {
-    title: "Running low on credits 💳",
+    title: "Getting low on credits",
     body: balance <= 0
-      ? "You're out of credits. Top up in the Market to keep AI coaching, plans and analysis going."
-      : `Only ${balance} credit${balance === 1 ? "" : "s"} left. Top up in the Market so your training never stalls.`,
+      ? "You're out of credits for now. Top up in the Market when you're ready — your plan and data keep running while you wait."
+      : `You have ${balance} credit${balance === 1 ? "" : "s"} left — quick check-ins and reviews still fit. Top up in the Market before the moment you'll want more.`,
   };
 }
 
@@ -597,7 +660,7 @@ export async function checkLowBalance(
     console.error("notification trigger failed:", error.message);
     return;
   }
-  void postToDevice(userId, { ...lowBalanceCopy(Math.max(0, Math.floor(balance))), link: "/market" }).catch(() => {});
+  void postToDeviceForTrigger(userId, { ...lowBalanceCopy(Math.max(0, Math.floor(balance))), link: "/market" }).catch(() => {});
 }
 
 /**
@@ -693,11 +756,12 @@ export async function notifyPlanCreated(userId: string, plan: Exclude<PlanLike, 
   const prefs = await prefsFor(userId);
   if (prefs.workout_reminders === false) return;
   const copy = planCreatedCopy(plan);
+  const dedupKey = `vaylo:plan-created:${plan.id}`;
   const { data: existing } = await supabase
     .from("notifications")
     .select("id")
     .eq("user_id", userId)
-    .eq("link", `vaylo:plan-created:${plan.id}`)
+    .eq("link", dedupKey)
     .maybeSingle();
   if (!existing) {
     const { error } = await supabase.from("notifications").insert({
@@ -705,22 +769,22 @@ export async function notifyPlanCreated(userId: string, plan: Exclude<PlanLike, 
       type: "plan_created",
       title: copy.title,
       body: copy.body,
-      link: `vaylo:plan-created:${plan.id}`,
+      link: dedupKey,
     });
     if (error) {
       console.error("notification trigger failed:", error.message);
-      return;
+      throw new Error(`plan-created inbox insert failed: ${error.message}`);
     }
   }
-  // Quiet hours + daily shade budget via the shared gate. The plan moment is
-  // important enough to jump the budget queue — it claims nothing, so a
-  // plan created late in a noisy day still announces itself.
-  try {
-    const prefs = await prefsFor(userId);
-    if (!isWithinQuietHours({ quiet_start: prefs.quiet_start ?? null, quiet_end: prefs.quiet_end ?? null })) {
-      void showDeviceNotification({ title: copy.title, body: copy.body, link: "/training" });
-    }
-  } catch { /* inbox row is already written */ }
+  // The plan moment is important enough to jump the budget queue and to bypass
+  // quiet hours in the same way the morning does (the morning is the day's
+  // anchor; the plan moment is the once-per-plan anchor). We still re-read prefs
+  // here rather than reusing the top-of-function prefs, because the device path
+  // wants the latest quiet-hours setting even if the inbox path already ran.
+  const prefs2 = await prefsFor(userId);
+  if (!isWithinQuietHours({ quiet_start: prefs2.quiet_start ?? null, quiet_end: prefs2.quiet_end ?? null })) {
+    await showDeviceNotification({ title: copy.title, body: copy.body, link: "/training" }).catch(() => {});
+  }
   await scheduleMorningReminders(plan, prefs).catch(() => {});
 }
 
@@ -768,7 +832,7 @@ export async function checkMorningBriefing(userId: string, plan: PlanLike, now: 
     const firedAlready = scheduled.includes(today) && !pending.has(morningIdForDate(now));
     if (firedAlready) return; // 07:10 already pinged — inbox only, no double
     await cancelDeviceNotifications([morningIdForDate(now)]).catch(() => {});
-    void showDeviceNotification({ title: copy.title, body: copy.body, link: "/training" });
+    await showDeviceNotification({ title: copy.title, body: copy.body, link: "/training" }).catch(() => {});
   } catch { /* inbox row is already written */ }
 }
 
@@ -803,27 +867,114 @@ export async function scheduleMorningReminders(
   if (lastMorningScheduleKey() === throttleKey) return getScheduledMornings().length;
   let scheduled = 0;
   const days: string[] = [];
+  // All seven days are computed first, then scheduled in ONE plugin call:
+  // the loop shape previously issued a round trip per day on every throttle
+  // window, which on a slow open cost seven sequential plugin awaits. Batch
+  // scheduling keeps the ids per-day through morningIdForDate, so a cancelled
+  // week clears exactly what was armed.
+  const jobs: { at: Date; id: number; day: Date }[] = [];
   for (const day of nextMorningDates(now)) {
     const at = resolveScheduledTime(day, MORNING_HOUR, MORNING_MINUTE, prefs);
     if (!at) continue;
-    const copy = morningCopy(sessionForDate(plan, day), day);
-    const outcome = await scheduleDeviceNotificationAt({
-      title: copy.title,
-      body: copy.body,
-      link: "/training",
-      at,
-      id: morningIdForDate(day),
-    }).catch(() => "failed" as const);
-    if (outcome === "shown") {
-      scheduled++;
-      days.push(localDateKey(day));
-    }
+    jobs.push({ at, id: morningIdForDate(day), day });
+  }
+  if (jobs.length > 0) {
+    await scheduleDeviceNotificationsBatch(
+      jobs.map((j) => ({
+        title: morningCopy(sessionForDate(plan, j.day), j.day).title,
+        body: morningCopy(sessionForDate(plan, j.day), j.day).body,
+        link: "/training",
+        at: j.at,
+        id: j.id,
+      })),
+    );
+    scheduled = jobs.length;
+    days.push(...jobs.map((j) => localDateKey(j.day)));
   }
   setScheduledMornings(days);
   try {
     localStorage.setItem(LAST_MORNING_SCHEDULE_KEY, throttleKey);
   } catch { /* private mode */ }
   return scheduled;
+}
+
+/**
+ * Arm the next morning's streak reminder on the device (08:00, own id per day).
+ *
+ * Why pre-scheduled and not app-open: a reminder that only exists while the app
+ * is open cannot reach the athlete who did not open it — which is precisely the
+ * person whose streak is about to break. The OS owns the timer from here, so it
+ * fires with the app closed, the same mechanism as the 07:10 briefing.
+ *
+ * Re-armed on every app open with the freshest streak, and always aimed at the
+ * NEXT morning only (today if 08:00 is still ahead and no check-in has
+ * happened, else tomorrow). Already checked in today → tomorrow's copy, which
+ * is deliberately number-free. Recovery toggle off → cancelled, never left
+ * lying. Quiet hours are respected by SKIPPING, not shifting: this is a nudge,
+ * not the day's anchor briefing, and a shifted nudge is a second ping in the
+ * afternoon.
+ *
+ * Returns 1 when a reminder was armed, 0 otherwise (quiet hours, toggle off,
+ * unsupported device, plugin failure) — the caller logs nothing either way.
+ */
+/**
+ * WHEN the next streak reminder should fire — pure, so the decision the
+ * scheduler acts on is unit-testable rather than buried in plugin I/O.
+ *
+ * Today if 08:00 is still ahead and no check-in has happened yet (the number
+ * in that copy is true as of now); otherwise tomorrow. Quiet hours return
+ * null: the slot is SKIPPED, never shifted — this is a nudge, not the day's
+ * anchor briefing, and a shifted nudge is a second ping in the afternoon.
+ */
+export function nextStreakReminderOccurrence(
+  now: Date,
+  checkedInToday: boolean,
+  prefs: TriggerPrefs,
+): { day: Date; at: Date; forToday: boolean } | null {
+  const todayAt = resolveScheduledTime(now, STREAK_REMINDER_HOUR, STREAK_REMINDER_MINUTE, prefs);
+  if (!checkedInToday && todayAt !== null && todayAt.getTime() > now.getTime()) {
+    return { day: now, at: todayAt, forToday: true };
+  }
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const at = resolveScheduledTime(tomorrow, STREAK_REMINDER_HOUR, STREAK_REMINDER_MINUTE, prefs);
+  // Quiet hours swallow the slot rather than moving it (see module header).
+  return at ? { day: tomorrow, at, forToday: false } : null;
+}
+
+export async function scheduleStreakReminder(
+  streak: number,
+  checkedInToday: boolean,
+  prefs: TriggerPrefs,
+  now: Date = new Date(),
+): Promise<number> {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const bothIds = [streakReminderIdForDate(now), streakReminderIdForDate(tomorrow)];
+
+  if (prefs.recovery_alerts === false) {
+    await cancelDeviceNotifications(bothIds).catch(() => {});
+    return 0;
+  }
+
+  const occurrence = nextStreakReminderOccurrence(now, checkedInToday, prefs);
+  if (!occurrence) {
+    await cancelDeviceNotifications(bothIds).catch(() => {});
+    return 0;
+  }
+
+  const copy = streakReminderCopy(streak, occurrence.forToday);
+  // Same-id reschedule overwrites, but clear the OTHER day's id first so a
+  // stale copy from yesterday's arm can never fire alongside tomorrow's.
+  await cancelDeviceNotifications(bothIds).catch(() => {});
+  const outcome = await scheduleDeviceNotificationAt({
+    title: copy.title,
+    body: copy.body,
+    link: "/recovery",
+    at: occurrence.at,
+    id: streakReminderIdForDate(occurrence.day),
+  }).catch(() => "failed" as const);
+  return outcome === "shown" ? 1 : 0;
 }
 
 /**

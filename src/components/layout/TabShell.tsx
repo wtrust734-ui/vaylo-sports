@@ -29,10 +29,10 @@ import ScreenFallback from "@/components/ScreenFallback";
  * already exists — never transform, see the note on the <section> below):
  *
  *   phase 1  the OUTGOING panel is still the one in layout, and fades out over
- *            `--vaylo-nav-fade-out` (120ms).
+ *            `--vaylo-nav-fade-out` (150ms).
  *   phase 2  at the end of that, the swap and the outgoing `hidden` happen in
  *            one commit, and the INCOMING panel fades in over
- *            `--vaylo-nav-fade` (240ms) on an ease-out curve.
+ *            `--vaylo-nav-fade` (260ms) on an ease-out curve.
  *
  * 360ms end to end, and the previous 160ms single fade was the "too quick, not
  * smooth" complaint: the old screen blinked out of existence in a single frame,
@@ -87,7 +87,7 @@ const TABS: Tab[] = [
   },
 ];
 
-const FADE_OUT_MS = 130;
+const FADE_OUT_MS = 150;
 
 /** The tab whose root path is exactly this pathname, or undefined. */
 export const activeTabPath = (pathname: string): string | undefined =>

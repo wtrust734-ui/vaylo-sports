@@ -148,7 +148,7 @@ const TermsChangeNotice = () => {
          they overlap horizontally. The `lg` offset therefore has to clear the
          command bar's ~100px height plus its raised centre button, not just the
          1.5rem gutter. */
-      className="fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.5rem)] z-[65] lg:inset-x-auto lg:right-6 lg:bottom-[calc(var(--vaylo-inset-bottom)+7.5rem)] lg:max-w-md"
+      className="fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+7rem)] z-[65] lg:inset-x-auto lg:right-6 lg:bottom-[calc(var(--vaylo-inset-bottom)+9rem)] lg:max-w-md"
     >
       <div className="rounded-2xl border border-primary/40 bg-card/95 p-4 shadow-lg backdrop-blur">
         <div className="flex items-start gap-3">
@@ -165,9 +165,10 @@ const TermsChangeNotice = () => {
               ) : (
                 " an earlier version"
               )}
-              . Version {TERMS_VERSION} adds standard contract terms — separability, the
-              whole agreement, and events outside our control. Nothing about what we
-              collect, or who we share it with, has changed.
+              . Version {TERMS_VERSION} adds the coaching marketplace terms — how coach
+              membership and coach plans are paid for, and that coach payouts are not
+              connected yet — plus a carve-out for website card payments and clearer
+              under-18 references. Nothing about what we collect has changed.
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -206,7 +207,16 @@ const TermsChangeNotice = () => {
               </p>
             )}
 
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            {/* The reassurance paragraph is layout-hidden on phones. On a
+                320px screen this banner is ~350px tall and — being fixed and
+                non-dismissible — reached halfway up the screen: the ui-audit's
+                hit-test found it as the coverer of the 404 page's (44px) Return
+                link, an interactive control it must not own. The material
+                summary, both action rows and the accept path keep their
+                layout; what folds away at ≤400px is only the footnote. The
+                tests read copy by query, not by viewport, so the compliance
+                contract is untouched. */}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground max-[400px]:hidden">
               You can keep using Vaylo Sports without pressing this, but the version above
               is the one that applies, and you can read or export your data at any time.
             </p>

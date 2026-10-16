@@ -43,7 +43,32 @@ import { expectedPlanSeconds, planChunkCount } from "@/lib/planGeneration";
 
 type Stage = { label: string; detail: string };
 
-function stagesFor(weeks: number): Stage[] {
+/**
+ * Which pipeline the overlay is describing.
+ *
+ * This screen used to be training-shaped no matter who opened it: a nutrition
+ * plan generation showed "Reading your training history" and "Setting the
+ * periodisation" — steps `generate-nutrition-plan` never performs. Every stage
+ * below names work the matching edge function genuinely does, in order:
+ *
+ *   training (`generate-plan`)     — dossier, periodisation, sessions, caps
+ *   nutrition (`generate-nutrition-plan`) — intake/goals, week calorie+macro
+ *                                           targets the APP computes, meals
+ *                                           the model fills in, shape+safety
+ *                                           validation, save
+ */
+export type PlanGenerationKind = "training" | "nutrition";
+
+function stagesFor(kind: PlanGenerationKind, weeks: number): Stage[] {
+  if (kind === "nutrition") {
+    return [
+      { label: "Reading your goals and intake", detail: "Body metrics, training days and the goal you picked" },
+      { label: "Setting your calorie and macro targets", detail: `Weekly energy and protein targets for ${weeks} weeks` },
+      { label: "Writing the meals", detail: "Every meal of every day, chosen around your dietary pattern" },
+      { label: "Checking the safety limits", detail: "Adults only, portion sanity and week-shape validation" },
+      { label: "Saving your plan", detail: "Almost there" },
+    ];
+  }
   return [
     { label: "Reading your training history", detail: "Personal bests, injuries, recent load and recovery" },
     { label: "Setting the periodisation", detail: `Deload placement and weekly progression for ${weeks} weeks` },
@@ -65,6 +90,9 @@ function progressFor(elapsed: number, expected: number): number {
 
 export type PlanGenerationProgressProps = {
   weeks: number;
+  /** Which plan is being built. Defaults to "training" (the original screen);
+   *  Nutrition passes "nutrition" so the stages describe its real pipeline. */
+  kind?: PlanGenerationKind;
   /** `overlay` (the default) covers the screen; `inline` is the same status as
    *  a card, for after the athlete has hidden the overlay. */
   variant?: "overlay" | "inline";
@@ -75,19 +103,33 @@ export type PlanGenerationProgressProps = {
 
 export default function PlanGenerationProgress({
   weeks,
+  kind = "training",
   variant = "overlay",
   onHide,
 }: PlanGenerationProgressProps) {
   const reduceMotion = useReducedMotion();
-  const stages = useMemo(() => stagesFor(weeks), [weeks]);
+  const stages = useMemo(() => stagesFor(kind, weeks), [kind, weeks]);
+  // "plan" vs "meal plan": one noun, so the header never claims a training
+  // plan to an athlete who is waiting on meals.
+  const noun = kind === "nutrition" ? "meal plan" : "plan";
   const expected = useMemo(() => expectedPlanSeconds(weeks), [weeks]);
   const [elapsed, setElapsed] = useState(0);
 
   // The wait has no progress stream, so elapsed time is the only thing that
   // moves the bar and the stages. Without this the screen is a frozen frame.
+  // The interval is owned by the component instance that mounted it; when React
+  // unmounts the overlay (e.g. the athlete hid it, or navigated away) the
+  // cleanup clears it. The parent (Training.tsx) owns whether a generation is
+  // actually in flight, so dropping the overlay never cancels the request.
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed((e) => e + 0.25), 250);
-    return () => window.clearInterval(id);
+    let cancelled = false;
+    const id = window.setInterval(() => {
+      if (!cancelled) setElapsed((e) => e + 0.25);
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   // The bar is an honest estimate. It claims nothing beyond what the server
@@ -126,7 +168,7 @@ export default function PlanGenerationProgress({
     <>
       <div className="flex items-center gap-2">
         <Loader2 size={16} className={`text-primary ${reduceMotion ? "" : "animate-spin"}`} aria-hidden />
-        <p className="text-sm font-semibold">Building your {weeks}-week plan</p>
+        <p className="text-sm font-semibold">Building your {weeks}-week {noun}</p>
         <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
           {overdue ? "still working" : `${elapsedSecs}s so far`}
         </span>
@@ -137,7 +179,7 @@ export default function PlanGenerationProgress({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(cappedPct)}
-        aria-label="AI plan generation progress"
+        aria-label={`AI ${kind} plan generation progress`}
         className={`mt-3 h-2 w-full overflow-hidden rounded-full bg-muted ${variant === "overlay" ? "sm:h-2.5" : ""}`}
       >
         {/* A CSS width transition rather than a motion animation: the value
@@ -191,6 +233,9 @@ export default function PlanGenerationProgress({
         {overdue
           ? "This is taking longer than usual — the plan is still being written. You can leave this screen and it will be saved when it lands."
           : `Most ${weeks}-week plans take about ${expected}s. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically.`}
+      </p>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/80">
+        If this stays on screen much longer than the time above, the plan is still being written in the background — you do not need to stay here.
       </p>
     </>
   );

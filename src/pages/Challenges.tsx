@@ -43,7 +43,13 @@ const Challenges = () => {
   const load = async () => {
     setLoading(true);
     setLoadError(null);
-    const { data: ch, error } = await supabase.from("challenges").select("*").order("start_date", { ascending: false }).limit(200);
+    // Column lists, not "*": the list reads eleven challenge fields and the
+    // participation rows read four — pulling every column (this table carries
+    // long rules/sponsor text) just to render cards downloaded it all (audit
+    // finding 3.1). Fields mirror the exact reads below.
+    const { data: ch, error } = await supabase.from("challenges").select(
+      "id, title, description, icon, sport, scope, type, reward_credits, reward_points, target_value, target_unit, participant_count, sponsor_name, sponsor_disclosure, start_date, end_date",
+    ).order("start_date", { ascending: false }).limit(200);
     if (error) {
       setLoadError(error.message);
       setLoading(false);
@@ -51,7 +57,7 @@ const Challenges = () => {
     }
     setItems(ch || []);
     if (user) {
-      const { data: parts } = await supabase.from("challenge_participants").select("*").eq("user_id", user.id);
+      const { data: parts } = await supabase.from("challenge_participants").select("challenge_id, progress, status, completed_at").eq("user_id", user.id);
       const map: Record<string, Participant> = {};
       (parts || []).forEach((p) => { map[p.challenge_id] = p; });
       setMine(map);

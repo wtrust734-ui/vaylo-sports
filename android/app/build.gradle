@@ -294,9 +294,25 @@ android {
         // squeezing on 320px phones. WebView + CSS only — no manifest,
         // permission or plugin change.
         //
+        // 45 / 1.2.42 is the refreshed WebView release: the audited feature
+        // set and the latest phone layout fixes are included. No manifest,
+        // permission or plugin change — WebView-only.
+        //
+        // 46 / 1.2.43 is the audit-remediation release, from the 2026-10-15
+        // sweep: the Terms banner no longer swallows the 404's return link on
+        // a 320x568 phone (a fixed escape chip was added), every Market
+        // section pill and the trend pill carry the 44px tap floor, the
+        // plan-list queries stopped selecting every column (Training, Goals,
+        // MetricsHub, Challenges, Coach, Market — typed against the generated
+        // schema), morning reminders schedule the whole week in one native
+        // call instead of seven sequential awaits, the VPR disabled submit
+        // explains why, and the "Trend needs 2 saves" nudge links to the
+        // logging form. Server-side (not in this APK): password minimum is
+        // now 8, email confirmation is required, and the rate limits were
+        // tightened. No manifest, permission or plugin change — WebView-only.
         // Always increase the code for a Play upload.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 40
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.36"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 46
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.2.43"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

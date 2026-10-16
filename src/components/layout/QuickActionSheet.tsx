@@ -39,7 +39,7 @@ const QuickActionSheet = () => {
         transition={{ duration: 0.18 }}
         onClick={() => setOpen(false)}
         style={{ pointerEvents: open ? "auto" : "none" }}
-        className="fixed inset-0 z-[55] bg-[#050612]/60 sm:backdrop-blur-sm"
+        className="fixed inset-0 z-[55] bg-[#050310]/70 sm:backdrop-blur-sm"
       />
 
       <motion.div
@@ -50,9 +50,9 @@ const QuickActionSheet = () => {
         animate={{ y: open ? 0 : 24, opacity: open ? 1 : 0 }}
         transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
         style={{ pointerEvents: open ? "auto" : "none" }}
-        className={`fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card shadow-card overflow-hidden sm:bg-card/80 sm:backdrop-blur-2xl p-2 ${open ? "will-transform" : ""}`}
+        className={`fixed inset-x-3 bottom-[calc(var(--vaylo-inset-bottom)+7rem)] z-[56] rounded-[22px] border border-white/[0.08] bg-card/95 shadow-lg p-2 ${open ? "will-transform" : ""}`}
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.07] via-transparent to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent" />
         <div className="relative">
         {actions.map((a) => (
           <button
@@ -60,7 +60,7 @@ const QuickActionSheet = () => {
             type="button"
             tabIndex={open ? 0 : -1}
             onClick={() => go(a.path)}
-            className="press flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-start transition-colors hover:bg-white/[0.06] active:bg-white/[0.08]"
+            className="press flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-start transition-colors hover:bg-white/[0.04] active:bg-white/[0.06]"
           >
             {/* Same tinted tile as every hub row — see the note in HubPage's
                 HubTile. The sheet is open over any screen, so matching the rows
@@ -79,31 +79,34 @@ const QuickActionSheet = () => {
 
       {/* The FAB.
 
-          Alignment: the row centres its items, so a top margin on this button
-          moves it by *half* the margin. `-mt-2` (8px) therefore puts its centre
-          4px above the tab row's centre line — enough to read as "above",
-          without the button leaving the surface it sits in. It is a flex
-          sibling of the tab buttons, so it can never drift from them.
+          Now the button is a flex sibling of the tab groups, sitting between them,
+          so its horizontal position is the bar's centre by construction — not
+          inherited from the tab labels, which are unequal widths. That is what
+          fixed the Pixel screenshot showing the button left of centre.
 
-          It was `-mt-6`, which is three times that lift: 12px of centre
-          offset, which also pushed the button's top edge outside the bar
-          entirely. Measured in the release APK at 411x914, the button's box ran
-          y816..873 against a bar at y822..891 — 6px proud of the top border,
-          and 12px above the tab centres rather than the 4px this comment has
-          always claimed.
+          The lift: a top margin on a centred flex item moves it by *half* the
+          margin, so `-mt-2` (8px) puts its centre 4px above the tab row's centre
+          line — enough to read as "above", without the button leaving the
+          surface it sits in. It was `-mt-6` at one point, which is three times
+          that lift: 12px of centre offset, which also pushed the button's top
+          edge outside the bar entirely. Measured in the release APK at 411x914,
+          the proud version's box ran y816..873 against a bar at y822..891.
 
-          Elevation: `z-20` keeps it painted over the tab pill (which is z-auto
-          inside the same stacking context) and `--vaylo-elev-fab` gives it a
-          coloured halo rather than a card shadow, so its depth is legible as a
-          *primary action* and not as another surface. */}
+          Size: re-proportioned with the rest of the bar to M3 scale — the FAB
+          was 56px against a Material-3 60dp primary action, which read as a
+          smaller version of the whole bar in the release screenshots.
+
+          Elevation: `z-20` keeps it painted over the tab pill (z-auto inside the
+          same stacking context) and `--vaylo-elev-fab` gives it a coloured halo,
+          so its depth reads as the primary action, not another surface. */}
       <motion.button
         type="button"
         aria-label={open ? t("navigation.closeQuickActions") : t("navigation.openQuickActions")}
         aria-expanded={open}
-        whileTap={{ scale: 0.97 }}
+        whileTap={{ scale: 0.96 }}
         onClick={() => setOpen((o) => !o)}
-        className="press relative z-20 -mt-2 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary border border-white/15"
-        style={{ boxShadow: "var(--vaylo-elev-fab)" }}
+        className="press relative z-20 -mt-2 flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-2xl bg-gradient-primary border border-white/16"
+        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05)" }}
       >
         <motion.span animate={{ rotate: open ? 45 : 0 }} transition={{ duration: 0.18 }}>
           {open ? <X size={22} className="text-primary-foreground" /> : <Plus size={24} className="text-primary-foreground" />}

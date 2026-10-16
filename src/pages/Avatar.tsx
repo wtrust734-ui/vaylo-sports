@@ -6,7 +6,6 @@ import {
   Shirt, Layers, Footprints, HardHat, Hand, Award, Image as ImageIcon,
   ZoomIn, ZoomOut, RotateCcw, ShoppingBag,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarCharacter";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
+import CoinQuickBuySheet from "@/components/market/CoinQuickBuySheet";
+import RewardBoxesPanel from "@/components/cosmetics/RewardBoxesPanel";
 import { FIRST_PURCHASE_BUNDLE } from "@/config/coins";
 import {
   CATALOG, CATEGORY_META, RARITY_META, STARTER_ITEMS, DEFAULT_LOADOUT,
@@ -35,7 +36,6 @@ type FilterKey = typeof FILTERS[number];
 
 const Avatar = () => {
   const { user, profile, refreshProfile } = useAuth();
-  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,6 +43,9 @@ const Avatar = () => {
 
   // Shortfall top-up — set when the athlete cannot afford what they picked.
   const [topUp, setTopUp] = useState<{ gap: number; itemName?: string } | null>(null);
+  // Direct coin buying, right here — pick a bundle, confirm, done. No basket,
+  // no detour through the Market.
+  const [quickBuy, setQuickBuy] = useState(false);
   const [firstBundleAvailable, setFirstBundleAvailable] = useState(false);
 
   // The one-time first-purchase bundle is only offered while it is unused.
@@ -289,9 +292,9 @@ const Avatar = () => {
               <Coins size={14} className="text-energy" />
               <span className="text-sm font-display font-bold tabular-nums text-white">{formatNumber(coins)}</span>
             </div>
-            <button onClick={() => navigate("/market")}
+            <button onClick={() => setQuickBuy(true)}
               className="text-[12px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">
-              + Top Up
+              Buy Coins
             </button>
           </div>
 
@@ -317,6 +320,11 @@ const Avatar = () => {
         <Button onClick={save} disabled={saving} className="shrink-0 bg-gradient-electric">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
         </Button>
+      </div>
+
+      {/* ============= SURPRISE BOXES (streak + referral rewards) ============= */}
+      <div className="px-5 mt-6">
+        <RewardBoxesPanel compact />
       </div>
 
       {/* ============= CATEGORY BAR (icons) ============= */}
@@ -564,6 +572,11 @@ const Avatar = () => {
         onClose={() => setTopUp(null)}
         gap={topUp?.gap ?? 0}
         itemName={topUp?.itemName}
+        firstPurchaseAvailable={firstBundleAvailable}
+      />
+      <CoinQuickBuySheet
+        open={quickBuy}
+        onClose={() => setQuickBuy(false)}
         firstPurchaseAvailable={firstBundleAvailable}
       />
     </div>

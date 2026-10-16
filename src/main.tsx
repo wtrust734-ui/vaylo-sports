@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
-import VayloLoader from "./components/VayloLoader";
+import BootVeil from "./components/BootVeil";
 import { initI18n } from "./i18n";
 import "./index.css";
 import { installGlobalErrorReporting, reportError } from "@/lib/errorReporting";
@@ -52,8 +52,14 @@ window.addEventListener("unhandledrejection", (event) => {
 // flash LTR English before flipping). If init ever fails, i18n still has the
 // synchronous English bundle registered, so we render anyway rather than
 // leaving a blank screen.
+//
+// What paints first is the BootVeil — the same surface App mounts, on the same
+// module-level clock — not a second, differently-dressed loader. The old
+// sequence (loader → cut → veil → cut → app) is why opening felt abrupt; now
+// there is one brand surface from the first frame until the app is actually
+// ready underneath it.
 const root = createRoot(document.getElementById("root")!);
-root.render(<VayloLoader message="Preparing your performance space" />);
+root.render(<BootVeil />);
 initI18n()
   .catch((e) => console.warn("i18n init failed — rendering in English", e))
   .finally(() => root.render(<App />));

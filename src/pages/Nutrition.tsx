@@ -186,31 +186,48 @@ const Nutrition = () => {
     // missing column is not something the screen needs to report.
     const { data: intakeRow, error: intakeError } = await supabase
       .from("user_settings")
-      .select("dietary_pattern, food_dislikes, meals_per_day, training_days_per_week, typical_session_minutes, activity_level, sex")
+      // `*` lets older deployed schemas return their known columns rather than
+      // generating a PostgREST 400 for intake fields added by a newer migration.
+      // Newer schemas still include those fields in the same row.
+      .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
     if (intakeError) {
       console.warn("nutrition intake not available:", intakeError.message);
       return;
     }
-    if (intakeRow) setPlanIntake((current) => normalizeIntake(intakeRow, current));
+    if (intakeRow) {
+      setPlanIntake((current) => normalizeIntake(intakeRow as unknown as Partial<NutritionIntake>, current));
+    }
   };
 
   const fetchWater = async () => {
     if (!user) return;
-    const { data } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
+    const { data, error } = await supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today);
+    if (error) {
+      toast({ title: "Couldn't load water log", description: error.message, variant: "destructive" });
+      return;
+    }
     setWaterMl((data || []).reduce((sum, r) => sum + r.amount_ml, 0));
   };
 
   const fetchMeals = async () => {
     if (!user) return;
-    const { data } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
+    const { data, error } = await supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today).order("logged_at", { ascending: true });
+    if (error) {
+      toast({ title: "Couldn't load meals", description: error.message, variant: "destructive" });
+      return;
+    }
     setMeals(data || []);
   };
 
   const fetchPlans = async () => {
     if (!user) return;
-    const { data } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("nutrition_plans").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    if (error) {
+      toast({ title: "Couldn't load nutrition plans", description: error.message, variant: "destructive" });
+      return;
+    }
     setPlans(data || []);
   };
 
@@ -293,13 +310,14 @@ const Nutrition = () => {
   const buildFoodLogDigest = async (): Promise<{ digest: string; mealCount: number; daysLogged: number }> => {
     if (!user) return { digest: "", mealCount: 0, daysLogged: 0 };
     const since = localDateKey(new Date(Date.now() - (REVIEW_WINDOW_DAYS - 1) * 86_400_000));
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("meal_logs")
       .select("log_date, meal_type, name, calories, protein_g, carbs_g, fat_g")
       .eq("user_id", user.id)
       .gte("log_date", since)
       .order("log_date", { ascending: true })
       .order("logged_at", { ascending: true });
+    if (error) throw new Error(`Couldn't load your food log: ${error.message}`);
 
     const rows = data ?? [];
     const byDay = new Map<string, typeof rows>();
@@ -725,7 +743,7 @@ const Nutrition = () => {
       if (insertError) {
         toast({
           title: "Your plan was written but not saved",
-          description: `Do not generate it again — that would charge you a second time. ${insertError.message}`,
+          description: `Do not generate it again — that would charge you a second time. Contact support from Profile if this persists. ${insertError.message}`,
           variant: "destructive",
         });
         return;
@@ -765,11 +783,11 @@ const Nutrition = () => {
   return (
     <div className="min-h-screen bg-background">
       {writingPlan && !planWaitHidden && (
-        <PlanGenerationProgress weeks={planWaitWeeks} onHide={() => setPlanWaitHidden(true)} />
+        <PlanGenerationProgress weeks={planWaitWeeks} kind="nutrition" onHide={() => setPlanWaitHidden(true)} />
       )}
       {writingPlan && planWaitHidden && (
         <div className="px-5 pt-[var(--vaylo-screen-top)]">
-          <PlanGenerationProgress weeks={planWaitWeeks} variant="inline" />
+          <PlanGenerationProgress weeks={planWaitWeeks} kind="nutrition" variant="inline" />
         </div>
       )}
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">

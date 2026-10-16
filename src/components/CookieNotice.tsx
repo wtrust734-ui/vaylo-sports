@@ -97,7 +97,7 @@ export default function CookieNotice() {
       ref={noticeRef}
       role="region"
       aria-label="Cookies and stored preferences"
-      className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.5rem+var(--vaylo-notice-lift))] left-0 right-0 z-[45] mx-auto max-w-2xl px-4"
+      className="fixed bottom-[calc(var(--vaylo-inset-bottom)+7rem+var(--vaylo-notice-lift))] left-0 right-0 z-[45] mx-auto max-w-2xl px-4"
       hidden
     >
       <div className="rounded-2xl border border-border bg-card/95 p-4 backdrop-blur shadow-lg dark:bg-card">

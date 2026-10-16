@@ -782,7 +782,7 @@ a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border
 .back-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
 
 /* The version/effective line. The source document styled this as `.meta` and
-   that class was stripped with the document's own <style>; the generator
+   that class was stripped with the document's own \3c style>; the generator
    renames it to .doc-meta and this is its replacement. */
 .doc-meta {
   font-size: 0.85rem;

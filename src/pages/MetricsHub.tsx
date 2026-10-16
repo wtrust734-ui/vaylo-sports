@@ -34,11 +34,24 @@ const MetricsHub = () => {
   const load = async () => {
     if (!user) return;
     const today = localDateKey();
+    // Column lists per audit finding 3.1 — the four tables feed typed state,
+    // so each list mirrors the generated schema exactly (keeping every field
+    // the screen or analyzeLoads reads, dropping none). These are narrow tables
+    // to begin with; the win is doing this once here and saying so, rather
+    // than every future reader re-deciding.
     const [l, r, m, e] = await Promise.all([
-      supabase.from("training_loads").select("*").eq("user_id", user.id).order("log_date").limit(60),
-      supabase.from("recovery_logs").select("*").eq("user_id", user.id).order("log_date", { ascending: false }).limit(7),
-      supabase.from("meal_logs").select("*").eq("user_id", user.id).eq("log_date", today),
-      supabase.from("equipment").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("training_loads").select(
+        "id, user_id, log_date, duration_minutes, endurance_load, skill_load, sprint_load, strength_load, total_rpe, notes, created_at",
+      ).eq("user_id", user.id).order("log_date").limit(60),
+      supabase.from("recovery_logs").select(
+        "id, user_id, log_date, adjusted_session, created_at, energy, fatigue, hrv, mood, notes, readiness_score, rest_hours, rhr, sleep_quality, soreness, stress",
+      ).eq("user_id", user.id).order("log_date", { ascending: false }).limit(7),
+      supabase.from("meal_logs").select(
+        "id, user_id, log_date, logged_at, meal_type, name, calories, protein_g, carbs_g, fat_g",
+      ).eq("user_id", user.id).eq("log_date", today),
+      supabase.from("equipment").select(
+        "id, user_id, name, type, max_km, max_hours, active, notes, created_at, purchased_on, updated_at, usage_hours, usage_km",
+      ).eq("user_id", user.id).order("created_at", { ascending: false }),
     ]);
     setLoads(l.data || []);
     setRecovery(r.data || []);

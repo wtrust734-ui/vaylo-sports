@@ -34,6 +34,13 @@ export const PLAN_CHUNK_WEEKS = 2;
 /** Ignores anything below this — a plan is never instant, so never claim it is. */
 export const MIN_EXPECTED_SECONDS = 12;
 
+/** The per-call generation cost used by `expectedPlanSeconds` for one-week chunks. */
+export const EXPECTED_PER_CALL_SECONDS = 24;
+/** The per-week merge/payload term used by `expectedPlanSeconds`. */
+export const EXPECTED_PER_WEEK_SECONDS = 1.2;
+/** The fixed pre-call cost used by `expectedPlanSeconds`. */
+export const EXPECTED_FIXED_SECONDS = 11;
+
 const safeWeeks = (weeks: number): number =>
   Number.isFinite(weeks) ? Math.max(1, Math.min(52, Math.floor(weeks))) : 4;
 
@@ -54,16 +61,46 @@ export function planChunkWeeks(weeks: number): number {
 /**
  * Expected seconds to write a plan of `weeks` weeks.
  *
- * ~9s of fixed work (auth, charge, dossier, phase skeleton, validation) plus
- * ~12s of fixed cost in each model call plus ~16s per week written — the
- * slowest call, not their sum — plus a small per-week term for the merge and
- * the larger payloads. Capped, because past this the screen stops claiming to
- * know and switches to "still working".
+ * The server writes the plan in parallel chunks, so wall-clock time is set by
+ * the slowest call, not the sum of the calls. The shape of each call is one
+ * week up to twelve weeks, then two weeks beyond that, and each call's output
+ * IS the plan's own text for those weeks — so the per-call term is dominated by
+ * token generation, not by the number of calls.
+ *
+ * Measured against the deployed function: a one-week call regularly completes in
+ * roughly 20-35s on a normal request, with occasional runs past that when the
+ * provider is busy. The estimate below is deliberately on the high side of that
+ * measured range, because the failure mode of an underestimate is an athlete who
+ * believes their plan is stuck; the failure mode of an overestimate is a bar that
+ * finishes early and waits, which is invisible. Past 1.5× its own estimate the
+ * screen stops claiming a time at all and says the plan is taking longer than
+ * usual — which is always the honest answer when the work outlasted the model.
+ *
+ * So: a fixed cost for the work that happens before any call (auth, charge,
+ * dossier, skeleton, validation), a per-call generation cost that is the same for
+ * every chunk because each chunk is one week for most plans, and a small per-week
+ * term for the merge and the larger payloads on longer plans.
  */
 export function expectedPlanSeconds(weeks: number, chunkWeeks = planChunkWeeks(weeks)): number {
   const total = safeWeeks(weeks);
   const perCall = safeChunk(chunkWeeks, total);
-  const estimate = 9 + 12 + perCall * 16 + total * 0.6;
+  // Fixed work before the first model call starts: auth, credit charge, dossier
+  // fetch, skeleton build, caps, prompt assembly, and the final merge + validate.
+  // 11s is on the high side of what those steps take; the merge is fast, the rest
+  // is a few network round-trips.
+  const fixed = 11;
+  // Generation cost of ONE model call. One week per call is the fastest shape and
+  // the one the server uses for the vast majority of plans, so this term is the
+  // same for a 4-week plan and a 12-week plan. 24s sits at the high end of the
+  // measured one-week range on the deployed function; longer calls (two-week
+  // chunks) are bounded by the 90s cap below rather than by this term, and the
+  // screen admits it is taking longer than usual if they overrun.
+  const perCallSeconds = 24;
+  // Small extra per written week for the merge and the larger payloads on longer
+  // plans. This is what makes the estimate grow slowly with the plan length rather
+  // than staying flat — but it stays small, because the calls are parallel.
+  const perWeekSeconds = 1.2;
+  const estimate = fixed + perCallSeconds + total * perWeekSeconds;
   return Math.max(MIN_EXPECTED_SECONDS, Math.min(90, Math.round(estimate)));
 }
 

@@ -18,8 +18,8 @@
          behaves exactly as it did before push existed.
 -->
 <resources>
-    <string name="vaylo_fcm_app_id" translatable="false">AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:00:11:22:33</string>
-    <string name="vaylo_fcm_api_key" translatable="false">AIzaSyEugIBADANBgkqhkiG9w0BAQEFAASCBKQwggSgAgEAAoIBAQDIInjIfw0JoAOJX8SdXZMxigwQY0Sfibn7rc40IYyop+YmoiC5Mh1LP0K/Rkb++9BDTtLtqQ3c5yUO CM2NJKkdvnmq3naW0KYVKC3wF2RgpxD7+24cf3FjR0BHHBbjtj0gqVbUQDwoIQ3K GG5XjPfdd6eFRy5kOj4d176QE1rus08WoLJypIfKK9TVCbFl2ImmSBPhrUOcdBTo 0dy5RCarI6gWzQHUoOu9hfJAac6ZFBM7umQMgY1FqJzp7XRJKAYE4/Li9YbnMdxS OIEwe5eQksnap+MFEDilONe9/mBpcDsn6HoAqiDvsz6KlBl5xmAjq1HvxNzuqqjs 4rgvYicHAgMBAAECgf9cHix6HKtjmBizTTayjYpdba0f3eaNiFc9VkK+EV3XmMXW rR64H4OxnuyaHemPyVg9ot/I2dyyUQeSmNAD/LEwKlGA1I9r253ryb1bRWkZE8zo Lv1VIKk63mY3qjY0RILeWxNxnsoRrnp/tb8UN/k0IbR5zsm2WG3po+Q9bKtDiB6l 4AXZ+MYuR2b8Uz3S9EKWLt6Mpb+RaJBj7SqgWJxkzXA9Tq7MPCCpsmO8SdZ14/xE 0Uqfg6IyuRJh3ZDazBKCn0pk607W2RiYoj4n0TNow58ZoIcmzevjXDyN0BUsYjKM 4+GQWFszGKfAjdLqP1+tkX2RSuhPx0bqLj5NLIkCgYEA9XaNVaozapw/Y1/LDblt TMazjaWH7M1FFZuMX3+tyJDfogxKAXnbm+RUUdaVSNirp1sYW/06sUAn7PiutWaj UCVubD0LyHIhq9ThzPaSvsHV25E/hvS1H5eyDLxJ++NEfVYKO2ghM+HN9ZCvAuN3 T3OI9MwAp/tZnY7J1caDa3kCgYEA0LnLqLFHj/5fxUA/O222u4R0wXmqTgNYtpib izte0F1w7PcmHLtENOnel97C+52DVXGJRzFfpfhqvL/GSACB+OqfmXD0KuLM+wVZ Oe8wIRiuYV2BykJTsoY3OUNTyYDV/TbbiA6yuwd4z0AELTg4BrIzGY1y5Zff7ZdVR Y7dDBn8CgYAL7OaQ8uPsmgq6WT0UPZ4BzOWMTC5+YrqoghYfzaQzylYTGWW/DJyO xlkSYMp/74bnapWUYoknc2Z9LNfQGFx22Fq1B4I7CtB3+K+/tXsLqX8qW7Qqalki X8xWsg8mHbSGIlf86uIyExZeh9j42vRA9+v/eKnPf3arIPTNXgekgQKBgFni2VjB V58kHZw1icWO/vWMGjfDrFrCSC8CU2HHZJJ42wvBd3FCGCJtYMWoUfHHqGpgZYz6 L0WrUFQOhlY1mcNXTvnmUdAyMbIcYIt5fRGTrm0RtrYikCa+dAO+tF5IS5VtH7IT aILmrQtzl6m6kG/9g+YAZXsLKwF0twMpRb0DAoGAeAqEfUmvRdSx1DAWAjGUf0wu RTKvVMJcUwRP+k/BXhxaVuqAfWW3L7a9BbOgPwErASHaoiG5xLWQPhiSkUuWnl01 uZw3cZEN2T4Vesrm0fOKSNRY3S3vFMofhw2NkWxJuZrCDGMM7cM/eh3qkxXAcgX9 A+dIr5Xft5FVwKV4FkE=</string>
-    <string name="vaylo_fcm_project_id" translatable="false">vaylo-sports-9ab8f</string>
-    <string name="vaylo_fcm_sender_id" translatable="false">935784782122</string>
+    <string name="vaylo_fcm_app_id" translatable="false"></string>
+    <string name="vaylo_fcm_api_key" translatable="false"></string>
+    <string name="vaylo_fcm_project_id" translatable="false"></string>
+    <string name="vaylo_fcm_sender_id" translatable="false"></string>
 </resources>

@@ -26,6 +26,7 @@ import { Loader2, ShoppingBag, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatMinorUnits, type CoachPriceQuote } from "@/config/coachMarketplace";
+import ReportMenu from "@/components/safety/ReportMenu";
 import {
   buyCoachPlan,
   fetchCoachWallet,
@@ -136,6 +137,16 @@ export default function CoachPlanCard({
         {plan.description && (
           <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{plan.description}</p>
         )}
+        {/* Every published plan is reportable through the same safety stack as
+            every other surface (target type marketplace_plan) — the moderation
+            gate the marketplace flag requires before it can go on. */}
+        <ReportMenu
+          targetType="marketplace_plan"
+          targetId={plan.id}
+          targetLabel={`coach plan: ${plan.title}`}
+          allowBlock={false}
+          className="mt-1 -me-1 self-end"
+        />
 
         <div className="mt-3 flex items-end justify-between">
           <div>

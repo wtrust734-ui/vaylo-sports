@@ -13,10 +13,16 @@
 // Client eligibility mirrors the server rules but is presentation-only: even a
 // tampered client cannot buy twice or at the wrong price.
 //
-// NOTE: this module is deliberately free of top-level supabase/billing imports
-// (they are pulled in lazily inside the async functions) so the pure window
-// math stays unit-testable — same reason moneyCatalog has its own mirror test.
+// NOTE: billing stays a lazy import (it is large, and it is reachable only
+// from purchase paths), but the supabase client is imported STATICALLY. It
+// used to be dynamic-imported here while ~100 other modules import it
+// statically — the split was defeated either way, the module rode in the main
+// chunk regardless, and the mixed-import warning fired on every build (audit
+// finding 3). Lazy billing keeps the real win: the purchase machinery loads
+// only when an athlete actually starts a purchase.
 // ============================================================================
+
+import { supabase } from "@/integrations/supabase/client";
 
 /** The special_offers slug that backs the Welcome Bundle. */
 export const STARTER_OFFER_SLUG = "welcome-starter";
@@ -62,8 +68,6 @@ export function hoursLeftInWindow(
  */
 export async function getStarterOfferState(userId?: string | null): Promise<StarterOfferState> {
   if (!userId) return { status: "unavailable" };
-
-  const { supabase } = await import("@/integrations/supabase/client");
 
   // 1. Already bought? (user_purchases is readable for own rows.)
   try {

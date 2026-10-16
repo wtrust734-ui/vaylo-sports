@@ -2,6 +2,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { Activity } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { useVprSystem } from "@/lib/vprSystem";
 import { useAuth } from "@/contexts/AuthContext";
 import AnimatedNumber from "@/components/motion/AnimatedNumber";
@@ -120,9 +121,30 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
               Delta renders an inline element — a bare span when there is no
               value yet, an inline-flex pill once there is one — so as a direct
               child here it either merged into the badge's line (no value) or
-              sat flush against the badge with no gutter (value present). */}
-          <div>
-            <Delta value={sys.delta} unit={sys.snapshotCount < 2 ? t("vpr.trendNeedsTwo") : undefined} className="text-sm" />
+              sat flush against the badge with no gutter (value present).
+
+              The empty state is now a LINK, not just a sigh: "Trend needs 2
+              saves" on the dashboard left the athlete on the same screen they
+              were already reading (audit finding 3). It points to /vpr, where
+              the logging form lives inline. An explicit stopPropagation is not
+              needed — this card is not itself tappable. */}
+          <div className="min-h-11 flex flex-col justify-center">
+            {sys.snapshotCount < 2 ? (
+              // `min-h-[44px]`: the pill is NOT decorative — it navigates to the
+              // logging form. Its first draft kept the neighbouring badge's
+              // `py-1` scale and came out 160x28, which the ui-audit flagged on
+              // every viewport as a tap target under the 44px touch floor.
+              // The floor applies exactly like any other tappable control.
+              <Link
+                to="/vpr"
+                className="inline-flex min-h-[44px] w-fit max-w-full items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 -my-1.5 text-[12px] font-semibold text-primary active:opacity-80"
+              >
+                <Activity size={12} aria-hidden />
+                {t("vpr.trendNeedsTwo")}
+              </Link>
+            ) : (
+              <Delta value={sys.delta} className="text-sm" />
+            )}
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3">
             {overall == null

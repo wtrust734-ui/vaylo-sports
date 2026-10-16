@@ -1,77 +1,57 @@
 // ============================================================================
-// PLAN SETUP ADVICE — a recommended answer for nearly every choice
+// PLAN SETUP ADVICE — the numbers the wizard recommends, and the caps on them
 // ----------------------------------------------------------------------------
-// The create-plan wizard asks ten questions, and most of them are only
-// answerable if the athlete already knows how training works: "days per week
-// you can train", "dedicated full rest days", "session length", "hours per
-// week". A beginner looking at that grid has two options — guess, or leave —
-// and guessing produces a plan that is too much for them and then gets blamed
-// on the app.
+// What can silently go wrong here is not a wrong sentence, it is advice that
+// outruns a safety cap: a recommendation of five training days for an athlete
+// whose age caps allow three, or "hard" for a 14-year-old. Those are the cases
+// the tests below pin, next to the ordinary level progression.
 //
-// So every answerable field gets a recommendation here, and the wizard shows it
-// next to the control. This module is deliberately pure: no React, no Supabase,
-// no AI. It is the numbers and the reasoning behind them, unit-tested in
-// `planSetupAdvice.test.ts`, so the wizard's job stays presentation.
-//
-// Two rules shaped everything below:
-//
-//  1. A recommendation is not a lock. The athlete can always override it, and
-//     an advanced athlete is told plainly that the fields are theirs to set.
-//     What they must never face is an empty choice with no suggested default.
-//  2. Nothing here can exceed the age caps. Youth and masters athletes get
-//     clamped advice exactly like they get clamped input, because a
-//     recommendation is still an instruction to train.
-//
-// Two fields deliberately get no recommendation: equipment (a factual
-// inventory — only the athlete knows what their gym has, and recommending gear
-// they do not own is how a plan prescribes a barbell to somebody with a
-// bedroom floor) and training time of day (a life constraint, not a training
-// decision — the honest advice is "the slot you can keep", which is what the
-// wizard says instead of inventing a number).
+// The reason every number on the wizard's "Recommended" chip is there at all is
+// this module: each chip is the recommendation, not a label the chip happens to
+// sit in front of. The chip is not this module's value wrapped in a button — the
+// button IS the value, presented as the one-tap answer to that field. So the chip
+// does not summarize a reason tucked away somewhere else; it is the reason, made
+// tappable. The "Why?" toggle that follows each chip is the same numbers spelled
+// out in prose, for the athlete who wants to know why the chip says what it says.
 // ============================================================================
 
 export type PlanLevel = "beginner" | "intermediate" | "advanced";
-export type SessionLengthPref = "short" | "standard" | "long";
 export type IntensityPref = "easy" | "balanced" | "hard";
-export type TrainingEnvironment = "Indoor" | "Outdoor" | "Mixed" | "Altitude";
-
-/** The subset of `getAgeCaps()` this module reasons about. */
-export type AdviceCaps = {
-  maxSessionsPerWeek: number;
-  minRestDays: number;
-  maxMinutesPerSession: number;
-};
+export type SessionLengthPref = "short" | "standard" | "long";
+export type TrainingEnvironment = "Outdoor" | "Indoor" | "Mixed";
 
 export type SetupAdviceInput = {
-  level: string;
-  goals?: string[];
-  sport?: string;
+  level?: string | null;
+  sport?: string | null;
   age?: number | null;
-  /** Age caps from the same helper the submit path clamps with. */
-  caps?: AdviceCaps | null;
+  goals?: string[];
+  caps?: {
+    maxSessionsPerWeek?: number;
+    minRestDays?: number;
+    maxMinutesPerSession?: number;
+  } | null;
+  durationWeeks?: number | null;
 };
 
 export type SetupAdvice = {
   daysPerWeek: number;
   restDays: number;
   sessionLengthPref: SessionLengthPref;
-  hoursPerWeek: number;
   intensityPref: IntensityPref;
   environment: TrainingEnvironment;
-  focusAreas: string[];
+  hoursPerWeek: number;
   durationWeeks: number;
-  /** True when the level is advanced — the wizard drops its "recommended" tone. */
   athleteKnowsBest: boolean;
-  /** One line per field explaining the number, shown behind a "why". */
+  focusAreas: string[];
   reasons: {
+    duration: string;
     daysPerWeek: string;
     restDays: string;
-    hoursPerWeek: string;
     sessionLength: string;
+    hoursPerWeek: string;
     intensity: string;
     environment: string;
     focusAreas: string;
-    duration: string;
     equipment: string;
     timeOfDay: string;
   };
@@ -188,73 +168,61 @@ export function recommendSetup(input: SetupAdviceInput): SetupAdvice {
     if (focusAreas.length >= 4) break;
     if (!focusAreas.includes(chip)) focusAreas.push(chip);
   }
-  const trimmedFocus = focusAreas.slice(0, 4);
 
-  const restWord = restDays === 1 ? "rest day" : "rest days";
-  // A cap can leave one session in the week, and "1 training days" reads as a
-  // template rather than a recommendation.
-  const dayWord = daysPerWeek === 1 ? "training day" : "training days";
+  const durationWeeks = [4, 6, 8, 12].find((w) => w >= (input.durationWeeks ?? 4)) ?? 12;
+
   const reasons: SetupAdvice["reasons"] = {
-    daysPerWeek:
-      level === "beginner"
-        ? daysPerWeek === 3
-          ? `${daysPerWeek} ${dayWord}: three full-body sessions with a day between them is where a beginner adapts fastest. More sessions mostly adds fatigue you cannot yet recover from.`
-          : // A cap (age, or a first week back) can push this below the level's
-            // own recommendation, and the reason must not then claim the number
-            // it just refused to give — a sentence that contradicts its own
-            // first word is how an athlete stops trusting the panel.
-            `${daysPerWeek} ${dayWord}: full-body sessions with a day between them is where a beginner adapts fastest, and this is the most the limits on your profile allow right now. More sessions mostly adds fatigue you cannot yet recover from.`
-        : level === "intermediate"
-        ? `${daysPerWeek} ${dayWord}: enough frequency to build each quality twice a week without stacking hard days back to back.`
-        : `${daysPerWeek} ${dayWord}: the frequency a trained athlete needs to keep progressing. You know your own week — adjust it.`,
+    duration: `${durationWeeks} weeks: long enough for the block to actually build something, short enough to finish motivated.`,
+    daysPerWeek: daysPerWeek === 1
+      ? `1 training day: enough to build the habit without asking for more than you can give it.`
+      : daysPerWeek === 3 && restDays === 2
+      ? `Three full-body sessions a week, with two full rest days so the work actually sticks.`
+      : `${daysPerWeek} training days a week, with ${restDays} full rest day${restDays === 1 ? "" : "s"} so the work actually sticks.`,
     restDays: restDays === 0
-      ? "No dedicated full rest days — only sensible at a high training age, and only if your easy days are genuinely easy."
-      : `${restDays} full ${restWord}: a full rest day is where the adaptation you trained for actually happens. ${level === "beginner" ? "Beginners need more of them than they expect." : "Keep at least one."}`,
-    hoursPerWeek: `About ${hoursPerWeek}h a week at ${minutes} minutes a session — the total follows from your days and session length, so treat it as a check, not a target.`,
-    sessionLength:
-      sessionLengthPref === "short"
-        ? `Short (about ${minutes} min): enough for a warm-up, the main work and a cooldown once the plan stops diluting it.`
-        : sessionLengthPref === "standard"
-        ? `Standard (about ${minutes} min): the length most sessions in the plan are written for.`
-        : `Long (about ${minutes} min): only worth it if the sessions in your plan are genuinely long — a long slot filled with filler is worse than a short one used well.`,
-    intensity: youth
-      ? "Easy: while you are still growing, technique and consistency beat intensity. Loading stays sub-maximal."
-      : masters
-      ? "Balanced: at 45+ the recovery cost of hard sessions rises faster than the benefit. Hard work stays, it just gets spaced out."
-      : intensityPref === "hard"
-      ? "Hard: as an advanced athlete you can hold high intensity — ride it, and let the deload weeks do their job."
-      : "Balanced: hard sessions earn their place when they are the minority of the week, and the weekly deload is not optional.",
-    environment: `Mirrors where ${sport ? `a ${sport.toLowerCase()} athlete` : "this sport"} normally trains — change it if your week is really built the other way.`,
-    focusAreas: `The stage that matches your level${trimmedFocus.length > LEVEL_FOCUS[level].length ? " plus the goals you picked" : ""}. The plan blends these rather than training them one at a time.`,
-    duration: "8 weeks: two 4-week blocks, each ending in a deload — long enough to adapt twice, short enough that you re-plan with better information afterwards.",
-    equipment: "Tell us what you actually have. The plan can only prescribe what exists, so it is the one answer only you can give.",
-    timeOfDay: "Whatever slot you can keep every week — a plan followed at 6am beats a better one that never happens at 6pm.",
+      ? `No forced rest day — you are telling us you already manage recovery yourself.`
+      : restDays === 1
+      ? `One full rest day keeps the week recoverable without dropping the pace.`
+      : `${restDays} full rest days a week, because ${level} training at this cadence needs the recovery built in — full rest days are where the adaptation you trained for actually happens.`,
+    sessionLength: sessionLengthPref === "short"
+      ? `45-minute sessions fit around a busy week without dragging.`
+      : sessionLengthPref === "standard"
+      ? `About 60 minutes per session — long enough to mean something, short enough to repeat.`
+      : `90-minute sessions for when the week is open and the work is the point.`,
+    hoursPerWeek: `Around ${hoursPerWeek}h of actual training a week — the number behind the days and the session length.`,
+    intensity: intensityPref === "easy"
+      ? `Easy intensity: technique and consistency first, not chasing fatigue.`
+      : intensityPref === "balanced"
+      ? `Balanced intensity: hard sessions in the week, not every session.`
+      : `Hard intensity: the week is built around the sessions that matter most.`,
+    environment: `Most ${sport || "training"} happens ${environment.toLowerCase()}, so the plan is written for that.`,
+    focusAreas: focusAreas.length === 0
+      ? "No focus areas yet — add a goal and this will point at the things that move it."
+      : `Focus on ${focusAreas.join(", ")}.`,
+    equipment: "Equipment is an inventory question — only you can give us what you train with, and the plan will match it.",
+    timeOfDay: "Training time is a life question — only you know the slot you can keep, and the plan will adapt to it.",
   };
 
   return {
     daysPerWeek,
     restDays,
     sessionLengthPref,
-    hoursPerWeek,
     intensityPref,
     environment,
-    focusAreas: trimmedFocus,
-    durationWeeks: 8,
+    hoursPerWeek,
+    durationWeeks,
     athleteKnowsBest: level === "advanced",
+    focusAreas,
     reasons,
   };
 }
 
-/** True when the athlete's current answer already equals the recommendation. */
 export function matchesAdvice(advice: SetupAdvice, field: keyof SetupAdvice, value: unknown): boolean {
-  const target = advice[field];
-  if (Array.isArray(target)) {
-    return Array.isArray(value) && value.length === target.length && target.every((v) => value.includes(v));
+  const current = advice[field];
+  if (Array.isArray(current) && Array.isArray(value)) {
+    return current.length === value.length && current.every((v) => value.includes(v));
   }
-  return target === value;
-}
-
-/** The label the wizard shows on a recommended chip, e.g. `Recommended · 3`. */
-export function recommendedLabel(prefix: string, value: number | string): string {
-  return `${prefix}${value}`;
+  if (typeof current === "number" && typeof value === "number") {
+    return current === value;
+  }
+  return String(current) === String(value);
 }

@@ -1,4 +1,6 @@
-# Release audit — 8 October 2026
+# Release audit — 8 October 2026 (historical snapshot)
+
+> Historical snapshot from 8 October 2026. This is not the current release verdict; see [the 15 October app audit follow-up](APP-AUDIT-2026-10-14.md#15-october-follow-up-status). Claims of deployment and live status below were not revalidated in the follow-up.
 
 A pre-release pass over the whole product: the rendered UI, the copy, the code, the
 database, the edge functions, security posture and every published legal document. Run
@@ -9,7 +11,9 @@ Everything below is either (a) fixed and verified, (b) blocked on something only
 owner can do, or (c) evidence that it was checked and is clean. No check is reported as
 passing that was not run.
 
-## Verdict
+## Historical verdict (8 October 2026)
+
+The following is retained as historical evidence only. It has not been revalidated as current.
 
 **One release blocker left, and it is not code: the marketing site at
 `vaylo-sports.netlify.app` is not deployed from the current sources**, so the URLs a
@@ -189,10 +193,10 @@ What that changes in this document:
 | Check | Result |
 |---|---|
 | `npm run security:check` | **PASS** — 31 live checks (7 added for friend messaging; 24 as reported): RPC-level privilege rules, RLS write refusals, self-friending, duplicate reward claims, malformed baskets, client-inserted ledger rows, unofficial challenge minting |
-| `npm run secret:scan` | **PASS** — 933 files, 11 rules, 0 findings (working tree; history is not scanned) |
+| `npm run secret:scan` | 8 October historical result only; see the 15 October app audit follow-up for the current scan result. |
 | `npm run ai:health` | **7/7 AI features alive**. The three that answer 400 spend nothing; the run cost the review account 10 credits and said so |
-| `npm test` | **84/84 files pass** |
-| `npm run ui:check` | **PASS** — 46 routes: every control ≥44px, nothing scrolls sideways, nothing cut off, nothing jammed, no fixed layers overlapping |
+| `npm test` | 8 October historical result only; the current checkout test count is in the 15 October app audit follow-up. |
+| `npm run ui:check` | 8 October historical result only; current UI checks require an authenticated browser pass and current remote schema. |
 | `npm run typecheck:app`, `npx eslint` on every file touched | clean (4 pre-existing warnings, none on a changed line) |
 | Edge-function auth spot-check | `ai-service` → 401 without a JWT; `support-request` → 405 on GET; `waitlist-campaigns` → 405 on GET. `verify_jwt` is off only where a signature cannot exist (Stripe webhook, unsubscribe, legal pages), each documented in place |
 | RLS | enabled on every table; remaining `USING (true)` policies are public catalogue reads (avatars, event packs, pricing, challenges, creators) plus the ones explicitly reviewed in `20261006140000_audit_rls_exposure_fixes.sql` |

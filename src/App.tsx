@@ -28,6 +28,7 @@ import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import AppLayout from "@/components/layout/AppLayout";
 import ScreenFallback from "@/components/ScreenFallback";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import CookieNotice from "@/components/CookieNotice";
 import CreditWarning from "@/components/ads/CreditWarning";
 import PromoPopup from "@/components/ads/PromoPopup";
 import StreakShield from "@/components/ads/StreakShield";
@@ -46,7 +47,7 @@ const CoachStudio = lazy(() => import("./pages/CoachStudio"));
 const CoachSignup = lazy(() => import("./pages/CoachSignup"));
 
 import OfflineBanner from "@/components/OfflineBanner";
-import BootVeil from "@/components/BootVeil";
+import BootVeil, { bootVeilGated, markBootReady } from "@/components/BootVeil";
 import TermsChangeNotice from "@/components/legal/TermsChangeNotice";
 
 import Auth from "./pages/Auth";
@@ -369,7 +370,21 @@ const isTouchUI = (): boolean =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
 
-const App = () => (
+const App = () => {
+  // Boot handoff: the veil painted by main.tsx stays up until a screen tells us
+  // a real content frame exists underneath it. AppLayout does that when its
+  // profile gate clears (it calls holdBootVeil while that gate is up, so this
+  // cap stands down); screens that never mount AppLayout — sign-in, onboarding,
+  // the legal reader — are released by this cap instead. Either way the veil
+  // cannot crossfade into a spinner, and no route we have no signal for can sit
+  // behind it.
+  useEffect(() => {
+    if (bootVeilGated()) return;
+    const timer = window.setTimeout(() => markBootReady(), 1000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
   <ErrorBoundary>
     <MotionConfig reducedMotion="user">
     <QueryClientProvider client={queryClient}>
@@ -400,6 +415,9 @@ const App = () => (
                 renders nothing for a signed-out visitor or a profile that has
                 already accepted the current version. */}
             <TermsChangeNotice />
+            {/* App-wide cookie/storage notice — never blocks, versioned, and
+                stored on-device so each origin remembers independently. */}
+            <CookieNotice />
             {/* Inline skeleton, never the full-screen loader. This boundary is
                 what used to show "Loading your next screen" over the whole
                 app while a route chunk arrived — the interstitial that made
@@ -612,6 +630,7 @@ const App = () => (
   </QueryClientProvider>
     </MotionConfig>
   </ErrorBoundary>
-);
+  );
+};
 
 export default App;

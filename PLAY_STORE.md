@@ -17,7 +17,7 @@ provide" is the list of things that will stop you.
 | Application ID | `com.vaylosports.app` |
 | App name (target) | `VAYLO Sports` |
 | minSdk / targetSdk | 26 (Android 8.0) / 36 |
-| Version code / name | `29` / `1.2.25` (default in `android/app/build.gradle`), both overridable at build time |
+| Version code / name | `46` / `1.2.43` (default in `android/app/build.gradle`) — the audit-remediation release, built and verified 2026-10-15; both overridable at build time. Bump for every upload.
 | Release signing | Configured. Upload key `upload` in `android/upload-keystore.jks` |
 | Upload key SHA-256 | Local upload key; verify fingerprint with `apksigner verify --print-certs` |
 | Upload key valid until | 2054-02-13 (Play requires validity past 2033) |
@@ -28,7 +28,7 @@ provide" is the list of things that will stop you.
 | Store icon + feature graphic | Generated into `store/` |
 | Screenshots | **Not yet captured** — see §6 |
 | Feature flags | Wearable sync **on** (Health Connect); GPS tracking removed; coach marketplace **off** — see `src/config/featureFlags.ts` |
-| AI features | Enabled in app; availability depends on configured provider secrets |
+| AI features | **Live and verified 2026-10-15** — `ai:health` reported 8/8 answering with real provider calls (incl. Gemini video, cost 45 credits); `OPENAI_API_KEY`, `GOOGLE_API` + `GOOGLE_VIDEO_API` all set as function secrets |
 
 ---
 
@@ -46,20 +46,25 @@ Ordered by how early they block you.
    the sign-in screen and nothing else.
 
    One already exists and is the same account the UI audit signs in with:
-   `ui.review.20260928@example.com`. It has starting grant credits, no purchases,
-   no personal data, and no connection to a real athlete. Its password is in
+   `ui.review.20260928@example.com`. It is confirmed (email confirmation is now
+   required at signup) and holds the current 260-credit starting grant — topped
+   up on 2026-10-15 because it predated the new economy with a balance of 0. Its
+   password is in
    `.freebuff/ui-audit.local.json` in the working checkout — outside the
    repository on purpose, since the same password gets pasted into the Play
    listing anyway and one copy is easier to rotate than two.
 
-   Two things to do with it. Put the credentials in the App access declaration
-   before you submit, and re-check before you go public: a reviewer account that
+   Three things to do with it. Put the credentials in the App access declaration
+   before you submit; keep sign-in working after any auth change (verified
+   2026-10-15); and rotate the password (or zero the credits) the day the review
+   is done, because a reviewer account that
    is still reachable after launch is an open door, and deleting it then means
    re-doing this section for the next reviewer.
-3. **AI provider secrets** as Supabase secrets. Confirm `OPENAI_API_KEY` is set
-   for OpenAI-backed features and `GOOGLE_API` for Gemini video analysis before
-   expecting those routes to work. Configure secrets through the Supabase project
-   dashboard or authorized CLI; do not put provider credentials in the app bundle.
+3. **AI provider secrets** as Supabase secrets. **Confirmed set as of
+   2026-10-15** — no action remaining here: `OPENAI_API_KEY` (OpenAI-backed
+   features), `GOOGLE_API` and `GOOGLE_VIDEO_API` (Gemini), plus GMAIL relay
+   secrets, are all present; the 8/8 `ai:health` pass is the receipt, not a
+   plan. Do not put provider credentials in the app bundle.
 
    **Video analysis is separate.** It calls Gemini, not OpenAI, and wants a
    plain API key from Google AI Studio — no service account, no YouTube upload:
@@ -148,10 +153,9 @@ each document and it cannot drift from what Play reviewed.
 ## 2. Build the signed bundle
 
 Every upload needs a `versionCode` Play has never seen. The committed default is
-`29` / `1.2.25`; bump it for each subsequent upload. (Read the real default out
-of `android/app/build.gradle` rather than trusting this line — it said `5` /
-`1.2.1` for twenty-three releases, and a versionCode copied from a stale doc is
-an upload Play rejects outright.)
+`45` / `1.2.42`; bump it for each subsequent upload. Confirm the current version
+in `android/app/build.gradle` before building, and use a version code greater
+than every code already uploaded to Play.
 
 **Locally** (needs `android/keystore.properties`, which is git-ignored alongside
 the keystore):
@@ -160,7 +164,7 @@ the keystore):
 npm run build:native
 npx cap sync android
 cd android
-./gradlew bundleRelease -PversionCode=5 -PversionName=1.2.1
+./gradlew bundleRelease -PversionCode=46 -PversionName=1.2.43
 # → app/build/outputs/bundle/release/app-release.aab
 ```
 
@@ -361,8 +365,7 @@ currently cannot verify any purchase because the server side is unconfigured
 
 4. Add testers to **License testing** (Setup → License testing) so purchases are
    free and can be repeated.
-5. Set `PAYMENT_MODE=store` when you are ready to verify real purchases;
-   `PAYMENT_MODE=test` keeps the test path.
+5. Set `PAYMENT_MODE=store` when you are ready to verify real purchases. The test mode is for local development only and must never be enabled in a deployed project.
 
 Event Packs are currently bought with **credits**, not cash, so they work in a
 closed test today without any of the above. Credits themselves cannot be bought
@@ -397,7 +400,7 @@ If it is your first release, expect **1–7 days** for review of a closed test.
 
 ## Pre-launch checklist
 
-Updated 2026-09-29. Ordered by what actually blocks a rollout, not by
+Updated 2026-10-15. Ordered by what actually blocks a rollout, not by
 convenience. Everything in **Tier 0** is a real exposure or a lost conversion;
 everything in **Tier 4** can wait until after closed testing.
 
@@ -508,11 +511,7 @@ notice as the evidence. The app's advertising-identifier posture is documented i
 
 ### The 14-day clock
 
-Closed testing itself has **no tester minimum**. The 12-testers-for-14-continuous-
-days requirement applies to *production access* on new personal developer
-accounts. It is the long pole, it cannot be shortened, and it only starts once
-the track is live — so open the track the moment the bundle is uploaded rather
-than waiting for the closed test to look finished.
+Check the current Play Console requirement for your account type before planning production access. The 12-testers-for-14-continuous-days rule applies to production-access eligibility for certain newer personal developer accounts, not universally to every closed-testing track. If it applies, the clock starts when the track is live.
 
 ## Known gaps
 

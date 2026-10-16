@@ -1,198 +1,508 @@
 import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/i18n/format";
-import { RARITY_META, RARITY_ORDER, type Rarity } from "@/lib/rewards";
+import { RARITY_META } from "@/lib/rewards";
 import {
   SELLABLE_TYPES,
   SLOT_BY_TYPE,
+  TYPE_META,
   cosmeticColor,
   cosmeticLabel,
+  isAnimated,
   useCosmetics,
+  type CosmeticDef,
   type CosmeticType,
   type EquippedRow,
 } from "@/lib/cosmetics";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
-import { Check, Coins, Gift, Loader2, Lock } from "lucide-react";
+import CoinQuickBuySheet from "@/components/market/CoinQuickBuySheet";
+import RewardBoxesPanel from "@/components/cosmetics/RewardBoxesPanel";
+import { Check, Coins, Loader2, Lock, Sparkles, X } from "lucide-react";
 
+// ============================================================================
+// COLLECTION — the cosmetics tab
+// ----------------------------------------------------------------------------
+// Rebuilt 2026-10-15 around the question the old grid could not answer: "what
+// does that actually look like?" Every card here is TRY-ON FIRST — tapping one
+// previews it on the live profile card at the top (equipped items stay
+// underneath, so the comparison is real), and only pressing Equip or Buy
+// changes anything. Buying is a confirm step ("Buy … for … Coins?" → Buy now),
+// and coins can be bought right here without a detour through the Market.
+// ============================================================================
+
+const slotOf = (def: CosmeticDef): keyof EquippedRow => SLOT_BY_TYPE[def.type] as keyof EquippedRow;
+
+/** The cosmetic shown for a slot: the one being tried on, else the equipped one. */
 export default function Collection() {
   const { profile, refreshProfile } = useAuth();
   const { toast } = useToast();
-  const { defs, ownedIds, equipped, loading, buy, equip, unequip } = useCosmetics();
+  const { defs, ownedIds, equipped, loading, buy, equip, unequip, defById } = useCosmetics();
 
-  const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<CosmeticType | "all">("all");
   const [ownedFilter, setOwnedFilter] = useState<"all" | "owned" | "locked">("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [topUp, setTopUp] = useState<{ gap: number; itemName: string } | null>(null);
+  const [quickBuy, setQuickBuy] = useState(false);
+  /** The item waiting in the buy-confirm dialog, if any. */
+  const [confirm, setConfirm] = useState<CosmeticDef | null>(null);
+  /** What is being tried on the preview card right now. Nothing is equipped. */
+  const [trying, setTrying] = useState<CosmeticDef | null>(null);
 
-  const credits = profile?.credits ?? 0;
   const coins = (profile as { coins?: number } | null)?.coins ?? 0;
 
-  const categories = useMemo(() => {
-    const s = new Set(defs.map((d) => d.category));
-    return ["all", ...Array.from(s)];
-  }, [defs]);
-
-  const filtered = defs.filter((d) => {
-    if (rarityFilter !== "all" && d.rarity !== rarityFilter) return false;
-    if (categoryFilter !== "all" && d.category !== categoryFilter) return false;
-    const owned = ownedIds.has(d.id);
-    if (ownedFilter === "owned" && !owned) return false;
-    if (ownedFilter === "locked" && owned) return false;
-    if (q && !d.name.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      defs.filter((d) => {
+        if (typeFilter !== "all" && d.type !== typeFilter) return false;
+        const owned = ownedIds.has(d.id);
+        if (ownedFilter === "owned" && !owned) return false;
+        if (ownedFilter === "locked" && owned) return false;
+        if (q && !d.name.toLowerCase().includes(q.toLowerCase())) return false;
+        return true;
+      }),
+    [defs, typeFilter, ownedFilter, q],
+  );
 
   const totalCollected = defs.filter((d) => ownedIds.has(d.id)).length;
   const pct = defs.length ? Math.round((totalCollected / defs.length) * 100) : 0;
 
-  const handleBuy = async (id: string, name: string, cost: number) => {
-    if (coins < cost) {
-      setTopUp({ gap: cost - coins, itemName: name });
-      return;
-    }
-    setBusy(id);
-    const { error } = await buy(id);
-    setBusy(null);
-    if (error) {
-      toast({ title: "Purchase failed", description: error, variant: "destructive" });
-      return;
-    }
-    await refreshProfile();
-    toast({ title: `${name} unlocked` });
+  // -- Try-on: the slot resolution the preview card renders from --------------
+  const shown = (type: CosmeticType): CosmeticDef | undefined => {
+    if (trying && trying.type === type) return trying;
+    return defById(equipped[slotOf({ type } as CosmeticDef)]);
   };
+  const bgDef = shown("background");
+  const borderDef = shown("border");
+  const titleDef = shown("title");
+  const colorDef = shown("name_color");
+  const effectDef = shown("effect");
+  const badgeDef = shown("badge");
+  const nameColor = cosmeticColor(colorDef) ?? undefined;
 
-  const handleEquip = async (id: string, name: string) => {
-    setBusy(id);
-    const { error } = await equip(id);
+  // -- Actions ----------------------------------------------------------------
+  const handleEquip = async (def: CosmeticDef) => {
+    setBusy(def.id);
+    const { error } = await equip(def.id);
     setBusy(null);
     if (error) {
       toast({ title: "Could not equip", description: error, variant: "destructive" });
       return;
     }
-    toast({ title: `${name} equipped` });
+    setTrying(null);
+    toast({ title: `${def.name} equipped` });
   };
 
-  const handleUnequip = async (slot: keyof EquippedRow) => {
+  const handleUnequip = async (def: CosmeticDef) => {
+    const slot = slotOf(def);
     setBusy(slot);
     const { error } = await unequip(slot);
     setBusy(null);
     if (error) toast({ title: "Could not remove", description: error, variant: "destructive" });
   };
 
+  /** Runs after the confirm dialog's "Buy now" — or straight from a free claim. */
+  const handleBuy = async (def: CosmeticDef) => {
+    const cost = def.coin_cost ?? 0;
+    if (coins < cost) {
+      setConfirm(null);
+      setTopUp({ gap: cost - coins, itemName: def.name });
+      return;
+    }
+    setBusy(def.id);
+    const { error } = await buy(def.id);
+    setBusy(null);
+    if (error) {
+      toast({ title: "Purchase failed", description: error, variant: "destructive" });
+      return;
+    }
+    setConfirm(null);
+    setTrying(null);
+    await refreshProfile();
+    toast({ title: `${def.name} unlocked`, description: "Equip it from the grid below." });
+  };
+
+  const tryOn = (def: CosmeticDef) => setTrying(def.id === trying?.id ? null : def);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Collection</h1>
-        <p className="text-sm text-muted-foreground">
-          {totalCollected} / {defs.length} collected · {pct}%
-        </p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+    <div className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
+      {/* ============= HEADER + COINS ============= */}
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-[12px] uppercase tracking-[0.24em] text-primary font-bold">
+            <Sparkles size={12} /> Cosmetics
+          </div>
+          <h1 className="text-2xl font-display font-black">Your collection</h1>
+          <p className="text-sm text-muted-foreground">
+            {totalCollected} / {defs.length} collected · {pct}%
+          </p>
+          <div className="mt-2 h-2 max-w-xs overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className="h-full rounded-full bg-gradient-primary"
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
         </div>
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Coins className="h-3.5 w-3.5 text-energy" />
-          {formatNumber(coins)} Coins · profile cosmetics are bought with Coins; badges are earned from chests and challenges.
-        </p>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-energy/30 bg-energy/10 px-3 py-1.5 text-sm font-bold text-energy">
+            <Coins size={13} /> {formatNumber(coins)}
+          </span>
+          <Button size="sm" className="bg-gradient-electric text-white" onClick={() => setQuickBuy(true)}>
+            <Coins size={13} className="mr-1" /> Buy Coins
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="w-40" />
-        <select value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value as Rarity | "all")} className="rounded-md border bg-background px-2 py-1 text-sm">
-          <option value="all">All rarities</option>
-          {RARITY_ORDER.map((r) => <option key={r} value={r}>{RARITY_META[r].label}</option>)}
-        </select>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm">
-          {categories.map((c) => <option key={c} value={c}>{c === "all" ? "All categories" : c}</option>)}
-        </select>
-        <select value={ownedFilter} onChange={(e) => setOwnedFilter(e.target.value as "all" | "owned" | "locked")} className="rounded-md border bg-background px-2 py-1 text-sm">
-          <option value="all">Owned & locked</option>
-          <option value="owned">Owned</option>
-          <option value="locked">Locked</option>
-        </select>
+      {/* ============= SURPRISE BOXES ============= */}
+      <RewardBoxesPanel />
+
+      {/* ============= LIVE TRY-ON CARD ============= */}
+      <div className="space-y-2">
+        <div
+          className="relative overflow-hidden rounded-3xl border p-5 transition-colors"
+          style={{
+            borderColor: borderDef ? `${cosmeticColor(borderDef) ?? "#3b82f6"}66` : "hsl(var(--border))",
+            background: bgDef
+              ? (cosmeticColor(bgDef) ?? RARITY_META[bgDef.rarity].gradient)
+              : "linear-gradient(160deg, hsl(217 60% 18%), hsl(220 60% 8%))",
+            boxShadow: bgDef ? `0 0 30px ${RARITY_META[bgDef.rarity].glow}33` : undefined,
+          }}
+        >
+          {/* Border slot: an inset ring around the whole card. */}
+          {borderDef && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-3xl"
+              style={{ boxShadow: `inset 0 0 0 3px ${cosmeticColor(borderDef) ?? "#3b82f6"}` }}
+            />
+          )}
+          {/* Effect slot: a slow shimmer sweep when the effect is animated. */}
+          {effectDef && isAnimated(effectDef) && (
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: `linear-gradient(110deg, transparent 30%, ${
+                  cosmeticColor(effectDef) ?? "#a855f7"
+                }33 50%, transparent 70%)`,
+                backgroundSize: "200% 100%",
+              }}
+              animate={{ backgroundPosition: ["100% 0", "-100% 0"] }}
+              transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }}
+            />
+          )}
+
+          <div className="relative">
+            <p className="text-[12px] font-display font-bold uppercase tracking-wider text-white/60">
+              Live preview
+            </p>
+            <p className="mt-2 font-display text-2xl font-black" style={{ color: nameColor ?? "#fff" }}>
+              {profile?.full_name || "Athlete"}
+            </p>
+            {titleDef && (
+              <p className="text-sm font-semibold" style={{ color: cosmeticColor(titleDef) ?? undefined }}>
+                {cosmeticLabel(titleDef)}
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {badgeDef && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider"
+                  style={{
+                    background: `${RARITY_META[badgeDef.rarity].glow}22`,
+                    color: "#fff",
+                    border: `1px solid ${RARITY_META[badgeDef.rarity].glow}55`,
+                  }}
+                >
+                  {cosmeticLabel(badgeDef)}
+                </span>
+              )}
+              {effectDef && !isAnimated(effectDef) && (
+                <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[12px] text-white/70">
+                  {cosmeticLabel(effectDef)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Trying-on banner: nothing is equipped until Equip is pressed. */}
+        <AnimatePresence>
+          {trying && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/40 bg-primary/10 px-3 py-2.5"
+            >
+              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+                Trying on {trying.name}
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  ({RARITY_META[trying.rarity].label} · not equipped yet)
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setTrying(null)}
+                className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground"
+              >
+                <X size={12} /> Cancel
+              </button>
+              {ownedIds.has(trying.id) ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void handleEquip(trying)}
+                  className="inline-flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"
+                >
+                  {busy === trying.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  Equip
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => setConfirm(trying)}
+                  className="inline-flex items-center gap-1 rounded-xl bg-energy px-3 py-1.5 text-[12px] font-bold text-background disabled:opacity-60"
+                >
+                  <Coins size={12} /> Buy {trying.coin_cost != null ? formatNumber(trying.coin_cost) : ""}
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {loading && <p className="text-center text-sm text-muted-foreground">Loading your collection…</p>}
+      {/* ============= FILTERS ============= */}
+      <div className="space-y-2.5">
+        <Input placeholder="Search cosmetics…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {(["all", ...SELLABLE_TYPES, "badge"] as (CosmeticType | "all")[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTypeFilter(t)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${
+                typeFilter === t
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t === "all" ? "All" : TYPE_META[t as CosmeticType].label}
+            </button>
+          ))}
+          <span className="w-px shrink-0 bg-border mx-1" />
+          {(["all", "owned", "locked"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setOwnedFilter(f)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${
+                ownedFilter === f
+                  ? "bg-foreground text-background"
+                  : "border border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {loading && <p className="py-8 text-center text-sm text-muted-foreground">Loading your collection…</p>}
+
+      {/* ============= GRID ============= */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {filtered.map((d) => {
           const owned = ownedIds.has(d.id);
           const meta = RARITY_META[d.rarity];
-          const now = new Date();
-          const unavailable = (d.available_from && new Date(d.available_from) > now) || (d.available_to && new Date(d.available_to) < now);
-          const sellable = (SELLABLE_TYPES as CosmeticType[]).includes(d.type as CosmeticType);
-          const slot = sellable ? (SLOT_BY_TYPE[d.type as CosmeticType] as keyof EquippedRow) : null;
+          const slot = (SELLABLE_TYPES as CosmeticType[]).includes(d.type as CosmeticType)
+            ? slotOf(d)
+            : null;
           const isEquipped = slot ? equipped[slot] === d.id : false;
+          const isTrying = trying?.id === d.id;
           const color = cosmeticColor(d);
           const price = d.coin_cost;
 
           return (
-            <Card key={d.id} className={`relative flex flex-col overflow-hidden border p-3 transition ${meta.border} ${owned ? "" : "opacity-80"}`}
-              style={{ boxShadow: owned ? `0 0 24px ${meta.glow}` : undefined }}>
-              <div className="mb-2 flex items-center justify-between">
-                <Badge className={`${meta.bg} ${meta.text} ${meta.border} border`}>{meta.label}</Badge>
-                {!owned && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
-              </div>
-              <div className="mb-2 flex h-16 items-center justify-center rounded-md" style={{ background: meta.gradient, opacity: owned ? 1 : 0.4 }}>
-                <Gift className="h-8 w-8" style={{ color: color ?? "#fff" }} />
-              </div>
-              <div className="text-sm font-semibold leading-tight" style={color ? { color } : undefined}>{d.name}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{sellable ? cosmeticLabel(d) : d.category}</div>
-              {d.season && <div className="mt-1 text-xs italic text-amber-400">{d.season}</div>}
-              {unavailable && <div className="mt-1 text-xs text-muted-foreground">Out of season</div>}
-
-              <div className="mt-3">
-                {isEquipped && slot ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    disabled={busy !== null}
-                    onClick={() => handleUnequip(slot)}
-                  >
-                    {busy === slot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Unequip"}
-                  </Button>
-                ) : owned && sellable ? (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={busy !== null}
-                    onClick={() => handleEquip(d.id, d.name)}
-                  >
-                    {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Check className="mr-1 h-3.5 w-3.5" />Equip</>}
-                  </Button>
-                ) : owned ? (
-                  <p className="text-center text-[12px] font-semibold text-muted-foreground">Owned</p>
-                ) : sellable && price ? (
-                  <Button
-                    size="sm"
-                    className="w-full bg-energy text-background hover:bg-energy/90"
-                    disabled={busy !== null}
-                    onClick={() => handleBuy(d.id, d.name, price)}
-                  >
-                    {busy === d.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <><Coins className="mr-1 h-3.5 w-3.5" />{formatNumber(price)}</>
-                    )}
-                  </Button>
-                ) : (
-                  <p className="text-center text-[12px] text-muted-foreground">
-                    {sellable ? "Not for sale" : "Earn from chests"}
-                  </p>
+            <motion.div
+              key={d.id}
+              layout
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              className={`relative flex flex-col overflow-hidden rounded-2xl border transition-all ${
+                isTrying ? "border-primary shadow-glow-electric" : meta.border
+              }`}
+              style={{ boxShadow: owned ? `0 0 20px ${meta.glow}33` : undefined }}
+            >
+              {/* Tile: the cosmetic rendered as itself, not a placeholder. */}
+              <button
+                type="button"
+                onClick={() => tryOn(d)}
+                aria-label={`Try on ${d.name}`}
+                className="relative h-24 overflow-hidden"
+                style={{ background: meta.gradient }}
+              >
+                {d.type === "title" && (
+                  <span className="absolute inset-0 flex items-center justify-center px-2 text-center font-display text-sm font-black" style={{ color: color ?? "#fff" }}>
+                    {cosmeticLabel(d)}
+                  </span>
                 )}
+                {d.type === "name_color" && (
+                  <span className="absolute inset-2 rounded-xl" style={{ background: color ?? "#fff" }} />
+                )}
+                {d.type === "background" && (
+                  <span className="absolute inset-0" style={{ background: color ?? meta.gradient }} />
+                )}
+                {d.type === "border" && (
+                  <span
+                    className="absolute inset-3 rounded-full"
+                    style={{ boxShadow: `inset 0 0 0 4px ${color ?? "#fff"}` }}
+                  />
+                )}
+                {d.type === "effect" && (
+                  <motion.span
+                    className="absolute inset-0"
+                    style={{
+                      background: `linear-gradient(110deg, transparent 30%, ${color ?? "#a855f7"}66 50%, transparent 70%)`,
+                      backgroundSize: "200% 100%",
+                    }}
+                    animate={isAnimated(d) ? { backgroundPosition: ["100% 0", "-100% 0"] } : undefined}
+                    transition={{ duration: 2.6, repeat: Infinity, ease: "linear" }}
+                  />
+                )}
+                {d.type === "badge" && (
+                  <span className="absolute inset-0 flex items-center justify-center font-display text-lg font-black" style={{ color: color ?? "#fff" }}>
+                    {cosmeticLabel(d)}
+                  </span>
+                )}
+
+                <span
+                  className="absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase tracking-wider backdrop-blur"
+                  style={{ background: "rgba(0,0,0,0.45)", color: meta.glow }}
+                >
+                  {meta.label}
+                </span>
+                {isEquipped && (
+                  <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                    <Check size={11} />
+                  </span>
+                )}
+                {!owned && (
+                  <span className="absolute bottom-1.5 left-1.5 grid h-5 w-5 place-items-center rounded-full bg-black/60">
+                    <Lock size={10} className="text-white/80" />
+                  </span>
+                )}
+              </button>
+
+              <div className="flex flex-1 flex-col p-2.5">
+                <p className="truncate text-[12px] font-bold" style={color ? { color } : undefined}>
+                  {d.name}
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {d.description ?? TYPE_META[d.type as CosmeticType]?.blurb ?? d.category}
+                </p>
+
+                <div className="mt-auto pt-2">
+                  {isEquipped && slot ? (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void handleUnequip(d)}
+                      className="w-full rounded-xl border border-border py-1.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground disabled:opacity-60"
+                    >
+                      {busy === slot ? <Loader2 size={12} className="mx-auto animate-spin" /> : "Unequip"}
+                    </button>
+                  ) : owned ? (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void handleEquip(d)}
+                      className="w-full rounded-xl bg-primary py-1.5 text-[12px] font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60"
+                    >
+                      {busy === d.id ? <Loader2 size={12} className="mx-auto animate-spin" /> : "Equip"}
+                    </button>
+                  ) : price != null ? (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => setConfirm(d)}
+                      className="flex w-full items-center justify-center gap-1 rounded-xl bg-energy py-1.5 text-[12px] font-bold text-background disabled:opacity-60"
+                    >
+                      {busy === d.id ? <Loader2 size={12} className="animate-spin" /> : <><Coins size={12} /> {formatNumber(price)}</>}
+                    </button>
+                  ) : (
+                    <p className="text-center text-[12px] text-muted-foreground">
+                      {d.type === "badge" ? "Earn from boxes" : "Not for sale"}
+                    </p>
+                  )}
+                </div>
               </div>
-            </Card>
+            </motion.div>
           );
         })}
       </div>
-      {!loading && filtered.length === 0 && <p className="text-center text-sm text-muted-foreground">No rewards match your filters.</p>}
+
+      {!loading && filtered.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted-foreground">No cosmetics match your filters.</p>
+      )}
+
+      {/* ============= BUY CONFIRM ============= */}
+      <AnimatePresence>
+        {confirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-6 backdrop-blur-sm"
+            onClick={() => setConfirm(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 280, damping: 26 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs rounded-3xl border border-border bg-card p-5 text-center"
+            >
+              <div
+                className="mx-auto h-16 w-16 rounded-2xl"
+                style={{ background: RARITY_META[confirm.rarity].gradient }}
+              />
+              <p className="mt-3 font-display text-lg font-black">{confirm.name}</p>
+              <p className="text-[12px] text-muted-foreground">{TYPE_META[confirm.type as CosmeticType]?.blurb ?? confirm.category}</p>
+              <p className="mt-3 text-sm">
+                Buy for{" "}
+                <span className="font-bold text-energy">
+                  {formatNumber(confirm.coin_cost ?? 0)} Coins
+                </span>
+                ?
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">You have {formatNumber(coins)} Coins.</p>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleBuy(confirm)}
+                className="mt-4 w-full rounded-2xl bg-gradient-electric py-2.5 text-[12px] font-black uppercase tracking-wider text-white shadow-glow-electric active:scale-[0.99] disabled:opacity-60"
+              >
+                {busy === confirm.id ? <Loader2 size={14} className="mx-auto animate-spin" /> : "Buy now"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirm(null)}
+                className="mt-2 w-full text-[12px] font-bold uppercase tracking-wider text-muted-foreground"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <CoinTopUpSheet
         open={topUp !== null}
@@ -200,6 +510,7 @@ export default function Collection() {
         gap={topUp?.gap ?? 0}
         itemName={topUp?.itemName}
       />
+      <CoinQuickBuySheet open={quickBuy} onClose={() => setQuickBuy(false)} />
     </div>
   );
 }

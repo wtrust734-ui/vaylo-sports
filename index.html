@@ -18,6 +18,19 @@
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/logo.png" sizes="180x180" />
 
+    <!-- First-paint colour, inlined so the document itself is the app's
+         foundation colour before any stylesheet or module loads. Without it the
+         browser paints its default canvas first and the app appears to flash
+         black-then-blue on every open — the first of the hard cuts in the boot
+         sequence. Same #05070f the splash, the boot veil and the loader use. -->
+    <style>
+      html,
+      body {
+        background: #05070f;
+        margin: 0;
+      }
+    </style>
+
     <title>Vaylo Sports</title>
     <meta name="description" content="Vaylo Sports is an all-sports training log: log sessions, understand load and recovery, find your limiter and prepare for events.">
     <meta name="author" content="Vaylo Sports" />

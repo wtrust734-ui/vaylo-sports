@@ -156,25 +156,32 @@ on conflict (id) do nothing;
 
 -- Storage policies: allow authenticated users to read/write their own files in renders bucket
 -- Renders are stored under renders/{userId}/{filename}
-create policy if not exists "renders_select_own" on storage.objects
+
+-- Postgres policies have no "if not exists"; drop the same-backed names first
+-- so a re-run is a no-op instead of an abort.
+drop policy if exists "renders_select_own" on storage.objects;
+create policy "renders_select_own" on storage.objects
   for select using (
     bucket_id = 'renders'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
-create policy if not exists "renders_insert_own" on storage.objects
+drop policy if exists "renders_insert_own" on storage.objects;
+create policy "renders_insert_own" on storage.objects
   for insert with check (
     bucket_id = 'renders'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
-create policy if not exists "renders_update_own" on storage.objects
+drop policy if exists "renders_update_own" on storage.objects;
+create policy "renders_update_own" on storage.objects
   for update using (
     bucket_id = 'renders'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
-create policy if not exists "renders_delete_own" on storage.objects
+drop policy if exists "renders_delete_own" on storage.objects;
+create policy "renders_delete_own" on storage.objects
   for delete using (
     bucket_id = 'renders'
     and auth.uid()::text = (storage.foldername(name))[1]

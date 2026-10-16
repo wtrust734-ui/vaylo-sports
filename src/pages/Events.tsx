@@ -7,6 +7,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { formatShortDate, formatWeekdayDate } from "@/i18n/format";
+import SeasonExportButton from "@/components/events/SeasonExportButton";
 
 type Tab = "events" | "rivals";
 
@@ -541,6 +542,12 @@ const Events = () => {
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Events</motion.h1>
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Race day. Your day.</motion.p>
+      </div>
+
+      {/* The season rail: plan sessions + races in one calendar file the
+          athlete's own tools live inside. */}
+      <div className="px-5 mb-4 flex justify-end">
+        <SeasonExportButton />
       </div>
 
       <div className="px-5 mb-5">

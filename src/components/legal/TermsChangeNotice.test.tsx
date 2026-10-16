@@ -91,7 +91,7 @@ describe("when the athlete is behind", () => {
     expect(screen.getByText(HEADING)).toBeInTheDocument();
     expect(screen.getByText(/version 1\.0/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /I accept version 1\.4/ }),
+      screen.getByRole("button", { name: /I accept version 1\.5/ }),
     ).toBeInTheDocument();
   });
 
@@ -122,7 +122,7 @@ describe("accepting", () => {
   it("records the acceptance, then leaves", async () => {
     const { refreshProfile } = renderNotice({ terms_version: "1.0" });
 
-    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.4/ }));
+    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.5/ }));
 
     await waitFor(() => expect(recordTermsAcceptance).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByText(HEADING)).not.toBeInTheDocument());
@@ -133,7 +133,7 @@ describe("accepting", () => {
     vi.mocked(recordTermsAcceptance).mockResolvedValue(false);
     const { refreshProfile } = renderNotice({ terms_version: "1.0" });
 
-    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.4/ }));
+    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.5/ }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/could not save that/i);

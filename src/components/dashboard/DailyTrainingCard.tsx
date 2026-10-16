@@ -92,12 +92,16 @@ const DailyTrainingCard = () => {
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      supabase.from("training_plans").select("*").eq("user_id", user.id).eq("active", true).limit(1),
+      // Column lists, not "*": the dashboard card reads plan identity, the
+      // current week and the week template — pulling every column (the plan
+      // table carries several large ones) fed 4 full-screen cards off one
+      // oversized row (audit finding 3.1).
+      supabase.from("training_plans").select("id, created_at, plan_data, week_current, duration_weeks").eq("user_id", user.id).eq("active", true).limit(1),
       supabase.from("water_logs").select("amount_ml").eq("user_id", user.id).eq("log_date", today),
       supabase.from("user_settings").select("water_goal_ml").eq("user_id", user.id).maybeSingle(),
       supabase.from("meal_logs").select("calories").eq("user_id", user.id).eq("log_date", today),
       supabase.from("recovery_logs").select("readiness_score, adjusted_session").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
-      supabase.from("events").select("*").eq("user_id", user.id).gte("event_date", new Date().toISOString()).order("event_date", { ascending: true }).limit(1),
+      supabase.from("events").select("id, title, event_date").eq("user_id", user.id).gte("event_date", new Date().toISOString()).order("event_date", { ascending: true }).limit(1),
     ]).then(([planRes, waterRes, settingsRes, mealRes, recoveryRes, eventRes]) => {
       const recoveryData = recoveryRes.data;
       const hasAdjusted = recoveryData?.adjusted_session;
@@ -131,7 +135,7 @@ const DailyTrainingCard = () => {
       setTotalCalories(meals.reduce((sum, m) => sum + (m.calories || 0), 0));
       if (eventRes.data && eventRes.data.length > 0) setUpcomingEvent(eventRes.data[0]);
     });
-  }, [user]);
+  }, [user, today]);
 
   // A break that stops training takes today's session off the card entirely.
   // The sessions inside it are not deleted — they are marked unavailable — but
@@ -170,7 +174,7 @@ const DailyTrainingCard = () => {
             size on narrow phones instead of forcing it. Nothing truncates: a
             clipped section header reads as broken, a wrapped one does not. */}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
             <span className="h-2 w-2 shrink-0 rounded-full bg-primary shadow-glow animate-pulse-glow" />
             <span className="whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.16em] text-primary max-[400px]:text-[10.5px] max-[400px]:tracking-[0.1em]">Today's Schedule</span>
             {zoneDot && (

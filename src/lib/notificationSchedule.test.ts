@@ -22,9 +22,15 @@ import {
   sessionForDate,
   streakCopy,
   streakFinalCopy,
+  nextStreakReminderOccurrence,
+  streakReminderCopy,
+  MORNING_HOUR,
+  MORNING_MINUTE,
+  STREAK_REMINDER_HOUR,
+  STREAK_REMINDER_MINUTE,
   type PlanLike,
 } from "./notificationTriggers";
-import { morningIdForDate } from "./localNotifications";
+import { morningIdForDate, streakReminderIdForDate, REENGAGEMENT_NOTIFICATION_ID } from "./localNotifications";
 
 // Seven Monday-first entries, matching both plan writers (day 1-7, Mon-Sun).
 const weekSessions = (titles: (string | null)[]) =>
@@ -47,6 +53,99 @@ const plan: PlanLike = {
 const MONDAY = new Date(2026, 9, 12, 8, 0, 0);
 const TUESDAY = new Date(2026, 9, 13, 8, 0, 0);
 const THURSDAY_REST = new Date(2026, 9, 15, 8, 0, 0);
+
+describe("the morning streak reminder", () => {
+  it("keeps its own per-day id namespace, clear of every other reminder", () => {
+    const day = new Date(2026, 9, 14);
+    // 8_115_000 + mmdd (October 14 → 1014).
+    expect(streakReminderIdForDate(day)).toBe(8_116_014);
+    // Two reminders can coexist on one morning: the 07:10 briefing, then the
+    // streak nudge. A shared id would make scheduling one cancel the other.
+    expect(streakReminderIdForDate(day)).not.toBe(morningIdForDate(day));
+    expect(streakReminderIdForDate(new Date(2026, 9, 15))).not.toBe(streakReminderIdForDate(day));
+    // And it can never collide with the reengagement ping's fixed id.
+    expect(streakReminderIdForDate(day)).toBeLessThan(REENGAGEMENT_NOTIFICATION_ID);
+  });
+
+  it("posts after the briefing, not on top of it", () => {
+    const briefing = MORNING_HOUR * 60 + MORNING_MINUTE;
+    const streak = STREAK_REMINDER_HOUR * 60 + STREAK_REMINDER_MINUTE;
+    expect(streak).toBeGreaterThan(briefing);
+  });
+
+  it("quotes a real number for today", () => {
+    const copy = streakReminderCopy(12, true);
+    expect(copy.title).toContain("12-day streak");
+    expect(copy.body).toMatch(/recovery check-in/i);
+    // A zero streak starts the clock rather than mourning a number.
+    expect(streakReminderCopy(0, true).title).toMatch(/start a streak today/i);
+  });
+
+  it("never quotes a number aimed at tomorrow", () => {
+    // A tomorrow reminder is written tonight: one check-in (or one miss)
+    // tonight makes any pre-written count wrong by at least one, and a wrong
+    // streak number is the claim this app refuses to make. So the copy sells
+    // the action instead — digits at all.
+    const copy = streakReminderCopy(12, false);
+    expect(copy.title).not.toMatch(/\d/);
+    expect(copy.body).not.toMatch(/\d/);
+    expect(copy.body).toMatch(/streak/i);
+  });
+
+  it("aims at today before 08:00 when nothing is checked in yet", () => {
+    const now = new Date(2026, 9, 14, 6, 30);
+    const at = nextStreakReminderOccurrence(now, false, {});
+    expect(at?.forToday).toBe(true);
+    expect(at?.at.getHours()).toBe(STREAK_REMINDER_HOUR);
+    expect(at?.at.getMinutes()).toBe(STREAK_REMINDER_MINUTE);
+    expect(at?.at.getDate()).toBe(14);
+  });
+
+  it("aims at today once 08:00 has passed — never in the past", () => {
+    const now = new Date(2026, 9, 14, 9, 0);
+    const at = nextStreakReminderOccurrence(now, false, {});
+    expect(at?.forToday).toBe(false);
+    expect(at?.at.getTime()).toBeGreaterThan(now.getTime());
+    expect(at?.at.getDate()).toBe(15);
+  });
+
+  it("skips today when the check-in already happened", () => {
+    // A checked-in athlete has nothing to remind about today; tomorrow's copy
+    // (number-free) takes the slot instead.
+    const now = new Date(2026, 9, 14, 6, 30);
+    const at = nextStreakReminderOccurrence(now, true, {});
+    expect(at?.forToday).toBe(false);
+    expect(at?.at.getDate()).toBe(15);
+  });
+
+  it("swallows the slot inside quiet hours instead of shifting it", () => {
+    // Quiet hours are a fixed daily window: one covering 08:00 covers it every
+    // day, so both today's and tomorrow's slots are refused. A nudge is never
+    // moved to a new hour — silence was requested, so silence is armed.
+    const now = new Date(2026, 9, 14, 6, 30);
+    const quiet = { quiet_start: "06:00:00", quiet_end: "09:00:00" };
+    expect(nextStreakReminderOccurrence(now, false, quiet)).toBeNull();
+    expect(nextStreakReminderOccurrence(now, true, quiet)).toBeNull();
+  });
+
+  it("returns nothing when quiet hours swallow every slot", () => {
+    // An overnight window through 11:00 covers today's 08:00 AND tomorrow's
+    // — and resolveScheduledTime refuses to move a nudge past 11:00. Same
+    // outcome as any quiet window spanning 08:00: no reminder at all.
+    const now = new Date(2026, 9, 14, 6, 30);
+    const overnight = { quiet_start: "22:00:00", quiet_end: "11:00:00" };
+    expect(nextStreakReminderOccurrence(now, false, overnight)).toBeNull();
+  });
+
+  it("arms normally when quiet hours sit clear of 08:00", () => {
+    // The common case: quiet at night, 08:00 free — the reminder schedules.
+    const now = new Date(2026, 9, 14, 6, 30);
+    const night = { quiet_start: "22:00:00", quiet_end: "23:30:00" };
+    const at = nextStreakReminderOccurrence(now, false, night);
+    expect(at?.forToday).toBe(true);
+    expect(at?.at.getHours()).toBe(8);
+  });
+});
 
 describe("morning timing", () => {
   it("posts at 07:10 sharp in the athlete's own clock", () => {

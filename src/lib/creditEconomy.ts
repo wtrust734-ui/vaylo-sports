@@ -197,7 +197,7 @@ export async function loadEconomyConfig(): Promise<RemoteConfig> {
 
 // --- Analytics tracking ---
 export async function trackEconomyEvent(params: {
-  event_type: "view" | "add_to_basket" | "purchase" | "offer_view" | "offer_convert";
+  event_type: "view" | "section_view" | "confirm_open" | "add_to_basket" | "purchase" | "offer_view" | "offer_convert";
   pack_id?: string;
   offer_slug?: string;
   amount_cents?: number;

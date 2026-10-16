@@ -150,13 +150,12 @@ export function spendErrorMessage(feature: FeatureCostKey, res: SpendResult, qua
 
 // --- Grants / refills -----------------------------------------------------
 /**
- * Claims a configured reward (referral, winback). Amount comes from
- * `economy_config.promo_bonuses` server-side — never from the client.
+ * Claims a configured winback promo. Referral rewards are issued only through
+ * their verified server-side referral and purchase flows.
  *
- * The arcade record payout used to be claimable through here and is gone: the
- * key is out of `PromoBonusKey` and out of the live config (see the
- * 20261012140000 migration), so a client cannot ask for it and the database
- * would refuse it if one did.
+ * This helper remains for compatibility with vetted promo flows, but the
+ * database rejects direct client claims until an explicit verified claim RPC
+ * is introduced. Never pass referral kinds through this function.
  */
 export async function claimCreditReward(
   kind: PromoBonusKey,

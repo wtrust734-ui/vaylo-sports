@@ -54,7 +54,10 @@ const Coach = () => {
   // account or conversation, so switching either mid-fetch cannot paint the
   // wrong thread.
   const loadMessages = async (conversationId: string, userId: string) => {
-    const { data } = await supabase.from("coach_messages").select("*").eq("conversation_id", conversationId)
+    // Conversation replay reads two fields; the table carries none of the
+    // heavy ones here but "*" pulled every column into the history map for
+    // nothing (audit finding 3.1).
+    const { data } = await supabase.from("coach_messages").select("role, content, conversation_id, user_id, created_at").eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
     return { conversationId, userId, rows: (data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })) };
   };
@@ -63,7 +66,7 @@ const Coach = () => {
     if (!user) { setConvs([]); setActiveConv(null); setMessages([]); return; }
     let alive = true;
     const userId = user.id;
-    supabase.from("coach_conversations").select("*").eq("user_id", userId)
+    supabase.from("coach_conversations").select("id, title, user_id, updated_at").eq("user_id", userId)
       .order("updated_at", { ascending: false }).then(({ data }) => {
         if (!alive) return;
         setConvs(data || []);
@@ -449,7 +452,7 @@ const Coach = () => {
           bar, which is what made the send button hard to hit. The value below
           matches the tab bar's own geometry (64px of nav plus its 8px offset)
           and matches QuickActionSheet, so the three agree. */}
-      <div className="fixed bottom-[calc(var(--vaylo-inset-bottom)+5.25rem)] lg:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border px-3 sm:px-4 py-3 lg:pb-[calc(var(--vaylo-inset-bottom)+12px)]">
+      <div className="fixed bottom-[calc(var(--vaylo-inset-bottom)+7rem)] lg:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border px-3 sm:px-4 py-3 lg:pb-[calc(var(--vaylo-inset-bottom)+12px)]">
         <div className="flex gap-2 items-end">
           <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
