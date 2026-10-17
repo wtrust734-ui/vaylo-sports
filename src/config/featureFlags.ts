@@ -96,8 +96,13 @@ export const FEATURE_FLAGS = {
   wearableSync: envOverride("wearableSync", true),
   gpsTracking: envOverride("gpsTracking", false),
   iphone: envOverride("iphone", false),
-  // Pipeline dashboard: ad workflow stages, QC, and chat controls
-  pipelineDashboard: envOverride("pipelineDashboard", true),
+  // Pipeline dashboard: ad workflow stages, QC, and chat controls.
+  // Default OFF until the flagged rollout is intentional — the launch gate
+  // test (`featureFlags.test.ts` → "defaults every not-yet-ready flag to off")
+  // is the guardrail, and the dashboard itself still carries type-level bugs
+  // (see docs/BUG-AUDIT-2026-10-17.md P2-1). Operators flip it on with
+  // VITE_ENABLE_PIPELINE_DASHBOARD=true, not at this default.
+  pipelineDashboard: envOverride("pipelineDashboard", false),
 } as const satisfies Record<FlagKey, boolean>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;

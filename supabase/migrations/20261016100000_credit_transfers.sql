@@ -146,11 +146,11 @@ begin
     raise exception 'Insufficient credits';
   end if;
 
-  set_config('app.allow_credit_change', 'on', true);
+  perform set_config('app.allow_credit_change', 'on', true);
   update public.profiles
     set credits = v_locked - p_amount
     where user_id = v_sender;
-  set_config('app.allow_credit_change', 'off', true);
+  perform set_config('app.allow_credit_change', 'off', true);
 
   -- Sender-side ledger row, same convention as spend_credits.
   insert into public.credit_transactions (user_id, amount, reason)
@@ -205,11 +205,11 @@ begin
   if v_expires < now() then
     select credits into v_current
       from public.profiles where user_id = v_sender for update;
-    set_config('app.allow_credit_change', 'on', true);
+    perform set_config('app.allow_credit_change', 'on', true);
     update public.profiles
       set credits = v_current + v_amount
       where user_id = v_sender;
-    set_config('app.allow_credit_change', 'off', true);
+    perform set_config('app.allow_credit_change', 'off', true);
     insert into public.credit_transactions (user_id, amount, reason)
       values (v_sender, v_amount, 'credit transfer expired — refunded');
 
@@ -230,11 +230,11 @@ begin
     raise exception 'Profile not found';
   end if;
 
-  set_config('app.allow_credit_change', 'on', true);
+  perform set_config('app.allow_credit_change', 'on', true);
   update public.profiles
     set credits = v_current + v_amount
     where user_id = v_receiver;
-  set_config('app.allow_credit_change', 'off', true);
+  perform set_config('app.allow_credit_change', 'off', true);
 
   insert into public.credit_transactions (user_id, amount, reason)
     values (v_receiver, v_amount, 'credit transfer received');
@@ -294,11 +294,11 @@ begin
   -- Refund the sender.
   select credits into v_current
     from public.profiles where user_id = v_sender for update;
-  set_config('app.allow_credit_change', 'on', true);
+  perform set_config('app.allow_credit_change', 'on', true);
   update public.profiles
     set credits = v_current + v_amount
     where user_id = v_sender;
-  set_config('app.allow_credit_change', 'off', true);
+  perform set_config('app.allow_credit_change', 'off', true);
   insert into public.credit_transactions (user_id, amount, reason)
     values (v_sender, v_amount, 'credit transfer declined — refunded');
 

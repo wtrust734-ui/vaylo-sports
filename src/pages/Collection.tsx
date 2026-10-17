@@ -375,7 +375,7 @@ export default function Collection() {
           <h2 className="text-[12px] font-display font-bold uppercase tracking-wider">Bundles</h2>
           <span className="truncate text-[11px] text-muted-foreground">One checkout, one price — the whole set, or nothing.</span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {COSMETIC_BUNDLES.map((bundle) => {
             const items = bundle.itemIds.map((id) => defById(id)).filter(Boolean);
             return (

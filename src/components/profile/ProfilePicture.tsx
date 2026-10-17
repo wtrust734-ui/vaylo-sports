@@ -59,7 +59,10 @@ export default function ProfilePicture({ src, onUploaded, className }: ProfilePi
       setPreview(result.url);
       onUploaded?.(result.url);
       setTimeout(() => setPreview(null), 1800);
-    } else if (result.reason) {
+    } else if (isFailure(result)) {
+      // A typed guard rather than a bare `else if (!result.ok)`: this project's
+      // tsconfig combination does not narrow the union through `!ok`, so a
+      // predicate guarantees the false-arm (whose `reason` key exists).
       setError(cameraUploadErrorMessage(result.reason));
       setProgress(0);
       inputRef.current?.value && (inputRef.current.value = "");
@@ -152,7 +155,15 @@ export default function ProfilePicture({ src, onUploaded, className }: ProfilePi
   );
 }
 
-function cameraUploadErrorMessage(reason: ProfilePictureResult["reason"]): string {
+type ProfilePictureReason = Extract<ProfilePictureResult, { ok: false }>["reason"];
+
+type ProfilePictureFailure = Extract<ProfilePictureResult, { ok: false }>;
+
+function isFailure(result: ProfilePictureResult): result is ProfilePictureFailure {
+  return result.ok === false;
+}
+
+function cameraUploadErrorMessage(reason: ProfilePictureReason): string {
   switch (reason) {
     case "no-file":
       return "No photo was selected.";

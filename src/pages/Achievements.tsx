@@ -2,6 +2,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 
 import AchievementShelf from "@/components/achievements/AchievementShelf";
+import EventTrophyCase from "@/components/achievements/EventTrophyCase";
 import { useAchievementStats } from "@/hooks/useAchievementStats";
 import { achievementShelf, earnedIn, percentEarned } from "@/lib/achievements";
 
@@ -77,6 +78,7 @@ const AchievementsScreen = () => {
       </motion.div>
 
       <div className="px-5">
+        <EventTrophyCase />
         <AchievementShelf items={shelf} earnedIds={earnedIds} />
       </div>
     </div>

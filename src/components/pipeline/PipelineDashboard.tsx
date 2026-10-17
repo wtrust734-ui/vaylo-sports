@@ -20,6 +20,14 @@ import {
   Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
+
+// Supabase v2 removed `auth.user()`; this is the way every owner-scope check
+// in this file reads the caller. Returns null while the session resolves.
+async function currentOwnerId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
 import { useAuth } from "@/contexts/AuthContext";
 
 // ---------------------------------------------------------------------------
@@ -46,11 +54,18 @@ export interface PipelineJob {
   message: string;
   step: number; // which step in the stage we're on
   details: Record<string, unknown> | null; // stage-specific payload for chat
-  createdAt: string;
-  updatedAt: string;
-  lastAction: string; // human or system last triggered this
-  humanInput: string; // what the user typed into this stage's chatbot
+  campaign_id: string | null;
+  owner_id: string;
+  created_at: string;
+  updated_at: string;
+  human_input: string | null; // DB column — what the user typed into this stage's chatbot
+  /** Client-side convenience marker only — NOT a pipeline_jobs column; it is
+   *  stripped before every insert. */
+  lastAction?: string;
 }
+// NOTE: the interface mirrors the DB COLUMN NAMES (snake_case) because job
+// rows arrive straight from `pipeline_jobs` without a mapping pass — the old
+// camelCase fields (createdAt/updatedAt/humanInput) never matched anything.
 
 // ---------------------------------------------------------------------------
 // Static stage config — the "office"
@@ -128,29 +143,46 @@ const STAGES: StageCard[] = [
 // ---------------------------------------------------------------------------
 
 async function listPipelineJobs(): Promise<PipelineJob[]> {
+  const ownerId = await currentOwnerId();
   const { data, error } = await supabase
     .from("pipeline_jobs")
     .select("*")
-    .eq("owner_id", supabase.auth.user()?.id)
+    .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) return [];
   return (data ?? []) as PipelineJob[];
 }
 
-async function createPipelineJob(job: Omit<PipelineJob, "id" | "createdAt" | "updatedAt">) {
-  const { data, error } = await supabase
+/** Only DB-typed columns travel into pipeline_jobs — lastAction is client-side. */
+type PipelineJobInsert = Omit<PipelineJob, "id"> & { id?: string };
+
+async function createPipelineJob(job: PipelineJobInsert) {
+  // Column-for-column mapping rather than a spread: the pipeline_jobs Insert
+  // type wants exact Json-compatible values (`details` is Json, not
+  // Record<string, unknown>) and must never receive lastAction.
+  const ownerId = await currentOwnerId();
+  const { data: inserted, error } = await supabase
     .from("pipeline_jobs")
     .insert({
-      ...job,
-      owner_id: supabase.auth.user()?.id!,
-      created_at: new Date().toISOString(),
+      id: job.id ?? crypto.randomUUID(),
+      name: job.name,
+      stage: job.stage,
+      status: job.status,
+      progress: job.progress,
+      message: job.message,
+      step: job.step,
+      details: (job.details ?? {}) as unknown as Json,
+      campaign_id: job.campaign_id ?? null,
+      owner_id: ownerId ?? "",
+      created_at: job.created_at ?? new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      human_input: job.human_input ?? null,
     })
     .select()
     .single();
-  if (error) return null;
-  return data as PipelineJob;
+  if (error || !inserted) return null;
+  return inserted as unknown as PipelineJob;
 }
 
 async function updatePipelineJobStatus(jobId: string, status: JobStatus, progress: number, message: string) {
@@ -178,23 +210,28 @@ interface ChatMessage {
 }
 
 async function getStageChat(stage: StageName): Promise<ChatMessage[]> {
+  const ownerId = await currentOwnerId();
   const { data, error } = await supabase
     .from("pipeline_chat")
     .select("*")
     .eq("stage", stage)
-    .eq("owner_id", supabase.auth.user()?.id)
+    .eq("owner_id", ownerId)
     .order("created_at", { ascending: true });
   if (error) return [];
   return (data ?? []) as ChatMessage[];
 }
 
 async function saveStageChat(stage: StageName, message: ChatMessage) {
+  const ownerId = await currentOwnerId();
   const { error } = await supabase
     .from("pipeline_chat")
     .insert({
-      ...message,
+      id: message.id,
+      role: message.role,
+      text: message.text,
+      timestamp: message.timestamp,
       stage,
-      owner_id: supabase.auth.user()?.id!,
+      owner_id: ownerId ?? "",
     });
   return !error;
 }
@@ -206,14 +243,15 @@ async function saveStageChat(stage: StageName, message: ChatMessage) {
 /** Simulate triggering the next stage of the pipeline. Returns the new job. */
 async function triggerNextStage(campaignId: string | null): Promise<PipelineJob | null> {
   // If a run already exists for this campaign, resume it
+  const ownerId = await currentOwnerId();
   const { data: existing } = await supabase
     .from("pipeline_jobs")
-    .select("id, stage, status, progress, details")
+    .select("*")
     .eq("campaign_id", campaignId ?? "")
-    .eq("owner_id", supabase.auth.user()?.id)
+    .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (existing && (existing.status === "running" || existing.status === "queued")) {
     return existing as PipelineJob;
@@ -221,7 +259,7 @@ async function triggerNextStage(campaignId: string | null): Promise<PipelineJob 
 
   // Start a fresh run at the first stage
   const now = new Date().toISOString();
-  const newJob: PipelineJob = {
+  const newJob: PipelineJobInsert = {
     id: crypto.randomUUID(),
     name: campaignId ? `Campaign ${campaignId}` : "Unnamed campaign",
     stage: "brain",
@@ -231,7 +269,7 @@ async function triggerNextStage(campaignId: string | null): Promise<PipelineJob 
     step: 1,
     details: { action: "start" },
     campaign_id: campaignId ?? null,
-    owner_id: supabase.auth.user()?.id!,
+    owner_id: ownerId ?? "",
     created_at: now,
     updated_at: now,
     lastAction: "user",
@@ -251,10 +289,12 @@ export default function PipelineDashboard() {
   const [jobs, setJobs] = useState<PipelineJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState<StageName | null>(null);
-  const [messages, setMessages] = useState<Record<StageName, ChatMessage[]>>({});
+  // Loadout maps start PARTIALLY filled — stages get their entries as they are
+  // written, and every reader already guards with ?? [] / ?? "".
+  const [messages, setMessages] = useState<Partial<Record<StageName, ChatMessage[]>>>({});
   const [input, setInput] = useState("");
-  const [userInput, setUserInput] = useState<Record<StageName, string>>({});
-  const [errored, setErrored] = useState<Record<StageName, string | null>>({});
+  const [userInput, setUserInput] = useState<Partial<Record<StageName, string>>>({});
+  const [errored, setErrored] = useState<Partial<Record<StageName, string | null>>>({});
 
   // Load jobs on mount
   useEffect(() => {
@@ -469,7 +509,12 @@ export default function PipelineDashboard() {
                 }`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {STAGES.find((s) => s.key === runningJob.stage)?.icon ?? <Zap size={16} />}
+                      {(() => {
+                        // An ElementType must be rendered as an element, not as
+                        // a document-text child.
+                        const StageIcon = STAGES.find((s) => s.key === runningJob.stage)?.icon ?? Zap;
+                        return <StageIcon size={16} />;
+                      })()}
                       <div>
                         <div className="text-sm font-semibold">{runningJob.name}</div>
                         <div className="text-xs text-muted-foreground">
@@ -636,7 +681,7 @@ export default function PipelineDashboard() {
                   {job.stage.toUpperCase()} · Step {job.step} · {job.message}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Last: {job.lastAction} · {new Date(job.updatedAt).toLocaleString()}
+                  Last: {job.lastAction} · {new Date(job.updated_at).toLocaleString()}
                 </p>
                 {job.human_input && (
                   <p className="text-[10px] text-primary/80 mt-0.5 font-mono">

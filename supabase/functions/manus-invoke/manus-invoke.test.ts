@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 // DB-dependent actions. That keeps the suite stable on a developer machine and
 // in CI, where no secrets or database exist.
 
-import { ALLOWED_ACTIONS, requireSharedSecret } from "./gate";
+import { ALLOWED_ACTIONS, getSharedSecret, requireSharedSecret } from "./gate";
 
 // TS cannot narrow the union return type of requireSharedSecret, so a small
 // type guard makes the `ok: false` branch explicit where the status code is

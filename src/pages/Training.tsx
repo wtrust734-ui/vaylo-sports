@@ -31,6 +31,9 @@ import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
 import { flattenPlan } from "@/lib/planSchedule";
 import PlanExportButton from "@/components/training/PlanExportButton";
 import { notifyPlanCreated } from "@/lib/notificationTriggers";
+import { evaluateLogAgainstEvents } from "@/lib/eventTrophies";
+import { wallForEvaluation, recordTimedPb } from "@/lib/pbWall";
+import { triggerPbCelebration } from "@/components/PBCelebration";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -1527,7 +1530,50 @@ const Training = () => {
     // Weekly coin drip: the server decides the amount and enforces the weekly
     // cap; a failure here is a silent no (the log itself already saved).
     let coinLine: string | null = null;
+    let trophyLine: string | null = null;
     const newLogId = (insertedLog as { id?: string } | null)?.id;
+
+    // PB + event-trophy evaluation: only for timed distance events. The server
+    // matches sport + distance ±2% and grants the Bronze/Silver/Gold trophies
+    // the time earns; the client checks the local PB wall so the celebration
+    // card can say "new PB" with the honest previous best. Any failure here is
+    // a silent no — the log itself already saved.
+    if (newLogId && distKm && totalSec) {
+      try {
+        const [{ data: claimed }, evaluation] = await Promise.all([
+          supabase.rpc("claim_event_trophies" as never, { p_log_id: newLogId } as never),
+          Promise.resolve(
+            evaluateLogAgainstEvents(
+              { sport: logSport, log_type: logType, distance_km: distKm, time_seconds: totalSec },
+              wallForEvaluation(),
+            ),
+          ),
+        ]);
+        const trophies = (claimed as { trophies?: { reward_id: string; tier: string; name: string }[] } | null)?.trophies ?? [];
+
+        let isPb = false;
+        let previousSeconds: number | null = null;
+        if (evaluation.event) {
+          const recorded = recordTimedPb(evaluation.event.label, totalSec);
+          isPb = recorded.isPb;
+          previousSeconds = recorded.previousSeconds;
+        }
+
+        if (isPb || trophies.length > 0) {
+          triggerPbCelebration({
+            eventLabel: evaluation.event?.label ?? logSport,
+            timeSeconds: totalSec,
+            isPb,
+            previousSeconds,
+            trophies,
+          });
+          trophyLine = trophies.length > 0
+            ? `🏆 ${trophies.length === 1 ? "Trophy" : "Trophies"} earned: ${trophies.map((t) => t.tier).join(", ")}`
+            : "🚀 New personal best";
+        }
+      } catch { /* evaluation is best-effort; the log save stands on its own */ }
+    }
+
     if (newLogId) {
       const { data: drip } = await supabase.rpc("claim_session_coins" as never, { p_log_id: newLogId } as never);
       const awarded = (drip as { awarded?: number } | null)?.awarded ?? 0;
@@ -1539,7 +1585,7 @@ const Training = () => {
 
     setShowAddLog(false); setLogTitle(""); setLogDistance(""); setLogTime(""); setLogNotes(""); setLogHeartRate(""); setLogCalories("");
     fetchLogs();
-    toast({ title: "Log saved! 📝", description: coinLine ?? undefined });
+    toast({ title: "Log saved! 📝", description: coinLine || trophyLine || undefined });
   };
 
   const chipClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${active ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`;

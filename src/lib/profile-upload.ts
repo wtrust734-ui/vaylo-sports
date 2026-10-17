@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { supabase } from "@/integrations/supabase/client";
 
 export type ProfilePictureResult =
   | { ok: true; url: string }

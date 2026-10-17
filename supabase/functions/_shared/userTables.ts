@@ -92,6 +92,16 @@ export const USER_TABLES: [table: string, columns: string[]][] = [
   // "delete my account" that left it behind would leave a live grant to somebody's
   // wearable data with nothing to revoke it.
   ["health_connection_tokens", ["user_id"]],
+  // Ad-pipeline artwork. The whole ad family is owner-keyed so account
+  // deletion removes renders, exports and the raw concepts with it.
+  ["ad_assets", ["owner_id"]],
+  ["ad_campaigns", ["owner_id"]],
+  ["ad_concepts", ["owner_id"]],
+  ["ad_exports", ["owner_id"]],
+  ["ad_render_jobs", ["owner_id"]],
+  // Credit transfers: both sides are the athlete's row.
+  ["credit_transfer_auth", ["owner_id"]],
+  ["credit_transfers", ["sender_id", "receiver_id"]],
   ["health_samples", ["user_id"]],
   ["health_sync_state", ["user_id"]],
   ["health_workouts", ["user_id"]],
@@ -113,6 +123,9 @@ export const USER_TABLES: [table: string, columns: string[]][] = [
   ["outcome_goals", ["user_id"]],
   ["performance_logs", ["user_id"]],
   ["performance_metrics", ["user_id"]],
+  // Ad-workflow runs and their stage chats are the athlete's rows.
+  ["pipeline_chat", ["owner_id"]],
+  ["pipeline_jobs", ["owner_id"]],
   ["plan_events", ["user_id"]],
   ["points_events", ["user_id"]],
   ["privacy_settings", ["user_id"]],
@@ -121,8 +134,13 @@ export const USER_TABLES: [table: string, columns: string[]][] = [
   ["purchase_analytics", ["user_id"]],
   ["push_tokens", ["user_id"]],
   ["recovery_logs", ["user_id"]],
+  // Chest ledger rows (one per 7-day streak cycle). Deleted with the account
+  // rather than re-granted on a re-registered email.
   ["referral_codes", ["user_id"]],
   ["referrals", ["referrer_id", "referee_id"]],
+  ["reward_box_claims", ["user_id"]],
+  ["user_earned_grants", ["user_id"]],
+  ["user_session_coin_grants", ["user_id"]],
   ["shared_activities", ["user_id"]],
   ["streaks", ["user_id"]],
   ["subscriptions", ["user_id"]],

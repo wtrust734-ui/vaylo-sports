@@ -312,9 +312,9 @@ android {
         // tightened. No manifest, permission or plugin change — WebView-only.
         // Always increase the code for a Play upload.
         //
-        // 49 / 1.44.49 is the cosmetics rework build: earned-cosmetic grants, a capped weekly coin drip, cosmetic bundles, seasonal windows and a Premium gate on animated equips.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 49
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.44.49"
+        // 50 / 1.44.50 is the cosmetics/polish build: deletion-registry coverage for the athlete life-events tables, pipeline insert typing fixes and profile-picture upload narrowing.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 50
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.44.50"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

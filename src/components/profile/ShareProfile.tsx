@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { Medal, Star, Sparkles, Coins, Trophy, Copy, Check, Share2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCosmetics } from "@/lib/cosmetics";
@@ -60,7 +60,7 @@ export default function ProfileShareCard({
         tier?.color ? "ring-1 ring-inset ring-pill/40" : "ring-1 ring-inset ring-white/10",
         className,
       )}
-      style={tier?.color ? { "--pill-color": tier.color } : undefined}
+      style={tier?.color ? ({ "--pill-color": tier.color } as CSSProperties) : undefined}
     >
       {/* Header strip: class tier, if present. */}
       {tier && (
@@ -77,13 +77,13 @@ export default function ProfileShareCard({
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-lg font-black text-white/80",
             equipped.nameColor ? "border-white/20" : "bg-secondary",
           )}
-          style={equipped.nameColor ? { color: equipped.nameColor, borderColor: equipped.nameColor } : undefined}
+          style={equipped.nameColor?.color ? { color: equipped.nameColor.color, borderColor: equipped.nameColor.color } : undefined}
         >
           {name.at(0).toUpperCase()}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold" style={equipped.nameColor ? { color: equipped.nameColor } : undefined}>
+            <span className="truncate text-sm font-semibold" style={equipped.nameColor?.color ? { color: equipped.nameColor.color } : undefined}>
               {name}
             </span>
             {equipped.title && (

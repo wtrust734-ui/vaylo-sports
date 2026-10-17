@@ -876,10 +876,7 @@ const Profile = () => {
         open={showCosmetics}
         onClose={() => setShowCosmetics(false)}
       />
-      <HealthConnectPrompt
-        open={showHealthConnect}
-        onClose={() => setShowHealthConnect(false)}
-      />
+      <HealthConnectPrompt open={showHealthConnect} onClose={() => setShowHealthConnect(false)} />
     </div>
   );
 };

@@ -177,12 +177,48 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
     return { verified: false, error: result.error ?? "Purchase verification failed.", status: 402 };
   }
 
-  // Cross-check: the Play-verified product must be one the athlete actually
-  // asked for (prevents buying pack_25 and replaying it as pack_500), and the
-  // verified purchase time must not predate the request by more than 48h.
+  // Cross-checks. Everything here is a store-mode-only hardening of the same
+  // rule verified twice: a Play transaction is ONE product, so the grant loop
+  // below may never be driven by anything the token did not pay for.
+  //
+  //   1. Every money-priced basket row must be exactly the verified product —
+  //      the old single includes() let one token's id ride along inside a
+  //      basket of other priced SKUs, which the grant loop would then happily
+  //      award (docs/BUG-AUDIT-2026-10-17.md P1-1).
+  //   2. So no basket may carry two DISTINCT money products, or the same money
+  //      product twice — Play (consumables, no multiplicity in one SKU) sells
+  //      one product per token, and a second row would be granted off the same
+  //      one proof.
+  //   3. The verified purchase time must not predate the request by more than
+  //      48h (checked in verifyPlayPurchase).
   const verifiedProductId = result.purchase.productId;
+  const moneyIds = (items as { product_id?: unknown }[])
+    .map((i) => String(i?.product_id ?? ""))
+    .filter((id) => {
+      // Conservative: something makes an id money-priced if the catalogue knows
+      // a positive price for it, or it is an offer (whose price lives in the
+      // special_offers table and is read later). Client baskets with offers
+      // mixed into a paid SKU are refused — Play sells one product per token.
+      if (PRODUCT_PRICES[id] != null) return PRODUCT_PRICES[id]! > 0;
+      return id.startsWith("offer_");
+    });
+  const distinctMoneyIds = Array.from(new Set(moneyIds));
+  if (distinctMoneyIds.length > 1) {
+    return {
+      verified: false,
+      error: "One purchased product at a time — the basket mixes paid SKUs.",
+      status: 400,
+    };
+  }
+  if (moneyIds.length > 1) {
+    return {
+      verified: false,
+      error: "Only one unit of this product can be purchased at a time.",
+      status: 400,
+    };
+  }
   const basketIds = (items as { product_id?: unknown }[]).map((i) => String(i?.product_id ?? ""));
-  if (!basketIds.includes(verifiedProductId)) {
+  if (!moneyIds.includes(verifiedProductId) || !basketIds.includes(verifiedProductId)) {
     return {
       verified: false,
       error: "Verified purchase does not match the requested product.",
@@ -461,6 +497,27 @@ Deno.serve(async (req) => {
     let bonusToAdd = 0;
     let coinsToAdd = 0;
     let infiniteGrant: { period: string } | null = null;
+    // Purchase rows whose grants are settled at the END of the request
+    // (credit packs, offers, unlimited) — the old code left these behind
+    // whenever the shared grant call failed, so a retry hit the 409
+    // already-applied gate with nothing granted (docs/BUG-AUDIT-2026-10-17.md
+    // P1-2). Every insert into user_purchases belonging to one of these
+    // products is tracked so a grant failure can roll it back; the grants
+    // themselves are idempotent (credits_grant by key, grant_infinite by
+    // RPC-side trigger), so a storage-layer retry after rollback can only
+    // settle the SAME final state, never a duplicate.
+    const tailPurchaseIds: string[] = [];
+    // Roll every tail-tracked entitlement row back on a failed tail grant.
+    // Declared at request scope: the failure branches live after the insert
+    // loop. Tail grants (credits_grant, grant_infinite_credits) are idempotent,
+    // so a legitimate replay after a rollback can only settle the same final
+    // state once.
+    const rollBackTailRows = async () => {
+      for (const rowId of tailPurchaseIds) {
+        const { error } = await supabase.from("user_purchases").delete().eq("id", rowId);
+        if (error) console.error("tail purchase rollback failed:", error.message);
+      }
+    };
 
     for (const resolvedEntry of resolved) {
       const { productId, productType, priceCents } = resolvedEntry;
@@ -510,6 +567,16 @@ Deno.serve(async (req) => {
         const { error } = await supabase.from("user_purchases").delete().eq("id", purchaseId);
         if (error) console.error("purchase rollback failed:", error.message);
       };
+      // Tail products (credit packs, offers, unlimited) have their grant settled
+      // at the end of the request — track the row so a tail-grant failure can
+      // roll it back with the rest of the tail (see tailPurchaseIds above).
+      if (
+        CREDIT_GRANTS[productId] != null ||
+        UNLIMITED_PACKS.some((p) => p.id === productId) ||
+        productId.startsWith("offer_")
+      ) {
+        tailPurchaseIds.push(purchaseId);
+      }
 
       // Unlimited credits packs
       const unlimited = UNLIMITED_PACKS.find((p) => p.id === productId);
@@ -618,6 +685,13 @@ Deno.serve(async (req) => {
         p_metadata: { credits: creditsToAdd, bonus: bonusToAdd },
       });
       if (grantErr) {
+        // The tail rows (credit packs / offers with nothing delivered yet)
+        // would otherwise survive a failed grant and jam every retry behind
+        // the already-applied 409 with nothing granted. Head rows (coin
+        // bundles) stay: grant_coins is NOT idempotent, so deleting their rows
+        // would risk a replay double-granting coins. Tail grants are
+        // idempotent by key — a legit replay settles the same state.
+        await rollBackTailRows();
         return new Response(JSON.stringify({ error: `Credit grant failed: ${grantErr.message}` }), { status: 500, headers: corsHeaders });
       }
     }
@@ -638,6 +712,11 @@ Deno.serve(async (req) => {
         p_until: until,
       });
       if (infiniteErr) {
+        // Same reasoning: only roll back rows whose grant did not land. The
+        // credits (if any) are already delivered and stay; the unlimited
+        // grant failed, so pack rows go back — a replay re-attempts exactly
+        // the unlimited delivery under the same key.
+        await rollBackTailRows();
         return new Response(
           JSON.stringify({ error: `Unlimited grant failed: ${infiniteErr.message}` }),
           { status: 500, headers: corsHeaders }

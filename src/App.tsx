@@ -34,6 +34,7 @@ import CreditWarning from "@/components/ads/CreditWarning";
 import PromoPopup from "@/components/ads/PromoPopup";
 import StreakShield from "@/components/ads/StreakShield";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
+import PBCelebration from "@/components/PBCelebration";
 import PaywallModal from "@/components/PaywallModal";
 import CreditTopUpSheet from "@/components/market/CreditTopUpSheet";
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -625,6 +626,7 @@ const App = () => {
             <StreakShield />
             <CreditTopUpSheet />
             <MilestoneCelebration />
+            <PBCelebration />
           </SubscriptionProvider>
         </AuthProvider>
       </Router>
