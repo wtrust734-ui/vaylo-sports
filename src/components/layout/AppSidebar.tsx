@@ -132,6 +132,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: GraduationCap, labelKey: "sidebar.learning", path: "/learning" },
       { icon: MessageSquare, labelKey: "sidebar.coach", path: "/coach" },
+      { icon: Brain, labelKey: "sidebar.pipeline", path: "/pipeline" },
     ],
   },
   {

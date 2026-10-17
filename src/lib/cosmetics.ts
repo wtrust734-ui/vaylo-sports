@@ -14,6 +14,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Rarity } from "@/lib/rewards";
 
+export { isAvailableNow } from "@/lib/cosmeticCatalog";
+
+/** Animated items (>payload.animated) can only be worn with an active subscription. */
+
 export type CosmeticType = "title" | "border" | "background" | "name_color" | "effect" | "badge";
 
 /** Equip slot column on `user_profile_cosmetics` for each cosmetic type. */
@@ -88,6 +92,8 @@ export const isAnimated = (def?: CosmeticDef | null): boolean =>
 export interface UseCosmetics {
   defs: CosmeticDef[];
   ownedIds: Set<string>;
+  /** How each owned item was obtained — 'coins' when bought, e.g. 'achievement' / 'chest' when earned. */
+  ownedSourceById: Record<string, string>;
   equipped: EquippedRow;
   loading: boolean;
   /** Cosmetic definitions currently equipped, by slot column. */
@@ -103,6 +109,7 @@ export function useCosmetics(): UseCosmetics {
   const { user } = useAuth();
   const [defs, setDefs] = useState<CosmeticDef[]>([]);
   const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set());
+  const [ownedSourceById, setOwnedSourceById] = useState<Record<string, string>>({});
   const [equipped, setEquipped] = useState<EquippedRow>(EMPTY_EQUIPPED);
   const [loading, setLoading] = useState(true);
 
@@ -117,15 +124,20 @@ export function useCosmetics(): UseCosmetics {
     setLoading(true);
     const [defRes, ownedRes, equippedRes] = await Promise.all([
       supabase.from("reward_definitions").select("*").eq("active", true).order("rarity"),
-      supabase.from("user_rewards").select("reward_id").eq("user_id", user.id),
+      // `source` comes with the inventory so items can be tagged Earned vs
+      // bought ('coins') in the collection — the earned ones are the status
+      // markers the research called the real product.
+      supabase.from("user_rewards").select("reward_id, source").eq("user_id", user.id),
       supabase.from("user_profile_cosmetics").select("*").eq("user_id", user.id).maybeSingle(),
     ]);
     if (defRes.error) console.error("cosmetics: definitions failed", defRes.error);
     if (ownedRes.error) console.error("cosmetics: inventory failed", ownedRes.error);
     if (equippedRes.error) console.error("cosmetics: equipped failed", equippedRes.error);
 
+    const ownedRows = (ownedRes.data ?? []) as unknown as { reward_id: string; source?: string }[];
     setDefs((defRes.data ?? []) as unknown as CosmeticDef[]);
-    setOwnedIds(new Set((ownedRes.data ?? []).map((r: { reward_id: string }) => r.reward_id)));
+    setOwnedIds(new Set(ownedRows.map((r) => r.reward_id)));
+    setOwnedSourceById(Object.fromEntries(ownedRows.map((r) => [r.reward_id, r.source ?? ""])));
     setEquipped({ ...EMPTY_EQUIPPED, ...((equippedRes.data as EquippedRow) ?? {}) });
     setLoading(false);
   }, [user]);
@@ -157,9 +169,14 @@ export function useCosmetics(): UseCosmetics {
   }, [refresh]);
 
   const revalidateOwnedIds = useCallback(async () => {
-    const { data, error } = await supabase.from("user_rewards").select("reward_id").eq("user_id", user.id);
+    const { data, error } = await supabase
+      .from("user_rewards")
+      .select("reward_id, source")
+      .eq("user_id", user.id);
     if (!error && data) {
-      setOwnedIds(new Set(data.map((r: { reward_id: string }) => r.reward_id)));
+      const rows = data as unknown as { reward_id: string; source?: string }[];
+      setOwnedIds(new Set(rows.map((r) => r.reward_id)));
+      setOwnedSourceById(Object.fromEntries(rows.map((r) => [r.reward_id, r.source ?? ""])));
     }
   }, [user]);
 
@@ -177,5 +194,5 @@ export function useCosmetics(): UseCosmetics {
     return out;
   }, [equipped, defById]);
 
-  return { defs, ownedIds, equipped, loading, equippedDefs, refresh, buy, equip, unequip, defById };
+  return { defs, ownedIds, ownedSourceById, equipped, loading, equippedDefs, refresh, buy, equip, unequip, defById };
 }

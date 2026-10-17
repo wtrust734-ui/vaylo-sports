@@ -350,6 +350,18 @@
     "closeMenu": "Close menu",
     "guardian": "Guardian access",
     "startingAnalysis": "Starting analysis",
-    "insights": "Insights"
+    "insights": "Insights",
+    "pipeline": "Pipeline dashboard",
+    "pipelineStageBrain": "Brain — OpenAI decides what to say",
+    "pipelineStagePrep": "Prep — clips and captions",
+    "pipelineStageEdit": "Edit — AI is editing the video",
+    "pipelineStageQc": "QC — harsh quality gate",
+    "pipelineStagePost": "Post — auto post to TikTok",
+    "pipelineStageDone": "Done — brain knows it's published",
+    "pipelineStatusQueued": "Queued",
+    "pipelineStatusRunning": "Running",
+    "pipelineStatusCompleted": "Completed",
+    "pipelineStatusFailed": "Failed",
+    "pipelineStatusStopped": "Stopped"
   }
 }

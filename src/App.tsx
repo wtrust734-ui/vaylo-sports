@@ -1,4 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import PipelineDashboard from "@/components/pipeline/PipelineDashboard";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { MotionConfig } from "framer-motion";
 import {
@@ -605,6 +606,7 @@ const App = () => {
                 <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
                 <Route path="/collection" element={<Collection />} />
                 <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
+                <Route path="/pipeline" element={<RequireAdmin><PipelineDashboard /></RequireAdmin>} />
                 <Route path="/settings/delete-account" element={<DeleteAccount />} />
                 <Route path="/legal" element={<Legal />} />
                 <Route path="/safety" element={<Safety />} />

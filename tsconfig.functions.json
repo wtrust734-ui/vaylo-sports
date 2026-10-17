@@ -20,8 +20,12 @@
     // which silently hid real errors behind 5 spurious ones.
     "strictNullChecks": true,
     "target": "ES2022",
-    "types": [],
+    "types": ["node"],
     "paths": {
+      "@supabase-js@2": ["./node_modules/@supabase/supabase-js/dist/index.mjs"],
+      "@supabase-js@2.100.0": ["./node_modules/@supabase/supabase-js/dist/index.mjs"],
+      "@supabase-js@2.45.0": ["./node_modules/@supabase/supabase-js/dist/index.mjs"],
+      "@supabase-js": ["./node_modules/@supabase/supabase-js/dist/index.mjs"],
       "https://esm.sh/@supabase/supabase-js@2": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],
       "https://esm.sh/@supabase/supabase-js@2.100.0": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],
       "https://esm.sh/@supabase/supabase-js@2.45.0": ["./node_modules/@supabase/supabase-js/dist/index.d.mts"],

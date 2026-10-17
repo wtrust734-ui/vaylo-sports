@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "अभिभावक एक्सेस",
     "startingAnalysis": "शुरुआती विश्लेषण",
-    "insights": "विश्लेषण"
+    "insights": "विश्लेषण",
+    "pipeline": "पाइपलाइन डैशबोर्ड",
+    "pipelineStageBrain": "मस्तिष्क — OpenAI बताता है कि क्या कहें",
+    "pipelineStagePrep": "तैयारी — क्लिप और उपशीर्षक",
+    "pipelineStageEdit": "संपादन — AI वीडियो संपादित कर रही है",
+    "pipelineStageQc": "गुणवत्ता नियंत्रण — कठोर गुणवत्ता द्वार",
+    "pipelineStagePost": "पोस्ट — TikTok पर स्वचालित पोस्ट",
+    "pipelineStageDone": "पूर्ण — मस्तिष्क जानता है कि पोस्ट किया गया",
+    "pipelineStatusQueued": "कतार में",
+    "pipelineStatusRunning": "चल रहा",
+    "pipelineStatusCompleted": "पूर्ण",
+    "pipelineStatusFailed": "विफल",
+    "pipelineStatusStopped": "रोका गया"
   }
 }

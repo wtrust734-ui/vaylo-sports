@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "Accesso del tutore",
     "startingAnalysis": "Analisi iniziale",
-    "insights": "Approfondimenti"
+    "insights": "Approfondimenti",
+    "pipeline": "Dashboard pipeline",
+    "pipelineStageBrain": "Cervello — OpenAI decide cosa dire",
+    "pipelineStagePrep": "Preparazione — clip e sottotitoli",
+    "pipelineStageEdit": "Modifica — l'IA sta editando il video",
+    "pipelineStageQc": "QC — gate di qualità severo",
+    "pipelineStagePost": "Pubblica — pubblicazione automatica su TikTok",
+    "pipelineStageDone": "Fatto — il cervello sa che è pubblicato",
+    "pipelineStatusQueued": "In coda",
+    "pipelineStatusRunning": "In esecuzione",
+    "pipelineStatusCompleted": "Completato",
+    "pipelineStatusFailed": "Fallito",
+    "pipelineStatusStopped": "Interrotto"
   }
 }

@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "وصول ولي الأمر",
     "startingAnalysis": "تحليل البداية",
-    "insights": "رؤى"
+    "insights": "رؤى",
+    "pipeline": "لوحة تحكم سلسلة العمل",
+    "pipelineStageBrain": "الدماغ — OpenAI يحدد ماذا يقول",
+    "pipelineStagePrep": "التحضير — مقاطع ونصوص",
+    "pipelineStageEdit": "تحرير — الذكاء الاصطناعي يحرر الفيديو",
+    "pipelineStageQc": "مراجعة الجودة — باب صارم",
+    "pipelineStagePost": "نشر — نشر تلقائي على تيك توك",
+    "pipelineStageDone": "مكتمل — الدماغ يعرف أنه نُشر",
+    "pipelineStatusQueued": "في قائمة الانتظار",
+    "pipelineStatusRunning": "قيد التشغيل",
+    "pipelineStatusCompleted": "مكتمل",
+    "pipelineStatusFailed": "فشل",
+    "pipelineStatusStopped": "أوقف"
   }
 }

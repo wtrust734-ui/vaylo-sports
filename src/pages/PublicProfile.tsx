@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trophy, Activity, Target, ArrowLeft, Users, Lock } from "lucide-react";
+import { Trophy, Activity, Target, ArrowLeft, Users, Lock, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarCharacter";
 import { fetchDisplayName } from "@/lib/publicIdentity";
@@ -12,29 +12,26 @@ import { formatNumber, formatShortDate } from "@/i18n/format";
 // ============================================================================
 // VAYLO SPORTS — public athlete profile
 // ----------------------------------------------------------------------------
-// This page previously read `profiles` (select("*")), `workouts`,
-// `performance_metrics` and `achievements` for ANOTHER athlete. Every one of
-// those tables is protected by self-only RLS, so:
-//   * the `profiles` read returned null and the page rendered
-//     "Loading profile…" forever — it was unreachable for every athlete;
-//   * the stat queries silently returned nothing (and computed a fake rank of
-//     #1 from an empty list).
-// Worse, fixing it by relaxing `profiles` would have exposed date_of_birth,
-// credits, coins, weight_kg and sex to any signed-in user.
-//
-// So this page now reads ONLY what the schema actually makes public:
+// Reads only what the schema actually makes public:
 //   avatars                 → identity + the rendered athlete
 //   privacy_settings        → the athlete's own "show avatar publicly" choice
 //   leaderboard_totals      → points earned (public via points_events)
 //   challenge_participants  → challenge participation
 //   user_profile_cosmetics  → equipped public cosmetics
 // Anything private is shown as locked rather than as a zero.
+//
+// Cosmetic slots are public selections on `user_profile_cosmetics` (the table
+// has a `FOR SELECT USING (true)` read policy). The page renders the same
+// public identity layer the athlete sees on their own profile: title, name
+// colour, border, background, effect and earned badge. Cosmetics change how a
+// profile looks to other people; they do not change training or ranking.
 // ============================================================================
 
 interface CosmeticDefRow {
   id: string;
   name: string;
-  payload: { label?: string; color?: string } | null;
+  type: string;
+  payload: { label?: string; color?: string; animated?: boolean } | null;
 }
 
 interface ProfileState {
@@ -43,6 +40,14 @@ interface ProfileState {
   titleLabel: string;
   /** Equipped name-color cosmetic, if any. */
   nameColor: string | null;
+  /** Equipped public border cosmetic, if any. */
+  borderColor: string | null;
+  /** Equipped public background cosmetic, if any. */
+  backgroundColor: string | null;
+  /** Equipped public effect cosmetic, if any. */
+  effectColor: string | null;
+  /** Equipped public badge cosmetic, if any. */
+  badgeLabel: string;
   loadout: AvatarLoadout | null;
   /** False when the athlete has asked not to be shown publicly. */
   avatarPublic: boolean;
@@ -59,6 +64,12 @@ interface ProfileState {
 const RANK_PAGE = 1000;
 const RANK_MAX_PAGES = 10;
 
+const cosmeticLabelFromRow = (row?: CosmeticDefRow | null): string => {
+  if (!row) return "";
+  const label = (row.payload as { label?: string } | null)?.label;
+  return label ?? row.name;
+};
+
 const PublicProfile = () => {
   const { username } = useParams();
   const navigate = useNavigate();
@@ -74,25 +85,45 @@ const PublicProfile = () => {
         supabase.from("avatars").select("*").eq("user_id", username).maybeSingle(),
         supabase.rpc("peer_privacy", { p_user: username }),
         supabase.from("challenge_participants").select("challenge_id,status").eq("user_id", username).limit(50),
-        supabase.from("user_profile_cosmetics").select("title_id,name_color_id").eq("user_id", username).maybeSingle(),
+        supabase.from("user_profile_cosmetics").select("title_id,border_id,background_id,name_color_id,badge_id,effect_id").eq("user_id", username).maybeSingle(),
       ]);
 
       // Public name: `avatars.display_name` is the only cross-user name column.
       const name = await fetchDisplayName(username);
 
       // Equipped cosmetics are public (`user_profile_cosmetics` and
-      // `reward_definitions` are both readable), so they render here too. Titles
-      // carry their display text in payload; name colors carry a hex value.
+      // `reward_definitions` are both readable), so they render here too.
+      // Titles carry their display text in payload; name colours and borders
+      // carry a hex value; effects may carry a colour as well.
       let titleLabel = "";
       let nameColor: string | null = null;
-      const cosmeticIds = [cosRes?.data?.title_id, cosRes?.data?.name_color_id].filter((id): id is string => !!id);
+      let borderColor: string | null = null;
+      let backgroundColor: string | null = null;
+      let effectColor: string | null = null;
+      let badgeLabel = "";
+      const cosmeticIds = [
+        cosRes?.data?.title_id,
+        cosRes?.data?.border_id,
+        cosRes?.data?.background_id,
+        cosRes?.data?.name_color_id,
+        cosRes?.data?.effect_id,
+        cosRes?.data?.badge_id,
+      ].filter((id): id is string => !!id);
       if (cosmeticIds.length) {
-        const { data: defs } = await supabase.from("reward_definitions").select("id,name,payload").in("id", cosmeticIds);
+        const { data: defs } = await supabase.from("reward_definitions").select("id,name,type,payload").in("id", cosmeticIds);
         const byId = new Map<string, CosmeticDefRow>((defs ?? []).map(d => [d.id, d as CosmeticDefRow]));
         const title = cosRes?.data?.title_id ? byId.get(cosRes.data.title_id) : undefined;
         const color = cosRes?.data?.name_color_id ? byId.get(cosRes.data.name_color_id) : undefined;
+        const border = cosRes?.data?.border_id ? byId.get(cosRes.data.border_id) : undefined;
+        const background = cosRes?.data?.background_id ? byId.get(cosRes.data.background_id) : undefined;
+        const effect = cosRes?.data?.effect_id ? byId.get(cosRes.data.effect_id) : undefined;
+        const badge = cosRes?.data?.badge_id ? byId.get(cosRes.data.badge_id) : undefined;
         titleLabel = (title?.payload as { label?: string } | null)?.label ?? title?.name ?? "";
         nameColor = (color?.payload as { color?: string } | null)?.color ?? null;
+        borderColor = (border?.payload as { color?: string } | null)?.color ?? null;
+        backgroundColor = (background?.payload as { color?: string } | null)?.color ?? null;
+        effectColor = (effect?.payload as { color?: string } | null)?.color ?? null;
+        badgeLabel = cosmeticLabelFromRow(badge);
       }
 
       // Points come from `points_events` (publicly readable). Rank is only
@@ -152,6 +183,10 @@ const PublicProfile = () => {
         name: avatar?.display_name?.trim() || name,
         titleLabel,
         nameColor,
+        borderColor,
+        backgroundColor,
+        effectColor,
+        badgeLabel,
         loadout: avatar ? { ...((avatar.extras as Record<string, string>) || {}), ...avatar, display_name: avatar.display_name } : null,
         avatarPublic:
           (Array.isArray(privRes?.data) ? privRes.data[0] : null)?.show_avatar_publicly !== false,
@@ -182,11 +217,15 @@ const PublicProfile = () => {
       <div className="bg-gradient-card border-b border-primary/20 px-5 pt-16 pb-6">
         <div className="flex items-center gap-4">
           {state.avatarPublic && state.loadout ? (
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex items-center justify-center">
-              <AvatarCharacter loadout={state.loadout} size={110} animated={false} showBadge={false} />
+            <div className={`w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center border-2 transition-colors ${state.borderColor ? "border" : "border-primary/20"}`}
+              style={state.borderColor ? { borderColor: state.borderColor } : undefined}
+            >
+              <AvatarCharacter loadout={state.loadout} size={110} animated={!!state.effectColor && state.effectColor !== "transparent"} showBadge={false} />
             </div>
           ) : (
-            <div className="w-20 h-20 rounded-full bg-primary/15 flex items-center justify-center text-3xl font-bold text-primary">
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold transition-colors ${state.borderColor ? "border-2" : "bg-primary/15 border border-primary/20"}`}
+              style={state.borderColor ? { color: state.nameColor ?? undefined, borderColor: state.borderColor } : undefined}
+            >
               {first}
             </div>
           )}
@@ -195,6 +234,7 @@ const PublicProfile = () => {
               {state.name}
             </h1>
             {state.titleLabel && <p className="text-sm text-electric-purple font-semibold truncate">{state.titleLabel}</p>}
+            {state.badgeLabel && <p className="text-[11px] uppercase tracking-wider text-amber-400 font-bold mt-0.5">{state.badgeLabel}</p>}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {state.rank && (
                 <span className="text-[12px] uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-md font-bold">
@@ -205,6 +245,22 @@ const PublicProfile = () => {
                 {formatNumber(state.points)} pts
               </span>
             </div>
+            {/* Public cosmetics: the same identity layer the athlete sees on their own profile, rendered for other people. */}
+            {(state.nameColor || state.borderColor || state.backgroundColor || state.effectColor) && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {state.backgroundColor && (
+                  <span className="h-5 w-14 rounded-md border border-white/10 overflow-hidden" style={{ background: state.backgroundColor }} />
+                )}
+                {state.borderColor && (
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20" style={{ boxShadow: `inset 0 0 0 3px ${state.borderColor}` }} />
+                )}
+                {state.effectColor && (
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5" style={{ boxShadow: `0 0 14px ${state.effectColor}` }}>
+                    <Sparkles size={14} className="text-white/80" />
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

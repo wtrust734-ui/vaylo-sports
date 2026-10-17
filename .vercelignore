@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Source code (not needed in deployment)
+src/
+scripts/
+supabase/
+worker/
+
+# Build output (deploy only dist-web)
+dist/
+dist-web/
+
+# Environment files
+.env
+.env.*
+
+# Ignore everything except dist-web
+*
+!dist-web

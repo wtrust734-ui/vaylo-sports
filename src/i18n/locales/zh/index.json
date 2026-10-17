@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "监护人访问",
     "startingAnalysis": "起始分析",
-    "insights": "洞察"
+    "insights": "洞察",
+    "pipeline": "流程仪表盘",
+    "pipelineStageBrain": "大脑——OpenAI决定说什么",
+    "pipelineStagePrep": "准备——剪辑和字幕",
+    "pipelineStageEdit": "编辑——AI正在编辑视频",
+    "pipelineStageQc": "质量控制——严格的质量关口",
+    "pipelineStagePost": "发布——自动发到TikTok",
+    "pipelineStageDone": "完成——大脑知道已发布",
+    "pipelineStatusQueued": "已排队",
+    "pipelineStatusRunning": "运行中",
+    "pipelineStatusCompleted": "已完成",
+    "pipelineStatusFailed": "失败",
+    "pipelineStatusStopped": "已停止"
   }
 }

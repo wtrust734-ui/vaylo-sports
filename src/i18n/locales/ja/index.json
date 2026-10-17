@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "保護者アクセス",
     "startingAnalysis": "スタート時分析",
-    "insights": "インサイト"
+    "insights": "インサイト",
+    "pipeline": "パイプライン ダッシュボード",
+    "pipelineStageBrain": "ブレイン — OpenAI が何を言うか決める",
+    "pipelineStagePrep": "準備 — クリップと字幕",
+    "pipelineStageEdit": "編集 — AI が動画を編集中",
+    "pipelineStageQc": "QC — 厳しい品質ゲート",
+    "pipelineStagePost": "投稿 — TikTok に自動投稿",
+    "pipelineStageDone": "完了 — ブレインが投稿確認",
+    "pipelineStatusQueued": "キュー中",
+    "pipelineStatusRunning": "実行中",
+    "pipelineStatusCompleted": "完了",
+    "pipelineStatusFailed": "失敗",
+    "pipelineStatusStopped": "停止"
   }
 }

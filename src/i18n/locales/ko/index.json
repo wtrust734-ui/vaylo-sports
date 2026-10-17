@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "보호자 접근",
     "startingAnalysis": "시작 분석",
-    "insights": "인사이트"
+    "insights": "인사이트",
+    "pipeline": "파이프라인 대시보드",
+    "pipelineStageBrain": "두뇌 — OpenAI가 무엇을 말할지 결정",
+    "pipelineStagePrep": "준비 — 클립과 자막",
+    "pipelineStageEdit": "편집 — AI가 비디오를 편집 중",
+    "pipelineStageQc": "품질 관리 — 엄격한 품질 게이트",
+    "pipelineStagePost": "게시 — TikTok에 자동 게시",
+    "pipelineStageDone": "완료 — 두뇌가 게시 확인을 함",
+    "pipelineStatusQueued": "대기 중",
+    "pipelineStatusRunning": "실행 중",
+    "pipelineStatusCompleted": "완료",
+    "pipelineStatusFailed": "실패",
+    "pipelineStatusStopped": "중지됨"
   }
 }

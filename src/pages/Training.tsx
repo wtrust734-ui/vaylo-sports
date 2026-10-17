@@ -1500,7 +1500,10 @@ const Training = () => {
     if (parts.length === 3) totalSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
     else if (parts.length === 2) totalSec = parts[0] * 60 + parts[1];
     const pace = distKm && totalSec ? `${Math.floor((totalSec / distKm) / 60)}:${(Math.round((totalSec / distKm) % 60)).toString().padStart(2, "0")} /km` : null;
-    const { error } = await supabase.from("performance_logs").insert({
+    // `.select("id")` matters: the new log's id is what the weekly coin drip
+    // idempotency ledger hangs off — the drip claim verifies the log belongs
+    // to the athlete, so one log can never be replayed for coins.
+    const { data: insertedLog, error } = await supabase.from("performance_logs").insert({
       user_id: user.id, title: logTitle || `${logType} - ${logSport}`, distance_km: distKm,
       time_seconds: totalSec || null, pace_per_km: pace, notes: logNotes || null, sport: logSport, log_type: logType,
       perceived_exertion: parseInt(logRPE) || null, form_rating: parseInt(logFormRating) || null,
@@ -1515,11 +1518,28 @@ const Training = () => {
         rpe: parseInt(logRPE) || null,
         distanceKm: distKm,
       }),
-    });
+    }).select("id").single();
+    // supabase-js returns `data: null` for inserts without `.select()`, so the
+    // chain above is not optional polish: without it the drip below would
+    // silently never fire.
     if (error) { toast({ title: "Couldn't save your log", description: error.message, variant: "destructive" }); return; }
+
+    // Weekly coin drip: the server decides the amount and enforces the weekly
+    // cap; a failure here is a silent no (the log itself already saved).
+    let coinLine: string | null = null;
+    const newLogId = (insertedLog as { id?: string } | null)?.id;
+    if (newLogId) {
+      const { data: drip } = await supabase.rpc("claim_session_coins" as never, { p_log_id: newLogId } as never);
+      const awarded = (drip as { awarded?: number } | null)?.awarded ?? 0;
+      if (awarded > 0) {
+        coinLine = `+${awarded} Coins this week`;
+        await refreshProfile();
+      }
+    }
+
     setShowAddLog(false); setLogTitle(""); setLogDistance(""); setLogTime(""); setLogNotes(""); setLogHeartRate(""); setLogCalories("");
     fetchLogs();
-    toast({ title: "Log saved! 📝" });
+    toast({ title: "Log saved! 📝", description: coinLine ?? undefined });
   };
 
   const chipClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${active ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`;

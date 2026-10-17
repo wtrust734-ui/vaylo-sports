@@ -96,6 +96,8 @@ export const FEATURE_FLAGS = {
   wearableSync: envOverride("wearableSync", true),
   gpsTracking: envOverride("gpsTracking", false),
   iphone: envOverride("iphone", false),
+  // Pipeline dashboard: ad workflow stages, QC, and chat controls
+  pipelineDashboard: envOverride("pipelineDashboard", true),
 } as const satisfies Record<FlagKey, boolean>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
@@ -113,7 +115,9 @@ export const isFlagOn = (key: FeatureFlagKey): boolean => FEATURE_FLAGS[key];
  * menu entry pointing at a redirected page. Filtering by path means a new entry
  * point is covered by construction, as long as it routes here.
  */
-export const FLAGGED_ROUTES: Record<string, FeatureFlagKey> = {};
+export const FLAGGED_ROUTES: Record<string, FeatureFlagKey> = {
+  "/pipeline": "pipelineDashboard",
+};
 
 export const isRouteVisible = (path: string): boolean => {
   const key = FLAGGED_ROUTES[path];

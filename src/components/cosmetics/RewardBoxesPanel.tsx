@@ -40,7 +40,7 @@ export default function RewardBoxesPanel({ compact = false }: { compact?: boolea
   const [qualifying, setQualifying] = useState<number | null>(null);
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [opening, setOpening] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<{ box: PendingBox; grant: BoxGrant } | null>(null);
+  const [revealed, setRevealed] = useState<{ box: PendingBox; grant: BoxGrant; profileGrant?: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Avatar-cosmetic ownership, so the server (and the pending list) can prefer
@@ -101,6 +101,19 @@ export default function RewardBoxesPanel({ compact = false }: { compact?: boolea
         setError(grantError ?? "This box could not be opened right now.");
         return;
       }
+      // The profile shelf finally has an earn lane: the same streak milestone
+      // also grants a badge into user_rewards (server idempotent — even if the
+      // athlete already owns every grantable badge, the milestone is recorded
+      // and cannot be re-farmed). Only streak boxes do this; referral boxes
+      // stay avatar-only until referral-side grant content exists.
+      let profileGrant: string | null = null;
+      if (box.milestone.source === "streak") {
+        const { data: earned } = await supabase.rpc("grant_cosmetic" as never, {
+          p_source: "streak_milestone",
+          p_milestone_key: String(box.milestone.threshold),
+        } as never);
+        profileGrant = (earned as { granted?: { name?: string } } | null)?.granted?.name ?? null;
+      }
       markBoxOpened({
         source: box.milestone.source,
         threshold: box.milestone.threshold,
@@ -109,7 +122,7 @@ export default function RewardBoxesPanel({ compact = false }: { compact?: boolea
       });
       setOwned((s) => new Set(s).add(grant.itemId));
       setLedgerVersion((v) => v + 1);
-      setRevealed({ box, grant });
+      setRevealed({ box, grant, profileGrant });
     },
     [opening],
   );
@@ -296,6 +309,11 @@ export default function RewardBoxesPanel({ compact = false }: { compact?: boolea
                   ? "You had already opened this box — here is what it held."
                   : "Added to your avatar. Wear it in Avatar Studio."}
               </p>
+              {revealed.profileGrant && (
+                <p className="mt-1 text-[12px] font-semibold text-primary">
+                  Also earned: {revealed.profileGrant} — find it in your Collection.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => {

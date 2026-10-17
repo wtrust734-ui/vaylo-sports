@@ -1,0 +1,25 @@
+{
+  "name": "vaylo-site",
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist-web/**/*.js",
+      "use": "@vercel/static-build",
+      "config": {
+        "includeFiles": "dist-web/**"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "dist-web/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "outputDirectory": "dist-web",
+  "installCommand": null,
+  "buildCommand": null
+}

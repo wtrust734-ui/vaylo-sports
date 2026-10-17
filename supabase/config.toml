@@ -200,3 +200,12 @@ verify_jwt = false
 # service-role RPC no client role can call directly.
 [functions.report-error]
 verify_jwt = false
+
+# The agent's tool surface. The shared secret is the only credential the agent
+# holds; the function enforces it (deny-by-default on action), and every action
+# is listed explicitly below.
+#
+#  supabase secrets set MANUS_SHARED_SECRET=<random>
+#  supabase functions deploy manus-invoke --use-api
+[functions.manus-invoke]
+verify_jwt = false

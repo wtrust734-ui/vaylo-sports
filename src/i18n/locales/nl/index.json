@@ -350,6 +350,18 @@
     "wearables": "Wearables",
     "guardian": "Toegang voor voogd",
     "startingAnalysis": "Startanalyse",
-    "insights": "Inzichten"
+    "insights": "Inzichten",
+    "pipeline": "Pijplein dashboard",
+    "pipelineStageBrain": "Brein — OpenAI beslist wat te zeggen",
+    "pipelineStagePrep": "Voorbereiding — clips en ondertiteling",
+    "pipelineStageEdit": "Bewerking — AI bewerkt het video",
+    "pipelineStageQc": "Kwaliteitscontrole — strenge kwaliteitsgrens",
+    "pipelineStagePost": "Posten — automatisch posten naar TikTok",
+    "pipelineStageDone": "Klaar — brein weet het gepubliceerd",
+    "pipelineStatusQueued": "In queue",
+    "pipelineStatusRunning": "Lopend",
+    "pipelineStatusCompleted": "Voltooid",
+    "pipelineStatusFailed": "Mislukt",
+    "pipelineStatusStopped": "Gestopt"
   }
 }

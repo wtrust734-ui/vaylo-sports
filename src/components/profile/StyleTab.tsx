@@ -16,6 +16,7 @@ import {
   type EquippedRow,
 } from "@/lib/cosmetics";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
+import { isAvailableNow } from "@/lib/cosmeticCatalog";
 
 /** Rarity order for live-updating the 'Complete your profile' suggestion. */
 const RARITY_ORDER: Rarity[] = ["common", "rare", "epic", "legendary"];
@@ -70,7 +71,12 @@ export default function StyleTab({ onOpenSheet }: StyleTabProps) {
 
   const coins = (profile as { coins?: number } | null)?.coins ?? 0;
   const sellable = useMemo(() => defs.filter((d) => SELLABLE_TYPES.includes(d.type)), [defs]);
-  const visible = useMemo(() => sellable.filter((d) => d.type === type), [sellable, type]);
+  // Same availability rule as the Collection tab and the server's purchase RPC:
+  // a seasonal item outside its window is not on sale here either.
+  const visible = useMemo(
+    () => sellable.filter((d) => d.type === type && isAvailableNow(d)),
+    [sellable, type],
+  );
 
   // Owned across the whole sellable catalogue — the progress bar's numerator.
   const ownedCount = useMemo(
@@ -263,12 +269,28 @@ export default function StyleTab({ onOpenSheet }: StyleTabProps) {
                 <span className="absolute -top-2 right-3 rounded-full bg-primary/90 px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">
                   Cheapest here
                 </span>
-              )}
-              <div
+              )}              <div
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[12px] font-black"
-                style={{ background: meta.gradient, color: color ?? "#fff" }}
+                style={{
+                  background: meta.gradient,
+                  color: color ?? "#fff",
+                  ...(def.type === "border"
+                    ? { boxShadow: `0 0 0 3px ${color ?? "#fff"}` }
+                    : def.type === "background"
+                      ? { background: color ?? meta.gradient }
+                      : {}),
+                }}
               >
-                {def.type === "title" ? cosmeticLabel(def).slice(0, 3) : <Sparkles size={14} />}
+                {def.type === "title"
+                  ? cosmeticLabel(def).slice(0, 3)
+                  : def.type === "name_color"
+                    ? <span className="w-4 h-4 rounded-full" style={{ background: color ?? "#fff" }} />
+                    : def.type === "background"
+                      ? null
+                      : def.type === "effect"
+                        ? <Sparkles size={14} style={{ filter: color ? `drop-shadow(0 0 4px ${color})` : undefined }} />
+                        : <Sparkles size={14} />
+                }
               </div>
 
               <div className="min-w-0 flex-1">
