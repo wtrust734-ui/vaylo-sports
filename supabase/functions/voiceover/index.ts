@@ -25,7 +25,7 @@
  * `user_read`. That is reported rather than guessed at.
  */
 
-import { aiCallAllowed, authenticate, readJsonBody } from "../_shared/guard.ts";
+import { aiCallAllowed, authenticate, readJsonBody, spendForUser } from "../_shared/guard.ts";
 import {
   ALLOWED_MODELS,
   DEFAULT_VOICE_SETTINGS,
@@ -56,7 +56,9 @@ const json = (body: unknown, status = 200) =>
   });
 
 const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+// Vaylo Ads, so ad spend is metered on its own OpenAI project: prefer
+// ADS_OPENAI_API_KEY, fall back to the app key (see ad-agent).
+const OPENAI_API_KEY = Deno.env.get("ADS_OPENAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 /** Verified at integration time: the Responses API accepts function-free text. */
@@ -213,6 +215,25 @@ Deno.serve(async (req) => {
 
     if (!(await aiCallAllowed(req, userId, "voiceover", { max: 20, windowSeconds: 60 }))) {
       return json({ error: "Too many voiceover requests. Wait a moment and try again." }, 429);
+    }
+
+    // Beta cost control: a narration billed by ElevenLabs is metered in the
+    // same credit ledger as every other AI feature, for every plan type.
+    const metered = await spendForUser(req, userId, "ads_video_narration", `Ad narration (${String(body.text ?? "").length} chars)`, {
+      source: "voiceover",
+      billUnlimited: true,
+      idempotencyKey: `vo:${crypto.randomUUID()}`,
+    });
+    if (!metered.success) {
+      return json(
+        {
+          error: metered.error === "insufficient_credits"
+            ? `Not enough credits for the narration (${metered.cost ?? "?"} needed; you have ${metered.balance ?? 0}). Nothing was charged.`
+            : metered.error ?? "Could not record the credit charge",
+          code: metered.error === "insufficient_credits" ? "insufficient_credits" : "metering_failed",
+        },
+        metered.error === "insufficient_credits" ? 402 : 500,
+      );
     }
 
     const text = typeof body.text === "string" ? body.text.trim() : "";

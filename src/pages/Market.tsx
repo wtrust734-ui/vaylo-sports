@@ -5,11 +5,14 @@ import {
   Zap,
   Coins,
   X,
+  Palette,
+  ChevronRight,
   Infinity as InfinityIcon,
   Gift,
   Flame,
   Clock,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -73,6 +76,7 @@ const GuardianNote = () => (
 // the credit economy are untouched; this is a UX rebuild only.
 const Market = () => {
   const { user, profile, refreshProfile } = useAuth();
+  const navigate = useNavigate();
   // Buying is open to every age, on the owner's instruction. An under-18
   // purchase is expected to involve a parent or guardian and is refunded in full
   // on request (legal/purchases.html section 8 and legal/refunds.html section 4),
@@ -643,7 +647,32 @@ const Market = () => {
           )}
           {section === "unlocks" && <UnlocksSection />}
           {section === "coins" && (
-            <CoinBundlesSection currency={region.currency} onBuy={buyCoinBundle} priceLabel={buyPriceLabel} />
+            <>
+              {/* Coins buy looks, not features — so the place coins are sold is
+                  where the Collection has to be one tap away. The Market had no
+                  link to it at all: an athlete could buy coins here with no way
+                  to reach the shop they spend them in from this screen. This row
+                  is navigation, not a promotion: no price, no offer, no clock. */}
+              <div className="px-5 pb-4">
+                <button
+                  type="button"
+                  onClick={() => navigate("/collection")}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-start transition-colors hover:border-primary/40"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <Palette size={15} className="text-primary" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">Spend them on looks</span>
+                    <span className="block truncate text-[12px] text-muted-foreground">
+                      Titles, borders, effects, bundles & seasonal sets — the Collection
+                    </span>
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+                </button>
+              </div>
+              <CoinBundlesSection currency={region.currency} onBuy={buyCoinBundle} priceLabel={buyPriceLabel} />
+            </>
           )}
           {section === "subscriptions" && <SubscriptionsSection />}
           {section === "lifetime" && <LifetimeSection />}

@@ -1,0 +1,6 @@
+src
+public
+index.html
+vite.config.ts
+tsconfig.app.json
+package.json

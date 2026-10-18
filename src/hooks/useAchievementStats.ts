@@ -36,7 +36,7 @@ export function useAchievementStats() {
 
   const fetchAll = async () => {
     if (!user) return;
-    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes] = await Promise.all([
+    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes, streakRes] = await Promise.all([
       supabase.from("achievements").select("*").eq("user_id", user.id),
       supabase.from("challenges").select("*").order("created_at", { ascending: false }),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
@@ -53,6 +53,11 @@ export function useAchievementStats() {
       supabase.from("cue_words").select("id", { count: "exact" }).eq("user_id", user.id),
       supabase.from("mental_reviews").select("id", { count: "exact" }).eq("user_id", user.id),
       supabase.from("recovery_logs").select("id", { count: "exact" }).eq("user_id", user.id).not("hrv", "is", null),
+      // The streak counters behind the streak achievements come from the
+      // server's own streaks table (cached run recomputed at each claim) —
+      // never from a client-side guess. Without this the streak medals could
+      // never fire: the old code passed a hardcoded 0.
+      supabase.from("streaks" as never).select("current_streak").eq("user_id", user.id).maybeSingle() as never,
     ]);
 
     setEarnedAchievements(achRes.data || []);
@@ -88,7 +93,9 @@ export function useAchievementStats() {
       nutritionPlans: 0,
       completedChallenges: 0,
       createdChallenges,
-      streak: 0,
+      // Server streak: qualifying days (training, recovery, learning, weekly
+      // goal, scheduled rest) computed by the backend; 0 when no streak row.
+      streak: ((streakRes as { data: { current_streak: number } | null }).data?.current_streak) ?? 0,
     };
 
     setStats(baseStats);

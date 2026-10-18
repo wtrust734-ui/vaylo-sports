@@ -17,9 +17,11 @@ import { getLocalPBs } from "@/lib/athleteDossier";
 import {
   type ProcessGoal, type DailyAction, type ActionLog,
   outcomeProgress, requiredRate, reliabilityScore, currentStreak,
-  weeklyCompletionForProcess, todayCompletionMap, toggleAction, isoDate,
+  weeklyCompletionForProcess, todayCompletionMap, toggleAction, isoDate, startOfWeek,
 } from "@/lib/goals";
 import { ageFromDob } from "@/lib/age";
+import { awardWeeklyGoal } from "@/lib/xp";
+import { claimStreakDay } from "@/lib/streakRewards";
 import {
   PHASE_BLURBS, PHASE_LABELS, PROGRESS_LABELS,
   buildRoadmaps, type DevelopmentPhase, type GoalRoadmap, type RoadmapContext, type RoadmapGoalRow,
@@ -198,6 +200,24 @@ const Goals = () => {
       return;
     }
     if (done) toast.success("Locked in.");
+
+    // XP: completing a daily action may complete a weekly process goal
+    // (target-days in the week). The award goes through xp_award, which
+    // re-checks the logged days against the goal's weekly_target server-side;
+    // one award per goal per week via the ledger's idempotency key.
+    if (done) {
+      const pg = processes.find((p) => p.id === action.process_goal_id);
+      if (pg) {
+        const wk = weeklyCompletionForProcess(pg, actions, [...logs, { id: "tmp", action_id: action.id, log_date: isoDate(new Date()), completed: true } as unknown as ActionLog]);
+        if (wk.done >= wk.target) {
+          void awardWeeklyGoal(pg.id, isoDate(startOfWeek()));
+          // Streak: completing the weekly process goal qualifies today (the
+          // server re-checks the logged days against the goal's target).
+          void claimStreakDay("weekly_goal", `${pg.id}:${isoDate(startOfWeek())}`);
+        }
+      }
+    }
+
     load();
   };
 

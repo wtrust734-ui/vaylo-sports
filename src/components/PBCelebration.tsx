@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Share2, X } from "lucide-react";
 import { shareWithInvite } from "@/lib/share";
@@ -38,8 +40,45 @@ export interface PbCelebrationData {
   trophies: PbCelebrationTrophy[];
 }
 
-/** Fire a celebration from the save flow. */
+// ============================================================================
+// SELF-MOUNTING TRIGGER — the card that could never appear
+// ----------------------------------------------------------------------------
+// This component used to rely on someone rendering <PBCelebration /> in the
+// app shell. Nobody did: the save flow dispatched its event faithfully, no
+// listener existed anywhere, and the celebration was written, wired and
+// invisible. A component that exists only to answer one window event should
+// not depend on a global mount point that a refactor can silently drop (the
+// same failure the app-shell rewrite of 2026-10-17 caused by replacing the
+// entry file outright).
+//
+// So the trigger mounts the listener itself: first call creates a detached
+// container + React root, commits the component synchronously, and only then
+// dispatches the event — so the listener provably exists before the event it
+// is listening for. The root lives for the session; idle, the component
+// renders nothing.
+// ============================================================================
+
+const ROOT_ID = "vaylo-pb-celebration-root";
+let celebrationRoot: Root | null = null;
+
+const ensureMounted = () => {
+  if (celebrationRoot) return;
+  let container = document.getElementById(ROOT_ID);
+  if (!container) {
+    container = document.createElement("div");
+    container.id = ROOT_ID;
+    document.body.appendChild(container);
+  }
+  celebrationRoot = createRoot(container);
+};
+
+/** Fire a celebration from the save flow. Mounts the card on first use. */
 export const triggerPbCelebration = (data: PbCelebrationData) => {
+  ensureMounted();
+  // flushSync commits the listener before the dispatch below; a plain render
+  // is concurrent and could still be pending when the event fires, which is
+  // exactly how an event-with-no-listener happens.
+  flushSync(() => celebrationRoot?.render(<PBCelebration />));
   window.dispatchEvent(new CustomEvent("vaylo:pb-celebration", { detail: data }));
 };
 

@@ -66,6 +66,26 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       return json({ campaign: data });
     }
+
+    // DELETE carries { id } in the JSON body (supabase.functions.invoke is
+    // POST-only). The owner check runs before the delete: concepts, assets
+    // and exports cascade; render jobs reference campaigns with ON DELETE
+    // CASCADE only through ad_campaigns? They do (column references with
+    // `on delete cascade`), so a delete is complete.
+    if (req.method === "DELETE") {
+      const body = await readJsonBody(req);
+      if (!body?.id || typeof body.id !== "string") return json({ error: "id required" }, 400);
+      const { data: owned } = await admin
+        .from("ad_campaigns")
+        .select("id")
+        .eq("id", body.id)
+        .eq("owner_id", userId)
+        .maybeSingle();
+      if (!owned) return json({ error: "Campaign not found" }, 404);
+      const { error } = await admin.from("ad_campaigns").delete().eq("id", body.id).eq("owner_id", userId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ deleted: body.id });
+    }
     
     if (req.method === "PATCH") {
       const body = await readJsonBody(req);

@@ -26,6 +26,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { COSMETIC_BUNDLES, bundleSavings, isAvailableNow } from "@/lib/cosmeticCatalog";
+import FlexCardModal from "@/components/cosmeticsShop/FlexCardModal";
+import { useUnlockCelebration } from "@/hooks/useUnlockCelebration";
+import { defToFlexItem } from "@/lib/cosmeticsShop/flexFromDef";
 
 // ============================================================================
 // COLLECTION — the cosmetics tab
@@ -47,6 +50,22 @@ export default function Collection() {
   const navigate = useNavigate();
   const subscription = useSubscription();
   const { defs, ownedIds, ownedSourceById, equipped, loading, buy, equip, unequip, defById, refresh } = useCosmetics();
+
+  // FLEX CELEBRATION — epic+ unlocks here get the share card, fed from this
+  // page's own inventory (no shop-store adoption). `ready` keeps the baseline
+  // honest while defs load, so old ownership never re-celebrates on mount.
+  const celebrationSource = useMemo(
+    () => ({
+      ownedItemIds: defs.filter((d) => ownedIds.has(d.id)).map((d) => d.id),
+      resolveItem: (id: string) => {
+        const def = defs.find((d) => d.id === id);
+        return def ? defToFlexItem(def) : undefined;
+      },
+      ready: !loading,
+    }),
+    [defs, ownedIds, loading],
+  );
+  const celebration = useUnlockCelebration(celebrationSource);
 
   const [typeFilter, setTypeFilter] = useState<CosmeticType | "all">("all");
   const [ownedFilter, setOwnedFilter] = useState<"all" | "owned" | "locked">("all");
@@ -687,6 +706,12 @@ export default function Collection() {
         itemName={topUp?.itemName}
       />
       <CoinQuickBuySheet open={quickBuy} onClose={() => setQuickBuy(false)} />
+      {/* Epic+ unlock celebration — same flex card as the wardrobe. */}
+      <FlexCardModal
+        item={celebration.item}
+        athleteName={profile?.full_name || "Athlete"}
+        onClose={celebration.dismiss}
+      />
     </div>
   );
 }

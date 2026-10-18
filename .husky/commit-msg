@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+subject="$(git log -1 --pretty=format:"%s" HEAD 2>/dev/null || true)"
+
+if [[ -z "$subject" ]]; then
+  echo "commit-msg: could not read commit subject" >&2
+  exit 1
+fi
+
+# Enforce conventional commit subject format.
+if ! [[ "$subject" =~ ^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?:[[:space:]] ]]; then
+  echo "commit-msg: subject does not match conventional format: $subject" >&2
+  exit 1
+fi

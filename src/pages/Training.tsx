@@ -34,6 +34,8 @@ import { notifyPlanCreated } from "@/lib/notificationTriggers";
 import { evaluateLogAgainstEvents } from "@/lib/eventTrophies";
 import { wallForEvaluation, recordTimedPb } from "@/lib/pbWall";
 import { triggerPbCelebration } from "@/components/PBCelebration";
+import { awardTrainingSession } from "@/lib/xp";
+import { claimStreakDay } from "@/lib/streakRewards";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -1532,6 +1534,19 @@ const Training = () => {
     let coinLine: string | null = null;
     let trophyLine: string | null = null;
     const newLogId = (insertedLog as { id?: string } | null)?.id;
+
+    // XP: a completed training session earns its reward through the server's
+    // xp_award RPC, which verifies the log row and picks the amount from the
+    // reward rules — the client never sends an XP number. Idempotent per log:
+    // retrying or re-saving the same session can never double it. A failure is
+    // a silent no; the log itself already saved.
+    if (newLogId) {
+      void awardTrainingSession(newLogId);
+      // Streak: this completed session qualifies today (after the same
+      // server-side validation that verified the XP award; nothing the client
+      // says is trusted, and a duplicate event collapses into one day).
+      void claimStreakDay("training_session", newLogId);
+    }
 
     // PB + event-trophy evaluation: only for timed distance events. The server
     // matches sport + distance ±2% and grants the Bronze/Silver/Gold trophies

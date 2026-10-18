@@ -1,0 +1,24 @@
+effective tests root: ./tests
+playwright config testDir: ./tests
+spec: tests/specs/app-is-running.spec.ts
+fixture: tests/fixtures/app.setup.ts
+import used by spec: ../fixtures/app.setup
+
+dependency status
+@playwright/test present ^1.64.1
+clsx present ^2.1.1
+@vitejs/plugin-react-swc present ^3.11.0
+react present
+react-dom present
+react-router-dom present
+react-router present
+zustand present ^5.0.14
+
+gap
+node_modules confirmed installed from the current package.json
+chromium browsers installed
+app dev server not started during this session
+live playwright run against a running server not executed
+
+NOTE: If Playwright still resolves the fixture as <root>/fixtures/app.setup instead of <root>/tests/fixtures/app.setup,
+the runner is resolving relative to a different base dir than expected.

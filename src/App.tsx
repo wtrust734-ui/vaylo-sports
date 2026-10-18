@@ -34,7 +34,6 @@ import CreditWarning from "@/components/ads/CreditWarning";
 import PromoPopup from "@/components/ads/PromoPopup";
 import StreakShield from "@/components/ads/StreakShield";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
-import PBCelebration from "@/components/PBCelebration";
 import PaywallModal from "@/components/PaywallModal";
 import CreditTopUpSheet from "@/components/market/CreditTopUpSheet";
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -43,10 +42,16 @@ const ChallengeInvite = lazy(() => import("./pages/ChallengeInvite"));
 const DiscordCommunity = lazy(() => import("./pages/DiscordCommunity"));
 const NotificationPrefs = lazy(() => import("./pages/NotificationPrefs"));
 const Referrals = lazy(() => import("./pages/Referrals"));
+const Streaks = lazy(() => import("./pages/Streaks"));
+const AdminReferrals = lazy(() => import("./pages/AdminReferrals"));
 const CreatorMarketplace = lazy(() => import("./pages/CreatorMarketplace"));
 const BecomeCreator = lazy(() => import("./pages/BecomeCreator"));
 const CoachStudio = lazy(() => import("./pages/CoachStudio"));
 const CoachSignup = lazy(() => import("./pages/CoachSignup"));
+const AdsStudioConsole = lazy(() => import("./pages/studio/StudioApp"));
+const CreateAdPage = lazy(() => import("./pages/CreateAdPage"));
+// Ads Studio workspace (Prompt 6): the athlete-facing campaign console and the
+// single-ad creation flow. Lazy like the other late-loaded screens.
 
 import OfflineBanner from "@/components/OfflineBanner";
 import BootVeil, { bootVeilGated, markBootReady } from "@/components/BootVeil";
@@ -453,6 +458,8 @@ const App = () => {
               <Route path="/discord" element={<BareScreen><DiscordCommunity /></BareScreen>} />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Index />} />
+                <Route path="/studio" element={<AdsStudioConsole />} />
+                <Route path="/create" element={<CreateAdPage />} />
                 {/* Information-architecture hubs: every tile navigates to an
                     existing page; these only group destinations. */}
                 <Route path="/train" element={<Train />} />
@@ -569,6 +576,7 @@ const App = () => {
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/profile/notifications" element={<NotificationPrefs />} />
                 <Route path="/referrals" element={<Referrals />} />
+                <Route path="/streaks" element={<Streaks />} />
                 {/* Coach marketplace is launch-gated (featureFlags.ts). When off,
                     every route redirects to the Market so old links never 404.
 
@@ -605,6 +613,7 @@ const App = () => {
                 <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
                 <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
                 <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
+                <Route path="/admin/referrals" element={<RequireAdmin><AdminReferrals /></RequireAdmin>} />
                 <Route path="/collection" element={<Collection />} />
                 <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
                 <Route path="/pipeline" element={<RequireAdmin><PipelineDashboard /></RequireAdmin>} />
@@ -626,7 +635,6 @@ const App = () => {
             <StreakShield />
             <CreditTopUpSheet />
             <MilestoneCelebration />
-            <PBCelebration />
           </SubscriptionProvider>
         </AuthProvider>
       </Router>

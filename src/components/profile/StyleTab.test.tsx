@@ -87,14 +87,19 @@ describe("StyleTab: wiring", () => {
     expect(SOURCE).toMatch(/onOpenSheet: \(\) => void;/);
   });
 
-  it("graduates from a popup-only surface: profile page hosts the real tab", () => {
+  it("cosmetics graduated off the profile page: the Collection page owns the full look editor", () => {
+    // The look editor now lives at /collection (reachable from the profile menu
+    // and the mobile QuickActionSheet door); the profile page hosts the XP
+    // summary and account settings only.
     const profile = readFileSync(
       path.resolve(__dirname, "../../pages/Profile.tsx"),
       "utf8",
     ).replace(/\r\n?/g, "\n");
-    expect(profile).toMatch(/role="tablist"/);
-    expect(profile).toMatch(/<StyleTab /);
-    // The old popup-only button is gone — the tab replaces it.
-    expect(profile).not.toMatch(/Cosmetics \(\{Object\.keys\(equippedDefs\)\.length\} equipped\)/);
+    expect(profile).not.toMatch(/StyleTab|CosmeticShop|useCosmetics/);
+    const collection = readFileSync(
+      path.resolve(__dirname, "../../pages/Collection.tsx"),
+      "utf8",
+    ).replace(/\r\n?/g, "\n");
+    expect(collection).toContain("cosmeticColor");
   });
 });

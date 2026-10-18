@@ -144,6 +144,15 @@ export function useCosmetics(): UseCosmetics {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Re-read when another surface mutates ownership server-side (the shop
+  // store dispatches this after its RPCs). Without it, Collection/Profile and
+  // the wardrobe could show different inventories after one purchase.
+  useEffect(() => {
+    const onChange = () => { void refresh(); };
+    window.addEventListener("vaylo:cosmetics-changed", onChange);
+    return () => window.removeEventListener("vaylo:cosmetics-changed", onChange);
+  }, [refresh]);
+
   const buy = useCallback(async (id: string) => {
     const { error } = await supabase.rpc("purchase_cosmetic" as never, { p_reward_id: id } as never);
     if (error) return { error: error.message };

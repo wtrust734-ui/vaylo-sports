@@ -232,7 +232,8 @@ describe("the cost estimate drives the approval gate", () => {
     );
     expect(cost.veoShots).toBe(2);
     expect(cost.veoSeconds).toBe(14);
-    expect(cost.veoUsd).toBeCloseTo(0.42, 2);
+    // 14 s at the standard tier's published $0.40/s rate.
+    expect(cost.veoUsd).toBeCloseTo(5.6, 2);
   });
 
   it("costs nothing to generate when every shot uses real app footage", () => {

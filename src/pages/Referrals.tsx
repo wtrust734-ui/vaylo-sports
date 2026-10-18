@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { appHref } from "@/lib/routerBase";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,15 +11,28 @@ import { isNativeShell } from "@/lib/platform";
 import { promoBonus } from "@/lib/credits";
 import { toast } from "sonner";
 
-function genCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
 export default function Referrals() {
   const { user } = useAuth();
   const [code, setCode] = useState<string>("");
   type ReferralRow = { id?: string; status: string; [key: string]: unknown };
   const [referrals, setReferrals] = useState<ReferralRow[]>([]);
+  type CommissionSummary = {
+    enabled?: boolean;
+    commission_pct?: number;
+    hold_days?: number;
+    min_payout_minor?: number;
+    payout_currency?: string;
+    pending_minor?: number;
+    approved_minor?: number;
+    paid_minor?: number;
+    cancelled_minor?: number;
+    paying_customers?: number;
+    withdrawable_minor?: number;
+    is_adult?: boolean;
+  };
+  const [cash, setCash] = useState<CommissionSummary | null>(null);
+  const [cashLoading, setCashLoading] = useState(true);
+  const [cashError, setCashError] = useState<string | null>(null);
   const [redeem, setRedeem] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -29,16 +42,14 @@ export default function Referrals() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: existingCode, error: codeReadError } = await supabase.from("referral_codes").select("code").eq("user_id", user.id).maybeSingle();
-      let data = existingCode;
-      if (codeReadError) { toast.error(`Couldn't load your referral code: ${codeReadError.message}`); return; }
-      if (!data) {
-        const newCode = genCode();
-        const { data: ins, error: insError } = await supabase.from("referral_codes").insert({ user_id: user.id, code: newCode }).select().maybeSingle();
-        if (insError) { toast.error(`Couldn't create your referral code: ${insError.message}`); return; }
-        data = ins;
-      }
-      setCode(data?.code || "");
+      // Codes are issued server-side (referral_code_issue): crypto-random,
+      // collision-safe, idempotent per account. The old Math.random client
+      // generation was guessable and a collision meant a dead-end toast.
+      const { data: issuedCode, error: codeError } = await supabase.rpc("referral_code_issue" as never);
+      if (codeError) { toast.error(`Couldn't load your referral code: ${codeError.message}`); return; }
+      const issued = (issuedCode ?? "") as string;
+      if (!issued) { toast.error("Couldn't load your referral code: empty response"); return; }
+      setCode(issued);
       const { data: refs, error: refsError } = await supabase.from("referrals").select("*").eq("referrer_id", user.id);
       if (refsError) { toast.error(`Couldn't load your referrals: ${refsError.message}`); return; }
       setReferrals(refs || []);
@@ -52,6 +63,56 @@ export default function Referrals() {
   const shareValue = link || (code ? `Referral code: ${code}` : "");
   const sharePlaceholder = link ? "Invite link" : "Share this code with friends";
 
+
+  const money = (minor?: number) =>
+    `£${((Number(minor ?? 0)) / 100).toFixed(2)}`;
+
+  // Cash commissions (the programme the business rules define): loaded from
+  // the server's aggregate summary. Pending is NOT withdrawable money — the
+  // statuses here are labelled so nobody mistakes one for the other.
+  const loadCash = useCallback(async (uid: string) => {
+    setCashLoading(true);
+    setCashError(null);
+    const { data, error } = await supabase.rpc("referral_dashboard_summary" as never);
+    if (error) {
+      setCashError("Couldn't load your commission summary. Try again shortly.");
+    } else {
+      setCash((data ?? {}) as CommissionSummary);
+    }
+    setCashLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadCash(user.id);
+  }, [user, loadCash]);
+
+  const requestPayout = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("referral_payout_request" as never);
+      const r = (data ?? {}) as { ok?: boolean; error?: string; amount_minor?: number; status?: string };
+      if (error || r.ok !== true) {
+        const why = r.error ?? error?.message ?? "unknown";
+        toast.error(
+          why === "below_threshold"
+            ? `You need ${money(cash?.min_payout_minor ?? 2500)} in approved commission to request a payout.`
+            : why === "under_18_not_eligible"
+              ? "Cash payouts are only available to 18+ referrers."
+              : why === "programme_disabled"
+                ? "The cash referral programme is paused right now."
+                : `Payout request failed: ${why}`,
+        );
+      } else {
+        toast.success("Payout requested", {
+          description: "An admin will review and execute the transfer, then record its reference here.",
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const doRedeem = async () => {
     setBusy(true);
@@ -220,6 +281,52 @@ export default function Referrals() {
           <Input value={redeem} onChange={(e) => setRedeem(e.target.value)} placeholder="ABC123" className="font-mono uppercase" />
           <Button onClick={doRedeem} disabled={!redeem || busy}>Redeem</Button>
         </div>
+      </div>
+
+      {/* ── Cash commissions (18+): the honest money section ──────────────
+          Every status is labelled so that "pending" can never read as
+          "withdrawable": pending sits inside the hold period, approved has
+          cleared it, and payout requests are executed by the operator and
+          recorded with the provider reference. Registering or starting a
+          trial earns nothing; ONLY a verified first purchase accrues. */}
+      <div className="mt-6 p-5 rounded-2xl border border-electric-purple/40 bg-card">
+        <p className="font-semibold mb-1 flex items-center gap-2"><Crown size={16} className="text-electric-purple" /> Cash commissions (18+)</p>
+        {cashError && <p role="alert" className="mt-2 text-sm text-destructive">{cashError}</p>}
+        {cashLoading && !cashError && <p className="text-sm text-muted-foreground">Loading cash summary…</p>}
+        {cash && cash.enabled === false && (
+          <p className="mt-2 text-sm text-muted-foreground">The cash programme is paused right now — commission recording is switched off.</p>
+        )}
+        {cash && (
+          <>
+            <p className="text-xs text-muted-foreground mt-2">
+              {cash.commission_pct ?? 15}% of your referred friend's first qualifying payment, calculated on the revenue Vaylo keeps
+              (excluding refunds, taxes and processing fees). Held {cash.hold_days ?? 30} days after payment for refunds and fraud checks.
+            </p>
+            <div className="mt-3 space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Paying customers</span><span className="font-semibold">{cash.paying_customers ?? 0}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Pending (in hold)</span><span className="font-semibold">{money(cash.pending_minor)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Approved (past hold)</span><span className="font-semibold">{money(cash.approved_minor)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Paid out</span><span className="font-semibold">{money(cash.paid_minor)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Cancelled / reversed</span><span className="font-semibold">{money(cash.cancelled_minor)}</span></div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Minimum payout {money(cash.min_payout_minor ?? 2500)}. Approved and no payout requested so far: {money(cash.withdrawable_minor)}.
+              {cash.is_adult === false ? " Cash payouts are only available from age 18." : ""}
+            </p>
+            <Button
+              onClick={requestPayout}
+              disabled={busy || cashLoading || !!cashError || (cash.withdrawable_minor ?? 0) < (cash.min_payout_minor ?? 2500)}
+              className="mt-3 w-full"
+            >
+              Request payout
+            </Button>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              A request is a review, not a transfer: the team approves it and executes the payout manually, then the reference is
+              recorded here. Registration, trials and failed or refunded payments never accrue cash. One commission per referred
+              customer; duplicate webhook replays cannot create a second one. Self-referrals and underage referrers are excluded.
+            </p>
+          </>
+        )}
       </div>
 
       <p className="text-[12px] text-muted-foreground mt-4 text-center">One redemption per account. A friend qualifies after their first verified purchase. Transaction references prevent duplicate purchase processing; they do not identify a shared payment method. Self-referrals do not earn rewards.</p>

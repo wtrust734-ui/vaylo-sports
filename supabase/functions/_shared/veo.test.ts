@@ -102,7 +102,9 @@ describe("clip length is snapped to a length the model accepts", () => {
 
 describe("the cost estimate", () => {
   it("prices each tier from its own published rate", () => {
-    expect(estimateVeoCostUsd(DEFAULT_VEO_MODEL, 8)).toBeCloseTo(0.24, 5);
+    // The default tier is the standard $0.40/s model, so 8 s costs $3.20 —
+    // the same rate an explicitly-named standard model is charged at below.
+    expect(estimateVeoCostUsd(DEFAULT_VEO_MODEL, 8)).toBeCloseTo(3.2, 5);
     expect(estimateVeoCostUsd("veo-3.1-fast-generate-preview", 8)).toBeCloseTo(1.2, 5);
     expect(estimateVeoCostUsd("veo-3.1-generate-preview", 8)).toBeCloseTo(3.2, 5);
   });

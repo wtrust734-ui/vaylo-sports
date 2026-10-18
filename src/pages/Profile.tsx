@@ -3,12 +3,12 @@ import { motion, useInView } from "framer-motion";
 import {
   User,
   Users,
-  Medal,
   Settings,
   ChevronRight,
   Zap,
   Globe,
   LogOut,
+  Medal,
   Ruler,
   Weight,
   Target,
@@ -16,6 +16,13 @@ import {
   Trash2,
   MapPin,
   MessageCircle,
+  Scale,
+  Bell,
+  Watch,
+  FileText,
+  ShieldCheck,
+  Flame,
+  Gift,
 } from "lucide-react";
 import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,16 +33,10 @@ import { formatSports } from "@/lib/profile";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
 import PersonalizationSetting from "@/components/settings/PersonalizationSetting";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import CosmeticShop from "@/components/profile/CosmeticShop";
-import StyleTab from "@/components/profile/StyleTab";
-import {
-  cosmeticColor,
-  cosmeticLabel,
-  isAnimated,
-  useCosmetics,
-  type UseCosmetics,
-} from "@/lib/cosmetics";
-import { Sparkles } from "lucide-react";
+import { isAndroid } from "@/lib/platform";
+import { isFlagOn } from "@/config/featureFlags";
+import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
+import XpSummaryCard from "@/components/xp/XpSummaryCard";
 import CountrySelect from "@/components/geo/CountrySelect";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
@@ -45,167 +46,24 @@ import {
   currencyFor,
   normaliseCountryCode,
 } from "@/lib/geo";
-import { Bell, FileText, Scale, ShieldCheck, Watch } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
-import { isAndroid } from "@/lib/platform";
-import { isFlagOn } from "@/config/featureFlags";
-import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
+import ProfilePicture from "@/components/profile/ProfilePicture";
 
-const currencies = [
-  "USD",
-  "EUR",
-  "GBP",
-  "AUD",
-  "CAD",
-  "JPY",
-  "INR",
-  "BRL",
-  "ZAR",
-  "NZD",
-  "CHF",
-  "SEK",
-  "NOK",
-  "DKK",
-  "PLN",
-  "CZK",
-  "HUF",
-  "MXN",
-  "SGD",
-  "HKD",
-];
-const goalOptions = [
-  "Speed",
-  "Strength",
-  "Endurance",
-  "Fat Loss",
-  "Muscle Gain",
-  "Power",
-  "Agility",
-  "VO2 Max",
-  "Lactate Threshold",
-  "Flexibility",
-  "Mobility",
-  "Explosiveness",
-  "Balance",
-  "Coordination",
-  "Reaction Time",
-  "Injury Recovery",
-  "Mental Toughness",
-  "Sport Skill",
-  "Event Prep",
-  "Longevity",
-  "Body Recomposition",
-  "Cross-Training",
-  "Technique",
-  "Confidence",
-  "Consistency",
-];
-const experienceLevels = ["beginner", "intermediate", "advanced", "elite"];
-const sportOptions = [
-  "Running",
-  "Gym/Weightlifting",
-  "Football",
-  "Basketball",
-  "Swimming",
-  "Cycling",
-  "Tennis",
-  "Rugby",
-  "Boxing",
-  "MMA",
-  "Cricket",
-  "Athletics",
-  "Triathlon",
-  "CrossFit",
-  "General",
-];
-
-/* ── Row chrome ────────────────────────────────────────────────────────────
-   Every destination and every setting on this screen is one of two shapes, and
-   they used to be a third shape each: a full `card-surface card-pad` block with
-   its own border, its own icon tile and its own chevron. Nine of those stacked
-   up is what made Profile read as cluttered — the eye cannot tell a
-   destination from a section break when both are a bordered card.
-
-   Now they are rows inside one card, separated by hairlines. Same targets, same
-   labels, one border, one radius, and a 44px-tall row that is the size a thumb
-   expects. `divide-y` on the parent does the separating, so a row cannot
-   accidentally carry its own border again. */
-const ROW =
-  "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06]";
-
-const Row = ({
-  icon: Icon,
-  label,
-  desc,
-  onClick,
-  expanded,
-  rotate = true,
-}: {
-  icon: typeof Medal;
-  label: string;
-  desc: string;
-  onClick: () => void;
-  expanded?: boolean;
-  /** Set false for rows that navigate rather than expand. */
-  rotate?: boolean;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-expanded={expanded}
-    className={`${ROW} press`}
-  >
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-      <Icon size={16} className="text-foreground" aria-hidden />
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-sm font-semibold">{label}</span>
-      <span className="block truncate text-xs text-muted-foreground">{desc}</span>
-    </span>
-    <motion.span
-      animate={{ rotate: expanded ? 90 : 0 }}
-      transition={{ duration: 0.15 }}
-      className="shrink-0"
-      aria-hidden
-    >
-      <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-    </motion.span>
-  </button>
-);
-
-/** The panel an expanded row reveals. Sits inside the card, under its row. */
-const Panel = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    initial={{ opacity: 0, height: 0 }}
-    animate={{ opacity: 1, height: "auto" }}
-    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-    className="overflow-hidden"
-  >
-    <div className="space-y-4 px-4 pb-4 pt-1">{children}</div>
-  </motion.div>
-);
-
+// Profile is the account hub. The wardrobe (titles, borders, names, effects,
+// achieved badges) has been removed: it was an orphaned second surface for
+// coins-only cosmetics, not another coin destination. Coins are unaffected.
 const Profile = () => {
   const { profile, user, signOut, refreshProfile } = useAuth();
   const { entitlements, hasUnlimitedCredits } = useSubscription();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showSettings, setShowSettings] = useState(false);
-  const [showCosmetics, setShowCosmetics] = useState(false);
 
-  // Style gets its own tab, not a popup. Segmenting the page between the
-  // account hub and the wardrobe keeps both readable and makes the wardrobe
-  // browsable at full width — shopping needs to be *shown* before it is
-  // wanted, and a "Cosmetics (2 equipped)" button was asking athletes to want
-  // something they could not yet see.
-  const [profileTab, setProfileTab] = useState<"account" | "style">("account");
   // Health Connect is managed from here, in the sheet below. The separate
   // Wearables screen was removed; this row is the one door to it.
   const [showHealthConnect, setShowHealthConnect] = useState(false);
   const wearableOffer = isAndroid() && isFlagOn("wearableSync");
-  const { equippedDefs } = useCosmetics();
-  const equippedCount = Object.keys(equippedDefs).length;
-  const styleTabLabel = equippedCount > 0 ? `Style (${equippedCount})` : "Style";
+
   const [currency, setCurrency] = useState("USD");
   // ISO alpha-2, stored in `user_region` — the table the leaderboards read.
   const [country, setCountry] = useState<string | null>(null);
@@ -367,39 +225,10 @@ const Profile = () => {
 
   const handleDeleteAccount = () => navigate("/settings/delete-account");
 
-  // The Profile tab is the app's account hub. The drawer's own entries used to
-  // live here because the top-left hamburger is gone: these are the
   // destinations an athlete looked for in the drawer but which were only ever
   // reachable from it on mobile (notifications) or buried one level down.
-  //
-  // Three things changed here on 2026-10-02, all of them because the screen had
-  // become a directory:
-  //
-  //   The full-catalogue row is gone. It was called "All sections", then "Every
-  //   section" — one row whose only job was to open the navigation drawer, on a
-  //   screen that had already become an index of destinations.
-  //
-  //   It was also the only thing that opened the drawer on a phone. openAppNav()
-  //   existed solely to serve it and nothing else dispatches OPEN_NAV_EVENT, so
-  //   with the row gone the drawer has no way in on mobile.
-  //
-  //   That was checked before removing it rather than assumed. Every path the
-  //   drawer lists is also linked from somewhere else — the Train, Perform,
-  //   Recover and Compete hubs, this screen's own rows, or another page — so
-  //   nothing becomes unreachable; it becomes one level deeper to get to. The
-  //   drawer markup is left in place because that shortcut is still worth
-  //   having, and it needs a control that works rather than this row back.
-  //
-  //   "Legal & Safety" is the first row. Every published document has to be
-  //   reachable from inside the app — Google Play rejects a listing whose
-  //   privacy policy is only on the web, and the athlete should not have to go
-  //   hunting for their own rights. It used to live only inside a collapsed
-  //   accordion, which is easy to miss, and showed 3 of the 26 documents.
-  //
-  //   These rows are rows now: one card, hairline-separated, rather than nine
-  //   separate bordered cards stacked on top of each other.
   const menuItems: {
-    icon: typeof Medal;
+    icon: typeof Settings;
     label: string;
     desc: string;
     path?: string;
@@ -456,6 +285,18 @@ const Profile = () => {
       desc: "Credits, subscriptions & features",
       path: "/market",
     },
+    {
+      icon: Flame,
+      label: "Streaks",
+      desc: "Your streak, milestones and rewards",
+      path: "/streaks",
+    },
+    {
+      icon: Gift,
+      label: "Refer & earn",
+      desc: "Invite friends, track rewards",
+      path: "/referrals",
+    },
   ];
 
   return (
@@ -480,27 +321,12 @@ const Profile = () => {
         className="mx-5 mb-5 border border-border rounded-2xl p-5 card-surface"
       >
         <div className="flex flex-col gap-4">
-          {/* Your current look. If nothing is equipped, the profile keeps its defaults and shows an explicit default state. */}
           <div className="flex items-center gap-4">
-            <ProfileLook equipped={equippedDefs} />
+            <ProfilePicture />
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h2
-                  className="font-display font-bold text-lg truncate"
-                  style={
-                    equippedDefs.name_color_id
-                      ? { color: cosmeticColor(equippedDefs.name_color_id) ?? undefined }
-                      : undefined
-                  }
-                >
-                  {profile?.full_name || "Athlete"}
-                </h2>
-                {equippedDefs.badge_id && (
-                  <span title={cosmeticLabel(equippedDefs.badge_id)} className="shrink-0">
-                    <Medal size={14} className="text-amber-400" />
-                  </span>
-                )}
-              </div>
+              <h2 className="font-display font-bold text-lg truncate">
+                {profile?.full_name || "Athlete"}
+              </h2>
               <p className="text-sm text-muted-foreground">
                 {formatSports(profile?.sport)} · {profile?.experience_level || "Intermediate"}
               </p>
@@ -513,48 +339,9 @@ const Profile = () => {
                     ? "Unlimited credits"
                     : `${profile?.credits ?? 0} credits`}
                 </span>
-                {equippedDefs.title_id && (
-                  <span className="text-[12px] bg-electric-purple/10 text-electric-purple px-2 py-0.5 rounded-full font-semibold">
-                    {cosmeticLabel(equippedDefs.title_id)}
-                  </span>
-                )}
               </div>
-              {equippedDefs.title_id && (
-                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-electric-purple/20 bg-electric-purple/5 px-2 py-0.5 text-[11px] font-semibold text-electric-purple">
-                  {cosmeticLabel(equippedDefs.title_id)}
-                </span>
-              )}
             </div>
           </div>
-        </div>
-
-        {/* Live preview of the currently equipped look, so cosmetics are visible rather than just listed as text. */}
-        <ProfileLookCard equipped={equippedDefs} />
-
-        <div
-          role="tablist"
-          aria-label="Profile sections"
-          className="mt-2 flex gap-1 rounded-xl border border-border bg-card/60 p-1"
-        >
-          {([
-            { key: "account" as const, label: "Account" },
-            { key: "style" as const, label: styleTabLabel },
-          ]).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={profileTab === t.key}
-              onClick={() => setProfileTab(t.key)}
-              className={`flex-1 rounded-lg py-2 text-[12px] font-bold uppercase tracking-wider transition-colors ${
-                profileTab === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
         </div>
       </motion.div>
 
@@ -562,16 +349,15 @@ const Profile = () => {
         <AccountSubscriptionCard />
       </div>
 
+      {/* Athlete progression: level, XP total, next-level progress and recent
+          XP. Progression only — no money, no shop, no leaderboard. */}
+      <XpSummaryCard />
+
       {/* One card for every destination and every setting. `divide-y` supplies
           the separators, so a row can never drift back to being its own card,
           and the expanded panels sit inside the card rather than hanging off it
           as a second box. */}
-      {profileTab === "style" && <StyleTab onOpenSheet={() => setShowCosmetics(true)} />}
-
-      <div
-        ref={menuRef}
-        className={profileTab === "style" ? "hidden" : "px-5 mb-5"}
-      >
+      <div ref={menuRef} className="px-5 mb-5">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={menuInView ? { opacity: 1, y: 0 } : {}}
@@ -869,115 +655,79 @@ const Profile = () => {
         </p>
       </div>
 
-      {/* Shared sheets that Profile can open. CosmeticShop is imported from the
-          shared component so the same disclaimers and pricing flow are used
-          everywhere a cosmetic purchase can start. */}
-      <CosmeticShop
-        open={showCosmetics}
-        onClose={() => setShowCosmetics(false)}
-      />
       <HealthConnectPrompt open={showHealthConnect} onClose={() => setShowHealthConnect(false)} />
     </div>
   );
 };
 
-const ProfileLook = ({
-  equipped,
-  className,
+const experienceLevels = ["beginner", "intermediate", "advanced", "elite"];
+const sportOptions = [
+  "Running", "Gym/Weightlifting", "Football", "Basketball", "Swimming", "Cycling",
+  "Tennis", "Rugby", "Boxing", "MMA", "Cricket", "Athletics", "Triathlon",
+  "CrossFit", "General",
+];
+const currencies = [
+  "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD",
+  "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD",
+];
+const goalOptions = [
+  "Speed", "Strength", "Endurance", "Fat Loss", "Muscle Gain", "Power",
+  "Agility", "VO2 Max", "Lactate Threshold", "Flexibility", "Mobility",
+  "Explosiveness", "Balance", "Coordination", "Reaction Time", "Injury Recovery",
+  "Mental Toughness", "Sport Skill", "Event Prep", "Longevity",
+  "Body Recomposition", "Cross-Training", "Technique", "Confidence", "Consistency",
+];
+
+const Row = ({
+  icon: Icon,
+  label,
+  desc,
+  onClick,
+  expanded,
+  rotate = true,
 }: {
-  equipped: UseCosmetics["equippedDefs"];
-  className?: string;
-}) => {
-  const borderDef = equipped.border_id;
-  const colorDef = equipped.name_color_id;
-  const nameColor = cosmeticColor(colorDef);
-  const borderColor = cosmeticColor(borderDef);
-  return (
-    <div
-      className={className ?? ""}
-      style={
-        borderColor
-          ? { color: nameColor ?? undefined, borderColor }
-          : undefined
-      }
+  icon: typeof Settings;
+  label: string;
+  desc: string;
+  onClick: () => void;
+  expanded?: boolean;
+  /** Set false for rows that navigate rather than expand. */
+  rotate?: boolean;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-expanded={expanded}
+    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] press`}
+  >
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+      <Icon size={16} className="text-foreground" aria-hidden />
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-sm font-semibold">{label}</span>
+      <span className="block truncate text-xs text-muted-foreground">{desc}</span>
+    </span>
+    <motion.span
+      animate={{ rotate: expanded ? 90 : 0 }}
+      transition={{ duration: 0.15 }}
+      className="shrink-0"
+      aria-hidden
     >
-      {borderDef ? (
-        <span
-          className="rounded-full border-2 flex items-center justify-center"
-          style={{ borderColor: borderColor ?? undefined }}
-        >
-          <User size={28} className="text-muted-foreground" />
-        </span>
-      ) : (
-        <span className="rounded-full flex items-center justify-center">
-          <User size={28} className="text-muted-foreground" />
-        </span>
-      )}
-    </div>
-  );
-};
+      <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+    </motion.span>
+  </button>
+);
 
-const ProfileLookCard = ({ equipped }: { equipped: UseCosmetics["equippedDefs"] }) => {
-  const background = cosmeticColor(equipped.background_id);
-  const border = cosmeticColor(equipped.border_id);
-  const effect = cosmeticColor(equipped.effect_id);
-  const title = cosmeticLabel(equipped.title_id);
-  const badge = cosmeticLabel(equipped.badge_id);
-  const hasAny = !!(background || border || effect || title || badge);
-
-  return (
-    <div className="mt-1 rounded-xl border border-border bg-card/60 p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Current look
-      </p>
-      <div className="mt-2 flex items-center gap-3">
-        {background && (
-          <span
-            className="h-5 w-14 rounded-md border border-white/10 overflow-hidden"
-            style={{ background }}
-          />
-        )}
-        {border && (
-          <span
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/20"
-            style={{ boxShadow: `inset 0 0 0 3px ${border}` }}
-          />
-        )}
-        {effect && (
-          <span
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5"
-            style={{ boxShadow: `0 0 14px ${effect}` }}
-          >
-            <Sparkles size={14} className="text-white/80" />
-          </span>
-        )}
-        <div className="min-w-0">
-          {title && (
-            <p
-              className="text-sm font-semibold"
-              style={
-                cosmeticColor(equipped.title_id)
-                  ? { color: cosmeticColor(equipped.title_id) ?? undefined }
-                  : undefined
-              }
-            >
-              {title}
-            </p>
-          )}
-          {badge && (
-            <p className="text-[11px] uppercase tracking-wider text-amber-400 font-bold">
-              {badge}
-            </p>
-          )}
-        </div>
-      </div>
-      {!hasAny && (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          No cosmetics equipped yet.
-        </p>
-      )}
-    </div>
-  );
-};
+/** The panel an expanded row reveals. Sits inside the card, under its row. */
+const Panel = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, height: 0 }}
+    animate={{ opacity: 1, height: "auto" }}
+    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+    className="overflow-hidden"
+  >
+    <div className="space-y-4 px-4 pb-4 pt-1">{children}</div>
+  </motion.div>
+);
 
 export default Profile;

@@ -127,9 +127,19 @@ const Auth = () => {
   }, [authLoading, navigate, profile?.onboarding_complete, session, mode]);
 
   // Park an invite code from the URL so it survives sign-up and onboarding.
+  // A click is recorded at the moment the link lands here: no account, no IP,
+  // no personal data — just the code and a time (referral_clicks). It gives the
+  // referral programme its configurable attribution window; a code typed from
+  // memory still attributes at registration, since there is no click to bind it to.
   useEffect(() => {
     const fromUrl = readRefFromUrl();
-    if (fromUrl) { try { localStorage.setItem(REF_KEY, fromUrl); } catch { /* storage unavailable */ } }
+    if (fromUrl) {
+      try { localStorage.setItem(REF_KEY, fromUrl); } catch { /* storage unavailable */ }
+      void supabase.rpc("referral_click_record" as never, { p_code: fromUrl } as never).then(
+        () => undefined,
+        () => undefined,
+      );
+    }
     setPendingRef(fromUrl ?? storedRef());
   }, []);
 

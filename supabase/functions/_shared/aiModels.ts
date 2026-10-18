@@ -62,7 +62,7 @@ export const GEMINI_MODELS = {
    * resolves on this key (every variant returns 404 from predictLongRunning),
    * so the newest lite tier that actually exists is used.
    */
-  VEO_LITE: "veo-3.1-lite-generate-preview",
+  VEO_LITE: "veo-3.1-generate-preview",
   VEO_FAST: "veo-3.1-fast-generate-preview",
   VEO_STANDARD: "veo-3.1-generate-preview",
   // Deliberately NOT `as const`: video-form-analysis declares

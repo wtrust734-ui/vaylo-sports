@@ -49,7 +49,9 @@
     "recoveryCheckIn": "회복 체크인",
     "recoveryCheckInDesc": "수면, 근육통, 컨디션",
     "logMetric": "지표 기록",
-    "logMetricDesc": "속도·파워·지구력 테스트"
+    "logMetricDesc": "속도·파워·지구력 테스트",
+    "openCollection": "컬렉션",
+    "openCollectionDesc": "룩, 번들, 시즌 세트 착용해 보기"
   },
   "hub": {
     "brand": "Vaylo Sports",

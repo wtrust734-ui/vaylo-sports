@@ -49,7 +49,9 @@
     "recoveryCheckIn": "Check-in recupero",
     "recoveryCheckInDesc": "Sonno, indolenzimenti, prontezza",
     "logMetric": "Registra una metrica",
-    "logMetricDesc": "Test di velocità, potenza, resistenza"
+    "logMetricDesc": "Test di velocità, potenza, resistenza",
+    "openCollection": "Collezione",
+    "openCollectionDesc": "Prova look, bundle e collezioni stagionali"
   },
   "hub": {
     "brand": "Vaylo Sports",

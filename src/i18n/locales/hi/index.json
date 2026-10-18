@@ -49,7 +49,9 @@
     "recoveryCheckIn": "रिकवरी चेक-इन",
     "recoveryCheckInDesc": "नींद, मांसपेशियों में दर्द, तैयारी",
     "logMetric": "मीट्रिक दर्ज करें",
-    "logMetricDesc": "स्पीड, पावर, सहनशक्ति टेस्ट"
+    "logMetricDesc": "स्पीड, पावर, सहनशक्ति टेस्ट",
+    "openCollection": "संग्रह",
+    "openCollectionDesc": "लुक, बंडल और सीज़न सेट आज़माएँ"
   },
   "hub": {
     "brand": "वेलो",

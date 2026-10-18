@@ -34,6 +34,7 @@ import { lookup } from "node:dns/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PRESET_IDS, buildProbeArgs, buildRenderPlan, summariseProbe } from "./dist/renderPlan.mjs";
+import { validateComposeRequest, buildComposePlan, verifyOutput } from "./dist/composeJob.mjs";
 
 // ---------------------------------------------------------------------------
 // Refuse to render with a stale engine.
@@ -67,6 +68,21 @@ if (process.env.SKIP_BUILD_CHECK !== "1") {
         process.exit(1);
       }
       console.log(`render engine: fresh (${info.sourceHash.slice(0, 12)})`);
+    }
+    // Same stale-bundle rule, for the image compose engine.
+    try {
+      const cinfo = JSON.parse(await readFile(path.join(here, "dist/composeJob.build-info.json"), "utf8"));
+      const csource = await readFile(cinfo.entryPoint, "utf8").catch(() => null);
+      if (csource !== null) {
+        const ccurrent = createHash("sha256").update(csource).digest("hex");
+        if (ccurrent !== cinfo.sourceHash) {
+          console.error("REFUSING TO START: dist/composeJob.mjs is stale. Run `npm run build` in worker/.");
+          process.exit(1);
+        }
+        console.log(`compose engine: fresh (${cinfo.sourceHash.slice(0, 12)})`);
+      }
+    } catch (e) {
+      console.warn("could not verify the compose engine bundle:", e instanceof Error ? e.message : e);
     }
   } catch (e) {
     // A missing stamp is not a reason to refuse a container that was built earlier.
@@ -482,6 +498,71 @@ function validate(request) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Image compose pass (prompt 4) — background + logo + brand text → PNG.
+//
+// Reuses the video pipeline's registry, queue, dedup, TTL and source
+// resolution so the security story is IDENTICAL: argument arrays, no shell,
+// WORK_DIR containment, SSRF-guarded downloads, size-capped inline data URLs.
+// The plan builder (dist/composeJob.mjs, bundled from _shared/composeJob.ts)
+// refuses an overflow layout before any render slot is consumed.
+// ---------------------------------------------------------------------------
+
+/** FFmpeg does not give progress for a single-frame compose; a short fixed arc. */
+function composeJob(job, request) {
+  return new Promise(async (resolve, reject) => {
+    const jobDir = await mkdtemp(path.join(tmpdir(), "vaylo-compose-"));
+    try {
+      job.state = "preparing";
+      job.progress = 5;
+
+      // The background and logo arrive as data URLs (treated like any other
+      // inline source) or WORK_DIR paths — resolveSource enforces both.
+      const backgroundPath = await resolveSource(request.background, jobDir, 0);
+      const logoPath = request.logo ? await resolveSource(request.logo, jobDir, 1) : null;
+
+      job.state = "rendering";
+      job.progress = 20;
+      const outPath = path.join(jobDir, "out.png");
+      const config = buildComposePlan({
+        request,
+        backgroundPath,
+        logoPath,
+        fontPath: FONT_FILE,
+        outPath,
+      });
+      if (config.overflow) throw new Error(`layout overflow: ${config.overflow.join("; ")}`);
+
+      const result = await run(FFMPEG, config.plan.argv, { timeoutMs: Math.min(JOB_TIMEOUT_MS, 120_000) });
+      if (result.timedOut) throw new Error(`composition exceeded the ${Math.round(Math.min(JOB_TIMEOUT_MS, 120_000) / 1000)}s limit`);
+      if (result.code !== 0) {
+        const tail = result.stderr.split("\n").filter(Boolean).slice(-4).join(" | ");
+        throw new Error(`ffmpeg failed: ${tail.slice(0, 400)}`);
+      }
+
+      job.progress = 90;
+      const bytes = (await stat(outPath)).size;
+      const quality = verifyOutput(bytes);
+      if (quality) throw new Error(quality);
+
+      job.filePath = outPath;
+      job.bytes = bytes;
+      job.progress = 100;
+      job.state = "done";
+      job.meta.filename = "out.png";
+      console.log(`[compose] ${request.jobId} ok, ${Math.round(bytes / 1024)} KiB`);
+      resolve();
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      const entries = await readdir(jobDir).catch(() => []);
+      for (const entry of entries) {
+        if (entry !== "out.png") await rm(path.join(jobDir, entry), { force: true, recursive: true }).catch(() => {});
+      }
+    }
+  });
+}
+
 function dispatch(job, request) {
   running += 1;
   job.state = "queued";
@@ -491,7 +572,8 @@ function dispatch(job, request) {
   job.renderStartedAt = nowMs();
   stats.rendersStarted += 1;
 
-  renderJob(job, request)
+  const work = request.compose === true ? composeJob(job, request) : renderJob(job, request);
+  work
     .then(() => {
       job.finishedAt = nowMs();
       job.renderMs = job.finishedAt - job.renderStartedAt;
@@ -566,7 +648,7 @@ const server = createServer(async (req, res) => {
     });
   }
 
-  if (parts[0] !== "jobs" && url.pathname !== "/render") return json(res, 404, { error: "not found" });
+  if (parts[0] !== "jobs" && url.pathname !== "/render" && url.pathname !== "/compose") return json(res, 404, { error: "not found" });
 
   // ---- auth for everything that costs CPU ------------------------------
   if (!RENDER_TOKEN) return json(res, 503, { error: "the render worker is not configured (RENDER_TOKEN is unset)" });
@@ -574,6 +656,43 @@ const server = createServer(async (req, res) => {
   if (typeof token !== "string" || token !== RENDER_TOKEN) return json(res, 401, { error: "unauthorized" });
 
   // ---- start a render --------------------------------------------------
+  // ---- start an image compose ------------------------------------------
+  if (req.method === "POST" && url.pathname === "/compose") {
+    let body;
+    try {
+      body = JSON.parse(await readBody(req));
+    } catch (err) {
+      return json(res, 400, { error: err instanceof Error ? err.message : "invalid JSON body" });
+    }
+    const verdict = validateComposeRequest(body);
+    if (!verdict.ok) return json(res, 400, { error: verdict.reason });
+    const request = { ...verdict.request, compose: true };
+
+    const existing = jobs.get(request.jobId);
+    if (existing) {
+      return json(res, 200, buildJobView(request.jobId, existing, { deduplicated: true }));
+    }
+    const job = {
+      state: "queued",
+      progress: 0,
+      error: null,
+      filePath: null,
+      bytes: null,
+      startedAt: nowMs(),
+      finishedAt: null,
+      meta: { kind: "image_compose", placementId: request.placementId, jobId: request.jobId },
+    };
+    jobs.set(request.jobId, job);
+
+    if (running >= MAX_CONCURRENCY) {
+      queue.push({ job, request });
+      job.state = "queued";
+      return json(res, 202, buildJobView(request.jobId, job, { queued: true, position: queue.length }));
+    }
+    dispatch(job, request);
+    return json(res, 202, buildJobView(request.jobId, job, {}));
+  }
+
   if (req.method === "POST" && url.pathname === "/render") {
     let body;
     try {
@@ -619,16 +738,17 @@ const server = createServer(async (req, res) => {
     return json(res, 200, buildJobView(parts[1], job, {}));
   }
 
-  // ---- download the finished mp4 ---------------------------------------
+  // ---- download the finished mp4 / png ----------------------------------
   if (req.method === "GET" && parts[0] === "jobs" && parts[2] === "file") {
     const job = jobs.get(parts[1]);
     if (!job) return json(res, 404, { error: "no such job" });
     if (job.state !== "done" || !job.filePath) return json(res, 409, { error: `job is ${job.state}` });
+    const isImage = job.meta?.kind === "image_compose";
     const info = await stat(job.filePath);
     res.writeHead(200, {
-      "Content-Type": "video/mp4",
+      "Content-Type": isImage ? "image/png" : "video/mp4",
       "Content-Length": info.size,
-      "Content-Disposition": `attachment; filename="${parts[1]}.mp4"`,
+      "Content-Disposition": `attachment; filename="${parts[1]}.${isImage ? "png" : "mp4"}"`,
       "Cache-Control": "private, no-store",
     });
     createReadStream(job.filePath).pipe(res);

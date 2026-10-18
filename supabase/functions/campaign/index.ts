@@ -63,7 +63,9 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+// Ads spend is metered on its own OpenAI project — see ad-agent. The concept
+// writer therefore prefers ADS_OPENAI_API_KEY and falls back to the app key.
+const OPENAI_API_KEY = Deno.env.get("ADS_OPENAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 /**
  * The efficient chat tier, the same id ad-agent and the voiceover drafter use.
@@ -158,7 +160,14 @@ Deno.serve(async (req) => {
       if (!briefCheck.ok) return json({ action, ok: false, error: "The brief is incomplete", problems: briefCheck.problems }, 400);
 
       if (!OPENAI_API_KEY) {
-        return json({ action, error: "Concept writing is not configured on this deployment (OPENAI_API_KEY is missing).", code: "not_configured" }, 503);
+        return json(
+          {
+            action,
+            error: "Concept writing is not configured on this deployment (ADS_OPENAI_API_KEY or OPENAI_API_KEY is missing).",
+            code: "not_configured",
+          },
+          503,
+        );
       }
       if (!(await aiCallAllowed(req, userId, "ad-campaign", { max: 10, windowSeconds: 60 }))) {
         return json({ action, error: "Too many concept requests. Try again in a minute." }, 429);

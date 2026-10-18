@@ -39,6 +39,26 @@ await build({
   logLevel: "info",
 });
 
+// The image-ad compose engine: prompt-4's FFmpeg text/layout pass. Same rules,
+// same single-source-of-truth stamp, separate bundle so a compose-only change
+// does not invalidate the video engine's stamp (nor vice versa).
+const composeSource = resolve(here, "../supabase/functions/_shared/composeJob.ts");
+await build({
+  entryPoints: [composeSource],
+  outfile: resolve(here, "dist/composeJob.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node22",
+  logLevel: "info",
+});
+
+const composeSourceHash = createHash("sha256").update(readFileSync(composeSource)).digest("hex");
+writeFileSync(
+  resolve(here, "dist/composeJob.build-info.json"),
+  JSON.stringify({ entryPoint: composeSource, sourceHash: composeSourceHash, builtAt: new Date().toISOString() }, null, 2) + "\n",
+);
+
 const sourceHash = createHash("sha256").update(readFileSync(source)).digest("hex");
 writeFileSync(
   resolve(here, "dist/build-info.json"),
@@ -47,3 +67,5 @@ writeFileSync(
 
 console.log(`bundled dist/renderPlan.mjs from ${source}`);
 console.log(`source hash ${sourceHash.slice(0, 12)}`);
+console.log(`bundled dist/composeJob.mjs from ${composeSource}`);
+console.log(`compose hash ${composeSourceHash.slice(0, 12)}`);

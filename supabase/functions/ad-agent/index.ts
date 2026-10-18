@@ -55,7 +55,11 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+// Two OpenAI keys, deliberately: ad spend is metered on its own project so
+// campaign generation never shows up inside the app's AI bill (and vice versa).
+// Ads read ADS_OPENAI_API_KEY first and fall back to the app key, so a
+// deployment that has only ever set OPENAI_API_KEY behaves exactly as before.
+const OPENAI_API_KEY = Deno.env.get("ADS_OPENAI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
 // The Responses API, not Chat Completions — see the note on buildAdAgentRequest.
 // gpt-6-luna rejects function tools on /v1/chat/completions outright.
 const OPENAI_PLAN_URL = "https://api.openai.com/v1/responses";
@@ -82,7 +86,7 @@ function describeProviderError(status: number, detail: string): { error: string;
       status: 502,
       error: verification
         ? "OpenAI rejected the request pending organization verification. Verify the organization in the OpenAI dashboard."
-        : "OpenAI rejected the API key. Check that OPENAI_API_KEY is current and belongs to this project.",
+        : "OpenAI rejected the API key. Check that ADS_OPENAI_API_KEY (or OPENAI_API_KEY) is current and belongs to this project.",
     };
   }
   if (status === 404 || /model_not_found|does not exist/i.test(detail)) {
@@ -122,7 +126,10 @@ Deno.serve(async (req) => {
     if (!OPENAI_API_KEY) {
       // The honest answer, not a silent mock. A demo mode belongs in the client.
       return json(
-        { error: "OpenAI is not configured on this deployment (OPENAI_API_KEY is missing).", code: "not_configured" },
+        {
+          error: "OpenAI is not configured on this deployment (ADS_OPENAI_API_KEY or OPENAI_API_KEY is missing).",
+          code: "not_configured",
+        },
         503,
       );
     }

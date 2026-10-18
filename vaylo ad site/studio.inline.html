@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vaylo Sports — Ad Studio</title>
+  <style>
+    :root {
+      --bg-0: #0b0c15;
+      --bg-1: #11131f;
+      --bg-2: #171a2a;
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-strong: rgba(255, 255, 255, 0.07);
+      --line: rgba(255, 255, 255, 0.06);
+      --line-strong: rgba(255, 255, 255, 0.14);
+      --accent: #5b8cff;
+      --accent-soft: rgba(91, 140, 255, 0.22);
+      --vaylo-cyan: #a6f3ff;
+      --vaylo-magenta: #ff5fc8;
+      --vaylo-blue: #4a8cff;
+      --vaylo-text: #f6f7fb;
+      --vaylo-muted: #9aa4bf;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      color: var(--vaylo-text);
+      background: radial-gradient(1200px 800px at 70% -10%, #1a1f3a 0%, transparent 60%),
+                  radial-gradient(900px 700px at -10% 110%, #2a1340 0%, transparent 55%),
+                  linear-gradient(180deg, var(--bg-0), var(--bg-1));
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    }
+
+    .studio {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      padding: 32px 24px 88px;
+      isolation: isolate;
+    }
+
+    .studio-head {
+      max-width: 1180px;
+      margin: 0 auto 28px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .brand-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--glass);
+      border: 1px solid var(--line);
+      padding: 8px 14px 8px 10px;
+      border-radius: 999px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--vaylo-cyan), var(--vaylo-blue));
+      box-shadow: 0 0 16px rgba(166, 243, 255, 0.45), inset 0 0 8px rgba(10, 180, 220, 0.6);
+      position: relative;
+    }
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.7), transparent 55%);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.3px;
+      color: var(--vaylo-text);
+    }
+
+    .studio-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      background: linear-gradient(120deg, #ffffff 0%, var(--vaylo-cyan) 80%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .studio-sub {
+      font-size: 13px;
+      color: var(--vaylo-muted);
+      margin-top: 4px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .stat {
+      background: var(--glass);
+      border: 1px solid var(--line);
+      padding: 10px 14px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      min-width: 110px;
+    }
+    .stat-num {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--vaylo-cyan);
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--vaylo-muted);
+      margin-top: 2px;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      aspect-ratio: 16 / 9;
+      border-radius: 28px;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      background:
+        linear-gradient(180deg, rgba(10,12,24,0.0) 0%, rgba(10,12,24,0.55) 100%),
+        radial-gradient(120% 80% at 50% 42%, #1f2642 0%, #0a0c18 70%);
+      box-shadow:
+        0 30px 80px -20px rgba(0,0,0,0.7),
+        0 0 0 1px rgba(166,243,255,0.06) inset,
+        0 0 0 1px rgba(11,12,21,0.8) inset;
+    }
+
+    .floor {
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, rgba(166,243,255,0.05) 0 1px, transparent 1px 40px),
+        repeating-linear-gradient(90deg, rgba(166,243,255,0.05) 0 1px, transparent 1px 40px);
+      opacity: 0.5;
+      mix-blend-mode: screen;
+      transform: perspective(900px) rotateX(55deg) rotateZ(-22deg) translateY(-18%);
+      transform-origin: center top;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 55%);
+      -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 55%);
+    }
+
+    .grid-ring {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(70% 70% at 50% 45%, rgba(91,140,255,0.06), transparent 70%),
+        radial-gradient(45% 45% at 50% 45%, rgba(166,243,255,0.14), transparent 70%);
+    }
+
+    .vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(120% 90% at 50% 42%, rgba(10,12,24,0) 40%, rgba(10,12,24,0.55) 100%);
+      pointer-events: none;
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+      transform: perspective(820px) rotateX(38deg) rotateZ(-26deg);
+      transform-origin: center center;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      padding: 18px;
+      pointer-events: none;
+    }
+
+    .panel {
+      pointer-events: auto;
+      position: relative;
+      border-radius: 18px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+      border: 1px solid var(--line);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 12px 30px -12px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03);
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      cursor: pointer;
+      min-height: 130px;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel:hover {
+      border-color: rgba(166,243,255,0.5);
+      box-shadow: 0 16px 32px -14px rgba(91,140,255,0.35), 0 0 0 1px rgba(0,0,0,0.3) inset;
+      transform: translateY(-3px) scale(1.01);
+    }
+    .panel.active {
+      border-color: var(--vaylo-cyan);
+      box-shadow: 0 0 0 1px var(--vaylo-cyan) inset, 0 20px 40px -16px rgba(166,243,255,0.45);
+    }
+    .panel.active .panel-led {
+      background: var(--vaylo-cyan);
+      box-shadow: 0 0 12px var(--vaylo-cyan);
+      transform: scale(1.1);
+    }
+
+    .panel-led {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .panel-gauges {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: inherit;
+    }
+    .panel-gauge {
+      position: absolute;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      border: 1px solid rgba(166,243,255,0.16);
+      top: -22px;
+      right: -22px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.3) inset, 0 0 20px rgba(91,140,255,0.08);
+    }
+    .panel-meter {
+      position: absolute;
+      inset: 2px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--vaylo-cyan);
+      border-right-color: rgba(166,243,255,0.4);
+      animation: spin 8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .panel-media {
+      position: absolute;
+      inset: 14px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(10,12,24,0.7), rgba(12,14,26,0.9));
+      border: 1px solid rgba(166,243,255,0.18);
+      box-shadow: 0 0 24px rgba(91,140,255,0.12) inset, 0 0 0 1px rgba(0,0,0,0.4) inset;
+      overflow: hidden;
+    }
+    .panel-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .panel-media .med-fx {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(166,243,255,0.04), transparent 25%, transparent 70%, rgba(10,12,24,0.5));
+      pointer-events: none;
+    }
+    .panel-media .med-line {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(166,243,255,0.12) 0 1px, transparent 1px 32px);
+      mix-blend-mode: overlay;
+      opacity: 0.5;
+    }
+
+    .panel-foot {
+      position: relative;
+      padding: 14px 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 2;
+    }
+    .panel-top {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-tag {
+      font-size: 10px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(91,140,255,0.14);
+      color: var(--vaylo-cyan);
+      border: 1px solid rgba(91,140,255,0.25);
+    }
+
+    .panel-name {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.2px;
+      color: var(--vaylo-text);
+    }
+    .panel-state {
+      font-size: 11px;
+      color: var(--vaylo-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .panel-state .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--vaylo-cyan);
+      box-shadow: 0 0 8px var(--vaylo-cyan);
+      animation: pulse-dot 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    .panel-state.stopped .dot { animation: none; background: #5b6480; box-shadow: none; }
+    .panel-state.done .dot { background: #7edc8f; box-shadow: 0 0 8px #7edc8f; animation: none; }
+
+    .panel-note {
+      font-size: 11px;
+      color: var(--vaylo-muted);
+      margin-top: 2px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      padding-top: 6px;
+    }
+
+    .core {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 200px;
+      height: 200px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 5;
+    }
+    .core-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(166,243,255,0.18) 0%, rgba(91,140,255,0.05) 55%, transparent 75%);
+      box-shadow: 0 0 60px rgba(91,140,255,0.25), 0 0 0 1px rgba(166,243,255,0.2);
+      animation: ring-pulse 4s ease-in-out infinite alternate;
+    }
+    @keyframes ring-pulse {
+      0% { box-shadow: 0 0 40px rgba(166,243,255,0.15), 0 0 0 1px rgba(166,243,255,0.15); }
+      100% { box-shadow: 0 0 80px rgba(166,243,255,0.3), 0 0 0 1px rgba(166,243,255,0.4); }
+    }
+    .core-brain {
+      position: absolute;
+      inset: 26px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 35%, #2a1f5a, #100d26 80%);
+      border: 1px solid rgba(166,243,255,0.35);
+      box-shadow: 0 0 40px rgba(166,243,255,0.25) inset, 0 0 0 1px rgba(0,0,0,0.4) inset;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: var(--vaylo-cyan);
+      text-transform: uppercase;
+    }
+    .core-halo {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      width: 80px;
+      height: 80px;
+      transform: translate(-50%, -100%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,95,200,0.7), rgba(255,95,200,0) 70%);
+      filter: blur(10px);
+      animation: halo-float 3s ease-in-out infinite alternate;
+    }
+    @keyframes halo-float {
+      0% { transform: translate(-50%, -100%) scale(1); opacity: 0.7; }
+      100% { transform: translate(-50%, -115%) scale(1.15); opacity: 1; }
+    }
+    .core-label {
+      position: absolute;
+      bottom: -34px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--vaylo-muted);
+      white-space: nowrap;
+      background: var(--glass);
+      border: 1px solid var(--line);
+      padding: 4px 12px;
+      border-radius: 999px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .links {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .link {
+      position: absolute;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(166,243,255,0.55), rgba(91,140,255,0.15));
+      transform-origin: left center;
+      box-shadow: 0 0 6px rgba(166,243,255,0.25);
+    }
+
+    .rail {
+      position: relative;
+      max-width: 1180px;
+      margin: 22px auto 0;
+      padding: 0 4px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .rail-card {
+      background: var(--glass);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .rail-head {
+      font-size: 11px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--vaylo-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .handle {
+      font-size: 12px;
+      color: var(--vaylo-text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--line);
+      margin: 4px 0;
+      display: inline-block;
+    }
+    .handle strong { color: var(--vaylo-cyan); }
+
+    .footer-bar {
+      max-width: 1180px;
+      margin: 36px auto 0;
+      padding: 0 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      color: var(--vaylo-muted);
+      font-size: 12px;
+    }
+    .btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--line-strong);
+      color: var(--vaylo-text);
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .btn:hover {
+      background: rgba(255,255,255,0.09);
+      border-color: rgba(166,243,255,0.4);
+    }
+    .btn-ghost { background: transparent; border-color: var(--line); }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translate(-50%, 16px);
+      background: rgba(10,12,24,0.92);
+      border: 1px solid var(--line-strong);
+      padding: 10px 16px;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      font-size: 13px;
+      color: var(--vaylo-text);
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+      z-index: 50;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    @media (max-width: 860px) {
+      .stage { aspect-ratio: auto; min-height: 460px; }
+      .scene { transform: perspective(700px) rotateX(30deg) rotateZ(-22deg); }
+      .rail { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="studio">
+    <header class="studio-head">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="brand-line">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Vaylo Sports</span>
+        </div>
+        <div>
+          <div class="studio-title">Ad Studio</div>
+          <div class="studio-sub">A live frozen scene of the workflow — tap any panel to see what it is doing now.</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-num" id="views">12,925,891</div>
+          <div class="stat-label">Views</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="posts">810</div>
+          <div class="stat-label">Posts</div>
+        </div>
+      </div>
+    </header>
+
+    <section class="stage" id="stage" aria-label="Workflow studio frozen scene">
+      <div class="floor" aria-hidden="true"></div>
+      <div class="grid-ring" aria-hidden="true"></div>
+      <div class="links" id="links" aria-hidden="true"></div>
+
+      <div class="scene" role="group" aria-label="Workflow panels">
+        <article class="panel" data-panel="trend-scout" tabindex="0">
+          <span class="panel-led"></span>
+          <div class="panel-gauges"><div class="panel-gauge"><div class="panel-meter"></div></div></div>
+          <div class="panel-media">
+            <img src="https://picsum.photos/seed/trend/360/200" alt="Trend scout preview" loading="lazy" />
+            <div class="med-fx"></div>
+            <div class="med-line"></div>
+          </div>
+          <div class="panel-top">
+            <span class="panel-tag">Research</span>
+            <span style="font-size:10px;color:var(--vaylo-muted)">0:04</span>
+          </div>
+          <div class="panel-foot">
+            <div class="panel-name">Trend Scout</div>
+            <div class="panel-state"><span class="dot"></span> Scanning hooks</div>
+            <div class="panel-note">12 rising clips this hour</div>
+          </div>
+        </article>
+
+        <article class="panel active" data-panel="script-writer" tabindex="0">
+          <span class="panel-led"></span>
+          <div class="panel-gauges"><div class="panel-gauge"><div class="panel-meter"></div></div></div>
+          <div class="panel-media">
+            <img src="https://picsum.photos/seed/script/360/200" alt="Script writer draft" loading="lazy" />
+            <div class="med-fx"></div>
+            <div class="med-line"></div>
+          </div>
+          <div class="panel-top">
+            <span class="panel-tag">Scripting</span>
+            <span style="font-size:10px;color:var(--vaylo-muted)">1:18</span>
+          </div>
+          <div class="panel-foot">
+            <div class="panel-name">Script Writer</div>
+            <div class="panel-state"><span class="dot"></span> Writing Reel 278</div>
+            <div class="panel-note">Brand voice locked</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="thumbnails" tabindex="0">
+          <span class="panel-led"></span>
+          <div class="panel-gauges"><div class="panel-gauge" style="top:-26px;right:-26px;width:110px;height:110px"><div class="panel-meter" style="border-top-color:var(--vaylo-magenta);border-right-color:rgba(255,95,200,0.4);animation-duration:5s"></div></div></div>
+          <div class="panel-media">
+            <img src="https://picsum.photos/seed/thumb/360/200" alt="Thumbnail grid" loading="lazy" />
+            <div class="med-fx"></div>
+            <div class="med-line"></div>
+          </div>
+          <div class="panel-top">
+            <span class="panel-tag">Publishing</span>
+            <span style="font-size:10px;color:var(--vaylo-muted)">3</span>
+          </div>
+          <div class="panel-foot">
+            <div class="panel-name">Thumbnails</div>
+            <div class="panel-state"><span class="dot"></span> A/B running</div>
+            <div class="panel-note">Reel 278 variants</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="captions" tabindex="0">
+          <span class="panel-led"></span>
+          <div class="panel-gauges"><div class="panel-gauge"><div class="panel-meter" style="border-top-color:var(--vaylo-magenta);border-right-color:rgba(255,95,200,0.4);animation-duration:6s"></div></div></div>
+          <div class="panel-media">
+            <img src="https://picsum.photos/seed/caption/360/200" alt="Caption editor" loading="lazy" />
+            <div class="med-fx"></div>
+            <div class="med-line"></div>
+          </div>
+          <div class="panel-top">
+            <span class="panel-tag">Editing</span>
+            <span style="font-size:10px;color:var(--vaylo-muted)">0:52</span>
+          </div>
+          <div class="panel-foot">
+            <div class="panel-name">Captions</div>
+            <div class="panel-state"><span class="dot"></span> Styling hooks</div>
+            <div class="panel-note">Safe-read pass</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="competitor-watch" tabindex="0" style="grid-column:1;grid-row:1;align-self:end;justify-self:start;width:86px;min-height:96px;padding:10px;flex-direction:column;gap:4px">
+          <span class="panel-led" style="top:8px;left:8px;width:6px;height:6px"></span>
+          <div class="panel-media" style="inset:30px 8px 8px;height:44px;border-radius:8px">
+            <img src="https://picsum.photos/seed/comp/120/60" alt="Competitor feed" loading="lazy" style="border-radius:8px" />
+            <div class="med-fx"></div>
+          </div>
+          <div class="panel-foot" style="padding:6px 8px">
+            <div class="panel-name" style="font-size:10px">Competitor Watch</div>
+            <div class="panel-state stopped" style="font-size:9px">idle</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="hook-writer" tabindex="0" style="grid-column:2;grid-row:1;align-self:end;justify-self:end;width:86px;min-height:96px;padding:10px;flex-direction:column;gap:4px">
+          <span class="panel-led" style="top:8px;left:8px;width:6px;height:6px"></span>
+          <div class="panel-media" style="inset:30px 8px 8px;height:44px;border-radius:8px">
+            <img src="https://picsum.photos/seed/hook/120/60" alt="Hook card" loading="lazy" style="border-radius:8px" />
+            <div class="med-fx"></div>
+          </div>
+          <div class="panel-foot" style="padding:6px 8px">
+            <div class="panel-name" style="font-size:10px">Hook Writer</div>
+            <div class="panel-state" style="font-size:9px"><span class="dot"></span> typing</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="dm-closer" tabindex="0" style="grid-column:1;grid-row:2;align-self:start;justify-self:start;width:86px;min-height:96px;padding:10px;flex-direction:column;gap:4px">
+          <span class="panel-led" style="top:8px;left:8px;width:6px;height:6px"></span>
+          <div class="panel-media" style="inset:30px 8px 8px;height:44px;border-radius:8px">
+            <img src="https://picsum.photos/seed/dm/120/60" alt="DM inbox" loading="lazy" style="border-radius:8px" />
+            <div class="med-fx"></div>
+          </div>
+          <div class="panel-foot" style="padding:6px 8px">
+            <div class="panel-name" style="font-size:10px">DM Closer</div>
+            <div class="panel-state" style="font-size:9px"><span class="dot"></span> replying</div>
+          </div>
+        </article>
+
+        <article class="panel" data-panel="voice-check" tabindex="0" style="grid-column:2;grid-row:2;align-self:start;justify-self:end;width:86px;min-height:96px;padding:10px;flex-direction:column;gap:4px">
+          <span class="panel-led" style="top:8px;left:8px;width:6px;height:6px"></span>
+          <div class="panel-media" style="inset:30px 8px 8px;height:44px;border-radius:8px">
+            <img src="https://picsum.photos/seed/voice/120/60" alt="Voice check meter" loading="lazy" style="border-radius:8px" />
+            <div class="med-fx"></div>
+          </div>
+          <div class="panel-foot" style="padding:6px 8px">
+            <div class="panel-name" style="font-size:10px">Voice Check</div>
+            <div class="panel-state done" style="font-size:9px">pass</div>
+          </div>
+        </article>
+
+        <div class="core" aria-hidden="true">
+          <div class="core-halo"></div>
+          <div class="core-ring"></div>
+          <div class="core-brain">BRAND BRAIN</div>
+          <div class="core-label">Chief of Staff</div>
+        </div>
+      </div>
+
+      <div class="vignette" aria-hidden="true"></div>
+    </section>
+
+    <div class="rail">
+      <div class="rail-card">
+        <div class="rail-head"><span>Inbox / Team</span><span style="font-size:10px;letter-spacing:1px">41</span></div>
+        <div>
+          <span class="handle"><strong>@colton.ai</strong></span>
+          <span class="handle"><strong>@dean</strong></span>
+          <span class="handle"><strong>@lakedavidson</strong></span>
+          <span class="handle"><strong>@keanpurvis</strong></span>
+        </div>
+      </div>
+      <div class="rail-card">
+        <div class="rail-head"><span>Publishing Queue</span><span style="font-size:10px;letter-spacing:1px">3 queued</span></div>
+        <div>
+          <span class="handle"><strong>Lead Lopper</strong></span>
+          <span class="handle"><strong>DM Closer</strong></span>
+          <span class="handle"><strong>Comment Replays</strong></span>
+          <span class="handle"><strong>Group-Poster</strong></span>
+          <span class="handle"><strong>Scheduler</strong></span>
+          <span class="handle"><strong>Thumbnails</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" id="reset" type="button">Reset scene</button>
+        <button class="btn btn-ghost" type="button">View workflow</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span style="color:var(--vaylo-muted)">Reel 278 · Scripting</span>
+        <span style="color:var(--vaylo-cyan);font-weight:700">animate</span>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script>
+    (function () {
+      const panels = Array.from(document.querySelectorAll('[data-panel]'));
+      const linksLayer = document.getElementById('links');
+      const stage = document.getElementById('stage');
+      const toast = document.getElementById('toast');
+      let toastTimer;
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+      }
+
+      function buildLinks() {
+        linksLayer.innerHTML = '';
+        const center = stage.getBoundingClientRect();
+        const centerX = center.width / 2;
+        const centerY = center.height / 2;
+        for (const p of panels) {
+          const r = p.getBoundingClientRect();
+          const ax = r.left + r.width / 2 - center.left;
+          const ay = r.top + r.height / 4 - center.top;
+          const len = Math.hypot(ax - centerX, ay - centerY);
+          const angle = Math.atan2(ay - centerY, ax - centerX) * (180 / Math.PI);
+          const line = document.createElement('div');
+          line.className = 'link';
+          line.style.left = centerX + 'px';
+          line.style.top = centerY + 'px';
+          line.style.width = len + 'px';
+          line.style.transform = 'rotate(' + angle + 'deg)';
+          linksLayer.appendChild(line);
+        }
+      }
+
+      const states = {
+        'trend-scout': { name: 'Trend Scout', state: 'Scanning hooks', note: '12 rising clips this hour' },
+        'script-writer': { name: 'Script Writer', state: 'Writing Reel 278', note: 'Brand voice locked' },
+        'thumbnails': { name: 'Thumbnails', state: 'A/B running', note: 'Reel 278 variants' },
+        'captions': { name: 'Captions', state: 'Styling hooks', note: 'Safe-read pass' },
+        'competitor-watch': { name: 'Competitor Watch', state: 'Idle', note: 'Catching up' },
+        'hook-writer': { name: 'Hook Writer', state: 'Typing hooks', note: '3 drafts' },
+        'dm-closer': { name: 'DM Closer', state: 'Replying', note: '5 open threads' },
+        'voice-check': { name: 'Voice Check', state: 'Pass', note: 'Ready' }
+      };
+
+      function activate(panelId) {
+        const p = document.querySelector('[data-panel="' + panelId + '"]');
+        if (!p) return;
+        panels.forEach(x => x.classList.remove('active'));
+        p.classList.add('active');
+        const info = states[panelId] || {};
+        showToast('Now watching: ' + (info.name || panelId) + ' — ' + (info.state || 'active'));
+      }
+
+      panels.forEach(p => {
+        const id = p.getAttribute('data-panel');
+        p.addEventListener('click', () => activate(id));
+        p.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            activate(id);
+          }
+        });
+      });
+
+      document.getElementById('reset').addEventListener('click', () => {
+        panels.forEach(x => x.classList.remove('active'));
+        showToast('Scene reset');
+      });
+
+      if (document.readyState === 'complete') {
+        buildLinks();
+      } else {
+        window.addEventListener('load', buildLinks);
+      }
+      window.addEventListener('resize', buildLinks);
+    })();
+  </script>
+</body>
+</html>

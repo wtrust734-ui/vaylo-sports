@@ -9,6 +9,7 @@ import { getCurrentStreak as getRecoveryStreak } from "@/lib/recoveryStreak";
 import VprHero from "@/components/vpr/VprHero";
 import { SectionHeader, Delta, Metric } from "@/components/ui/section";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
+import StreakCard from "@/components/streaks/StreakCard";
 import StarterOfferCard from "@/components/dashboard/StarterOfferCard";
 import RaceOfferCard from "@/components/dashboard/RaceOfferCard";
 import { usePersonalization } from "@/hooks/usePersonalization";
@@ -166,6 +167,8 @@ const Index = () => {
       </header>
 
       <StarterOfferCard />
+
+      <StreakCard />
 
       <RaceOfferCard />
 

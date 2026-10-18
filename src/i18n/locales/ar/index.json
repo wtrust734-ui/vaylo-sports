@@ -49,7 +49,9 @@
     "recoveryCheckIn": "تسجيل الاستشفاء",
     "recoveryCheckInDesc": "النوم، التعب العضلي، الجاهزية",
     "logMetric": "تسجيل مقياس",
-    "logMetricDesc": "اختبارات السرعة والقوة والتحمل"
+    "logMetricDesc": "اختبارات السرعة والقوة والتحمل",
+    "openCollection": "المجموعة",
+    "openCollectionDesc": "جرّب الإطلالات والحزم ومجموعات الموسم"
   },
   "hub": {
     "brand": "فايلو",

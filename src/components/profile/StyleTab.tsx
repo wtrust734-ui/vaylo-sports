@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Check, Coins, Loader2, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowRight, Check, Coins, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/i18n/format";
@@ -23,9 +24,9 @@ const RARITY_ORDER: Rarity[] = ["common", "rare", "epic", "legendary"];
 
 interface StyleTabProps {
   /**
-   * Opens the existing full-sheet shop for a slot. The tab is the browse-and-
-   * understand surface; deep flows (top-up → buy, equip from a slot deep in
-   * the list) keep the sheet so the Profile page stays short.
+   * Opens the full shop. This used to open the in-page CosmeticShop sheet;
+   * Profile now routes it to /collection — one catalogue, not two surfaces.
+   * Deep flows (top-up → buy, per-slot deep link) live there too.
    */
   onOpenSheet: () => void;
 }
@@ -62,6 +63,7 @@ interface StyleTabProps {
  * applies here — the tab cannot claim a more permissive bargain than the sheet.
  */
 export default function StyleTab({ onOpenSheet }: StyleTabProps) {
+  const navigate = useNavigate();
   const { profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const { defs, ownedIds, equipped, loading, buy, equip, unequip, equippedDefs } = useCosmetics();
@@ -167,9 +169,9 @@ export default function StyleTab({ onOpenSheet }: StyleTabProps) {
               onClick={onOpenSheet}
               className="inline-flex items-center gap-1 text-[12px] font-bold text-primary"
             >
-              <Sparkles size={11} /> Full sheet
+              <Sparkles size={11} /> Full shop
             </button>
-            {/* the sheet keeps the deep flows: top-up → buy, per-slot deep link */}
+            {/* the shop route keeps the deep flows: top-up → buy, per-slot deep link */}
           </div>
         </div>
       </div>
@@ -192,6 +194,17 @@ export default function StyleTab({ onOpenSheet }: StyleTabProps) {
             ? "Everything on offer for this profile slot is already yours."
             : "Cosmetics are virtual items with no cash value, and they stay yours while your account is open."}
         </p>
+        {/* The full Collection — seasonal sets, bundles and everything earned,
+            none of which this per-slot browse shows. Without this link the tab
+            was a dead end for anyone who wanted to see all of it. */}
+        <button
+          type="button"
+          onClick={() => navigate("/collection")}
+          className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold text-primary"
+        >
+          Browse the full Collection
+          <ArrowRight size={12} />
+        </button>
       </div>
 
       {/* ── Slot tabs ──────────────────────────────────────────────────────── */}

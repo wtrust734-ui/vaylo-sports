@@ -1,6 +1,7 @@
 interface PlanWeek { week: number; sessions?: DaySession[]; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
+import { claimStreakDay } from "@/lib/streakRewards";
 import { currentWeekOf } from "@/lib/planSchedule";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -149,6 +150,19 @@ const DailyTrainingCard = () => {
   const isRecoveryDay = session?.isRecovery;
   const isTrainingDay = session && !isRestDay && !isRecoveryDay;
   const noSession = !session && !!activePlan;
+
+  // Streak: a scheduled rest (or active-recovery) day qualifies WITHOUT
+  // exercise. The server re-validates that today's session in the active plan
+  // really is rest/recovery before it records anything, and reclaims are
+  // idempotent — this effect cannot fabricate a day or farm it repeatedly.
+  const restClaimRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || !isRestDay) return;
+    const day = today;
+    if (restClaimRef.current === day) return;
+    restClaimRef.current = day;
+    void claimStreakDay("rest_day", day, day);
+  }, [user, isRestDay, today]);
   const totalDayMinutes = isTrainingDay ? (session.duration_minutes + 20) : 0;
   const zoneDot = readiness !== null ? getZoneDot(readiness) : null;
   // Whether the day-summary grid has anything real to show. A brand-new athlete

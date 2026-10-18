@@ -49,7 +49,9 @@
     "recoveryCheckIn": "恢复签到",
     "recoveryCheckInDesc": "睡眠、酸痛、状态",
     "logMetric": "记录指标",
-    "logMetricDesc": "速度、力量、耐力测试"
+    "logMetricDesc": "速度、力量、耐力测试",
+    "openCollection": "收藏",
+    "openCollectionDesc": "试穿造型、捆绑包和赛季套装"
   },
   "hub": {
     "brand": "Vaylo Sports",

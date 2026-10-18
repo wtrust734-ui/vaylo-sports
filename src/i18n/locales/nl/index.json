@@ -49,7 +49,9 @@
     "recoveryCheckIn": "Herstel-check-in",
     "recoveryCheckInDesc": "Slaap, spierpijn, paraatheid",
     "logMetric": "Metriek vastleggen",
-    "logMetricDesc": "Tests voor snelheid, kracht, uithoudingsvermogen"
+    "logMetricDesc": "Tests voor snelheid, kracht, uithoudingsvermogen",
+    "openCollection": "Collectie",
+    "openCollectionDesc": "Probeer looks, bundels en seizoenssets"
   },
   "hub": {
     "brand": "Vaylo Sports",

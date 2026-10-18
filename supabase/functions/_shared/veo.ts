@@ -33,7 +33,6 @@ export type VeoResolution = "720p" | "1080p";
  * surfaced, never as a quote.
  */
 export const VEO_COST_PER_SECOND: Record<string, number> = {
-  "veo-3.1-lite-generate-preview": 0.03,
   "veo-3.1-fast-generate-preview": 0.15,
   "veo-3.1-generate-preview": 0.4,
 };
@@ -46,7 +45,7 @@ export const VEO_COST_PER_SECOND: Record<string, number> = {
  * consent prompt becomes a lie, and it must not be estimated at the most
  * expensive tier either, which would scare a user off a cheap render.
  */
-export const DEFAULT_VEO_MODEL = "veo-3.1-lite-generate-preview";
+export const DEFAULT_VEO_MODEL = "veo-3.1-generate-preview";
 
 /** Veo accepts a fixed set of clip lengths. Anything else is rejected. */
 export const VEO_DURATIONS = [4, 6, 8] as const;

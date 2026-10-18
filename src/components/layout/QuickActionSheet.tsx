@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, X, Trophy, HeartPulse, Pencil } from "lucide-react";
+import { Plus, X, Trophy, HeartPulse, Pencil, Palette } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import type { FeatureKey } from "@/lib/personalization/features";
@@ -10,6 +10,11 @@ const ACTIONS = [
   { icon: Trophy, labelKey: "quickActions.logResult", descKey: "quickActions.logResultDesc", path: "/events", feature: "compete.events" as FeatureKey },
   { icon: HeartPulse, labelKey: "quickActions.recoveryCheckIn", descKey: "quickActions.recoveryCheckInDesc", path: "/recovery", feature: "recover.recovery" as FeatureKey },
   { icon: Pencil, labelKey: "quickActions.logMetric", descKey: "quickActions.logMetricDesc", path: "/vpr", feature: "perform.vpr" as FeatureKey },
+  // The Collection's third door. It existed only in the desktop sidebar and one
+  // personalised hub entry — neither of which a phone can open — so the
+  // cosmetics work had no path from the mobile UI at all. Same feature gate as
+  // the sidebar's own Collection entry (nav.ts groupYou).
+  { icon: Palette, labelKey: "quickActions.openCollection", descKey: "quickActions.openCollectionDesc", path: "/collection", feature: "perform.goals" as FeatureKey },
 ] as const;
 
 const QuickActionSheet = () => {

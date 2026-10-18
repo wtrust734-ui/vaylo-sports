@@ -3,23 +3,32 @@
   "version": 2,
   "builds": [
     {
-      "src": "dist-web/**/*.js",
-      "use": "@vercel/static-build",
-      "config": {
-        "includeFiles": "dist-web/**"
-      }
+      "src": "website/**/*.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "website/**/*.txt",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "website/**/*.json",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "dist-web/index.html"
-    }
+    { "src": "/", "dest": "/website/index.html" },
+    { "src": "/robots.txt", "dest": "/website/robots.txt" },
+    { "src": "/site.json", "dest": "/website/site.json" },
+    { "src": "/(.*)", "dest": "/website/index.html" }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "outputDirectory": "dist-web",
-  "installCommand": null,
-  "buildCommand": null
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
 }
