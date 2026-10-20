@@ -135,7 +135,7 @@ export default function AdminWaitlist() {
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-3xl mx-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2">
             <Mail className="h-6 w-6 text-electric-purple" /> Waiting list
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

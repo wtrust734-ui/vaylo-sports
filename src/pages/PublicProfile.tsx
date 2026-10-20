@@ -212,7 +212,10 @@ const PublicProfile = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <button onClick={() => navigate(-1)} className="absolute top-4 left-4 z-10 p-2 rounded-xl bg-card/80 border border-border"><ArrowLeft size={18} /></button>
+      {/* Absolute on purpose — it floats over the hero gradient. The inset-aware
+          max() is required because `absolute` escapes the body's inset padding,
+          and a fixed top-4 would put the button under a notched status bar. */}
+      <button onClick={() => navigate(-1)} className="absolute top-[max(0.75rem,var(--vaylo-inset-top))] left-3 z-10 p-2 rounded-xl bg-card/80 border border-border min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={18} /></button>
 
       <div className="bg-gradient-card border-b border-primary/20 px-5 pt-16 pb-6">
         <div className="flex items-center gap-4">

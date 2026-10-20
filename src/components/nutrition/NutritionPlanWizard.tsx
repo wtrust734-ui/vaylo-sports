@@ -25,6 +25,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, Sparkles, X } from "lucide-react";
 
 import { DISCLAIMERS, disclaimerShort } from "@/config/disclaimers";
+import PlanWaitEstimate from "@/components/training/PlanWaitEstimate";
 import { earliestDob } from "@/lib/age";
 import {
   ACTIVITY_LEVELS,
@@ -512,6 +513,11 @@ export default function NutritionPlanWizard({ initial, age, onSaveDob, savingDob
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">{DISCLAIMERS.nutrition.full}</p>
+
+      {/* The wait is tens of seconds and the athlete can still say no here:
+          the same estimate the wait screen runs on, quoted before the ask (
+          same honesty rules — "usually" only once there is real history). */}
+      {last && <PlanWaitEstimate kind="nutrition" weeks={Math.max(1, Math.min(12, intake.weeks))} />}
 
       <div className="flex gap-2">
         {step > 0 && (

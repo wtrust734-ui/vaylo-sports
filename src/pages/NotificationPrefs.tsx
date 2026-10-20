@@ -177,7 +177,7 @@ export default function NotificationPrefs() {
 
   return (
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold flex items-center gap-2 mb-1"><Bell className="h-6 w-6 text-electric-purple" /> Notification settings</h1>
+      <h1 className="text-2xl font-display font-bold flex items-center gap-2 mb-1"><Bell className="h-6 w-6 text-electric-purple" /> Notification settings</h1>
       <p className="text-sm text-muted-foreground mb-6">Choose what we ping you about. Smart send-times prevent late-night noise.</p>
 
       <div className="p-4 rounded-2xl border border-border bg-card mb-4">

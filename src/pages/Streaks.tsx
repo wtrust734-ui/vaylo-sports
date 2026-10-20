@@ -44,7 +44,7 @@ export default function Streaks() {
   if (!user) {
     return (
       <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-2">Streaks</h1>
+        <h1 className="text-2xl font-display font-bold mb-2">Streaks</h1>
         <p className="text-sm text-muted-foreground mb-4">Sign in to start building your streak.</p>
         <Button onClick={() => navigate("/auth")}>Sign in</Button>
       </div>
@@ -62,7 +62,7 @@ export default function Streaks() {
         <ChevronLeft size={18} /> Back
       </button>
 
-      <h1 className="text-2xl font-bold flex items-center gap-2 mb-1">
+      <h1 className="text-2xl font-display font-bold flex items-center gap-2 mb-1">
         <Flame className="h-6 w-6 text-energy" /> Streaks
       </h1>
       <p className="text-sm text-muted-foreground mb-5">

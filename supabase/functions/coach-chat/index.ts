@@ -4,6 +4,7 @@ import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteD
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import { languageDirective } from "../_shared/openai.ts";
+import { terminologyDirective } from "../_shared/terminology.ts";
 import { aiCallAllowed, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective, familyForCoach } from "../_shared/coachVoice.ts";
 
@@ -202,6 +203,10 @@ serve(async (req) => {
       });
     }
     const { messages, conversationId, pbs, userLocale } = body;
+    // Prompt 9: regional terminology follows the same strict validation as
+    // everywhere else — the raw value is never echoed into the prompt.
+    const userRegion = typeof body.userRegion === "string" ? body.userRegion : undefined;
+    const regionDirective = terminologyDirective(userRegion);
     const langDirective = languageDirective(userLocale);
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages required" }), {
@@ -339,7 +344,7 @@ ${dossierBlock}`;
       body: JSON.stringify({
         model: MODELS.CHAT.MINI,
         messages: [
-          { role: "system", content: systemPrompt + (langDirective ? "\n\n" + langDirective : "") },
+          { role: "system", content: systemPrompt + (langDirective ? "\n\n" + langDirective : "") + (regionDirective ? "\n\n" + regionDirective : "") },
           ...messages,
         ],
         stream: true,

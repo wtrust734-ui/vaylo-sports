@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vaylo Ads Studio — Site Preview</title>
+<style>
+  :root { --bg:#07090f; --accent:#8505D5; --surface:rgba(255,255,255,.05); --line:rgba(255,255,255,.10); --dim:rgba(255,255,255,.6); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:#fff; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .shell { display:flex; min-height:100vh; }
+  .sidebar { width:220px; flex-shrink:0; border-right:1px solid var(--line); padding:16px 12px; }
+  .brand { display:flex; align-items:center; gap:10px; padding:8px; margin-bottom:14px; }
+  .brand .logo { width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#8505D5,#b429ff); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; }
+  .brand b { font-size:15px; display:block; }
+  .brand small { color:var(--dim); font-size:11px; }
+  .nav a { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; color:var(--dim); text-decoration:none; font-size:13.5px; cursor:pointer; }
+  .nav a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .nav a.active { background:rgba(133,5,213,.22); color:#fff; font-weight:600; }
+  .nav .ico { width:16px; text-align:center; opacity:.9; }
+  .footnote { margin-top:16px; padding:10px; font-size:10.5px; color:rgba(255,255,255,.35); border-top:1px solid var(--line); }
+  main { flex:1; overflow-y:auto; }
+  .content { max-width:760px; margin:0 auto; padding:28px 24px 60px; }
+  h2.hl { font-size:22px; font-weight:600; letter-spacing:-.2px; }
+  p.sub { color:var(--dim); font-size:13px; margin-top:4px; }
+  .card { border:1px solid var(--line); background:var(--surface); border-radius:12px; }
+  .sayhi { width:100%; text-align:left; margin-top:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--dim); font-size:13.5px; cursor:pointer; }
+  .sayhi:hover { background:rgba(255,255,255,.08); }
+  .grid2 { margin-top:24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .action { padding:16px; cursor:pointer; transition:.15s; }
+  .action:hover { background:rgba(255,255,255,.10); }
+  .action .top { display:flex; align-items:center; gap:10px; font-weight:600; font-size:14px; }
+  .action .chip { width:32px; height:32px; border-radius:8px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .action p { margin-top:8px; color:var(--dim); font-size:12px; }
+  .tiles { margin-top:24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+  .tile { padding:12px 14px; }
+  .tile .lbl { color:var(--dim); font-size:11.5px; }
+  .tile .val { font-size:20px; font-weight:600; margin-top:4px; }
+  .recent { margin-top:24px; padding:16px; }
+  .recent h3 { font-size:13px; font-weight:600; margin-bottom:10px; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-radius:8px; font-size:13.5px; cursor:pointer; }
+  .row:hover { background:rgba(255,255,255,.06); }
+  .row .meta { color:rgba(255,255,255,.45); font-size:12px; display:flex; gap:8px; align-items:center; }
+  .pill { font-size:10px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
+  .pill.ok { border-color:rgba(74,222,128,.4); color:#4ade80; }
+  .pill.plan { border-color:rgba(234,179,8,.4); color:#eab308; }
+  .empty { color:rgba(255,255,255,.5); font-size:12px; padding:6px 2px; }
+  .beta { position:fixed; bottom:18px; right:18px; background:var(--accent); color:#fff; border:none; border-radius:99px; padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 6px 24px rgba(133,5,213,.45); }
+  .banner { margin-bottom:20px; padding:10px 14px; border-radius:10px; border:1px dashed rgba(133,5,213,.5); background:rgba(133,5,213,.10); font-size:11.5px; color:rgba(255,255,255,.7); }
+  .view { display:none; }
+  .view.active { display:block; }
+  .ph { padding:28px 16px; text-align:center; color:var(--dim); }
+  .bubble { max-width:560px; margin:0 auto 14px; padding:12px 16px; border-radius:12px; font-size:13.5px; }
+  .bubble.you { background:rgba(133,5,213,.25); margin-left:auto; text-align:left; }
+  .bubble.bot { background:var(--surface); border:1px solid var(--line); }
+  .shot { margin-top:12px; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .thumb { aspect-ratio:1; border-radius:10px; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:26px; background:linear-gradient(160deg,rgba(133,5,213,.25),rgba(255,255,255,.03)); }
+  .quote { margin-top:16px; padding:14px; }
+  .quote .q { font-weight:600; font-size:13.5px; }
+  .quote p { color:var(--dim); font-size:12px; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:12px; }
+  td, th { padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:500; font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">V</div>
+      <div><b>Vaylo Ads</b><small>Beta studio</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <a data-view="home" class="active"><span class="ico">🏠</span>Home</a>
+      <a data-view="chat"><span class="ico">💬</span>Creative Assistant</a>
+      <a data-view="image"><span class="ico">🖼️</span>Image Ads</a>
+      <a data-view="video"><span class="ico">🎬</span>Video Ads</a>
+      <a data-view="research"><span class="ico">🧪</span>Competitor Research</a>
+      <a data-view="campaigns"><span class="ico">📣</span>Campaigns</a>
+      <a data-view="library"><span class="ico">🗂️</span>Asset Library</a>
+      <a data-view="brand"><span class="ico">🎨</span>Brand Settings</a>
+      <a data-view="integrations"><span class="ico">🔌</span>Integrations</a>
+    </nav>
+    <div class="footnote">Static site preview of the Vaylo ad web app.<br>Not the live app — source lives in this folder.</div>
+  </aside>
+
+  <main><div class="content">
+    <div class="banner">🧪 This is a static page that shows what the Vaylo Ads studio looks like. The real views it mirrors are in <b>studio/</b> in this folder.</div>
+
+    <!-- ============ HOME ============ -->
+    <section class="view active" id="v-home">
+      <h2 class="hl">Start with a sentence</h2>
+      <p class="sub">Type what you want in the Creative Assistant, or pick a workflow below. Nothing is generated without a cost quote and your approval.</p>
+      <button class="sayhi">e.g. “Research Strava and Runna before creating a 15-second launch video”</button>
+
+      <div class="grid2">
+        <div class="card action"><div class="top"><span class="chip">🖼️</span>Image ad</div><p>Static social ads, placements and variants</p></div>
+        <div class="card action"><div class="top"><span class="chip">🎬</span>Video ad</div><p>15–60s spots: script, shots, voiceover, export</p></div>
+        <div class="card action"><div class="top"><span class="chip">🧪</span>Research competitors</div><p>Evidence-led study before creating</p></div>
+        <div class="card action"><div class="top"><span class="chip">💬</span>Creative Assistant</div><p>Describe what you want in plain words</p></div>
+      </div>
+
+      <div class="tiles">
+        <div class="card tile"><div class="lbl">Campaigns</div><div class="val">3</div></div>
+        <div class="card tile"><div class="lbl">Assets</div><div class="val">12</div></div>
+        <div class="card tile"><div class="lbl">In planning</div><div class="val">2</div></div>
+        <div class="card tile"><div class="lbl">Approved</div><div class="val">1</div></div>
+      </div>
+
+      <div class="card recent">
+        <h3>Recent campaigns</h3>
+        <div class="row"><span>Spring Trail Launch — hero 15s</span><span class="meta"><span class="pill">instagram</span><span class="pill plan">planning</span></span></div>
+        <div class="row"><span>Runna comparison — image set</span><span class="meta"><span class="pill">meta</span><span class="pill ok">approved</span></span></div>
+        <div class="row"><span>Retargeting refresh — 4 variants</span><span class="meta"><span class="pill">tiktok</span><span class="pill plan">planning</span></span></div>
+      </div>
+    </section>
+
+    <!-- ============ CHAT ============ -->
+    <section class="view" id="v-chat">
+      <h2 class="hl">Creative Assistant</h2>
+      <p class="sub">Describe what you want in plain words — it plans, quotes costs, then asks before spending anything.</p>
+      <div class="bubble you" style="margin-top:20px">Research Strava and Runna before creating a 15-second launch video</div>
+      <div class="bubble bot">I can do that. Here's the plan I've built:
+        1️⃣ <b>Research</b> Strava + Runna (sourced) → 2️⃣ <b>Video concept</b> → 3️⃣ <b>15s Veo shots</b> → 4️⃣ <b>Voiceover</b> → 5️⃣ <b>Export</b>.
+        Estimated spend: <b>$0.42 of credits</b>. Want me to start with step 1 only?</div>
+      <div class="bubble you">Start with the research</div>
+      <div class="bubble bot">✅ Research ready — 8 sources, cited below. Want me to draft the video concept next?</div>
+    </section>
+
+    <!-- ============ IMAGE ============ -->
+    <section class="view" id="v-image">
+      <h2 class="hl">Image Ads</h2>
+      <p class="sub">Static social ads with placements, variants and composition from a brief.</p>
+      <div class="shot">
+        <div class="thumb">🖼️</div><div class="thumb">🖼️</div><div class="thumb">🖼️</div><div class="thumb">🖼️</div>
+      </div>
+      <div class="card quote">
+        <div class="q">Generate 4 variants · square + story</div>
+        <p>Estimated cost from the per-feature credit table. You approve the quote before any generation runs.</p>
+      </div>
+    </section>
+
+    <!-- ============ VIDEO ============ -->
+    <section class="view" id="v-video">
+      <h2 class="hl">Video Ads</h2>
+      <p class="sub">15–60s spots — script, shot list, Veo generation, voiceover, captions, export.</p>
+      <div class="shot">
+        <div class="thumb">🎬</div><div class="thumb">🎬</div><div class="thumb">🎬</div>
+      </div>
+      <div class="card quote">
+        <div class="q">Shots 1–3 · Veo 8s each</div>
+        <p>Quote-first spend: estimate shown before confirm, metered server-side, and a repeat confirm can't charge twice.</p>
+      </div>
+      <div class="banner">⚠️ Export to MP4 is labelled <b>unavailable</b> in beta — the render worker isn't hosted yet. Generation and metering work.</div>
+    </section>
+
+    <!-- ============ RESEARCH ============ -->
+    <section class="view" id="v-research">
+      <h2 class="hl">Competitor Research</h2>
+      <p class="sub">Evidence-led study before you create, with sourced citations.</p>
+      <table>
+        <tr><th>User</th><th>Summary</th><th>Sources</th></tr>
+        <tr><td>Strava · app</td><td>Social feeds, segment leaderboards, club challenges</td><td>8</td></tr>
+        <tr><td>Runna · app</td><td>Coach-built plans, race predictor, onboarding trial</td><td>6</td></tr>
+      </table>
+    </section>
+
+    <!-- ============ CAMPAIGNS ============ -->
+    <section class="view" id="v-campaigns">
+      <h2 class="hl">Campaigns</h2>
+      <table>
+        <tr><th>Name</th><th>Platform</th><th>Status</th></tr>
+        <tr><td>Spring Trail Launch — hero 15s</td><td>instagram</td><td><span class="pill plan">planning</span></td></tr>
+        <tr><td>Runna comparison — image set</td><td>meta</td><td><span class="pill ok">approved</span></td></tr>
+        <tr><td>Retargeting refresh — 4 variants</td><td>tiktok</td><td><span class="pill plan">planning</span></td></tr>
+      </table>
+    </section>
+
+    <!-- ============ LIBRARY / BRAND / INTEGRATIONS ============ -->
+    <section class="view" id="v-library">
+      <h2 class="hl">Asset Library</h2>
+      <div class="shot"><div class="thumb">🗂️</div><div class="thumb">🎞️</div><div class="thumb">🖼️</div><div class="thumb">🖼️</div><div class="thumb">🎞️</div><div class="thumb">🖼️</div></div>
+    </section>
+    <section class="view" id="v-brand">
+      <h2 class="hl">Brand Settings</h2>
+      <div class="card" style="padding:16px;margin-top:16px">
+        <p><b>Palette:</b> #8505D5 accent · dark navy surface</p>
+        <p style="margin-top:8px"><b>Voice:</b> energetic, first-person plural, no exclamation marks</p>
+        <p style="margin-top:8px"><b>Default disclaimer:</b> footer-safe legal line on every export</p>
+      </div>
+    </section>
+    <section class="view" id="v-integrations">
+      <h2 class="hl">Integrations</h2>
+      <div class="card quote"><div class="q">Publishing to ad platforms is not connected</div><p>If a request mentions publishing or budget, the assistant routes to an honest “can't do that yet” answer instead of pretending.</p></div>
+    </section>
+  </div></main>
+</div>
+
+<button class="beta">💬 Beta feedback</button>
+
+<script>
+  document.getElementById('nav').addEventListener('click', e => {
+    const a = e.target.closest('a'); if (!a) return;
+    document.querySelectorAll('#nav a').forEach(x => x.classList.toggle('active', x === a));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'v-' + a.dataset.view));
+    window.scrollTo(0, 0);
+  });
+</script>
+</body>
+</html>

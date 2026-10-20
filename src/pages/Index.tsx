@@ -7,9 +7,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useVprSystem } from "@/lib/vprSystem";
 import { getCurrentStreak as getRecoveryStreak } from "@/lib/recoveryStreak";
 import VprHero from "@/components/vpr/VprHero";
-import { SectionHeader, Delta, Metric } from "@/components/ui/section";
+import {
+  SectionHeader,
+  Metric,
+  Delta,
+  Chip,
+  IconBadge,
+  SlideAction,
+} from "@/components/ui/section";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
-import StreakCard from "@/components/streaks/StreakCard";
 import StarterOfferCard from "@/components/dashboard/StarterOfferCard";
 import RaceOfferCard from "@/components/dashboard/RaceOfferCard";
 import { usePersonalization } from "@/hooks/usePersonalization";
@@ -130,8 +136,8 @@ const Insights = () => {
             <ins.icon size={16} className="text-primary-foreground" aria-hidden />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[13.5px] font-medium leading-snug">{ins.text}</span>
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 text-[12px] font-bold text-primary">{ins.cta} →</span>
+            <p className="min-w-0 flex-1 text-[13.5px] leading-snug">{ins.text}</p>
+            <SlideAction path={ins.path} onClick={() => navigate(ins.path)}>{ins.cta}</SlideAction>
           </span>
         </motion.button>
       ))}
@@ -150,25 +156,20 @@ const Index = () => {
 
   return (
     <div className="min-h-screen pb-28">
-      {/* 12px below the status bar, 24px below the title block before the first
-          card — the same two values every primary view uses (--vaylo-screen-top,
-          --vaylo-title-gap). */}
       <header className="px-5 pt-[var(--vaylo-screen-top)] pb-[var(--vaylo-title-gap)]">
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3 py-1">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_hsla(142_76%_36%_/_0.8)]" />
             <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{greeting}</p>
           </div>
           <h1 className="mt-3 text-[28px] sm:text-[32px] font-display font-bold tracking-tight leading-none">
-            <span className="bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-transparent">{name}</span>
-            <span className="bg-gradient-to-r from-violet-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">.</span>
+            <span className="text-white">{name}</span>
+            <span className="ml-1 text-[28px] sm:text-[32px] font-display text-primary">.</span>
           </h1>
         </motion.div>
       </header>
 
       <StarterOfferCard />
-
-      <StreakCard />
 
       <RaceOfferCard />
 
@@ -232,7 +233,7 @@ const ReadinessStrip = () => {
             beside it is content-sized, so at 390px "Check in" was breaking
             across two lines inside its own button — a two-line pill for a
             two-word label. A control label should never wrap. */}
-        <span className="shrink-0 whitespace-nowrap rounded-xl bg-gradient-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-glow border border-white/10">{t("dashboard.checkIn")}</span>
+        <SlideAction onClick={() => navigate("/recovery")}>{t("dashboard.checkIn")}</SlideAction>
       </button>
     );
   }

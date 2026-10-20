@@ -180,6 +180,7 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
     lifeEventsRes,
     checkInsRes,
     settingsRes,
+    regionRes,
     memoriesRes,
   ] = await Promise.all([
     supabase.from("profiles").select("sport, experience_level, date_of_birth, weight_kg, height_cm, goals, full_name, sex").eq("user_id", user.id).maybeSingle(),
@@ -213,6 +214,9 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
     // not have returns an error rather than throwing, so a missing column costs
     // this section alone and the rest of the memory still builds.
     supabase.from("user_settings").select("dietary_pattern, food_dislikes, meals_per_day, training_days_per_week, typical_session_minutes, activity_level").eq("user_id", user.id).maybeSingle(),
+    // The regional terminology layer needs the athlete's country (Prompt 9):
+    // plans and coaching must use the sports language of where they train.
+    supabase.from("user_region").select("country").eq("user_id", user.id).maybeSingle(),
     // Notes the coach saved while talking to the athlete (server-written).
     supabase.from("coach_memories").select("category, key, value").eq("user_id", user.id).limit(DOSSIER_LIMITS.memories),
   ]);
@@ -251,6 +255,8 @@ export async function buildClientDossier(): Promise<Record<string, unknown>> {
   const dossier: Record<string, unknown> = {
     /** When this memory was assembled. The panel shows it; a stale dossier must not read as current. */
     builtAt: new Date().toISOString(),
+    /** Prompt 9: the athlete's region, for regional terminology in generated content. */
+    region: regionRes.data?.country ?? null,
     profile: {
       sport: profile.sport || null,
       experience_level: profile.experience_level || null,

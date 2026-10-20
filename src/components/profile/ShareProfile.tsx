@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from "react";
+import { useMemo } from "react";
 import { Medal, Star, Sparkles, Coins, Trophy, Copy, Check, Share2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCosmetics } from "@/lib/cosmetics";
@@ -60,7 +60,7 @@ export default function ProfileShareCard({
         tier?.color ? "ring-1 ring-inset ring-pill/40" : "ring-1 ring-inset ring-white/10",
         className,
       )}
-      style={tier?.color ? ({ "--pill-color": tier.color } as CSSProperties) : undefined}
+      style={tier?.color ? ({ "--pill-color": tier.color } as React.CSSProperties) : undefined}
     >
       {/* Header strip: class tier, if present. */}
       {tier && (

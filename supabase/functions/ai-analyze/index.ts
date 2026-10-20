@@ -63,7 +63,10 @@ Deno.serve(async (req) => {
       return json({ error: "Invalid type" }, 400);
     }
     if ((type === "form_analysis" || type === "calorie_scan") && !image) {
-      return json({ error: "A valid image is required for this analysis (JPEG, PNG, WebP or HEIC up to 8MB)." }, 400);
+      // The message states what the provider reads, not what a phone produces —
+      // a client that couldn't normalise a HEIC to JPEG here sees the truthful
+      // alternative (the camera button), not a format the offer never covered.
+      return json({ error: "A valid image is required for this analysis (JPEG, PNG or WebP, up to 8MB)." }, 400);
     }
 
     // Provider split, checked BEFORE the charge so an unconfigured provider

@@ -24,6 +24,14 @@ describe("launch defaults", () => {
     expect(isFlagOn("wearableSync")).toBe(true);
   });
 
+  it("keeps the pipeline admin dashboard off until its route is ready", () => {
+    // The route behind /pipeline currently ships real defects (stale v2 auth call,
+    // invalid `.select()` args, a column-name miss that silences its banner, and an
+    // icon rendered as text). It is admin-only, so the safe build decision is to hide
+    // it until the generated types catch up and the substantive defects are fixed.
+    expect(isFlagOn("pipelineDashboard")).toBe(false);
+  });
+
   it("keeps GPS tracking off", () => {
     // Nothing reads this flag any more: live-distance tracking was removed from
     // the app on 2026-10-12, so there is no control left to hide. It stays in

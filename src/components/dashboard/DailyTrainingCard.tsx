@@ -1,7 +1,6 @@
 interface PlanWeek { week: number; sessions?: DaySession[]; [key: string]: unknown }
 import { motion, useInView } from "framer-motion";
 import { localDateKey } from "@/lib/dates";
-import { claimStreakDay } from "@/lib/streakRewards";
 import { currentWeekOf } from "@/lib/planSchedule";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +9,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveBreak } from "@/hooks/useActiveBreak";
 import ActiveBreakBanner from "@/components/ActiveBreakBanner";
+import { claimStreakDay } from "@/lib/streakRewards";
 
 interface DaySession {
   day: number;
@@ -149,20 +149,21 @@ const DailyTrainingCard = () => {
   const isRestDay = session?.isRest;
   const isRecoveryDay = session?.isRecovery;
   const isTrainingDay = session && !isRestDay && !isRecoveryDay;
-  const noSession = !session && !!activePlan;
 
-  // Streak: a scheduled rest (or active-recovery) day qualifies WITHOUT
-  // exercise. The server re-validates that today's session in the active plan
-  // really is rest/recovery before it records anything, and reclaims are
-  // idempotent — this effect cannot fabricate a day or farm it repeatedly.
-  const restClaimRef = useRef<string | null>(null);
+  // Rest days qualify the streak too — claimed from the dashboard card, where
+  // the scheduled rest day is actually shown. It is a server-side ask: the RPC
+  // verifies the active plan really schedules a rest day before inserting the
+  // activity-day row, so a client guess can never mint one. Reference and day
+  // are both today — a rest day's source is the day itself.
+  const restClaimedRef = useRef("");
   useEffect(() => {
-    if (!user || !isRestDay) return;
-    const day = today;
-    if (restClaimRef.current === day) return;
-    restClaimRef.current = day;
+    if (!user || !isRestDay || breakStopsTraining) return;
+    if (restClaimedRef.current === today) return;
+    restClaimedRef.current = today;
+    const day = localDateKey();
     void claimStreakDay("rest_day", day, day);
-  }, [user, isRestDay, today]);
+  }, [user, isRestDay, breakStopsTraining, today]);
+  const noSession = !session && !!activePlan;
   const totalDayMinutes = isTrainingDay ? (session.duration_minutes + 20) : 0;
   const zoneDot = readiness !== null ? getZoneDot(readiness) : null;
   // Whether the day-summary grid has anything real to show. A brand-new athlete

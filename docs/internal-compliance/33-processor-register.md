@@ -84,57 +84,5 @@ categories honestly without that detail, which is the right balance.
 | Name the wearable providers actually supported; align the published notice | High |
 | Decide and configure transactional email, then verify delivery to the support inbox | High |
 | Complete the AI provider review before enabling any AI feature | High |
-| Review a controller/processor contract for each entry above | Medium || Assess transfers outside the UK/EEA | Medium |
-
-## 33.10 — Vaylo Sports ad-site drop
-
-**Drafted 2026-10-02. Internal. Owner: unassigned. For internal use; NOT PUBLISHED — deliberately.**
-
-This notes the inline ad-site drop for the Vaylo Sports public advertising page and the generator that keeps it current, as of today.
-
-### 1. Files in the drop folder
-
-The folder is `vaylo ad site/` in this repository. Today it contains at least these items:
-
-| File | Present | Notes |
-|---|---|---|
-| `index.html` | yes | Vaylo Sports ad landing page |
-| `_redirects` | yes | `/*	/index.html` |
-| `robots.txt` | yes | `User-agent: *
-Allow: /` |
-| `studio.inline.html` | yes | inline studio page for the ad site |
-
-Notes:
-- `index.html`, `_redirects`, `robots.txt`, and `studio.inline.html` are all present in `vaylo ad site/` as of this run.
-- The contents of each file are consistent with a minimal public advertising site for Vaylo Sports.
-- `studio.inline.html` matches the corresponding file currently in `website/`.
-
-### 2. Why it exists
-
-The ad-site drop is the public-facing advertising entry point for Vaylo Sports. It is intentionally kept simple and separate from the app build so the public page can stay stable and easy to share.
-
-### 3. How it is kept current
-
-The generator is `scripts/gen-site.cjs`. When it runs, it writes the ad-site files to `vaylo ad site/`:
-- `index.html`
-- `_redirects`
-- `robots.txt`
-- `studio.inline.html`
-
-Today the ad-site drop includes all four files. If the generator runs again, those files are regenerated, so the ad folder stays current with the generated site.
-
-### 4. Unknowns
-
-- Whether `vaylo ad site/` should contain anything beyond the four generated files listed above. Today it is a minimal ad-site drop.
-- Whether the vendor or destination links should change. The current page is a placeholder pitch.
-- Whether the deployed ad site URL should be linked here.
-
-### 5. Recommended actions
-
-- If the ad site is going to be shared live, add the real destination links and any real branding to `index.html` in the drop folder and re-run the generator.
-- If the ad site should include more than the current four files, update the generator or the drop folder accordingly.
-- If this folder should be fully mirrored from `website/`, change the generator to copy the same shape into `vaylo ad site/` on every run.
-
-### 6. Why this is internal
-
-This is a working note about a drop folder and a generator. It is not a public doc and should stay internal.
+| Review a controller/processor contract for each entry above | Medium |
+| Assess transfers outside the UK/EEA | Medium |

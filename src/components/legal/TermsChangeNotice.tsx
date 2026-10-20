@@ -165,10 +165,11 @@ const TermsChangeNotice = () => {
               ) : (
                 " an earlier version"
               )}
-              . Version {TERMS_VERSION} adds the coaching marketplace terms — how coach
-              membership and coach plans are paid for, and that coach payouts are not
-              connected yet — plus a carve-out for website card payments and clearer
-              under-18 references. Nothing about what we collect has changed.
+              . Version {TERMS_VERSION} clarifies what happens to what you send the
+              AI coach: the Terms now state plainly that sending footage, photos or
+              notes to the AI does not presently promise that the input is never
+              stored by our AI providers or never used to improve their models.
+              Nothing about what we collect or who sees your data has changed.
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">

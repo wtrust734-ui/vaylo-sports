@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 
 import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
+import { clearPlanGenerationHistory, recordPlanGenerationMs } from "@/lib/planTiming";
 
 const bar = () => screen.getByRole("progressbar");
 const percent = () => Number(bar().getAttribute("aria-valuenow"));
@@ -109,13 +110,32 @@ describe("the plan generation progress panel", () => {
     expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/about \d+s left/i)).not.toBeInTheDocument();
     // The header renders in both the overlay headline and the status card.
-    expect(screen.getAllByText(/usually about \d+s/i).length).toBeGreaterThanOrEqual(1);
+    // With no recorded history on this device, the quote is honest about being
+    // an estimate: "usually" is a claim about measurements the app cannot
+    // make, so without measurements it says "estimated".
+    expect(screen.getAllByText(/estimated at about \d+s/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/usually about \d+s/i)).not.toBeInTheDocument();
     expect(screen.getByText(/\d+s so far/i)).toBeInTheDocument();
 
     // Well past 1.5× (≈57s): "longer than usual", still no countdown.
     advance(60);
     expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
+  });
+
+  it("quotes recorded history as 'usually', because that is what a measurement is", () => {
+    // Seed enough calibrated successful runs of the same shape that the
+    // estimate switches source, then assert the header says the measured
+    // thing — the switch from "estimated" to "usually" is the visible proof
+    // the historical timing is actually used.
+    clearPlanGenerationHistory();
+    for (let i = 0; i < 3; i++) {
+      recordPlanGenerationMs({ kind: "training", weeks: 6, ms: (25 + i) * 1000, outcome: "ok", at: Date.now() + i });
+    }
+    const utils = renderWith(<PlanGenerationProgress weeks={6} />);
+    expect(screen.getAllByText(/usually about \d+s/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/estimated at about \d+s/i)).not.toBeInTheDocument();
+    clearPlanGenerationHistory();
   });
 
   it("shows elapsed seconds in the headline instead of a fabricated percent", () => {

@@ -161,6 +161,20 @@ describe("mobile overflow regression", () => {
     expect(coach).not.toMatch(/bottom-tab/);
   });
 
+  it("does not treat a banner in another referenced source tree as this app's overflow defect", () => {
+    // Some referenced walk artifacts render their own header banners (for example a
+    // manus-skill-skeleton style header). Those files live outside this app's
+    // tsconfig, so they are not part of this app's mobile-overflow surface and their
+    // banners are not this app's bug. This guard exists so a future copy/paste of the
+    // scoped walk directory does not silently widen this app's scanner into that other
+    // tree by accident.
+    // A malformed double-arrow ((f) => file => …) turned this guard into a
+    // no-op that passed every file and the guard asserted nothing. Restored
+    // predicate: every scanned path must live under src/.
+    const allScanned = files.filter((file) => !file.startsWith(SRC));
+    expect(allScanned).toEqual([]);
+  });
+
   it("keeps long AI replies wrappable", () => {
     // A long unbroken token in a flex item with the default min-width:auto
     // sets the item's floor and drags the row wider than the screen.

@@ -11,6 +11,8 @@ import { AUDIENCE_COPY, ageBand, earliestDob, validateDob } from "@/lib/age";
 import { localDateKey } from "@/lib/dates";
 import CountrySelect from "@/components/geo/CountrySelect";
 import { continentFor, countryName, currencyFor, normaliseCountryCode } from "@/lib/geo";
+import { setRegionCountry, sportDisplayName } from "@/i18n/region";
+import { refreshFormattingLocale } from "@/i18n/format";
 import { EQUIPMENT, describeEquipment, normaliseEquipment, type EquipmentId } from "@/config/equipment";
 import { isAndroid } from "@/lib/platform";
 import { isFlagOn } from "@/config/featureFlags";
@@ -202,8 +204,12 @@ export default function Onboarding() {
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" },
-        );
-        if (regionError) throw regionError;
+        );        if (regionError) throw regionError;
+        // The regional layer (terminology, units, formatting) becomes live
+        // immediately at signup — the athlete's own choice, not the device
+        // suggestion, is what every AI call and screen should see.
+        setRegionCountry(countryCode);
+        refreshFormattingLocale();
       }
 
       await refreshProfile();
@@ -265,10 +271,11 @@ export default function Onboarding() {
 
             {cur.key === "sport" && (
               <div className="grid grid-cols-2 gap-2">
+                {/* Stored value stays canonical; the label is the regional display name. */}
                 {SPORTS.map((s) => (
                   <button key={s} onClick={() => setData({ ...data, sport: s })}
                     className={`p-3 rounded-xl border text-sm font-medium transition ${data.sport === s ? "bg-electric-purple/20 border-electric-purple" : "border-border bg-card hover:border-electric-purple/40"}`}>
-                    {s}
+                    {sportDisplayName(s)}
                   </button>
                 ))}
               </div>

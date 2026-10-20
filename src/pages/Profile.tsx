@@ -3,12 +3,12 @@ import { motion, useInView } from "framer-motion";
 import {
   User,
   Users,
+  Medal,
   Settings,
   ChevronRight,
   Zap,
   Globe,
   LogOut,
-  Medal,
   Ruler,
   Weight,
   Target,
@@ -16,13 +16,7 @@ import {
   Trash2,
   MapPin,
   MessageCircle,
-  Scale,
-  Bell,
-  Watch,
-  FileText,
-  ShieldCheck,
-  Flame,
-  Gift,
+  Palette,
 } from "lucide-react";
 import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,11 +27,9 @@ import { formatSports } from "@/lib/profile";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
 import PersonalizationSetting from "@/components/settings/PersonalizationSetting";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { isAndroid } from "@/lib/platform";
-import { isFlagOn } from "@/config/featureFlags";
-import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
-import XpSummaryCard from "@/components/xp/XpSummaryCard";
 import CountrySelect from "@/components/geo/CountrySelect";
+import { setRegionCountry, sportDisplayName } from "@/i18n/region";
+import { refreshFormattingLocale } from "@/i18n/format";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
 import {
@@ -46,12 +38,147 @@ import {
   currencyFor,
   normaliseCountryCode,
 } from "@/lib/geo";
+import { Bell, FileText, Scale, ShieldCheck, Watch } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
-import ProfilePicture from "@/components/profile/ProfilePicture";
+import { isAndroid } from "@/lib/platform";
+import { isFlagOn } from "@/config/featureFlags";
+import XpSummaryCard from "@/components/xp/XpSummaryCard";
+import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
 
-// Profile is the account hub. The wardrobe (titles, borders, names, effects,
-// achieved badges) has been removed: it was an orphaned second surface for
-// coins-only cosmetics, not another coin destination. Coins are unaffected.
+const currencies = [
+  "USD",
+  "EUR",
+  "GBP",
+  "AUD",
+  "CAD",
+  "JPY",
+  "INR",
+  "BRL",
+  "ZAR",
+  "NZD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "MXN",
+  "SGD",
+  "HKD",
+];
+const goalOptions = [
+  "Speed",
+  "Strength",
+  "Endurance",
+  "Fat Loss",
+  "Muscle Gain",
+  "Power",
+  "Agility",
+  "VO2 Max",
+  "Lactate Threshold",
+  "Flexibility",
+  "Mobility",
+  "Explosiveness",
+  "Balance",
+  "Coordination",
+  "Reaction Time",
+  "Injury Recovery",
+  "Mental Toughness",
+  "Sport Skill",
+  "Event Prep",
+  "Longevity",
+  "Body Recomposition",
+  "Cross-Training",
+  "Technique",
+  "Confidence",
+  "Consistency",
+];
+const experienceLevels = ["beginner", "intermediate", "advanced", "elite"];
+const sportOptions = [
+  "Running",
+  "Gym/Weightlifting",
+  "Football",
+  "Basketball",
+  "Swimming",
+  "Cycling",
+  "Tennis",
+  "Rugby",
+  "Boxing",
+  "MMA",
+  "Cricket",
+  "Athletics",
+  "Triathlon",
+  "CrossFit",
+  "General",
+];
+
+/* ── Row chrome ────────────────────────────────────────────────────────────
+   Every destination and every setting on this screen is one of two shapes, and
+   they used to be a third shape each: a full `card-surface card-pad` block with
+   its own border, its own icon tile and its own chevron. Nine of those stacked
+   up is what made Profile read as cluttered — the eye cannot tell a
+   destination from a section break when both are a bordered card.
+
+   Now they are rows inside one card, separated by hairlines. Same targets, same
+   labels, one border, one radius, and a 44px-tall row that is the size a thumb
+   expects. `divide-y` on the parent does the separating, so a row cannot
+   accidentally carry its own border again. */
+const ROW =
+  "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06]";
+
+const Row = ({
+  icon: Icon,
+  label,
+  desc,
+  onClick,
+  expanded,
+  rotate = true,
+}: {
+  icon: typeof Medal;
+  label: string;
+  desc: string;
+  onClick: () => void;
+  expanded?: boolean;
+  /** Set false for rows that navigate rather than expand. */
+  rotate?: boolean;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-expanded={expanded}
+    className={`${ROW} press`}
+  >
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+      <Icon size={16} className="text-foreground" aria-hidden />
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-sm font-semibold">{label}</span>
+      <span className="block truncate text-xs text-muted-foreground">{desc}</span>
+    </span>
+    <motion.span
+      animate={{ rotate: expanded ? 90 : 0 }}
+      transition={{ duration: 0.15 }}
+      className="shrink-0"
+      aria-hidden
+    >
+      <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
+    </motion.span>
+  </button>
+);
+
+/** The panel an expanded row reveals. Sits inside the card, under its row. */
+const Panel = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, height: 0 }}
+    animate={{ opacity: 1, height: "auto" }}
+    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+    className="overflow-hidden"
+  >
+    <div className="space-y-4 px-4 pb-4 pt-1">{children}</div>
+  </motion.div>
+);
+
 const Profile = () => {
   const { profile, user, signOut, refreshProfile } = useAuth();
   const { entitlements, hasUnlimitedCredits } = useSubscription();
@@ -59,11 +186,14 @@ const Profile = () => {
   const { toast } = useToast();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Cosmetics graduated off this page entirely: the Collection page
+  // (/collection, sidebar + the Market side of the app) owns the full look
+  // editor. The profile hosts the XP summary and account settings only, so
+  // this screen's menu keeps a door to /collection rather than a wardrobe.
   // Health Connect is managed from here, in the sheet below. The separate
   // Wearables screen was removed; this row is the one door to it.
   const [showHealthConnect, setShowHealthConnect] = useState(false);
   const wearableOffer = isAndroid() && isFlagOn("wearableSync");
-
   const [currency, setCurrency] = useState("USD");
   // ISO alpha-2, stored in `user_region` — the table the leaderboards read.
   const [country, setCountry] = useState<string | null>(null);
@@ -98,7 +228,15 @@ const Profile = () => {
         .eq("user_id", user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data?.country) setCountry(data.country);
+          if (data?.country) {
+            setCountry(data.country);
+            // The selected country drives regional everywhere: terminology
+            // (Football vs Soccer), units (km/mi, kg/lb) and date/number
+            // formatting. Setting it here — not only in saveCountry — is what
+            // makes the choice survive app restarts.
+            setRegionCountry(data.country);
+            refreshFormattingLocale();
+          }
         });
     }
   }, [user]);
@@ -140,6 +278,10 @@ const Profile = () => {
     }
     const previous = country;
     setCountry(normalised);
+    // The regional layer follows the new country immediately — terminology,
+    // units and formatting all re-derive from this one value.
+    setRegionCountry(normalised);
+    refreshFormattingLocale();
     // `currency` here is the pricing tier that follows the country, and is a
     // different thing from the display currency in Settings above.
     const { error } = await supabase
@@ -225,10 +367,39 @@ const Profile = () => {
 
   const handleDeleteAccount = () => navigate("/settings/delete-account");
 
+  // The Profile tab is the app's account hub. The drawer's own entries used to
+  // live here because the top-left hamburger is gone: these are the
   // destinations an athlete looked for in the drawer but which were only ever
   // reachable from it on mobile (notifications) or buried one level down.
+  //
+  // Three things changed here on 2026-10-02, all of them because the screen had
+  // become a directory:
+  //
+  //   The full-catalogue row is gone. It was called "All sections", then "Every
+  //   section" — one row whose only job was to open the navigation drawer, on a
+  //   screen that had already become an index of destinations.
+  //
+  //   It was also the only thing that opened the drawer on a phone. openAppNav()
+  //   existed solely to serve it and nothing else dispatches OPEN_NAV_EVENT, so
+  //   with the row gone the drawer has no way in on mobile.
+  //
+  //   That was checked before removing it rather than assumed. Every path the
+  //   drawer lists is also linked from somewhere else — the Train, Perform,
+  //   Recover and Compete hubs, this screen's own rows, or another page — so
+  //   nothing becomes unreachable; it becomes one level deeper to get to. The
+  //   drawer markup is left in place because that shortcut is still worth
+  //   having, and it needs a control that works rather than this row back.
+  //
+  //   "Legal & Safety" is the first row. Every published document has to be
+  //   reachable from inside the app — Google Play rejects a listing whose
+  //   privacy policy is only on the web, and the athlete should not have to go
+  //   hunting for their own rights. It used to live only inside a collapsed
+  //   accordion, which is easy to miss, and showed 3 of the 26 documents.
+  //
+  //   These rows are rows now: one card, hairline-separated, rather than nine
+  //   separate bordered cards stacked on top of each other.
   const menuItems: {
-    icon: typeof Settings;
+    icon: typeof Medal;
     label: string;
     desc: string;
     path?: string;
@@ -285,17 +456,15 @@ const Profile = () => {
       desc: "Credits, subscriptions & features",
       path: "/market",
     },
+    // The look editor. The full wardrobe (avatar, colours, borders, titles)
+    // lives at /collection with its own shop flow; this row is the door the
+    // profile keeps so the feature stays reachable from where athletes open
+    // their identity.
     {
-      icon: Flame,
-      label: "Streaks",
-      desc: "Your streak, milestones and rewards",
-      path: "/streaks",
-    },
-    {
-      icon: Gift,
-      label: "Refer & earn",
-      desc: "Invite friends, track rewards",
-      path: "/referrals",
+      icon: Palette,
+      label: "Style & collection",
+      desc: "Avatar look, colours, borders and titles",
+      path: "/collection",
     },
   ];
 
@@ -321,8 +490,10 @@ const Profile = () => {
         className="mx-5 mb-5 border border-border rounded-2xl p-5 card-surface"
       >
         <div className="flex flex-col gap-4">
+          {/* Your current look stays cosmetic-free here — the equipped look is
+              rendered on the Collection page, where it can be edited. */}
           <div className="flex items-center gap-4">
-            <ProfilePicture />
+            <ProfileLook />
             <div className="min-w-0">
               <h2 className="font-display font-bold text-lg truncate">
                 {profile?.full_name || "Athlete"}
@@ -346,12 +517,12 @@ const Profile = () => {
       </motion.div>
 
       <div className="px-5 mb-5">
-        <AccountSubscriptionCard />
+        <XpSummaryCard />
       </div>
 
-      {/* Athlete progression: level, XP total, next-level progress and recent
-          XP. Progression only — no money, no shop, no leaderboard. */}
-      <XpSummaryCard />
+      <div className="px-5 mb-5">
+        <AccountSubscriptionCard />
+      </div>
 
       {/* One card for every destination and every setting. `divide-y` supplies
           the separators, so a row can never drift back to being its own card,
@@ -469,7 +640,7 @@ const Profile = () => {
                           : "bg-card border-border text-foreground"
                       }`}
                     >
-                      {s}
+                      {sportDisplayName(s)}
                     </button>
                   ))}
                 </div>
@@ -660,74 +831,14 @@ const Profile = () => {
   );
 };
 
-const experienceLevels = ["beginner", "intermediate", "advanced", "elite"];
-const sportOptions = [
-  "Running", "Gym/Weightlifting", "Football", "Basketball", "Swimming", "Cycling",
-  "Tennis", "Rugby", "Boxing", "MMA", "Cricket", "Athletics", "Triathlon",
-  "CrossFit", "General",
-];
-const currencies = [
-  "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "INR", "BRL", "ZAR", "NZD",
-  "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "SGD", "HKD",
-];
-const goalOptions = [
-  "Speed", "Strength", "Endurance", "Fat Loss", "Muscle Gain", "Power",
-  "Agility", "VO2 Max", "Lactate Threshold", "Flexibility", "Mobility",
-  "Explosiveness", "Balance", "Coordination", "Reaction Time", "Injury Recovery",
-  "Mental Toughness", "Sport Skill", "Event Prep", "Longevity",
-  "Body Recomposition", "Cross-Training", "Technique", "Confidence", "Consistency",
-];
-
-const Row = ({
-  icon: Icon,
-  label,
-  desc,
-  onClick,
-  expanded,
-  rotate = true,
-}: {
-  icon: typeof Settings;
-  label: string;
-  desc: string;
-  onClick: () => void;
-  expanded?: boolean;
-  /** Set false for rows that navigate rather than expand. */
-  rotate?: boolean;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-expanded={expanded}
-    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] press`}
-  >
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-      <Icon size={16} className="text-foreground" aria-hidden />
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-sm font-semibold">{label}</span>
-      <span className="block truncate text-xs text-muted-foreground">{desc}</span>
-    </span>
-    <motion.span
-      animate={{ rotate: expanded ? 90 : 0 }}
-      transition={{ duration: 0.15 }}
-      className="shrink-0"
-      aria-hidden
-    >
-      <ChevronRight size={16} className="text-muted-foreground rtl-flip" />
-    </motion.span>
-  </button>
-);
-
-/** The panel an expanded row reveals. Sits inside the card, under its row. */
-const Panel = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    initial={{ opacity: 0, height: 0 }}
-    animate={{ opacity: 1, height: "auto" }}
-    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-    className="overflow-hidden"
-  >
-    <div className="space-y-4 px-4 pb-4 pt-1">{children}</div>
-  </motion.div>
-);
+const ProfileLook = ({ className }: { className?: string }) => {
+  return (
+    <div className={className ?? ""}>
+      <span className="rounded-full flex items-center justify-center">
+        <User size={28} className="text-muted-foreground" />
+      </span>
+    </div>
+  );
+};
 
 export default Profile;

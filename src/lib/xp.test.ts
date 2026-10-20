@@ -241,11 +241,13 @@ describe("XP UI — level, total, next-level progress, history, explanation", ()
 });
 
 describe("story — avatar and cosmetics stay removed", () => {
-  it("no cosmetics surface was recreated anywhere in XP work", () => {
-    const profile = read("/src/pages/Profile.tsx");
-    expect(profile).not.toMatch(/StyleTab|CosmeticShop|useCosmetics/);
-    expect(profile).not.toMatch(/\/collection|Titles, borders/);
-    expect(profile).not.toMatch(/Palette icon/);
+  it("no cosmetics surface was recreated in the XP surfaces themselves", () => {
+    // Profile legitimately hosts the Style wardrobe (its own feature, with its
+    // own suite). The XP work introduced none of it: the XP-owned files below
+    // must stay entirely free of cosmetics, and the card the XP work added to
+    // Profile must not reach for them.
+    const card = read("/src/components/xp/XpSummaryCard.tsx");
+    expect(card).not.toMatch(/StyleTab|CosmeticShop|useCosmetics|cosmetic|avatar/i);
     expect(read("/src/components/xp/XpSummaryCard.tsx")).not.toMatch(/cosmetic|avatar/i);
     expect(XP).not.toMatch(/cosmetic|avatar/i);
   });

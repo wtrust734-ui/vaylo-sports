@@ -135,7 +135,7 @@ const Coach = () => {
   // Memories are persisted by the coach-chat edge function now (it sees the
   // full streamed reply, so a closed tab or a dropped frame can no longer drop
   // a memory, and a doctored client can no longer fabricate one). The client
-  // only refreshes its memory list after a reply lands here; nothing writes here.
+  // only refreshes its memory list after each reply; nothing writes here.
   const parseMemorySaves = useCallback(async (_text: string) => {
     if (!user) return;
     // Re-read the user's memories so the sidebar reflects what the server saved.
@@ -145,9 +145,6 @@ const Coach = () => {
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
     setMemories(data ?? []);
-    if (!data?.length) {
-      setMemories([]);
-    }
   }, [user]);
 
   const send = async (text: string) => {
@@ -297,12 +294,9 @@ const Coach = () => {
 
       if (assistantSoFar) {
         await supabase.from("coach_messages").insert({ conversation_id: convId, user_id: user.id, role: "assistant", content: assistantSoFar });
+        await parseMemorySaves(assistantSoFar);
       }
-      await parseMemorySaves(assistantSoFar);
       await refreshProfile();
-      if (assistantSoFar && !malformed) {
-        toast({ title: "Memory updated", description: "Saved what you shared to your coach profile.", variant: "default" });
-      }
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "Failed to connect to Vaylo Sports Coach", variant: "destructive" });

@@ -80,6 +80,19 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
   // surface is behind the launch flag.
   const offered = isAndroid() && isFlagOn("wearableSync");
   const connected = hc.status === "connected";
+  // Permissions once granted can be taken back in Health Connect at any time.
+  // The old sheet had no word for that state: it fell through to "not
+  // connected" and showed the full first-run pitch — "connect it once here…"
+  // — to an athlete who had ALREADY connected and synchronised. Calling the
+  // setup flow redundant is generous: it asked to build the thing that was
+  // already built. This state gets its own branch and its own verb.
+  const permissionsIncomplete = hc.status === "permission_required";
+  // The sync axis — which the old sheet also lacked, so "connected" quietly
+  // stood in for "synchronised" and a failed first import looked identical
+  // to a user who had never connected at all.
+  const syncStatus = hc.syncStatus;
+  const everSynced = hc.syncState.lastSyncAt != null || syncStatus === "succeeded";
+  const lastSyncFailed = syncStatus === "failed" || (hc.error != null && everSynced === false && syncStatus !== "in_progress");
   // No session to connect with, so this visit is a promise rather than an
   // action. Checked before anything reads hook state: on this screen the hook's
   // status is meaningless (there is no user to resolve it against).
@@ -196,6 +209,23 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
       );
     }
 
+    if (permissionsIncomplete) {
+      return (
+        <div className="space-y-3">
+          <StatusLine ok={false}>
+            Health Connect permissions were changed — Vaylo is connected, but some reads were taken
+            back. Your imported data is untouched.
+          </StatusLine>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Re-approve the reads below and syncing resumes. Nothing was read while the permissions
+            were missing, and no data was overwritten.
+          </p>
+          {permissionList}
+          {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}
+        </div>
+      );
+    }
+
     if (connected) {
       return (
         <div className="space-y-3">
@@ -212,7 +242,13 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
               ? `Last sync ${formatDateTimeExact(new Date(hc.syncState.lastSyncAt))}.`
               : "No sync yet — the first one imports your recent sessions."}
           </p>
-          {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}
+          {lastSyncFailed && (
+            <StatusLine ok={false}>
+              The last sync didn't complete — what was already imported is unchanged, and picking up
+              below resumes from where it left off.
+            </StatusLine>
+          )}
+          {hc.error && !lastSyncFailed && <StatusLine ok={false}>{hc.error}</StatusLine>}
           <p className="text-[12px] leading-relaxed text-muted-foreground">
             Disconnecting stops future syncs but keeps what was already imported. Delete imported
             data to erase those workouts and samples from Vaylo now.
@@ -286,6 +322,48 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
     </Button>
   );
 
+  const syncButton = (label: string) => (
+    <Button
+      onClick={() => void sync()}
+      disabled={busy !== null || syncStatus === "in_progress"}
+      className="h-11 flex-1 rounded-xl bg-gradient-primary text-primary-foreground font-semibold"
+    >
+      {busy === "sync" || syncStatus === "in_progress" ? (
+        <>
+          <Loader2 size={14} className="mr-1.5 animate-spin" /> Syncing…
+        </>
+      ) : (
+        <>
+          <RefreshCw size={14} className="mr-1.5" /> {label}
+        </>
+      )}
+    </Button>
+  );
+
+  /**
+   * The THREE sync actions, and the rule that separates them:
+   *
+   *   * never synced          → "Sync now" is the FIRST import — the
+   *                             second half of the setup flow;
+   *   * last run failed        → "Retry sync" — the genuine retry path, run
+   *                             from the stored cursor (nothing was lost);
+   *   * synchronised           → "Done" primary, "Sync new data" beside it —
+   *                             a distinct, explicitly manual resync action,
+   *                             NOT a repeat of the setup flow. A future sync
+   *                             stays available exactly because this button
+   *                             never disappears; what disappears is the
+   *                             setup, which has nothing left to do.
+   */
+  const syncActionLabel =
+    syncStatus === "failed"
+      ? // The doc comment above promises this verb to every failed run — a run
+        // that failed before any batch arrived (no cursor) is still a retry of
+        // the sync, not a calm first ask.
+        "Retry sync"
+      : syncStatus === "succeeded" || everSynced
+        ? "Sync new data"
+        : "Sync now";
+
   const footer = pendingSession ? (
     <Button
       onClick={() => {
@@ -298,32 +376,52 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
     </Button>
   ) : !offered || hc.apiStatus === "update_required" ? (
     closeOnly
+  ) : permissionsIncomplete ? (
+    /* The reconnect path. A distinct verb for permission repair — same grant
+       flow, different promise — so the sheet never re-offers the *initial*
+       setup to an athlete who already did their setup. */
+    <div className="flex gap-2">
+      <Button onClick={onClose} variant="outline" className="h-11 rounded-xl px-4">
+        Not now
+      </Button>
+      <Button
+        onClick={() => void connect()}
+        disabled={busy !== null || hc.connecting}
+        className="h-11 flex-1 rounded-xl bg-gradient-primary text-primary-foreground font-semibold"
+      >
+        {busy === "connect" || hc.connecting ? (
+          <>
+            <Loader2 size={14} className="mr-1.5 animate-spin" /> Connecting…
+          </>
+        ) : (
+          "Reconnect permissions"
+        )}
+      </Button>
+    </div>
   ) : connected ? (
     /* Connected is the state an athlete comes back to, and it used to offer one
        footer control: "Sync now". A sheet whose only prominent action is not an
        exit reads as a trap — the header X was the sole way out, and the first
        thing reported about this screen was that it could not be dismissed.
-       "Done" is the primary action now, and syncing sits beside it: both are
-       things the athlete actually wants, and leaving is never the harder one. */
+       "Done" is secondary-permanent now, and the sync half labels itself: first
+       import, retry, or a clearly manual resync of new data — one verb per
+       reality, and never a repeat of the setup flow that already finished. */
     <div className="flex gap-2">
-      <Button onClick={onClose} variant="outline" className="h-11 flex-1 rounded-xl">
+      <Button onClick={onClose} variant="outline" className="h-11 rounded-xl px-4">
         Done
       </Button>
-      <Button
-        onClick={() => void sync()}
-        disabled={busy !== null}
-        className="h-11 flex-1 rounded-xl bg-gradient-primary text-primary-foreground font-semibold"
-      >
-        {busy === "sync" ? (
-          <>
-            <Loader2 size={14} className="mr-1.5 animate-spin" /> Syncing…
-          </>
-        ) : (
-          <>
-            <RefreshCw size={14} className="mr-1.5" /> Sync now
-          </>
-        )}
-      </Button>
+      {syncActionLabel === "Retry sync" ? (
+        syncButton(syncActionLabel)
+      ) : (
+        /* Synchronised state puts the manual resync SECOND: the athlete's most
+           likely want is to leave, and pressing Sync again without new data is
+           a no-cost no-op — the dedupe lock and the conflict-safe upserts make
+           it harmless, and the label refrains from promising an import. */
+        <>
+          <div className="flex-1" />
+          {syncButton(syncActionLabel)}
+        </>
+      )}
     </div>
   ) : hc.checking ? undefined : (
     <div className="flex gap-2">

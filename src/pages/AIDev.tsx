@@ -239,7 +239,7 @@ const AIDev = () => {
 
   return (
     <div className="min-h-screen pb-24">
-      <div className="px-5 pt-6 pb-4">
+      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={18} className="text-primary" />
           <h1 className="text-xl font-bold">AI Testing Console</h1>

@@ -646,7 +646,6 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
       aspectRatio: aspectRatio ?? (placementRatio(body.placement) ?? "9:16"),
       durationSeconds,
       resolution,
-      personGeneration: "allow_adult",
     });
   } catch (err) {
     return badReq(err instanceof Error ? err.message : "invalid request");
@@ -667,11 +666,43 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
     });
   }
 
+  // Duplicate-spend protection: if this owner already has a LIVE shot for the
+  // same concept+shot number (running or done), return it instead of billing a
+  // second generation — a refresh mid-flight or a re-sent confirm can never
+  // create a duplicate charge. A FAILED shot is not caught by this guard, so a
+  // genuine retry bills and runs a new attempt, which is correct.
+  let existingLiveShot: Record<string, unknown> | null = null;
+  if (conceptId) {
+    const { data: liveShot } = await admin
+      .from("ad_video_shots")
+      .select("id, operation_id, state, model, duration_seconds, cost_usd")
+      .eq("owner_id", userId)
+      .eq("concept_id", conceptId)
+      .eq("shot_number", scene?.shot ?? 1)
+      .in("state", ["running", "done"])
+      .limit(1)
+      .maybeSingle();
+    existingLiveShot = (liveShot as Record<string, unknown> | null) ?? null;
+  }
+  if (existingLiveShot) {
+    return jsonResp({
+      action: "start",
+      duplicate: true,
+      shotId: existingLiveShot.id,
+      conceptId,
+      operationId: existingLiveShot.operation_id,
+      state: existingLiveShot.state,
+      model: existingLiveShot.model,
+      durationSeconds: Number(existingLiveShot.duration_seconds) || durationSeconds,
+      estimatedCostUsd: Number(existingLiveShot.cost_usd) || 0,
+      note: "An active or completed generation for this shot already exists — returning it instead of creating a second one. No new charge.",
+    });
+  }
+
   // Beta cost control: the confirmed Veo shot is metered in credits through
   // the same server-side ledger every other AI feature uses. Unlimited plans
   // are NOT exempt (metered path) — a subscription must not become unbounded
-  // provider spend. Idempotency key is derived from the operation, so a retry
-  // of the same confirmed shot cannot double-charge.
+  // provider spend.
   const metered = await spendForUser(req, userId, "ads_video_shot", `Veo shot ${scene?.shot ?? 1} (${model}, ${durationSeconds}s)`, {
     source: "ads-video",
     billUnlimited: true,

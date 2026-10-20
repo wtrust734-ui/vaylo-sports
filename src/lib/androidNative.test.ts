@@ -361,19 +361,22 @@ describe("native lifecycle — App.tsx", () => {
 });
 
 describe("media handling — Nutrition scan", () => {
-  it("every scan preview blob URL is revoked", () => {
+  it("scan previews are data URLs — nothing to leak", () => {
+    // The preview used to be a blob URL with a separate revoke path per route
+    // (camera, gallery, native picker). It is a data URL now — the normalised
+    // scan photo doubles as the preview — so there is no object URL to create,
+    // none to forget on an unmount, and nothing to leak. Asserting the ABSENCE
+    // is the invariant: new capture routes must not reintroduce blob previews.
     const n = read(NUTRITION);
-    const created = n.match(/URL\.createObjectURL/g)?.length ?? 0;
-    const revoked = n.match(/URL\.revokeObjectURL/g)?.length ?? 0;
-    // An invariant rather than a magic count: the scan now has a camera route, a
-    // gallery route and a native picker route that all write the same preview
-    // state, so the number of releases moves whenever a capture path is added.
-    // What must not move is that every preview created is released — asserting
-    // the relationship is what stops a new route from shipping a leak past a
-    // count that nobody updated.
-    expect(created, "the scan must still create a preview").toBeGreaterThan(0);
-    expect(revoked, "every created preview needs a revoke path").toBeGreaterThanOrEqual(created);
-    expect(n).toMatch(/leaked each photo's bytes/);
+    expect(n, "no object URLs in the scan preview path").not.toMatch(/URL\.createObjectURL/);
+    expect(n).toMatch(/clearScanPreview/);
+  });
+
+  it("the web photo path normalises before upload (src/lib/mealImage)", () => {
+    const page = read(NUTRITION);
+    expect(page).toMatch(/normalizeMealImage\(/);
+    expect(page).toMatch(/MealImageError/);
+    expect(page).not.toMatch(/reader\.readAsDataURL/);
   });
 });
 

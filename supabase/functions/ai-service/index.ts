@@ -161,6 +161,9 @@ Deno.serve(async (req) => {
       // The athlete's UI language — the AI answers in it (validated inside
       // generateAIResponse; unknown values degrade to a plain language name).
       userLocale: typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined,
+      // Prompt 9: the selected country, expanded into a validated terminology
+      // directive inside generateAIResponse (sports naming, spelling, units).
+      userRegion: typeof body.userRegion === "string" ? body.userRegion.slice(0, 2).toUpperCase() : undefined,
     });
 
     return json(result);

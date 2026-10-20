@@ -5,14 +5,13 @@ import {
   Zap,
   Coins,
   X,
-  Palette,
-  ChevronRight,
   Infinity as InfinityIcon,
   Gift,
   Flame,
   Clock,
+  Loader2,
+  Check,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -76,7 +75,6 @@ const GuardianNote = () => (
 // the credit economy are untouched; this is a UX rebuild only.
 const Market = () => {
   const { user, profile, refreshProfile } = useAuth();
-  const navigate = useNavigate();
   // Buying is open to every age, on the owner's instruction. An under-18
   // purchase is expected to involve a parent or guardian and is refunded in full
   // on request (legal/purchases.html section 8 and legal/refunds.html section 4),
@@ -173,6 +171,27 @@ const Market = () => {
     () => offers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
     [offers]
   );
+  // Claimed state for the one-time offer: the server refuses a second
+  // redemption (409 duplicate), but showing a live "once per account" button
+  // to someone who already claimed it is the confusing dead end Prompt 10
+  // calls out. One cheap row read; a failure leaves the BUY row visible rather
+  // than hiding an offer a legitimate athlete can still use.
+  const [starterClaimed, setStarterClaimed] = useState(false);
+  useEffect(() => {
+    if (!user || !starterOffer) return;
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("user_purchases")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("product_id", `offer_${starterOffer.slug}`)
+        .limit(1)
+        .maybeSingle();
+      if (alive) setStarterClaimed(!!data);
+    })();
+    return () => { alive = false; };
+  }, [user, starterOffer]);
 
   const enhancedPacks = useMemo(
     () => packs.map((p) => (doubleOffer ? applyOffer(p, doubleOffer) : p)),
@@ -272,8 +291,18 @@ const Market = () => {
     })();
   };
 
+  // One checkout in flight, ever. The server (process-purchase) is the real
+  // duplicate guard — a replayed request returns "This purchase has already
+  // been applied" — but the client must not even send the double: a rapid
+  // second tap used to fire a second purchaseItem call and, at best, show two
+  // receipts for one basket. Backed by the same disabled-button treatment the
+  // confirm sheet already uses.
+  const [checkingOut, setCheckingOut] = useState(false);
+
   const checkout = async () => {
-    if (!user || basket.length === 0) return;
+    if (!user || basket.length === 0 || checkingOut) return;
+    setCheckingOut(true);
+    try {
     // Through the billing seam (src/lib/billing.ts) so store billing can replace
     // web checkout later without touching this page. Same payload as before.
     const result = await purchaseItems(
@@ -333,6 +362,12 @@ const Market = () => {
         ? `+${credits}${bonus > 0 ? ` & ${bonus} bonus` : ""} credits added${wasFree ? " — nothing was charged" : ""}`
         : "Unlocked.",
     });
+    } finally {
+      // Released on EVERY path — success, refusal, cancellation — so a failed
+      // checkout can always be retried, and a retry while one is already in
+      // flight is dropped here rather than sent twice to the server.
+      setCheckingOut(false);
+    }
   };
 
   const basketTotal = basket.reduce((s, b) => s + b.price_cents, 0);
@@ -539,9 +574,14 @@ const Market = () => {
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={checkout}
-                  className="w-full rounded-xl bg-primary py-3 font-bold text-primary-foreground"
+                  disabled={checkingOut}
+                  className="w-full rounded-xl bg-primary py-3 font-bold text-primary-foreground disabled:opacity-60"
                 >
-                  {freeCreditsActive() ? "Add to my account — free" : "Checkout"}
+                  {checkingOut ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin" /> Processing…
+                    </span>
+                  ) : freeCreditsActive() ? "Add to my account — free" : "Checkout"}
                 </motion.button>
                 {freeCreditsActive() && (
                   <p className="mt-2 text-center text-[11px] text-muted-foreground">
@@ -570,6 +610,22 @@ const Market = () => {
 
       {/* Starter offer — one quiet row, no purple pill, no shouting */}
       {isAdult && starterOffer && section === "packs" && (
+        starterClaimed ? (
+          <div className="mb-4 px-5">
+            <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 opacity-70">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted">
+                <Gift size={15} className="text-muted-foreground" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{starterOffer.title}</span>
+                <span className="block truncate text-[12px] text-muted-foreground">Already claimed on this account — one per athlete.</span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-1 text-[12px] font-bold text-muted-foreground">
+                <Check size={11} /> Claimed
+              </span>
+            </div>
+          </div>
+        ) : (
         <div className="mb-4 px-5">
           <motion.button
             initial={{ opacity: 0, y: 6 }}
@@ -598,6 +654,7 @@ const Market = () => {
             <span className="shrink-0 text-sm font-bold">{formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}</span>
           </motion.button>
         </div>
+        )
       )}
 
       {/* Picked for you — one unlock recommendation per sport family. */}
@@ -647,32 +704,7 @@ const Market = () => {
           )}
           {section === "unlocks" && <UnlocksSection />}
           {section === "coins" && (
-            <>
-              {/* Coins buy looks, not features — so the place coins are sold is
-                  where the Collection has to be one tap away. The Market had no
-                  link to it at all: an athlete could buy coins here with no way
-                  to reach the shop they spend them in from this screen. This row
-                  is navigation, not a promotion: no price, no offer, no clock. */}
-              <div className="px-5 pb-4">
-                <button
-                  type="button"
-                  onClick={() => navigate("/collection")}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-start transition-colors hover:border-primary/40"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <Palette size={15} className="text-primary" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">Spend them on looks</span>
-                    <span className="block truncate text-[12px] text-muted-foreground">
-                      Titles, borders, effects, bundles & seasonal sets — the Collection
-                    </span>
-                  </span>
-                  <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
-                </button>
-              </div>
-              <CoinBundlesSection currency={region.currency} onBuy={buyCoinBundle} priceLabel={buyPriceLabel} />
-            </>
+            <CoinBundlesSection currency={region.currency} onBuy={buyCoinBundle} priceLabel={buyPriceLabel} />
           )}
           {section === "subscriptions" && <SubscriptionsSection />}
           {section === "lifetime" && <LifetimeSection />}

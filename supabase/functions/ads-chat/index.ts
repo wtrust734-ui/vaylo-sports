@@ -112,7 +112,7 @@ async function classifyWithModel(history: HistoryRow[], content: string): Promis
       body: JSON.stringify({
         model: MODELS.MINI,
         messages: buildModelMessages(history, content),
-        temperature: 0,
+        temperature: 1,
         response_format: { type: "json_object" },
       }),
       signal: controller.signal,

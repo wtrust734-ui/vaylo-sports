@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Check, Loader2, Clock, RefreshCw } from "lucide-react";
 
 import { expectedPlanSeconds, planChunkCount } from "@/lib/planGeneration";
+import { estimatePlanSeconds, type EstimateSource } from "@/lib/planTiming";
 
 // ============================================================================
 // PLAN GENERATION PROGRESS — the full-screen loading screen for AI plans
@@ -96,6 +97,13 @@ export type PlanGenerationProgressProps = {
   /** `overlay` (the default) covers the screen; `inline` is the same status as
    *  a card, for after the athlete has hidden the overlay. */
   variant?: "overlay" | "inline";
+  /** Where the estimate comes from. When the caller does not supply one the
+   *  component calibrates from this device's recorded generation history
+   *  (see `planTiming.ts`) and falls back to the documented model constants
+   *  when there is not enough of it — and SAYS which it is quoting, because
+   *  "usually about 40s" is a claim about measurements that an unmeasured
+   *  constant must not make on its behalf. */
+  estimate?: { seconds: number; source: EstimateSource };
   /** Only meaningful for the overlay: drops it without cancelling the request.
    *  Once hidden, it does not come back — the inline version is accurate. */
   onHide?: () => void;
@@ -105,6 +113,7 @@ export default function PlanGenerationProgress({
   weeks,
   kind = "training",
   variant = "overlay",
+  estimate,
   onHide,
 }: PlanGenerationProgressProps) {
   const reduceMotion = useReducedMotion();
@@ -112,7 +121,15 @@ export default function PlanGenerationProgress({
   // "plan" vs "meal plan": one noun, so the header never claims a training
   // plan to an athlete who is waiting on meals.
   const noun = kind === "nutrition" ? "meal plan" : "plan";
-  const expected = useMemo(() => expectedPlanSeconds(weeks), [weeks]);
+  const expected = useMemo(
+    () => estimate?.seconds ?? (kind === "nutrition" ? expectedPlanSeconds(weeks) : estimatePlanSeconds("training", weeks).seconds),
+    [estimate, kind, weeks],
+  );
+  // Which number the screen is quoting, labeled honestly. A history-based
+  // estimate is measured ("usually"); a model fallback is unmeasured and
+  // cannot claim that — it says "estimated" instead.
+  const estimatedFromHistory = (estimate?.source ??
+    (kind === "nutrition" ? "model" : estimatePlanSeconds("training", weeks).source)) === "history";
   const [elapsed, setElapsed] = useState(0);
 
   // The wait has no progress stream, so elapsed time is the only thing that
@@ -162,7 +179,9 @@ export default function PlanGenerationProgress({
   // the body states the elapsed wait; neither claims to know the future.
   const header = overdue
     ? "Still working — this plan is taking longer than usual"
-    : `Usually about ${expected}s for a ${weeks}-week plan`;
+    : estimatedFromHistory
+      ? `Usually about ${expected}s for a ${weeks}-week plan`
+      : `Estimated at about ${expected}s · based on the workflow, before enough of your own timings have been recorded`;
 
   const body = (
     <>
@@ -232,7 +251,9 @@ export default function PlanGenerationProgress({
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
         {overdue
           ? "This is taking longer than usual — the plan is still being written. You can leave this screen and it will be saved when it lands."
-          : `Most ${weeks}-week plans take about ${expected}s. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically.`}
+          : estimatedFromHistory
+            ? `Most ${weeks}-week plans on this device have taken about ${expected}s. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically.`
+            : `A ${weeks}-week plan is estimated at about ${expected}s; the figure sharpens to your own timing as plans complete. Credits are only kept if a plan is delivered — if anything fails, the cost is refunded automatically.`}
       </p>
       <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/80">
         If this stays on screen much longer than the time above, the plan is still being written in the background — you do not need to stay here.

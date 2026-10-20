@@ -44,6 +44,13 @@ const HEADING = "We have updated the Terms of Service";
 
 const LocationProbe = () => <span data-testid="where">{useLocation().pathname}</span>;
 
+// Accept-button locator for the CURRENT_TERMS version, always derived from the
+// consent constant rather than a hardcoded "1.5" — a version bump must fail the
+// contract tests that assert the published Terms agree, not silently make every
+// "I accept version …" locator stale.
+const acceptVersionLabel = () =>
+  new RegExp(`I accept version ${TERMS_VERSION.split(".").join("\\.")}`);
+
 function renderNotice(profile: { terms_version: string | null } | null) {
   const refreshProfile = vi.fn().mockResolvedValue(undefined);
   // Force the mock to return a profile with the given terms_version, so the
@@ -91,7 +98,7 @@ describe("when the athlete is behind", () => {
     expect(screen.getByText(HEADING)).toBeInTheDocument();
     expect(screen.getByText(/version 1\.0/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /I accept version 1\.5/ }),
+      screen.getByRole("button", { name: acceptVersionLabel() }),
     ).toBeInTheDocument();
   });
 
@@ -122,7 +129,7 @@ describe("accepting", () => {
   it("records the acceptance, then leaves", async () => {
     const { refreshProfile } = renderNotice({ terms_version: "1.0" });
 
-    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.5/ }));
+    fireEvent.click(screen.getByRole("button", { name: acceptVersionLabel() }));
 
     await waitFor(() => expect(recordTermsAcceptance).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByText(HEADING)).not.toBeInTheDocument());
@@ -133,7 +140,7 @@ describe("accepting", () => {
     vi.mocked(recordTermsAcceptance).mockResolvedValue(false);
     const { refreshProfile } = renderNotice({ terms_version: "1.0" });
 
-    fireEvent.click(screen.getByRole("button", { name: /I accept version 1\.5/ }));
+    fireEvent.click(screen.getByRole("button", { name: acceptVersionLabel() }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/could not save that/i);

@@ -68,7 +68,7 @@ export default function CreatorMarketplace() {
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-5xl mx-auto">
       <div className="flex items-start justify-between mb-4 gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><ShoppingBag className="h-6 w-6 text-electric-purple" /> Marketplace</h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2"><ShoppingBag className="h-6 w-6 text-electric-purple" /> Marketplace</h1>
           <p className="text-sm text-muted-foreground mt-1">Programs, meal plans, and 1-on-1 sessions from verified coaches.</p>
         </div>
         <Button onClick={() => navigate("/market/become-creator")} variant="outline">

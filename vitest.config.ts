@@ -28,12 +28,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@supabase-js": path.resolve(__dirname, "node_modules/@supabase/supabase-js/dist/index.mjs"),
-      "@supabase-js@2": path.resolve(__dirname, "node_modules/@supabase/supabase-js/dist/index.mjs"),
-      "@supabase-js@2.100.0": path.resolve(__dirname, "node_modules/@supabase/supabase-js/dist/index.mjs"),
-      "@supabase-js@2.45.0": path.resolve(__dirname, "node_modules/@supabase/supabase-js/dist/index.mjs"),
-    },
+    alias: { "@": path.resolve(__dirname, "./src") },
   },
 });

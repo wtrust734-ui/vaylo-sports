@@ -1,0 +1,1 @@
+Write-Output Makefile style

@@ -49,9 +49,7 @@
     "recoveryCheckIn": "Recovery check-in",
     "recoveryCheckInDesc": "Sleep, soreness, readiness",
     "logMetric": "Log a metric",
-    "logMetricDesc": "Speed, power, endurance tests",
-    "openCollection": "Collection",
-    "openCollectionDesc": "Try on looks, bundles and seasonal sets"
+    "logMetricDesc": "Speed, power, endurance tests"
   },
   "hub": {
     "brand": "Vaylo Sports",

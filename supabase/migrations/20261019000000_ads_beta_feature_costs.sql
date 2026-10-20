@@ -47,7 +47,9 @@ BEGIN
   FOREACH v_key IN ARRAY ARRAY['ads_image_generate','ads_video_shot','ads_video_narration','ads_video_render']
   LOOP
     IF v -> v_key IS NULL OR (v ->> v_key)::integer <= 0 THEN
-      v_missing := v_missing || COALESCE(v_missing || ',', '') || v_key;
+      -- COALESCE first: in Postgres NULL || text stays NULL, so a plain
+      -- concatenation would silently lose every missing key.
+      v_missing := COALESCE(v_missing || ',', '') || v_key;
     END IF;
   END LOOP;
   IF v_missing IS NOT NULL THEN

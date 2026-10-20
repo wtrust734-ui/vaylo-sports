@@ -217,25 +217,6 @@ Deno.serve(async (req) => {
       return json({ error: "Too many voiceover requests. Wait a moment and try again." }, 429);
     }
 
-    // Beta cost control: a narration billed by ElevenLabs is metered in the
-    // same credit ledger as every other AI feature, for every plan type.
-    const metered = await spendForUser(req, userId, "ads_video_narration", `Ad narration (${String(body.text ?? "").length} chars)`, {
-      source: "voiceover",
-      billUnlimited: true,
-      idempotencyKey: `vo:${crypto.randomUUID()}`,
-    });
-    if (!metered.success) {
-      return json(
-        {
-          error: metered.error === "insufficient_credits"
-            ? `Not enough credits for the narration (${metered.cost ?? "?"} needed; you have ${metered.balance ?? 0}). Nothing was charged.`
-            : metered.error ?? "Could not record the credit charge",
-          code: metered.error === "insufficient_credits" ? "insufficient_credits" : "metering_failed",
-        },
-        metered.error === "insufficient_credits" ? 402 : 500,
-      );
-    }
-
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) return json({ error: "text is required" }, 400);
 
@@ -307,6 +288,27 @@ Deno.serve(async (req) => {
         characters: cached.characters,
         audio: cached.audio,
       });
+    }
+
+    // Beta cost control (placed AFTER the cache lookup on purpose): a narration
+    // billed by ElevenLabs is metered in the same credit ledger as every other
+    // AI feature, for every plan type. An identical re-request answers from the
+    // cache above uncharged, so a retry cannot double-bill the same audio.
+    const metered = await spendForUser(req, userId, "ads_video_narration", `Ad narration (${characters} chars)`, {
+      source: "voiceover",
+      billUnlimited: true,
+      idempotencyKey: `vo:${cacheKey}`,
+    });
+    if (!metered.success) {
+      return json(
+        {
+          error: metered.error === "insufficient_credits"
+            ? `Not enough credits for the narration (${metered.cost ?? "?"} needed; you have ${metered.balance ?? 0}). Nothing was charged.`
+            : metered.error ?? "Could not record the credit charge",
+          code: metered.error === "insufficient_credits" ? "insufficient_credits" : "metering_failed",
+        },
+        metered.error === "insufficient_credits" ? 402 : 500,
+      );
     }
 
     const res = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${encodeURIComponent(voiceId)}`, {

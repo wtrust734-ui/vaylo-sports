@@ -12,12 +12,17 @@ import { getAiLocale } from "@/i18n";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import {
   buildInjuryBriefing,
+  freeInjuryProtocol,
+  MEDICAL_REFERRAL_MARKER,
+  PERSONALISED_PLAN_MARKER,
+  hasSeriousSymptomSignals,
   MAX_SITE_LENGTH,
   parseInjuryPlan,
   planHeadline,
   renderInjuryProtocol,
   resolveInjurySite,
   splitStoredProtocol,
+  SERIOUS_SEVERITY,
 } from "@/lib/injuryPlan";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -30,79 +35,14 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 
 const BODY_PARTS = ["Knee", "Hamstring", "Calf", "Achilles", "Foot/Ankle", "Hip", "Lower Back", "Shoulder", "Elbow", "Wrist", "Other"];
 
-// Generic, evidence-led recovery scaffolds. NOT medical advice — disclaimer always shown.
-const RECOVERY_PLANS: Record<string, string[]> = {
-  Knee: [
-    "Days 1–3: Rest, ice 15min ×3/day, compression sleeve, elevate when seated.",
-    "Days 4–7: Quad sets, straight-leg raises 3×10. Stationary bike, no resistance.",
-    "Week 2: Wall sits 3×30s, step-ups (low box), terminal knee extension band work.",
-    "Week 3–4: Single-leg balance, Bulgarian split squats (bodyweight), gradual jog return.",
-    "Red flags: locking, giving way, swelling that doesn't drop → see a physio.",
-  ],
-  Hamstring: [
-    "Days 1–3: Ice, gentle isometrics (bridges 3×10s holds), avoid stretching.",
-    "Days 4–7: Nordic curl negatives 3×3, single-leg deadlift (light), walking lunges.",
-    "Week 2: Romanian deadlift, prone hamstring curls, sled drags.",
-    "Week 3+: Build to sprints — start at 50% and add 10% per session.",
-    "Red flags: bruising, popping sensation, inability to bear weight → get imaged.",
-  ],
-  Calf: [
-    "Days 1–3: Ice, calf compression sleeve, walking only.",
-    "Days 4–10: Seated calf raises 3×15, ankle ABCs, eccentric calf drops on stairs.",
-    "Week 2: Standing calf raises (both then single leg), pogo hops low height.",
-    "Week 3+: Skipping rope, then progressive jogging at 30%/50%/70%/100% over 4 sessions.",
-  ],
-  Achilles: [
-    "Days 1–5: Heel lift in shoes, isometric calf holds 5×45s daily, no jumping.",
-    "Week 1–3: Alfredson protocol — heavy slow eccentric heel drops 3×15 twice daily.",
-    "Week 4+: Reintroduce skipping, then 20s strides at 60% effort.",
-    "Avoid: stretching to pain, plyos until pain on hopping <2/10.",
-  ],
-  "Foot/Ankle": [
-    "Days 1–3: PEACE & LOVE — Protection, Elevation, Avoid anti-inflammatories, Compression, Education.",
-    "Days 4–10: Single-leg balance 3×30s, alphabet drills, towel scrunches.",
-    "Week 2: Heel-to-toe walking, lateral band walks, controlled hops.",
-    "Week 3+: Plyo progression — pogos → broad jumps → cutting.",
-  ],
-  Hip: [
-    "Days 1–7: Hip flexor stretch (couch stretch) 2×60s/side, glute bridges 3×15.",
-    "Week 2: Banded clams, side-lying hip abduction, deadbugs.",
-    "Week 3+: Goblet squats, lateral lunges, single-leg RDL progression.",
-  ],
-  "Lower Back": [
-    "Days 1–3: Walking 10–15min ×2/day. Avoid prolonged sitting. Cat-cow gently.",
-    "Days 4–10: McKenzie press-ups 10 reps every 2h, glute bridges, deadbugs.",
-    "Week 2+: Bird-dogs, hip hinge practice (broomstick), kettlebell deadlifts (very light).",
-    "Red flags: leg numbness, bladder/bowel changes → ER immediately.",
-  ],
-  Shoulder: [
-    "Days 1–7: Pendulum swings, scapular squeezes 3×10, avoid overhead.",
-    "Week 2: External rotation band work 3×15, prone Y-T-W raises.",
-    "Week 3+: Push-up plus, landmine press, gradual return to overhead.",
-  ],
-  Elbow: [
-    "Days 1–7: Wrist eccentrics (flexion + extension) 3×15, ice 10min post-activity.",
-    "Week 2+: Forearm strengthening — pronation/supination with hammer, towel twists.",
-    "Avoid: gripping under load until pain on resisted wrist extension <3/10.",
-  ],
-  Wrist: [
-    "Days 1–5: Splint, wrist circles, gentle pronation/supination.",
-    "Week 2+: Wrist curls (very light), grip work with stress ball, gradual loading.",
-  ],
-  Other: [
-    "General protocol: 48–72h relative rest, then begin pain-free movement.",
-    "Re-introduce strength at 50% load, progress 10% per session if pain stays <3/10.",
-    "Sleep 8h+, protein 1.6–2.0g/kg/day, manage stress — recovery is systemic.",
-  ],
-};
-
-const planForInjury = (bodyPart: string, severity: number): string[] => {
-  const base = RECOVERY_PLANS[bodyPart] ?? RECOVERY_PLANS.Other;
-  if (severity >= 7) {
-    return ["⚠ Severity 7+: see a qualified physiotherapist or doctor BEFORE following any plan.", ...base];
-  }
-  return base;
-};
+// The free, conservative, visible scaffold moved into `@/lib/injuryPlan`: genericScaffoldFor/freeInjuryProtocol.
+// The old in-page scaffolds were fixed week-by-week timelines with built-in
+// return-to-sport progressions ("Week 3+: build to sprints, add 10% per
+// session") written identically for every severity — a prescription the app
+// had no basis for. What the app can honestly hand out free is the general
+// pattern of care per body area, pain-rule-gated progression and red flags;
+// that is what freeInjuryProtocol now writes, with a medical referral text in
+// place of any scaffold when the report carries serious signals.
 
 const Injury = () => {
   const { user, profile, refreshProfile } = useAuth();
@@ -120,10 +60,15 @@ const Injury = () => {
   // plan specific — a rehabilitation scaffold written for "Other, severity 4" is
   // a plan for nobody.
   const [otherSite, setOtherSite] = useState("");
-  const [unlocking, setUnlocking] = useState(false);
+  const [planningId, setPlanningId] = useState<string | null>(null);
   // The injury whose personalised plan is being written right now. One at a
   // time: a double tap used to be two paid calls.
-  const [planningId, setPlanningId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  // One in-flight destructive mutation at a time — a status change and a plan
+  // generation are the two writes on this tab, and a double-tap on either
+  // used to fire two of both.
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState(false);
   const unlock = useUnlockFeature();
   const { hasFeature, loading: entitlementsLoading, refresh: refreshEntitlements } = useSubscription();
 
@@ -201,7 +146,7 @@ const Injury = () => {
   if (avgFatigue > 7) risk += 15;
   if (avgSoreness > 7) risk += 15;
   if (avgSleep < 4) risk += 10;
-  if (injuries.filter((i) => i.status === "active").length > 0) risk += 20;
+  if (injuries.filter((i) => isRestrictingStatus(i.status)).length > 0) risk += 20;
   risk = Math.min(100, risk);
 
   const riskTier = risk >= 65 ? { label: "HEAVY LOAD", color: "destructive", action: "Reduce load 30% for 5 days. Add 2 mobility sessions." }
@@ -209,7 +154,7 @@ const Injury = () => {
     : { label: "STEADY", color: "primary", action: "Keep current load. Maintain mobility routine." };
 
   const submitInjury = async () => {
-    if (!user) return;
+    if (!user || submitting) return;
     // Mirror the injury_logs DB checks: severity 1–10, closed status set,
     // body part from the product list, bounded note length. A malicious or
     // broken client cannot store a fabricated status/severity combination.
@@ -218,26 +163,82 @@ const Injury = () => {
     // so the athlete's own words are kept when they gave them (see
     // resolveInjurySite, which is where that rule is tested).
     const bodyPart = resolveInjurySite({ listed: form.body_part, typed: otherSite, known: BODY_PARTS });
+    const notes = (form.notes || "").replace(/\p{C}/gu, " ").slice(0, 1000) || null;
+    // The safety gate, BEFORE anything is written with the athlete's own
+    // words: a severity at the top of the scale, or a note carrying one of
+    // the serious-symptom signals, stores the medical-referral text instead
+    // of a scaffold — the app declines to be the clinician here.
+    const protocol = freeInjuryProtocol({ bodyPart, severity, reported: notes });
     const status = "active";
-    const plan = planForInjury(bodyPart, severity);
+    setSubmitting(true);
     const { error } = await supabase.from("injury_logs").insert({
       user_id: user.id,
       body_part: bodyPart,
       severity,
       status,
-      notes: (form.notes || "").replace(/\p{C}/gu, " ").slice(0, 1000) || null,
-      recovery_protocol: plan.join("\n"),
+      notes,
+      recovery_protocol: protocol.lines.join("\n"),
     });
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Injury logged — a free generic scaffold is below. A personalised plan costs credits.");
-      setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); setOtherSite(""); load();
+    setSubmitting(false);
+    if (error) { toast.error(error.message); return; }
+    if (protocol.referral) {
+      toast.error("Injury logged — please get this assessed by a physiotherapist or doctor before any training plan.");
+    } else {
+      toast.success("Injury logged — a free conservative scaffold is below. A personalised plan costs credits.");
     }
+    setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); setOtherSite(""); load();
   };
 
-  const resolveInjury = async (id: string) => {
-    const { error } = await supabase.from("injury_logs").update({ status: "resolved" }).eq("id", id);
+  // The status vocabulary the whole app supports. Four states, four honest
+  // readings: active (this restricts training), improving (getting better —
+  // still restricts, with a reduced dose), reassess (something changed
+  // and a professional should look again — still restricts), resolved (no
+  // restriction). "Resolved" is only ever set deliberately by the athlete:
+  // nothing here auto-resolves after a fixed period, and a feel-better report
+  // is not a resolution, it is a status the athlete records deliberately.
+  const INJURY_STATUSES = [
+    { value: "active", label: "Active" },
+    { value: "improving", label: "Improving" },
+    { value: "reassess", label: "Needs reassessment" },
+    { value: "resolved", label: "Resolved" },
+  ] as const;
+  const isRestrictingStatus = (status: string): boolean => status !== "resolved";
+
+  /**
+   * Status + reassessment update, one write per tap.
+   *
+   * Resolving a high-severity injury (severity at or above the serious
+   * threshold, or one where the report carried serious signals) asks for a
+   * deliberate confirm: "feeling better" is not what clears a potentially
+   * serious injury — a professional's assessment is. The confirm says that,
+   * and requires a second tap, so the single most consequential write on the
+   * tab cannot happen by accident.
+   */
+  const [confirmResolveId, setConfirmResolveId] = useState<string | null>(null);
+  const updateInjuryStatus = async (injury: InjuryRow, status: string, severity?: number) => {
+    if (!user || updatingId) return;
+    if (status === "resolved" && severity != null && severity >= SERIOUS_SEVERITY) {
+      // Set the confirm flow: a second tap on the Update button executes it.
+      if (confirmResolveId !== injury.id) {
+        setConfirmResolveId(injury.id);
+        toast.message("Resolving a severity-" + severity + " injury", {
+          description: "If this is resolved, it should be after a professional assessment — not just because it feels better. Tap Update again if you are sure.",
+        });
+        return;
+      }
+      setConfirmResolveId(null);
+    }
+    setUpdatingId(injury.id);
+    const patch: { status: string; severity?: number } = { status };
+    if (typeof severity === "number" && severity >= 1 && severity <= 10) patch.severity = Math.round(severity);
+    const { error } = await supabase.from("injury_logs").update(patch).eq("id", injury.id).eq("user_id", user.id);
+    setUpdatingId(null);
     if (error) { toast.error(error.message); return; }
+    toast.success(
+      status === "resolved"
+        ? "Marked resolved — restrictions and flags for this injury are lifted."
+        : "Status updated — the plan flags and the AI's next plan now reflect this.",
+    );
     load();
   };
 
@@ -258,6 +259,13 @@ const Injury = () => {
    */
   const generateInjuryPlan = async (injury: InjuryRow) => {
     if (!user || !profile || planningId) return;
+    // The same gate the button rendering applies, owning correctness in code:
+    // a serious report is not something a training plan is written around,
+    // at any price, whatever the UI does.
+    if (injury.severity >= SERIOUS_SEVERITY) {
+      toast.error("This injury needs assessment by a physiotherapist or doctor before any training plan. Update its status once they have looked at it.");
+      return;
+    }
     setPlanningId(injury.id);
     try {
       const created = typeof injury.created_at === "string" ? injury.created_at : null;
@@ -408,7 +416,7 @@ const Injury = () => {
             <li className="flex justify-between"><span>Avg fatigue</span><span>{avgFatigue.toFixed(1)}/10</span></li>
             <li className="flex justify-between"><span>Avg soreness</span><span>{avgSoreness.toFixed(1)}/10</span></li>
             <li className="flex justify-between"><span>Avg sleep quality</span><span>{avgSleep.toFixed(1)}/10</span></li>
-            <li className="flex justify-between"><span>Active injuries</span><span>{injuries.filter((i) => i.status === "active").length}</span></li>
+            <li className="flex justify-between"><span>Active injuries</span><span>{injuries.filter((i) => isRestrictingStatus(i.status)).length}</span></li>
           </ul>
         </motion.div>
 
@@ -475,7 +483,9 @@ const Injury = () => {
               <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
               <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-training scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
             </div>
-            <Button onClick={submitInjury} className="w-full">Save injury — free generic scaffold</Button>
+            <Button onClick={submitInjury} disabled={submitting} className="w-full">
+              {submitting ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : "Save injury — free conservative scaffold"}
+            </Button>
           </motion.div>
         )}
         {injuries.length === 0 ? (
@@ -486,29 +496,76 @@ const Injury = () => {
           <div className="space-y-3">
             {injuries.map((i) => (
               <div key={i.id} className={`p-3 rounded-xl border ${
-                i.status === "active" ? "border-destructive/30 bg-destructive/5" : "border-border bg-background/40 opacity-60"
+                isRestrictingStatus(i.status) ? "border-destructive/30 bg-destructive/5" : "border-border bg-background/40 opacity-60"
               }`}>
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <div className="font-medium text-sm">{i.body_part} <span className="text-xs text-muted-foreground">· severity {i.severity}/10</span></div>
+                    <div className="font-medium text-sm">
+                      {i.body_part} <span className="text-xs text-muted-foreground">· severity {i.severity}/10</span>
+                      <span className={`ml-2 text-[11px] uppercase tracking-wider font-semibold ${
+                        i.status === "active" ? "text-destructive"
+                        : i.status === "improving" ? "text-success"
+                        : i.status === "reassess" ? "text-energy"
+                        : "text-muted-foreground"
+                      }`}>
+                        {INJURY_STATUSES.find((s) => s.value === i.status)?.label ?? i.status}
+                      </span>
+                    </div>
                     {i.notes && <div className="text-xs text-muted-foreground mt-1">{i.notes}</div>}
                   </div>
-                  {i.status === "active" && <Button size="sm" variant="ghost" onClick={() => resolveInjury(i.id)}>Resolve</Button>}
                 </div>
+                {/* Status + reassessment: where the athlete records getting
+                    better, a setback, or resolution. This is deliberately a
+                    deliberate write, not a checkbox next to "feels fine" —
+                    resolved is a status for after a professional's outcome,
+                    and the copy below says so. */}
+                {isRestrictingStatus(i.status) && (
+                  <div className="mt-2 p-2 rounded-lg bg-background/60 border border-border space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Select value={i.status} onValueChange={(v) => void updateInjuryStatus(i, v, i.severity)} disabled={updatingId === i.id}>
+                        <SelectTrigger className="h-8 text-xs w-44" aria-label="Injury status"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {INJURY_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-[11px] text-muted-foreground">severity</span>
+                      <input
+                        type="range" min={1} max={10} defaultValue={i.severity}
+                        aria-label={`${i.body_part} severity`}
+                        onMouseUp={(e) => void updateInjuryStatus(i, i.status, Number((e.target as HTMLInputElement).value))}
+                        onTouchEnd={(e) => void updateInjuryStatus(i, i.status, Number((e.target as HTMLInputElement).value))}
+                        className="w-20"
+                      />
+                      {updatingId === i.id && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Improving still counts as active for your restrictions until you mark it resolved; resolved is a status for after a professional has reassessed it, not just when it feels better.
+                    </p>
+                  </div>
+                )}
                 {i.recovery_protocol && (() => {
                   // The column holds both plans, so the label comes from the
                   // stored text (the marker line the paid path writes) rather
                   // than from state: a generic scaffold must never be shown as
                   // the thing the athlete paid for, and vice versa.
                   const stored = splitStoredProtocol(i.recovery_protocol);
+                  // A stored medical referral is not one of the plans — it is
+                  // the app's answer to a serious report, and it must not be
+                  // relabelled as either the free scaffold or the paid plan.
+                  const isReferral = i.recovery_protocol.startsWith(MEDICAL_REFERRAL_MARKER);
+                  const storedIsPersonalised = stored.personalised && !isReferral;
                   return (
                     <div className="mt-2 pt-2 border-t border-border/40">
-                      <div className="text-[12px] uppercase tracking-widest text-primary mb-1">
-                        {stored.personalised ? "Personalised plan (written for this injury)" : "Generic scaffold (free)"}
+                      <div className={`text-[12px] uppercase tracking-widest mb-1 ${isReferral ? "text-destructive" : "text-primary"}`}>
+                        {isReferral
+                          ? "Medical assessment needed first"
+                          : storedIsPersonalised
+                          ? "Personalised plan (written for this injury)"
+                          : "Generic scaffold (free)"}
                       </div>
                       <ul className="space-y-1 text-xs text-muted-foreground">
                         {stored.lines.map((line, idx) => (
-                          <li key={idx} className="flex gap-2"><span className="text-primary">•</span><span>{line}</span></li>
+                          <li key={idx} className="flex gap-2"><span className={isReferral ? "text-destructive" : "text-primary"}>•</span><span>{line}</span></li>
                         ))}
                       </ul>
                     </div>
@@ -519,23 +576,40 @@ const Injury = () => {
                     from a literal written here, and the reason is on screen
                     rather than implied: a plan is written for this injury at this
                     severity against the athlete's training week, so it costs us a
-                    provider call every time it is made. */}
-                <div className="mt-3 pt-2 border-t border-border/40">
-                  <Button
-                    size="sm"
-                    onClick={() => void generateInjuryPlan(i)}
-                    disabled={planningId === i.id}
-                    className="w-full gap-1.5"
-                  >
-                    {planningId === i.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    {planningId === i.id
-                      ? "Writing your plan…"
-                      : `${i.recovery_protocol ? "Replace with a" : "Create a"} personalised plan · ${creditCost("injury_plan")} credits`}
-                  </Button>
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                    {creditCost("injury_plan")} credits per plan — written for this injury against your training week, so it costs a provider call every time it is made. The tab unlock does not cover it. The generic scaffold above stays free.
-                  </p>
-                </div>
+                    provider call every time it is made.
+
+                    Gated for a serious report: a stored medical referral, or a
+                    severity at or above the serious threshold, means the app
+                    has already declined to write a training plan for this
+                    injury — the button is not offered, and the card says why,
+                    rather than selling a scaffold around a possible fracture. */}
+                {i.recovery_protocol?.startsWith(MEDICAL_REFERRAL_MARKER) || i.severity >= SERIOUS_SEVERITY ? (
+                  <div className="mt-3 pt-2 border-t border-border/40">
+                    <div className="p-3 rounded-lg bg-energy/5 border border-energy/20 flex gap-2">
+                      <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
+                      <span className="text-[12px] leading-relaxed text-muted-foreground">
+                        <strong>No plan is offered for this report.</strong> Based on the severity or the symptoms recorded, this injury needs assessment by a qualified physiotherapist or doctor first. Once they have assessed it, log what they said here (update the status and severity above) and the app can help you track a plan they approve.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 pt-2 border-t border-border/40">
+                    <Button
+                      size="sm"
+                      onClick={() => void generateInjuryPlan(i)}
+                      disabled={planningId === i.id}
+                      className="w-full gap-1.5"
+                    >
+                      {planningId === i.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {planningId === i.id
+                        ? "Writing your plan…"
+                        : `${i.recovery_protocol ? "Replace with a" : "Create a"} personalised plan · ${creditCost("injury_plan")} credits`}
+                    </Button>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {creditCost("injury_plan")} credits per plan — written for this injury against your training week, so it costs a provider call every time it is made. The tab unlock does not cover it. The generic scaffold above stays free.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

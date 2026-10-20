@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getRegionCountry } from "./region";
 
 /**
  * Resolve the Intl locale tag to format with.
@@ -17,11 +18,20 @@ import { useTranslation } from "react-i18next";
  * keep the device's full tag (an en-GB device keeps "22 September", an en-US
  * device keeps "September 22" — even after choosing English manually).
  * Otherwise use the bare language code and let Intl pick the region default.
+ *
+ * Prompt 9 adds one override: a *confirmed* region — the athlete's selected
+ * country from user_region — wins over the device, because a selected country
+ * is an explicit act and the device locale is only a suggested default.
+ * With no confirmed region the previous behaviour is untouched, so nothing
+ * changes for existing athletes.
  */
 function resolveLocale(lang: string): string {
   try {
+    const langBase = lang?.toLowerCase().split(/[-_]/)[0];
+    const region = getRegionCountry();
+    if (region && langBase) return `${langBase}-${region}`;
     const nav = typeof navigator !== "undefined" ? navigator.language : undefined;
-    if (nav && nav.toLowerCase().split(/[-_]/)[0] === lang.toLowerCase()) return nav;
+    if (nav && nav.toLowerCase().split(/[-_]/)[0] === langBase) return nav;
   } catch { /* non-browser env */ }
   return lang;
 }
@@ -30,8 +40,21 @@ let activeLocale = "en";
 
 /** Sync the formatting locale with i18next. Called by the i18n init. */
 export function setFormattingLocale(lang: string): void {
+  i18nLanguageRef = lang || "en";
   activeLocale = resolveLocale(lang || "en");
 }
+
+/**
+ * Re-derive the formatting locale after the region changes. Called by the
+ * profile load when the country is set — the language has not changed, but
+ * the locale tag has (en + US selected → "en-US" dates).
+ */
+export function refreshFormattingLocale(): void {
+  setFormattingLocale((i18nLanguageRef ?? "en"));
+}
+
+/** Last language seen by setFormattingLocale, so a region change re-uses it. */
+let i18nLanguageRef: string | null = null;
 
 /** Current Intl locale tag used by every formatter below. */
 export function getLocale(): string {

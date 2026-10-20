@@ -1,39 +1,42 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
     "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleDetection": "force",
     "moduleResolution": "bundler",
-    // The codebase is written to the project's baseline lint level, not to
-    // strict TS. Keep the baseline; the functions config enforces null-safety
-    // where it matters (server-side money and auth paths).
-    "strict": false,
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": false,
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": false,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
-    // node types used to arrive transitively through the old vitest tree;
-    // vitest 4 no longer provides them, so the test files' node imports need
-    // this declared.
-    "types": ["vitest/globals", "node"]
+    "skipLibCheck": true,
+    "strict": false,
+    "target": "ES2020",
+    // node types used to arrive transitively through the old vitest tree; vitest 4
+    // no longer provides them, so the test files' node imports need this declared.
+    "types": [
+      "vitest/globals",
+      "node"
+    ],
+    "useDefineForClassFields": true
   },
-  "include": ["src", "vite.config.app.ts"],
+  "include": [
+    "src"
+  ],
   "exclude": [
     "src/components/_archive",
-    "src/lib/profile-upload.ts",
-    // Edge-runtime code compiled under tsconfig.functions.json, not TSC here.
-    "src/server"
+    "src/lib/profile-upload.ts"
   ]
 }

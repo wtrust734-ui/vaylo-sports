@@ -38,7 +38,11 @@ import { supabase } from "@/integrations/supabase/client";
  * current Terms (src/components/legal/TermsChangeNotice.tsx). Section 17 of
  * `legal/terms.html` promises exactly that, so the two move together.
  */
-export const TERMS_VERSION = "1.5";
+// Must stay in lockstep with the version line published in legal/terms.html
+// (termsReacceptance.test.ts asserts the two agree). 1.6 — effective
+// 2026-10-20 — clarifies in §7a that AI-sending protections do not presently
+// promise AI input is never stored or never used for model improvement.
+export const TERMS_VERSION = "1.6";
 
 /**
  * Stamp acceptance of the Terms and Privacy Policy.

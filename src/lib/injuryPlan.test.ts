@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildInjuryBriefing,
+  freeInjuryProtocol,
+  MEDICAL_REFERRAL_MARKER,
   MAX_PLAN_WEEKS,
   MAX_SITE_LENGTH,
   parseInjuryPlan,
@@ -23,6 +25,7 @@ import {
   renderInjuryProtocol,
   resolveInjurySite,
   splitStoredProtocol,
+  SERIOUS_SEVERITY,
   type InjuryPlan,
 } from "./injuryPlan";
 
@@ -260,5 +263,82 @@ describe("planHeadline", () => {
   it("prefers the summary and falls back to the first week", () => {
     expect(planHeadline(planOf(validPlan))).toContain("Reported left knee");
     expect(planHeadline(planOf({ weeks: [{ week: 1, focus: "Go", items: [{ work: "x" }] }] }))).toContain("Go");
+  });
+});
+
+// ─── The safety floor: serious symptoms get a referral, not a plan ───
+
+describe("the serious-symptom gate", () => {
+  it("refers on the report's own serious signals, without needing a diagnosis", () => {
+    // Each of these is a keyword that genuinely warrants clinical assessment
+    // regardless of everything else in the report; the app's job is to notice
+    // them, not to name the injury.
+    for (const reported of [
+      "heard a pop at the moment of landing and can't bear weight",
+      "leg numbness spreading down, pins and needles",
+      "bladder changes since it happened",
+      "obvious deformity, think it is a fracture",
+      "night pain that wakes me",
+      "hot and swollen with a fever",
+      "head injury during the match, knocked out",
+    ]) {
+      expect(freeInjuryProtocol({ bodyPart: "Knee", severity: 3, reported }).referral, reported).toBe(true);
+    }
+  });
+
+  it("does not refer on ordinary badness: a sore knee still gets the free scaffold", () => {
+    const normal = freeInjuryProtocol({ bodyPart: "Knee", severity: 4, reported: "Twisted it at 6-a-side, hurts when I run downhill" });
+    expect(normal.referral).toBe(false);
+    expect(normal.lines.join("\n")).toContain("General scaffold");
+  });
+
+  it("refers on a severity at the top of the scale even with a silent note", () => {
+    expect(freeInjuryProtocol({ bodyPart: "Knee", severity: SERIOUS_SEVERITY, reported: null }).referral).toBe(true);
+    // One below the threshold stays scaffold territory.
+    expect(freeInjuryProtocol({ bodyPart: "Knee", severity: SERIOUS_SEVERITY - 1, reported: null }).referral).toBe(false);
+  });
+
+  it("the referral text is stored and rendered as its own thing, never as a plan", () => {
+    const lines = freeInjuryProtocol({ bodyPart: "Lower Back", severity: 9, reported: "" }).lines;
+    const stored = lines.join("\n");
+    expect(stored.startsWith(MEDICAL_REFERRAL_MARKER)).toBe(true);
+    // Both of the labels the screen can print would mislead here; the referral
+    // is neither the paid plan nor the free scaffold.
+    expect(splitStoredProtocol(stored).personalised).toBe(false);
+    expect(stored).toMatch(/physiotherapist or doctor/);
+    expect(stored).toMatch(/does not diagnose or treat/i);
+  });
+});
+
+// ─── The free scaffold is conservative by construction ───
+
+describe("the free generic scaffold", () => {
+  it("exists for every listed body area, with red flags and a pain rule", () => {
+    for (const bodyPart of ["Knee", "Hamstring", "Calf", "Achilles", "Foot/Ankle", "Hip", "Lower Back", "Shoulder", "Elbow", "Wrist", "Other"]) {
+      const result = freeInjuryProtocol({ bodyPart, severity: 3, reported: "" });
+      expect(result.referral, bodyPart).toBe(false);
+      const text = result.lines.join("\n");
+      expect(text).toContain("not medical advice");
+      expect(text).toContain("Progress when");
+      expect(text).toContain("clinician");
+    }
+  });
+
+  it("prescribes NO recovery timeline and NO return-to-sport progression", () => {
+    // What the old in-page scaffolds wrote: fixed week-by-week programmes
+    // ("Week 3+: build to sprints — add 10% per session") identical for every
+    // severity. The app has no basis for a timeline, so the text may not
+    // contain one.
+    for (const bodyPart of ["Knee", "Hamstring", "Calf", "Achilles", "Foot/Ankle", "Hip", "Lower Back", "Shoulder", "Elbow", "Wrist", "Other"]) {
+      const text = freeInjuryProtocol({ bodyPart, severity: 3, reported: "" }).lines.join("\n");
+      expect(text, bodyPart).not.toMatch(/^\s*Weeks?\s*\d/m);
+      expect(text, bodyPart).not.toMatch(/\d+\s*%/);
+      expect(text, bodyPart).not.toMatch(/return to sport/i);
+    }
+  });
+
+  it("warns at least one honest thing about progression: next-day pain, not the session", () => {
+    const text = freeInjuryProtocol({ bodyPart: "Knee", severity: 3, reported: "" }).lines.join("\n");
+    expect(text).toMatch(/pain-free|comfortable/i);
   });
 });

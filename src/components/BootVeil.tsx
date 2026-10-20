@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import logo from "@/assets/logo.jpg";
+import { isConfigBootFailure, isConfigKeyMissing } from "@/lib/startup";
 
 /**
  * BootVeil — one continuous surface from the first frame to the first usable one.
@@ -109,6 +110,7 @@ if (typeof window !== "undefined") {
 
 export default function BootVeil() {
   const [, setTick] = useState(0);
+  const [fatal, setFatal] = useState<boolean | null>(null);
 
   useEffect(() => {
     const listener = () => setTick((t) => t + 1);
@@ -117,6 +119,36 @@ export default function BootVeil() {
       listeners.delete(listener);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Defer until the hydration effect has had a chance to fail: if it settles
+    // without an error, leave boot alone; if it sets a fatal diagnostic, surface
+    // it underneath the veil without waiting for the hard stop.
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      if (cancelled) return;
+      if (isConfigBootFailure()) {
+        setFatal(true);
+        // Peel the veil immediately so the diagnostic is visible; it has its own
+        // retry affordance and does not rely on the hard stop.
+        if (phase === "held") {
+          phase = "gone";
+          emit();
+        }
+      }
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, []);
+
+  if (fatal) {
+    return (
+      <ConfigBootFailureScreen />
+    );
+  }
 
   if (phase === "gone") return null;
 
@@ -142,6 +174,49 @@ export default function BootVeil() {
       />
       <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.32em] text-sky-200/70">
         Vaylo Sports
+      </p>
+    </div>
+  );
+}
+
+function ConfigBootFailureScreen() {
+  return (
+    <div
+      role="alert"
+      data-boot-fatal
+      className="fixed inset-0 z-[210] flex flex-col items-center justify-center p-6 bg-[#05070f] text-center"
+    >
+      <h1 className="text-lg font-bold tracking-tight text-white">
+        App could not start
+      </h1>
+      <p className="mt-3 max-w-sm text-sm text-white/70">
+        We could not reach the app’s backend. The loading screen will not disappear until this is fixed.
+      </p>
+      <p className="mt-2 text-xs text-white/50">
+        {isConfigKeyMissing()
+          ? "This app is missing its backend key. It cannot reach the server until that is fixed."
+          : "This app could not reach its backend. The loading screen will not disappear until that is fixed."}
+      </p>
+      <div className="mt-6 flex flex-col gap-3 w-full max-w-[260px]">
+        <button
+          type="button"
+          className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+          onClick={() => {
+            try {
+              window.location.reload();
+            } catch {
+              window.location.href = window.location.href;
+            }
+          }}
+        >
+          Retry
+        </button>
+        <p className="text-[11px] text-white/40 leading-relaxed">
+          If this keeps happening on a device you own, the app may need to be reinstalled or the build may need its backend configuration fixed.
+        </p>
+      </div>
+      <p className="mt-3 text-[11px] text-white/30" aria-label="No keys or tokens are shown on this screen">
+        No keys or tokens are shown on this screen.
       </p>
     </div>
   );

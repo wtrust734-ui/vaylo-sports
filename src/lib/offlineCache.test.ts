@@ -6,7 +6,16 @@
 // data without saying so is a lie rather than a fallback.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { CACHE_TTLS, cacheAgeLabel, cacheClear, cacheRead, cacheWrite } from "./offlineCache";
+import {
+  CACHE_TTLS,
+  cacheAgeLabel,
+  cacheClear,
+  cachePlans,
+  cacheRead,
+  cacheReadPlans,
+  cacheWrite,
+  clearPlansCache,
+} from "./offlineCache";
 
 beforeEach(() => localStorage.clear());
 
@@ -75,6 +84,46 @@ describe("cacheWrite / cacheRead", () => {
   });
 });
 
+describe("cachePlans / cacheReadPlans", () => {
+  it("round-trips the plan list and reports its age", () => {
+    expect(cachePlans("u1", [{ id: "p1", planTitle: "800m Pace" }])).toBe(true);
+
+    const read = cacheReadPlans("u1");
+
+    expect(read?.data).toEqual([{ id: "p1", planTitle: "800m Pace" }]);
+    expect(read?.ageMs).toBeGreaterThanOrEqual(0);
+    expect(read?.stale).toBe(false);
+  });
+
+  it("misses when nothing was cached for the athlete", () => {
+    expect(cacheReadPlans("u1")).toBeNull();
+  });
+
+  it("never hands one athlete another athlete's cached plans", () => {
+    cachePlans("u1", [{ id: "my-plan", planTitle: "Mine" }]);
+
+    expect(cacheReadPlans("u2")).toBeNull();
+    expect(cacheReadPlans("u1")?.data).toEqual([{ id: "my-plan", planTitle: "Mine" }]);
+  });
+
+  it("marks a plan snapshot stale past the plans TTL", () => {
+    const old = CACHE_TTLS.plans - 60_000;
+    const fresh = CACHE_TTLS.plans + 60_000;
+
+    localStorage.setItem(
+      "vaylo.cache.v1.u1.plans",
+      JSON.stringify({ savedAt: Date.now() - old, data: [] }),
+    );
+    expect(cacheReadPlans("u1")?.stale).toBe(false);
+
+    localStorage.setItem(
+      "vaylo.cache.v1.u1.plans",
+      JSON.stringify({ savedAt: Date.now() - fresh, data: [] }),
+    );
+    expect(cacheReadPlans("u1")?.stale).toBe(true);
+  });
+});
+
 describe("cacheClear", () => {
   it("clears one key", () => {
     cacheWrite("u1", "today", { a: 1 });
@@ -107,6 +156,28 @@ describe("cacheClear", () => {
     cacheClear("u1");
 
     expect(localStorage.getItem("vaylo.offlineQueue.v1")).not.toBeNull();
+  });
+});
+
+describe("clearPlansCache", () => {
+  it("clears only the named user's plan snapshots", () => {
+    cachePlans("u1", [{ id: "only-me" }]);
+    cachePlans("u2", [{ id: "other" }]);
+
+    clearPlansCache("u1");
+
+    expect(cacheReadPlans("u1")).toBeNull();
+    expect(cacheReadPlans("u2")?.data).toEqual([{ id: "other" }]);
+  });
+
+  it("does not touch non-plan cache keys", () => {
+    cachePlans("u1", []);
+    cacheWrite("u1", "today", { a: 1 });
+
+    clearPlansCache("u1");
+
+    expect(cacheReadPlans("u1")).toBeNull();
+    expect(cacheRead("u1", "today")?.data).toEqual({ a: 1 });
   });
 });
 

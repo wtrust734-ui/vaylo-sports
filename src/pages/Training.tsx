@@ -1,7 +1,10 @@
 import { getAiLocale } from "@/i18n";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
-import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info } from "lucide-react";
+import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info, WifiOff } from "lucide-react";
+import { updateOrQueue } from "@/lib/offlineQueue";
+import { cacheAgeLabel, cachePlans, cacheReadPlans } from "@/lib/offlineCache";
+import { getRegionCountry, sportDisplayName } from "@/i18n/region";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +24,9 @@ import { sessionStatusMeta } from "@/lib/lifeEvents";
 import { useActiveBreak } from "@/hooks/useActiveBreak";
 import ActiveBreakBanner from "@/components/ActiveBreakBanner";
 import { breakBriefForGenerator, rebuildPlanForBreak, undoPlanRebuild } from "@/lib/adaptivePlanning";
+import { recordPlanGenerationMs } from "@/lib/planTiming";
+import PlanWaitEstimate from "@/components/training/PlanWaitEstimate";
+import { summarizeInjuryImpact, type InjuryRestriction } from "@/lib/injuryRestrictions";
 import { readRecoveryForPlan, type RecoveryReadResult } from "@/lib/recoveryPlanning";
 import type { AdjustmentDecision } from "@/lib/recoveryAdjust";
 import { explainDecision, explainWeek } from "@/lib/explanations";
@@ -32,10 +38,9 @@ import { flattenPlan } from "@/lib/planSchedule";
 import PlanExportButton from "@/components/training/PlanExportButton";
 import { notifyPlanCreated } from "@/lib/notificationTriggers";
 import { evaluateLogAgainstEvents } from "@/lib/eventTrophies";
-import { wallForEvaluation, recordTimedPb } from "@/lib/pbWall";
+import { recordTimedPb, wallForEvaluation } from "@/lib/pbWall";
 import { triggerPbCelebration } from "@/components/PBCelebration";
 import { awardTrainingSession } from "@/lib/xp";
-import { claimStreakDay } from "@/lib/streakRewards";
 
 type TrainingPlan = Tables<"training_plans">;
 
@@ -298,6 +303,14 @@ const Training = () => {
   const { toast } = useToast();
   const spendWithTopUp = useSpendWithTopUp();
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
+  // Phase 8: where the plan list is rendering from. A network failure serves the
+  // device snapshot (cacheReadPlans) so an offline athlete sees the plans they
+  // have already opened once online — but it has to say so, and say when the
+  // snapshot was taken, so cached data is never presented as live data.
+  // plansLoadFailed means the read failed AND nothing is cached: here a distinct
+  // message is required, as "no plans yet" would be a false statement.
+  const [plansCachedInfo, setPlansCachedInfo] = useState<{ savedAt: number; stale: boolean } | null>(null);
+  const [plansLoadFailed, setPlansLoadFailed] = useState(false);
   // The break banner on the plans view (audit B1): an active availability
   // window is visible here, not only on /availability.
   const activeBreak = useActiveBreak();
@@ -354,6 +367,33 @@ const Training = () => {
   // and handed a null plan when none is open, because the plan-detail view is
   // an early return further down and a hook cannot live inside it.
   const adaptive = useAdaptiveSchedule(activeView === "planDetail" ? selectedPlan : null);
+
+  // Active injuries, read when a plan is open, so the plan detail can say
+  // which sessions the injury touches. One small read on plan open, not on
+  // every render; the flags themselves are computed in
+  // `src/lib/injuryRestrictions.ts` and rendered as review chips, never
+  // written back into the plan — existing plan data and history stay intact.
+  const [injuriesForFlags, setInjuriesForFlags] = useState<InjuryRestriction[]>([]);
+  useEffect(() => {
+    if (activeView !== "planDetail" || !user) return;
+    let alive = true;
+    supabase
+      .from("injury_logs")
+      .select("id, body_part, severity, status, notes")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (alive) setInjuriesForFlags((data ?? []) as unknown as InjuryRestriction[]);
+      }, () => {
+        // Unreadable is the same as none: this read only feeds display flags
+        // and must never block the plan or invent an error state the page
+        // does not otherwise have.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeView, selectedPlan?.id, user]);
 
   // If the athlete leaves the Training screen while a plan is being written, the
   // request is already in flight on the server and cannot be cancelled from here
@@ -551,17 +591,55 @@ const Training = () => {
     // by far the heaviest column on the table and is only needed by the plan
     // detail path, not by every list render. "*" was fetching all of it, for
     // every plan, on every visit (audit finding 3.1).
-    const { data } = await supabase.from("training_plans").select(
+    const { data, error } = await supabase.from("training_plans").select(
       "id, user_id, title, sport, level, active, week_current, duration_weeks, created_at, description, goal, updated_at, plan_data, plan_adjustments",
     ).eq("user_id", user.id).order("created_at", { ascending: false });
-    setPlans(data || []);
+    if (!error) {
+      const rows = (data || []) as unknown as TrainingPlan[];
+      setPlans(rows);
+      setPlansCachedInfo(null);
+      setPlansLoadFailed(false);
+      // Offered online, therefore available offline: the snapshot is written on
+      // every successful read. A read-only fallback for the offline detail
+      // view, never a second source of truth — the next online read overwrites it.
+      cachePlans(user.id, rows);
+      return;
+    }
+    // A failed read is not an empty list: without the cached rows below, an
+    // offline athlete would be told they have no plans at all.
+    const cached = cacheReadPlans(user.id);
+    if (cached) {
+      setPlans(cached.data as unknown as TrainingPlan[]);
+      setPlansCachedInfo({ savedAt: cached.savedAt, stale: cached.stale });
+    } else {
+      setPlans([]);
+      setPlansCachedInfo(null);
+    }
+    setPlansLoadFailed(true);
   };
+
+  // When connectivity returns, refresh the plan list from the server now rather
+  // than on the athlete's next visit, so cached readings get replaced as soon
+  // as there is something newer to replace them with.
+  useEffect(() => {
+    if (!user) return;
+    const online = () => { void fetchPlans(); };
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPlans closes over the current user id only
+  }, [user]);
 
   const deletePlan = async (planId: string) => {
     if (!user) return;
     const { error } = await supabase.from("training_plans").delete().eq("id", planId).eq("user_id", user.id);
     if (error) { toast({ title: "Couldn't delete plan", description: error.message, variant: "destructive" }); return; }
-    setPlans(plans.filter(p => p.id !== planId));
+    // Keep the offline snapshot honest too: the deleted plan must not reappear
+    // after a restart offline, silently resurrecting an athlete's deletion.
+    setPlans((prev) => {
+      const next = prev.filter((p) => p.id !== planId);
+      cachePlans(user.id, next);
+      return next;
+    });
     toast({ title: "Plan deleted" });
   };
 
@@ -581,7 +659,12 @@ const Training = () => {
   };
 
   const createPlan = async () => {
-    if (!user || !profile) return;
+    // One generation at a time — ever. The overlay covers the screen, but the
+    // overlay renders a frame AFTER this handler begins, so a fast double-tap
+    // slipped past it before it existed and charged for two identical plans.
+    // The two-spending-states guard here is the one that owns correctness; the
+    // disabled button and the overlay are presentation.
+    if (!user || !profile || loading || generationActive) return;
     const age = getAge();
     if (!age) { toast({ title: "Age required", description: "Enter your age or set DOB in Profile.", variant: "destructive" }); return; }
     // Multi-goal: keep every selected goal in one comma-joined string for the
@@ -617,6 +700,13 @@ const Training = () => {
     setPlanGenerationProgress(duration);
     setProgressHidden(false);
     setGenerationActive(true);
+    // When the request was issued — the measurement point the recorded
+    // estimate is calibrated from. The other endpoints of the raw wait look
+    // like timing too and are not: the fetch of the dossier and the brief is
+    // the athlete's own device work, lagging on bad networks, and the save
+    // happens after the plan is already written. What the provider spent is
+    // the round trip between this point and the server's definitive answer.
+    const generationStartedAt = Date.now();
     try {
       // The generate-plan function verifies auth, throttles and charges
       // training_plan_week credits server-side (with auto-refund on failure).
@@ -645,6 +735,11 @@ const Training = () => {
         const { data: aiData, error: aiErr } = await supabase.functions.invoke("generate-plan", {
           body: {
             sport, goal, level, duration_weeks: duration, age, quiz, userLocale: getAiLocale(),
+            // Prompt 9: the selected country, so the generator writes the
+            // plan in the athlete's regional terminology and units. The
+            // server expands the ISO code itself — nothing prompt-authored
+            // is sent.
+            userRegion: getRegionCountry(),
             pbs: dossier?.pbs ?? null,
             dossier: dossier ? { pbs_text: dossier.pbs_text, outcomeGoals: dossier.outcomeGoals, injuries: dossier.injuries } : null,
             // The generator is told about breaks; it is not asked to do the
@@ -694,6 +789,17 @@ const Training = () => {
           chargeError = "The plan could not be reached. Your credits were charged by the server and, if anything failed there, the server will refund them automatically. If your credits do not come back within a few minutes, contact support.";
         }
       }
+      // Measured before anything branch-specific runs, on failure AND on
+      // success though only successes calibrate: a fast refusal (a 402, a
+      // throttle) is round-trip noise, and pretending refusals were the cost
+      // of generation would teach the estimate to promise a wait that real
+      // work never takes. See `src/lib/planTiming.ts`.
+      recordPlanGenerationMs({
+        kind: "training",
+        weeks: duration,
+        ms: Date.now() - generationStartedAt,
+        outcome: planData ? "ok" : "failed",
+      });
       if (chargeError || !planData) {
         const reason = chargeError
           ? chargeError
@@ -1324,18 +1430,34 @@ const Training = () => {
       }
       planData[weekIdx].sessions[sessionIdx].duration_minutes = mins;
     }
-    // Scope the update to THIS plan. The previous call had no filter — RLS made
-    // it touch only the owner's rows, which still meant EVERY plan the athlete
-    // owned was overwritten with the edited plan's data.
-    const { error } = await supabase
-      .from("training_plans")
-      .update({ plan_data: planData as unknown as Json })
-      .eq("id", selectedPlan.id)
-      .eq("user_id", user?.id ?? "");
-    if (error) { toast({ title: "Couldn't save the session", description: error.message, variant: "destructive" }); return; }
+    // Offline-edits go to the device queue instead of failing: the athlete gets
+    // their change now, and the queue replays it (with the pre-edit row as the
+    // conflict baseline) when connectivity returns. A server refusal is still
+    // surfaced — only the network is allowed to queue.
+    const before = selectedPlan.plan_data;
+    const result = await updateOrQueue(
+      "training_plans",
+      selectedPlan.id,
+      { plan_data: planData },
+      { base: { plan_data: before } },
+    );
+    if (!result.ok) {
+      const message = result.error instanceof Error ? result.error.message : "Please try again.";
+      toast({ title: "Couldn't save the session", description: message, variant: "destructive" });
+      return;
+    }
     setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
+    setPlans((prev) => {
+      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
+      if (user) cachePlans(user.id, next);
+      return next;
+    });
+    if (result.queued) {
+      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
+    } else {
+      toast({ title: "Session updated! ✏️" });
+    }
     setEditingSession(null);
-    toast({ title: "Session updated! ✏️" });
   };
 
   const toggleWeekHoliday = async (weekNum: number) => {
@@ -1380,16 +1502,31 @@ const Training = () => {
       });
     }
     
-    // Scoped to this plan (see saveSessionEdit — an unfiltered update would
-    // overwrite every plan the athlete owns).
-    const { error } = await supabase
-      .from("training_plans")
-      .update({ plan_data: planData as unknown as Json })
-      .eq("id", selectedPlan.id)
-      .eq("user_id", user?.id ?? "");
-    if (error) { toast({ title: "Couldn't update your week", description: error.message, variant: "destructive" }); return; }
+    // Scoped and queued like saveSessionEdit: the row is addressed by its id,
+    // and a network failure queues the edit for replay rather than losing it.
+    const before = selectedPlan.plan_data;
+    const result = await updateOrQueue(
+      "training_plans",
+      selectedPlan.id,
+      { plan_data: planData },
+      { base: { plan_data: before } },
+    );
+    if (!result.ok) {
+      const message = result.error instanceof Error ? result.error.message : "Please try again.";
+      toast({ title: "Couldn't update your week", description: message, variant: "destructive" });
+      return;
+    }
     setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
-    toast({ title: !wasHoliday ? "Week marked as holiday 🏖️ — sessions redistributed to next week" : "Holiday removed — sessions restored" });
+    setPlans((prev) => {
+      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
+      if (user) cachePlans(user.id, next);
+      return next;
+    });
+    if (result.queued) {
+      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
+    } else {
+      toast({ title: !wasHoliday ? "Week marked as holiday 🏖️ — sessions redistributed to next week" : "Holiday removed — sessions restored" });
+    }
   };
 
   /**
@@ -1430,19 +1567,31 @@ const Training = () => {
     const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === dayNum);
     if (sessionIdx === -1) return;
     planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
-    // Scoped to this plan (see saveSessionEdit).
-    const { error } = await supabase
-      .from("training_plans")
-      .update({ plan_data: planData as unknown as Json })
-      .eq("id", selectedPlan.id)
-      .eq("user_id", user?.id ?? "");
-    if (error) {
+    // Scoped and queued like saveSessionEdit (only network failures queue;
+    // server refusals still revert local state and say why).
+    const before = selectedPlan.plan_data;
+    const result = await updateOrQueue(
+      "training_plans",
+      selectedPlan.id,
+      { plan_data: planData },
+      { base: { plan_data: before } },
+    );
+    if (!result.ok) {
       // Put the local state back so the UI can't disagree with the database.
       planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
-      toast({ title: "Couldn't update the session", description: error.message, variant: "destructive" });
+      const message = result.error instanceof Error ? result.error.message : "Please try again.";
+      toast({ title: "Couldn't update the session", description: message, variant: "destructive" });
       return;
     }
     setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
+    setPlans((prev) => {
+      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
+      if (user) cachePlans(user.id, next);
+      return next;
+    });
+    if (result.queued) {
+      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
+    }
   };
 
   // Limiter test
@@ -1505,9 +1654,6 @@ const Training = () => {
     if (parts.length === 3) totalSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
     else if (parts.length === 2) totalSec = parts[0] * 60 + parts[1];
     const pace = distKm && totalSec ? `${Math.floor((totalSec / distKm) / 60)}:${(Math.round((totalSec / distKm) % 60)).toString().padStart(2, "0")} /km` : null;
-    // `.select("id")` matters: the new log's id is what the weekly coin drip
-    // idempotency ledger hangs off — the drip claim verifies the log belongs
-    // to the athlete, so one log can never be replayed for coins.
     const { data: insertedLog, error } = await supabase.from("performance_logs").insert({
       user_id: user.id, title: logTitle || `${logType} - ${logSport}`, distance_km: distKm,
       time_seconds: totalSec || null, pace_per_km: pace, notes: logNotes || null, sport: logSport, log_type: logType,
@@ -1524,83 +1670,53 @@ const Training = () => {
         distanceKm: distKm,
       }),
     }).select("id").single();
-    // supabase-js returns `data: null` for inserts without `.select()`, so the
-    // chain above is not optional polish: without it the drip below would
-    // silently never fire.
-    if (error) { toast({ title: "Couldn't save your log", description: error.message, variant: "destructive" }); return; }
+    if (error || !insertedLog) { toast({ title: "Couldn't save your log", description: error?.message ?? "Unknown error", variant: "destructive" }); return; }
+    // The saved log row is the proof of a session: XP is requested with the
+    // log id, the server verifies the row (and its daily cap / idempotency).
+    const newLogId = (insertedLog as { id: string }).id;
+    void awardTrainingSession(newLogId);
+    setShowAddLog(false); setLogTitle(""); setLogDistance(""); setLogTime(""); setLogNotes(""); setLogHeartRate(""); setLogCalories("");
 
-    // Weekly coin drip: the server decides the amount and enforces the weekly
-    // cap; a failure here is a silent no (the log itself already saved).
-    let coinLine: string | null = null;
-    let trophyLine: string | null = null;
-    const newLogId = (insertedLog as { id?: string } | null)?.id;
-
-    // XP: a completed training session earns its reward through the server's
-    // xp_award RPC, which verifies the log row and picks the amount from the
-    // reward rules — the client never sends an XP number. Idempotent per log:
-    // retrying or re-saving the same session can never double it. A failure is
-    // a silent no; the log itself already saved.
-    if (newLogId) {
-      void awardTrainingSession(newLogId);
-      // Streak: this completed session qualifies today (after the same
-      // server-side validation that verified the XP award; nothing the client
-      // says is trusted, and a duplicate event collapses into one day).
-      void claimStreakDay("training_session", newLogId);
+    // Trophy claim + PB detection run AFTER the log row is confirmed saved, so
+    // a failed save claims nothing and grants nothing. The server RPC is
+    // authoritative for what was granted (idempotent per user+reward); what we
+    // render is what it returns, never a client-side guess.
+    let trophies: { reward_id: string; tier: string; name: string }[] = [];
+    if (totalSec > 0) {
+      const { data: claim } = await supabase.rpc("claim_event_trophies", { p_log_id: insertedLog.id });
+      // The RPC returns jsonb ({ ok, event, trophies }); narrow through the
+      // shape the migration documents rather than trusting Json's union.
+      trophies = ((claim as { trophies?: { reward_id: string; tier: string; name: string }[] } | null)?.trophies ?? []) as { reward_id: string; tier: string; name: string }[];
     }
-
-    // PB + event-trophy evaluation: only for timed distance events. The server
-    // matches sport + distance ±2% and grants the Bronze/Silver/Gold trophies
-    // the time earns; the client checks the local PB wall so the celebration
-    // card can say "new PB" with the honest previous best. Any failure here is
-    // a silent no — the log itself already saved.
-    if (newLogId && distKm && totalSec) {
-      try {
-        const [{ data: claimed }, evaluation] = await Promise.all([
-          supabase.rpc("claim_event_trophies" as never, { p_log_id: newLogId } as never),
-          Promise.resolve(
-            evaluateLogAgainstEvents(
-              { sport: logSport, log_type: logType, distance_km: distKm, time_seconds: totalSec },
-              wallForEvaluation(),
-            ),
-          ),
-        ]);
-        const trophies = (claimed as { trophies?: { reward_id: string; tier: string; name: string }[] } | null)?.trophies ?? [];
-
-        let isPb = false;
-        let previousSeconds: number | null = null;
-        if (evaluation.event) {
-          const recorded = recordTimedPb(evaluation.event.label, totalSec);
-          isPb = recorded.isPb;
-          previousSeconds = recorded.previousSeconds;
-        }
-
-        if (isPb || trophies.length > 0) {
-          triggerPbCelebration({
-            eventLabel: evaluation.event?.label ?? logSport,
-            timeSeconds: totalSec,
-            isPb,
-            previousSeconds,
-            trophies,
-          });
-          trophyLine = trophies.length > 0
-            ? `🏆 ${trophies.length === 1 ? "Trophy" : "Trophies"} earned: ${trophies.map((t) => t.tier).join(", ")}`
-            : "🚀 New personal best";
-        }
-      } catch { /* evaluation is best-effort; the log save stands on its own */ }
-    }
-
-    if (newLogId) {
-      const { data: drip } = await supabase.rpc("claim_session_coins" as never, { p_log_id: newLogId } as never);
-      const awarded = (drip as { awarded?: number } | null)?.awarded ?? 0;
-      if (awarded > 0) {
-        coinLine = `+${awarded} Coins this week`;
-        await refreshProfile();
+    // Local PB wall updates in the same flow, against the pre-record snapshot,
+    // so the PBs page and this celebration agree on what a PB is.
+    let isPb = false;
+    let eventLabel: string | null = null;
+    let previousSeconds: number | null = null;
+    if (totalSec > 0 && distKm) {
+      const preview = evaluateLogAgainstEvents(
+        { sport: logSport, log_type: logType, distance_km: distKm, time_seconds: totalSec },
+        wallForEvaluation(),
+      );
+      eventLabel = preview.event?.label ?? null;
+      previousSeconds = preview.previous_seconds;
+      if (preview.event) {
+        const recorded = recordTimedPb(preview.event.label, totalSec);
+        isPb = recorded.isPb;
+        previousSeconds = recorded.previousSeconds;
       }
     }
-
-    setShowAddLog(false); setLogTitle(""); setLogDistance(""); setLogTime(""); setLogNotes(""); setLogHeartRate(""); setLogCalories("");
     fetchLogs();
-    toast({ title: "Log saved! 📝", description: coinLine || trophyLine || undefined });
+    toast({ title: "Log saved! 📝" });
+    if (isPb || trophies.length > 0) {
+      triggerPbCelebration({
+        eventLabel: eventLabel ?? trophies[0]?.name ?? logSport,
+        timeSeconds: totalSec,
+        isPb,
+        previousSeconds,
+        trophies,
+      });
+    }
   };
 
   const chipClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${active ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`;
@@ -1766,6 +1882,18 @@ const Training = () => {
   // === PLAN DETAIL VIEW ===
   if (activeView === "planDetail" && selectedPlan) {
     const planData = selectedPlan.plan_data as PlanData | null;
+    // What the athlete's active injuries say about THIS plan. Computed, not
+    // written back: the plan stays byte-identical, the completed-week history
+    // stays untouched, and everything the flags claim is rendered as a chip
+    // next to the thing it is about.
+    const injuryReport = summarizeInjuryImpact(injuriesForFlags, Array.isArray(planData) ? planData : []);
+    const injurySessionFlags = new Map<string, { chip: string; reason: string; adapting: boolean }>();
+    const injuryWeekCounts = new Map<number, number>();
+    for (const a of injuryReport.affected) {
+      if (a.verdict.action === "none") continue;
+      injurySessionFlags.set(`${a.week}:${a.day}`, { chip: a.verdict.chip, reason: a.verdict.reason, adapting: a.verdict.action === "adapt" });
+      injuryWeekCounts.set(a.week, (injuryWeekCounts.get(a.week) ?? 0) + 1);
+    }
     return (
       <div className="min-h-screen bg-background">
       {generationOverlay}
@@ -1803,6 +1931,36 @@ const Training = () => {
             </div>
           </div>
         </div>
+
+        {/* An injury recorded after this plan was written. Said first, because
+            it changes what the athlete is about to do today: the flagged
+            sessions are visible in place below, the plan data itself is not
+            rewritten behind their back, and the banner is the honest summary —
+            what is affected and what to do about it. */}
+        {injuryReport.injuries.length > 0 && (
+          <div className="px-5 mb-4">
+            <div className="rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="text-destructive mt-0.5 shrink-0" />
+                <div className="min-w-0 text-[12px] leading-relaxed text-muted-foreground">
+                  <span className="block text-xs font-semibold text-foreground">
+                    Active injuries affect {injuryReport.affected.length} session{injuryReport.affected.length === 1 ? "" : "s"} in this plan
+                    {injuryReport.injuries.map((i) => ` · ${i.bodyPart}`).join("")}
+                  </span>
+                  {injuryReport.affected.length > 0 ? (
+                    <>
+                      Flagged sessions are marked below — reduce them as the chip says, or get them cleared by a professional. Anything marked <em>Review</em> should not be pushed through.
+                      <br />
+                      Plans you generate from now on are written around your active injuries automatically.
+                    </>
+                  ) : (
+                    <>Your injuries are recorded, but nothing in this plan matches their affected areas — enough to train around, not enough to rewrite.</>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* A rebuild is the biggest thing that can happen to a plan, so it is
             said first, in the athlete's own numbers, with a way out. Collapsed
@@ -1951,6 +2109,11 @@ const Training = () => {
                     </span>
                   )}
                   {week.extraNote && !week.returnFromBreak && <span className="text-[12px] bg-accent/10 text-accent-foreground px-2 py-0.5 rounded-full">+Extra</span>}
+                  {(injuryWeekCounts.get(week.week) ?? 0) > 0 && (
+                    <span className="text-[12px] bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-semibold">
+                      Injury · {injuryWeekCounts.get(week.week)} session{(injuryWeekCounts.get(week.week) ?? 0) === 1 ? "" : "s"} to review
+                    </span>
+                  )}
                 </div>
                 <motion.div animate={{ rotate: (expandedWeek === week.week || expandedWeek === -1) ? 180 : 0 }}><ChevronDown size={16} className="text-muted-foreground" /></motion.div>
               </button>
@@ -2017,6 +2180,25 @@ const Training = () => {
                                       className="inline-block mt-1 text-[12px] bg-info/10 text-info px-1.5 py-0.5 rounded"
                                     >
                                       {sessionStatusMeta(adaptive.statusFor(week.week, session.day)).label}
+                                    </span>
+                                  )}
+                                  {/* The injury flag, in place, with the reason on
+                                      hover/tap. "Adapt" chips are instructions the
+                                      athlete applies (reduce the dose); "Review"
+                                      chips mean the session should not be pushed
+                                      through — have it cleared first. The plan row
+                                      itself is not rewritten: what the athlete
+                                      actually did is their record, not the app's. */}
+                                  {injurySessionFlags.get(`${week.week}:${session.day}`) && (
+                                    <span
+                                      title={injurySessionFlags.get(`${week.week}:${session.day}`)!.reason}
+                                      className={`inline-block mt-1 text-[12px] px-1.5 py-0.5 rounded ${
+                                        injurySessionFlags.get(`${week.week}:${session.day}`)!.adapting
+                                          ? "bg-energy/10 text-energy"
+                                          : "bg-destructive/10 text-destructive"
+                                      }`}
+                                    >
+                                      {injurySessionFlags.get(`${week.week}:${session.day}`)!.chip}
                                     </span>
                                   )}
                                 </div>
@@ -2097,9 +2279,32 @@ const Training = () => {
         </div>
       )}
 
+      {/* Offline fallback notice: the list below is the device snapshot, not
+          live data. Saying when it was taken is what keeps a cached list from
+          reading as current — the sync state machine refuses to claim freshness
+          it cannot prove, and neither may this screen. */}
+      {plansCachedInfo && (
+        <div className="mx-5 mb-4 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-[12px]">
+          <WifiOff size={14} className="mt-0.5 shrink-0 text-warning" />
+          <span>
+            Offline — showing the plans saved on this device ({cacheAgeLabel(Date.now() - plansCachedInfo.savedAt)}).
+            {plansCachedInfo.stale && " They may have changed on your other devices."}{" They'll refresh when you reconnect."}
+          </span>
+        </div>
+      )}
+      {plansLoadFailed && !plansCachedInfo && (
+        <div className="mx-5 mb-4 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-[12px]">
+          <WifiOff size={14} className="mt-0.5 shrink-0 text-destructive" />
+          <span>
+            Couldn't load your plans, and nothing is saved on this device yet.
+            Connect once while online and your plans will stay available offline.
+          </span>
+        </div>
+      )}
+
       {plans.some((p) => p.active) && <PlanFundingNotice />}
 
-      {hasNoPlans && !showCreate && (
+      {hasNoPlans && !plansLoadFailed && !showCreate && (
         <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           className="mx-5 mb-5 bg-gradient-card border border-primary/30 rounded-2xl p-5 shadow-card text-center">
           <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}><Dumbbell size={32} className="mx-auto text-primary mb-3" /></motion.div>
@@ -2157,7 +2362,8 @@ const Training = () => {
                 <input type="number" placeholder="Age (required for safe training)" value={planAge} onChange={e => setPlanAge(e.target.value)} className={inputClass} />
                 <p className="text-[12px] text-muted-foreground mt-1">Training load is adapted for your age group.</p>
               </div>
-              <div><label className="text-xs text-muted-foreground mb-1 block">Sport</label><div className="flex flex-wrap gap-1.5">{sportOptions.map(s => (<button key={s} onClick={() => setSport(s)} className={chipClass(sport === s)}>{s}</button>))}</div></div>
+              {/* Canonical names are stored and compared; the label is regional, so a US athlete sees "Soccer" while the app keeps "Football" everywhere else. */}
+              <div><label className="text-xs text-muted-foreground mb-1 block">Sport</label><div className="flex flex-wrap gap-1.5">{sportOptions.map(s => (<button key={s} onClick={() => setSport(s)} className={chipClass(sport === s)}>{sportDisplayName(s)}</button>))}</div></div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Goals <span className="text-muted-foreground/70">(pick all that apply)</span></label>
                 <div className="flex flex-wrap gap-1.5">
@@ -2332,6 +2538,12 @@ const Training = () => {
               </motion.button>
             )}
           </div>
+          {/* The estimate the wait screen will run on, shown while the ask can
+              still be un-asked: plan creation is a tens-of-seconds wait, and
+              the athlete should start it knowing that. Same estimate the
+              progress screen settles on, same honest labeling — on a device
+              with history it says "usually", without one "estimated". */}
+          <PlanWaitEstimate kind="training" weeks={duration} />
         </motion.div>
       )}
 

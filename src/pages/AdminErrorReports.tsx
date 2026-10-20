@@ -128,7 +128,7 @@ export default function AdminErrorReports() {
       <div className="flex items-start gap-2">
         <Bug className="h-6 w-6 text-electric-purple mt-1" aria-hidden />
         <div>
-          <h1 className="text-2xl font-bold">App failures</h1>
+          <h1 className="text-2xl font-display font-bold">App failures</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Reported by the app itself. One row per distinct failure per build —
             the count beside each one is how many times testers hit it.

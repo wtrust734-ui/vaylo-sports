@@ -58,11 +58,11 @@ export default function AdminRewards() {
     if (error) toast.error(error.message); else load();
   };
 
-  if (!cfg) return <div className="p-6">Loading…</div>;
+  if (!cfg) return <div className="min-h-screen flex items-center justify-center p-6 pt-[var(--vaylo-screen-top)] text-sm text-muted-foreground">Loading rewards…</div>;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
-      <h1 className="text-2xl font-bold">Admin · Rewards</h1>
+    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6 pt-[var(--vaylo-screen-top)]">
+      <h1 className="text-2xl font-display font-bold">Admin · Rewards</h1>
 
       <Card className="p-4">
         <h2 className="mb-3 font-semibold">Rarity probabilities (%)</h2>

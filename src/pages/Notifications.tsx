@@ -16,7 +16,7 @@ export default function Notifications() {
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Bell className="h-6 w-6 text-electric-purple" /> Notifications</h1>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2"><Bell className="h-6 w-6 text-electric-purple" /> Notifications</h1>
           <p className="text-sm text-muted-foreground mt-1">All your activity in one place.</p>
         </div>
         <button onClick={() => navigate("/profile/notifications")} className="h-9 w-9 rounded-full bg-muted/40 hover:bg-muted/60 flex items-center justify-center">

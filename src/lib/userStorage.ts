@@ -32,7 +32,15 @@ export function clearUserLocalState(): void {
     const doomed: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && USER_SCOPED_STORAGE_PREFIXES.some((p) => key.startsWith(p))) {
+      // `vaylo.cache.v1.*` is the offline snapshot cache (lib/offlineCache.ts).
+      // Its keys are per-user, but the cache is a read fallback only, so the
+      // safe direction on sign-out is to sweep it entirely — a shared device
+      // must not be the place an athlete's plan snapshot still lives.
+      if (
+        key &&
+        (USER_SCOPED_STORAGE_PREFIXES.some((p) => key.startsWith(p)) ||
+          key.startsWith("vaylo.cache.v1."))
+      ) {
         doomed.push(key);
       }
     }

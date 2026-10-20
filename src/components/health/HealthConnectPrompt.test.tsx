@@ -51,7 +51,8 @@ function hookState(overrides: Partial<UseHealthConnect> = {}): UseHealthConnect 
   return {
     status: "not_connected",
     apiStatus: "available",
-    syncState: { lastSyncAt: null, cursorMs: null },
+    syncStatus: "idle",
+    syncState: { lastSyncAt: null, cursorMs: null, syncStatus: "idle" },
     consentOutdated: false,
     checking: false,
     connecting: false,
@@ -126,16 +127,49 @@ describe("on Android, before connecting", () => {
 describe("once connected", () => {
   const connected = hookState({
     status: "connected",
-    syncState: { lastSyncAt: "2026-10-10T07:00:00.000Z", cursorMs: 1 },
+    syncStatus: "succeeded",
+    syncState: { lastSyncAt: "2026-10-10T07:00:00.000Z", cursorMs: 1, syncStatus: "succeeded" },
   });
 
-  it("offers a sync rather than asking to connect a second time", async () => {
+  it("labels the sync by what actually happened, not by connection", async () => {
+    // A connected account whose last run succeeded is about to pull NEW data,
+    // so the honest label is "Sync new data" — "Sync now" said nothing about
+    // ever having imported anything.
     renderPrompt(connected);
-    expect(screen.queryByRole("button", { name: HEALTH_CONNECT_CTA })).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Sync now/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Sync new data/ }));
     });
     expect(connected.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a first sync before anything has ever arrived", () => {
+    renderPrompt(hookState({ status: "connected", syncStatus: "idle" }));
+    expect(screen.getByRole("button", { name: /Sync now/ })).toBeInTheDocument();
+  });
+
+  it("turns a failed run into a retry, not a success that quietly never happened", async () => {
+    const failed = hookState({
+      status: "connected",
+      syncStatus: "failed",
+      syncState: { lastSyncAt: null, cursorMs: null, syncStatus: "failed" },
+    });
+    renderPrompt(failed);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Retry sync/ }));
+    });
+    expect(failed.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pile a second run onto an in-flight one", () => {
+    renderPrompt(
+      hookState({
+        status: "connected",
+        syncing: false,
+        syncStatus: "in_progress",
+        syncState: { lastSyncAt: null, cursorMs: null, syncStatus: "in_progress" },
+      }),
+    );
+    expect(screen.getByRole("button", { name: /Syncing/ })).toBeDisabled();
   });
 
   it("keeps disconnect reachable, and asks before doing it", () => {

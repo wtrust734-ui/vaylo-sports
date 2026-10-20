@@ -5,9 +5,8 @@ import { Mail, Lock, Eye, EyeOff, KeyRound, Fingerprint, Wand2, Smartphone } fro
 import { useToast } from "@/hooks/use-toast";
 import { authRedirectUrl } from "@/lib/share";
 import { consumePendingJoin } from "@/hooks/usePendingJoin";
-import { useAuthMethods, passkeySupported, normalisePhone } from "@/hooks/use-auth-providers";
-import { isFlagOn } from "@/config/featureFlags";
-import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
+import { recordReferralClick } from "@/lib/referralClick";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
@@ -17,14 +16,17 @@ import { isAndroid } from "@/lib/platform";
 import { armHealthConnectOffer } from "@/lib/health/connectOffer";
 import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
 import logo from "@/assets/logo.jpg";
+import { useAuthMethods, passkeySupported, normalisePhone } from "@/hooks/use-auth-providers";
+import { isFlagOn } from "@/config/featureFlags";
+import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
 
 type Mode = "auth" | "forgot" | "updatePassword";
 
-// Referral invites arrive as /auth?ref=CODE, but the athlete usually has no
-// account yet at that point, so the code is parked here until a session exists.
-// Nothing in the app read the `ref` parameter before, which meant every share
-// link the Referrals page produced was a dead end — the invitee had to find
-// /referrals and retype the code by hand.
+// Referral invites arrive as /auth?ref=CODE. The code is parked until a
+// session exists, because the attribution and the referee's welcome credits
+// both happen server-side in redeem_referral(). Before this landed, nothing in
+// the app read the `ref` parameter — every share link was a dead end, and the
+// invitee had to find /referrals and retype the code by hand.
 const REF_KEY = "vaylo_pending_referral";
 
 /** Reads `ref` from either `?ref=` or `#/auth?ref=` (hash routing). */
@@ -126,19 +128,15 @@ const Auth = () => {
     navigate(profile?.onboarding_complete ? "/" : "/onboarding", { replace: true });
   }, [authLoading, navigate, profile?.onboarding_complete, session, mode]);
 
-  // Park an invite code from the URL so it survives sign-up and onboarding.
-  // A click is recorded at the moment the link lands here: no account, no IP,
-  // no personal data — just the code and a time (referral_clicks). It gives the
-  // referral programme its configurable attribution window; a code typed from
-  // memory still attributes at registration, since there is no click to bind it to.
+  // Park an invite code from the URL so it survives sign-up and onboarding. The
+  // click is recorded anonymously here too: it is the telemetry behind the
+  // landing’s “clicks recorded” aggregate, not the attribution (that is the
+  // backend redeem_referral path on a later successful sign-up).
   useEffect(() => {
     const fromUrl = readRefFromUrl();
     if (fromUrl) {
       try { localStorage.setItem(REF_KEY, fromUrl); } catch { /* storage unavailable */ }
-      void supabase.rpc("referral_click_record" as never, { p_code: fromUrl } as never).then(
-        () => undefined,
-        () => undefined,
-      );
+      void recordReferralClick(fromUrl);
     }
     setPendingRef(fromUrl ?? storedRef());
   }, []);

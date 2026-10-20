@@ -23,8 +23,10 @@ import {
   type NutritionIntake,
 } from "@/lib/nutritionTargets";
 import { newNutritionPlanRequestId, parseGeneratedPlan } from "@/lib/nutritionPlan";
-import { capturePhoto, pickPhoto } from "@/lib/camera";
+import { capturePhoto, pickPhoto, hasNativeCamera } from "@/lib/camera";
+import { normalizeMealImage, MealImageError } from "@/lib/mealImage";
 import { isNative } from "@/lib/platform";
+import { recordPlanGenerationMs } from "@/lib/planTiming";
 import { hapticImpact } from "@/lib/haptics";
 import type { Json, Tables } from "@/integrations/supabase/types";
 
@@ -421,11 +423,18 @@ const Nutrition = () => {
   };
 
   // AI Calorie Scan with image
+  // Heavy scan in progress is also the re-entrance guard: a second invoke
+  // while the first is on the wire means two charges for one photo. The ref
+  // holds across renders, where state alone can read stale inside one tick.
+  const scanningRef = useRef(false);
   /** Shared by the web file input and the native camera. */
   const runScan = async (base64: string) => {
+    if (scanningRef.current) return; // one scan at a time — never a double charge
+    if (!base64 || !base64.startsWith("data:image/")) return;
     // Nutrition is a standard tab: every scan is charged per use. The server
     // charges the credits and refunds on failure — nothing is charged or
     // validated from the client.
+    scanningRef.current = true;
     setScanning(true);
     setScanResult(null);
     setScanEdits(null);
@@ -483,38 +492,46 @@ const Nutrition = () => {
     } catch (err) {
       toast({ title: "Scan failed", description: (err as Error).message, variant: "destructive" });
     } finally {
+      scanningRef.current = false;
       setScanning(false);
     }
   };
 
+  // The preview and the stored photo are one string here: every preview in this
+  // panel is a data URL (the normalised scan photo, the native camera shot,
+  // the picked library photo), so clearing it frees a string and nothing else.
+  const clearScanPreview = () => setScanPreview(null);
+
+  // Guard against a double-tap creating two meal rows. The server has no
+  // uniqueness key for two inserts of the same meal seconds apart.
+  const loggingScanRef = useRef(false);
+
   const handleScanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // reset FIRST — a same-file re-pick must fire change again
     if (!file || !user || !profile) return;
     // Backstop: the panel cannot open for an under-18, but the input is also
     // unreachable by other means only if this holds.
     if (!canScanCalories) {
-      e.target.value = "";
       toast({ title: "Age restriction", description: CALORIE_SCAN_REFUSAL, variant: "destructive" });
       return;
     }
-    setScanPreview((prev) => {
-      // The previous preview's blob URL stays allocated until revoked —
-      // repeated scans without this leaked each photo's bytes for the session.
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
-    });
+    // A data URL, not a blob URL: the preview survives a refresh-free tab switch
+    // and there is no object URL to revoke on the clear path (below) or on an
+    // unmount the effect below no longer controls.
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Couldn't read the image file."));
-        reader.readAsDataURL(file);
-      });
-      await runScan(base64);
+      const base64 = await normalizeMealImage(file);
+      setScanPreview(base64);
+      await runScan(base64); // scanning ref guards re-entry inside runScan
     } catch (err) {
-      toast({ title: "Couldn't read that photo", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      e.target.value = "";
+      // A recoverable failure keeps whatever preview was there before:
+      // nothing local is cleared, the athlete just tries the other button.
+      if (err instanceof MealImageError) {
+        toast({ title: err.useCamera ? "Camera needed for that photo" : "Couldn't use that photo", description: err.message, variant: "destructive" });
+        if (err.useCamera) onScanPhoto();
+      } else {
+        toast({ title: "Couldn't read that photo", description: (err as Error).message, variant: "destructive" });
+      }
     }
   };
 
@@ -535,7 +552,6 @@ const Nutrition = () => {
     hapticImpact("medium");
     await runScan(shot.base64);
   };
-
   /**
    * Native "choose from my photos". Same age gate and same scan path as the
    * camera route: the picker is reachable on its own, so the check cannot live
@@ -549,27 +565,30 @@ const Nutrition = () => {
     }
     const picked = await pickPhoto();
     if (!picked) return; // cancelled
-    setScanPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return picked.previewUrl;
-    });
+    setScanPreview(picked.previewUrl);
     hapticImpact("light");
     await runScan(picked.base64);
   };
 
+  /** The photo-taking route, used by the Take Photo button and offered when a photo arrived in a format the browser could not decode. */
   const onScanPhoto = () => {
-    if (isNative()) void scanFromCamera();
-    else fileInputRef.current?.click();
+    if (!scanningRef.current) {
+      if (isNative() && hasNativeCamera()) void scanFromCamera();
+      else fileInputRef.current?.click();
+    }
   };
 
   /** Upload / choose an existing photo — the camera is never opened from here. */
   const onScanUpload = () => {
-    if (isNative()) void scanFromLibrary();
-    else galleryInputRef.current?.click();
+    if (!scanningRef.current) {
+      if (isNative()) void scanFromLibrary();
+      else galleryInputRef.current?.click();
+    }
   };
 
   const addScanResult = async () => {
-    if (!user || !scanResult) return;
+    if (!user || !scanResult || loggingScanRef.current) return;
+    loggingScanRef.current = true;
     // What is logged is what the athlete sees in the fields above — the
     // estimate prefilled them, but a correction here is what lands in the log.
     const edits = scanEdits ?? {
@@ -588,9 +607,10 @@ const Nutrition = () => {
       protein_g: toNum(edits.protein), carbs_g: toNum(edits.carbs), fat_g: toNum(edits.fat),
       meal_type: "meal", log_date: today,
     });
+    loggingScanRef.current = false;
     if (error) { toast({ title: "Couldn't save the scanned meal", description: error.message, variant: "destructive" }); return; }
     setScanResult(null); setScanEdits(null); setShowScan(false);
-    setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    clearScanPreview();
     setNutriTab("today");
     fetchMeals();
     toast({ title: "Scanned meal logged!" });
@@ -639,7 +659,10 @@ const Nutrition = () => {
   };
 
   const submitPlan = async (draft: PlanDraft) => {
-    if (!user || !profile) return;
+    if (!user || !profile || writingPlan) return;
+    // The writingPlan guard: a double-tap on Write my plan must not leave two
+    // paid generations in flight. The wait overlay covers the screen, but the
+    // guard runs before the first frame where that overlay exists.
     // One check, shared with every other entry point (see dietPlanRefusalReason).
     //
     // This used to allow an UNKNOWN date of birth through: `age !== null &&
@@ -673,6 +696,9 @@ const Nutrition = () => {
       if (intakeError) console.warn("nutrition intake not saved:", intakeError.message);
 
       const projected = targetsForRequest(targets);
+      // The measured endpoint is the provider round trip, not the intake save
+      // or the app's target arithmetic that precede it.
+      const generationStartedAt = Date.now();
       const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", {
         body: {
           // The function validates this spelling, lowercase.
@@ -711,6 +737,14 @@ const Nutrition = () => {
 
       const payload = (data ?? {}) as { plan?: unknown; cost?: number };
       const parsed = parseGeneratedPlan(payload.plan);
+      // Measured before any branch-specific handling, on failure and success
+      // alike (only successes calibrate — see src/lib/planTiming.ts).
+      recordPlanGenerationMs({
+        kind: "nutrition",
+        weeks,
+        ms: Date.now() - generationStartedAt,
+        outcome: parsed.plan ? "ok" : "failed",
+      });
       if (!parsed.plan) {
         // Charged but unreadable. The server refunds a failed call; an answer we
         // cannot read is reported here rather than stored as an empty plan.
@@ -1032,7 +1066,7 @@ const Nutrition = () => {
             tab bar), so there is no separate collapsed state to discover. */}
         {showScan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-electric-purple/20 rounded-2xl p-4 space-y-3 mb-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanEdits(null); setScanPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; }); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
+            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanEdits(null); clearScanPreview(); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
             <p className="text-xs text-muted-foreground">
               <span className="font-semibold text-foreground">1.</span> Photograph the plate · <span className="font-semibold text-foreground">2.</span> check the estimate · <span className="font-semibold text-foreground">3.</span> log it. Each scan costs {creditCost("calorie_scan")} credits; a failed scan is refunded automatically.
             </p>
@@ -1058,12 +1092,18 @@ const Nutrition = () => {
               <div className="flex gap-2">
                 <motion.button onClick={onScanPhoto} whileTap={{ scale: 0.98 }}
                   className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
-                  <Camera size={16} /> Take Photo
+                  <Camera size={16} /> {scanPreview ? "Replace photo" : "Take Photo"}
                 </motion.button>
                 <motion.button onClick={onScanUpload} whileTap={{ scale: 0.98 }}
                   className="bg-card border border-border px-4 py-2.5 rounded-xl flex items-center gap-2 hover:border-electric-purple/20">
                   <Upload size={16} /> {isNative() ? "Choose Photo" : "Upload"}
                 </motion.button>
+                {scanPreview && (
+                  <button onClick={clearScanPreview} aria-label="Remove selected photo"
+                    className="bg-card border border-border px-3 rounded-xl flex items-center text-muted-foreground hover:text-destructive hover:border-destructive/40 text-sm">
+                    <X size={16} />
+                  </button>
+                )}
               </div>
             )}
 

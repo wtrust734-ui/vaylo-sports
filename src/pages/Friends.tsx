@@ -11,6 +11,8 @@ import {
   ShieldCheck,
   Share2,
   X,
+  ShieldAlert,
+  LifeBuoy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/i18n/format";
@@ -30,6 +32,13 @@ import {
   type FriendRequest,
 } from "@/lib/friends";
 import { fetchConversations, type Conversation } from "@/lib/messages";
+import {
+  appealFriendRestriction,
+  fetchMyFriendAccess,
+  FRIEND_RESTRICTION_APPEAL,
+  FRIEND_RESTRICTION_POLICY,
+  type FriendAccessState,
+} from "@/lib/friendAccess";
 import {
   fetchMyShareKeys,
   shareKey,
@@ -96,10 +105,28 @@ const Friends = () => {
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
   const [shareKeys, setShareKeys] = useState<Set<string>>(new Set());
 
+  // The restriction check runs FIRST, before any friend-graph read. When the
+  // athlete is restricted the reads below would fail under RLS anyway (the
+  // friend-list policy and the messaging tables disagree with them), so the
+  // screen shows the explanation instead of a page of broken requests.
+  // A failed access check blocks rendering rather than guessing: an "open"
+  // Friends page built on unknown state would put real writes (a request that
+  // the trigger then refuses, a message) behind a lie.
+  const [access, setAccess] = useState<FriendAccessState | "unknown">("unknown");
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
+      const accessResult = await fetchMyFriendAccess();
+      if (accessResult.ok && accessResult.state.restricted) {
+        setAccess(accessResult.state);
+        return; // Nothing below can load for a restricted athlete.
+      }
+      // Panel open only until the first denial: pull it down when access is
+      // re-granted after a moderation review.
+      if (accessResult.ok) setAccess(accessResult.state);
+
       const [fr, inc, out, code, workoutRes] = await Promise.all([
         fetchFriends(user.id),
         fetchIncomingRequests(user.id),
@@ -215,6 +242,37 @@ const Friends = () => {
 
   const unreadTotal = conversations.reduce((n, c) => n + c.unread, 0);
 
+  // The restriction read decides the whole screen, so it is computed once.
+  // "unknown" (read still in flight or failed) renders the normal shell — the
+  // server refuses restricted writes either way, and the panel supercedes the
+  // tabs the moment the read lands, including re-granted access after review.
+  const restricted = access !== "unknown" && access.restricted;
+
+  // The appeal dialog: only exists when the athlete is restricted. len>=10,
+  // same floor as BetaFeedback — one real sentence, not a stray tap.
+  const [appealOpen, setAppealOpen] = useState(false);
+  const [appealBody, setAppealBody] = useState("");
+  const [appealing, setAppealing] = useState(false);
+  const [appealError, setAppealError] = useState<string | null>(null);
+  const [appealReference, setAppealReference] = useState<string | null>(null);
+
+  const submitAppeal = async () => {
+    if (appealing || appealBody.trim().length < 10) return;
+    setAppealing(true);
+    setAppealError(null);
+    try {
+      const res = await appealFriendRestriction(appealBody);
+      if (!res.ok) {
+        setAppealError(res.error ?? "That did not send. Try again.");
+        return;
+      }
+      setAppealReference(res.reference ?? "saved");
+      setAppealBody("");
+    } finally {
+      setAppealing(false);
+    }
+  };
+
   const TABS: { id: Tab; label: string; badge: number }[] = [
     { id: "friends", label: "Friends", badge: friends.length },
     { id: "requests", label: "Requests", badge: incoming.length },
@@ -232,6 +290,94 @@ const Friends = () => {
         </p>
       </div>
 
+      {restricted && (
+        <div className="px-5">
+          <div
+            data-testid="friends-restriction"
+            className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4"
+          >
+            <h2 className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] text-amber-400">
+              <ShieldAlert size={14} /> Friends is restricted
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed">
+              {FRIEND_RESTRICTION_POLICY}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {"Qualifying reports on this account right now: "}
+              <span className="font-semibold text-foreground">
+                {access.qualifyingReports}
+              </span>
+              {" — the restriction activates above "}
+              <span className="font-semibold text-foreground">
+                {access.thresholdForRestriction}
+              </span>
+              {". Dismissed reports no longer count."}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {FRIEND_RESTRICTION_APPEAL}
+            </p>
+            {appealReference ? (
+              <p className="mt-3 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">
+                Appeal sent — reference {appealReference}. A moderator will review it.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAppealOpen(true);
+                  setAppealError(null);
+                }}
+                className="press mt-3 flex min-h-[44px] items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-semibold"
+              >
+                <LifeBuoy size={15} className="text-primary" /> Appeal this restriction
+              </button>
+            )}
+          </div>
+
+          {appealOpen && !appealReference && (
+            <div
+              data-testid="friends-appeal"
+              className="mt-3 rounded-2xl border border-border bg-card p-4"
+            >
+              <label htmlFor="friends-appeal-body" className="text-sm font-semibold">
+                Why should the reports be reviewed?
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Written to the support team with the restriction attached. Do not include
+                passwords or private files.
+              </p>
+              <textarea
+                id="friends-appeal-body"
+                value={appealBody}
+                onChange={(e) => setAppealBody(e.target.value)}
+                maxLength={4000}
+                rows={4}
+                className="mt-2 w-full rounded-xl border border-border bg-background p-3 text-sm outline-none focus:border-primary"
+              />
+              {appealError && <p className="mt-1 text-xs text-destructive">{appealError}</p>}
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAppealOpen(false)}
+                  className="press min-h-[44px] rounded-xl border border-border px-4 text-sm font-semibold text-muted-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitAppeal}
+                  disabled={appealing || appealBody.trim().length < 10}
+                  className="press flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+                >
+                  {appealing && <Loader2 size={14} className="animate-spin" />} Send appeal
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!restricted && (
       <div className="px-5">
         <div
           role="tablist"
@@ -258,14 +404,15 @@ const Friends = () => {
           ))}
         </div>
       </div>
+      )}
 
-      {loading && (
+      {loading && !restricted && (
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {!loading && tab === "friends" && (
+      {!loading && !restricted && tab === "friends" && (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-5">
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
             <h2 className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] text-muted-foreground/70">
@@ -479,7 +626,7 @@ const Friends = () => {
         </motion.section>
       )}
 
-      {!loading && tab === "requests" && (
+      {!loading && !restricted && tab === "requests" && (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-5">
           <h2 className="mb-2 px-1 text-[13px] font-bold uppercase tracking-[0.14em] text-muted-foreground/70">
             Waiting on you
@@ -569,7 +716,7 @@ const Friends = () => {
         </motion.section>
       )}
 
-      {!loading && tab === "messages" && (
+      {!loading && !restricted && tab === "messages" && (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="px-5 pt-5">
           {conversations.length === 0 ? (
             <div className="rounded-2xl border border-border bg-card p-5 text-center">

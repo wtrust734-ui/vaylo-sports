@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { recordHealthConsent } from "@/lib/consent";
+import { awardRecoverySession } from "@/lib/xp";
 import {
   adaptDailyPlanForReadiness,
   restoreDailyPlanForReadiness,
@@ -17,8 +18,6 @@ import { currentWeekOf } from "@/lib/planSchedule";
 import { formatDate } from "@/i18n/format";
 import { markCheckInDone } from "@/lib/recoveryStreak";
 import { pendingBoxes } from "@/lib/rewardBoxes";
-import { awardRecoverySession } from "@/lib/xp";
-import { claimStreakDay } from "@/lib/streakRewards";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -439,6 +438,10 @@ const Recovery = () => {
     // that consent once, without blocking the save if it fails.
     void recordHealthConsent();
 
+    // The check-in row is the proof — recovery XP is only requested once it is
+    // saved, and it works exactly the same on a rest day: no exercise required.
+    void awardRecoverySession(today);
+
     if (hrvVal) {
       const allHrv = [hrvVal, ...recentHrv].slice(0, 7);
       const avg7 = Math.round(allHrv.reduce((a, b) => a + b, 0) / allHrv.length);
@@ -465,14 +468,6 @@ const Recovery = () => {
     setReadiness(score);
     setLogged(true);
     setStep("result");
-    // XP: a recovery check-in is a completed recovery day — 15 XP, once per
-    // day, rest days included. The server verifies the recovery_logs row and
-    // never lets a replay double it; a silent no if anything fails.
-    void awardRecoverySession(today);
-    // Streak: the recovery check-in qualifies today (rest included — a rest
-    // day never requires exercise; the server re-validates the log row).
-    void claimStreakDay("recovery_session", today);
-
     // The streak is now driven by anonymous recovery check-ins, not by a sign-in.
     // Mark this check-in against the session key so the streak survives restarts.
     const streakAfter = markCheckInDone();

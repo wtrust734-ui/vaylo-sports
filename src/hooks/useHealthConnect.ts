@@ -29,6 +29,11 @@ export type HealthApiStatus = "unavailable" | "update_required" | "available" | 
 export interface UseHealthConnect {
   status: HealthConnectionStatus;
   apiStatus: HealthApiStatus;
+  /** The last sync run's persisted outcome — succeeded / failed / idle /
+   *  in_progress. A connection says nothing about whether data ever arrived,
+   *  and this is the axis that tells the sheet which action is honest:
+   *  first import, retry after failure, or manual resync of new data. */
+  syncStatus: StoredHealthState["syncStatus"];
   /** Stored last-sync info (local first, backfilled from the server row). */
   syncState: StoredHealthState;
   consentOutdated: boolean;
@@ -52,7 +57,11 @@ export function useHealthConnect(): UseHealthConnect {
   const { user } = useAuth();
   const [status, setStatus] = useState<HealthConnectionStatus>("checking");
   const [apiStatus, setApiStatus] = useState<HealthApiStatus>("unknown");
-  const [syncState, setSyncState] = useState<StoredHealthState>({ lastSyncAt: null, cursorMs: null });
+  const [syncState, setSyncState] = useState<StoredHealthState>({
+    lastSyncAt: null,
+    cursorMs: null,
+    syncStatus: "idle",
+  });
   const [consentOutdated, setConsentOutdated] = useState(false);
   const [checking, setChecking] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -79,6 +88,14 @@ export function useHealthConnect(): UseHealthConnect {
       setSyncState({
         lastSyncAt: local.lastSyncAt ?? server.lastSyncAt,
         cursorMs: local.cursorMs ?? server.cursorMs,
+        // This device's own record of the outcome wins when it has one (it
+        // includes this session's runs); the server row backfills everywhere
+        // else. `syncStatus` never falls back to the stale in_progress of a
+        // crashed run — that resolves to failed/idle below.
+        syncStatus:
+          server.syncStatus === "in_progress" && local.syncStatus !== "in_progress"
+            ? local.syncStatus
+            : (local.syncStatus !== "idle" ? local.syncStatus : server.syncStatus ?? "idle"),
       });
     } finally {
       setChecking(false);
@@ -186,6 +203,7 @@ export function useHealthConnect(): UseHealthConnect {
     status,
     apiStatus,
     syncState,
+    syncStatus: syncState.syncStatus,
     consentOutdated,
     checking,
     connecting,

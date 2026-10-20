@@ -1,3 +1,14 @@
+// This file runs in two places: the Deno ad pipeline (which has `Deno`) and
+// tooling on Node (which does not). Both references are optional-chained, so
+// the globals are read defensively instead of imported — and off globalThis so
+// the browser build never references an undeclared name.
+const asRuntime = globalThis as { Deno?: { readTextFileSync?: (p: string) => string } };
+const Deno = asRuntime.Deno;
+
+/** Path join without importing node's fs/path — this file stays runtime-free. */
+const joinPath = (a: string, b: string): string =>
+  a.endsWith("/") || b.startsWith("/") ? `${a}${b}` : `${a}/${b}`;
+
 export interface PlanItem {
   id: string;
   sequence: number;
@@ -81,7 +92,7 @@ export function loadPlanItems(): PlanItem[] {
   try {
     const raw = process.env.HOME || process.env.USERPROFILE;
     if (raw) {
-      const candidate = path.join(raw, "vaylo-ad-plan.json");
+      const candidate = joinPath(raw, "vaylo-ad-plan.json");
       const text = Deno?.readTextFileSync?.(candidate);
       if (text) {
         const parsed = JSON.parse(text) as PlanItem[];

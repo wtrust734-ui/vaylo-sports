@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Check, Loader2, Lock, Ticket, Zap, ArrowRight, Infinity as InfinityIcon } from "lucide-react";
+import { Check, Loader2, Lock, Ticket, Zap, ArrowRight, Infinity as InfinityIcon, Search, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useToast } from "@/hooks/use-toast";
 import { creditCost } from "@/lib/credits";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { UNLOCK_CATALOG, type UnlockCatalogEntry } from "@/config/unlocks";
+import { filterMarketEntries, type UnlockStatus } from "@/lib/marketDiscovery";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 
 /**
@@ -138,10 +139,23 @@ export default function UnlocksSection() {
   const navigate = useNavigate();
   const unlock = useUnlockFeature();
   const [buying, setBuying] = useState<string | null>(null);
+  // Discovery controls (Prompt 10): the catalog is the shop's largest list and
+  // previously had no way to find one unlock or separate locked from owned.
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<UnlockStatus>("all");
 
   const credits = profile?.credits ?? 0;
   const owned = UNLOCK_CATALOG.filter((entry) => hasFeature(entry.feature));
   const locked = UNLOCK_CATALOG.filter((entry) => !hasFeature(entry.feature));
+
+  // Filtered view for the grid below. The catalogue itself is never mutated —
+  // the helper sorts a copy and keeps owned entries last, so buying something
+  // never jumps the row out from under the athlete's finger.
+  const visible = useMemo(
+    () => filterMarketEntries(UNLOCK_CATALOG, query, status, (e) => hasFeature(e.feature)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasFeature is derived from entitlement state, which is stable between refreshes
+    [query, status],
+  );
 
   const buy = async (entry: UnlockCatalogEntry) => {
     if (!user) {
@@ -200,17 +214,71 @@ export default function UnlocksSection() {
         </div>
       )}
 
-      {[...locked, ...owned].map((entry) => (
-        <UnlockCard
-          key={entry.product}
-          entry={entry}
-          owned={hasFeature(entry.feature)}
-          buying={buying === entry.product}
-          credits={credits}
-          onBuy={() => void buy(entry)}
-          onOpen={() => navigate(entry.route)}
-        />
-      ))}
+      {/* Discovery: search + status chips. One text box, no page navigation, no */}
+      {/* clutter — the catalogue grid below shrinks to what matches. */}
+      <div className="rounded-2xl border border-border bg-card p-3">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2">
+          <Search size={14} className="shrink-0 text-muted-foreground" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search unlocks — e.g. mental, videos, cross-sport"
+            aria-label="Search unlocks"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="text-muted-foreground hover:text-foreground">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {([
+            ["all", `All ${UNLOCK_CATALOG.length}`],
+            ["locked", `Locked ${locked.length}`],
+            ["owned", `Owned ${owned.length}`],
+          ] as [UnlockStatus, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={status === key}
+              onClick={() => setStatus(key)}
+              className={`flex-1 rounded-full px-3 py-2 text-[12px] font-bold transition-colors min-h-[40px] ${
+                status === key ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-6 text-center">
+          <p className="text-sm font-semibold">No unlocks match “{query}”.</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">Try a shorter word, or clear the filters.</p>
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setStatus("all"); }}
+            className="mt-3 rounded-xl border border-border bg-muted/30 px-4 py-2 text-[12px] font-bold"
+          >
+            Show everything
+          </button>
+        </div>
+      ) : (
+        visible.map((entry) => (
+          <UnlockCard
+            key={entry.product}
+            entry={entry}
+            owned={hasFeature(entry.feature)}
+            buying={buying === entry.product}
+            credits={credits}
+            onBuy={() => void buy(entry)}
+            onOpen={() => navigate(entry.route)}
+          />
+        ))
+      )}
 
       {/*
         Event Packs — back in the shop, and bought with credits.

@@ -16,7 +16,6 @@ import {
 } from "@/lib/cosmetics";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
 import BottomSheet from "@/components/ui/bottom-sheet";
-import { isAvailableNow } from "@/lib/cosmeticCatalog";
 
 interface Props {
   open: boolean;
@@ -52,12 +51,7 @@ export default function CosmeticShop({ open, onClose, initialType = "title" }: P
 
   const coins = (profile as { coins?: number } | null)?.coins ?? 0;
 
-  // Same availability rule as everywhere else: seasonal items are visible only
-  // inside their window (the server refuses the purchase either way).
-  const visible = useMemo(
-    () => defs.filter((d) => d.type === type && isAvailableNow(d)),
-    [defs, type],
-  );
+  const visible = useMemo(() => defs.filter((d) => d.type === type), [defs, type]);
 
   const handleBuy = async (id: string, name: string, cost: number) => {
     if (coins < cost) {

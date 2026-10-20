@@ -6,7 +6,8 @@ import { Link } from "react-router-dom";
 import { useVprSystem } from "@/lib/vprSystem";
 import { useAuth } from "@/contexts/AuthContext";
 import AnimatedNumber from "@/components/motion/AnimatedNumber";
-import { Delta, VprFactorBar } from "@/components/ui/section";
+import { Delta } from "@/components/ui/section";
+import VprFactorBar from "@/components/vpr/VprFactorBar";
 
 const RING_SIZE = 168;
 const RING_SIZE_SM = 132;

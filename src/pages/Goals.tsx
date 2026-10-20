@@ -19,9 +19,8 @@ import {
   outcomeProgress, requiredRate, reliabilityScore, currentStreak,
   weeklyCompletionForProcess, todayCompletionMap, toggleAction, isoDate, startOfWeek,
 } from "@/lib/goals";
-import { ageFromDob } from "@/lib/age";
 import { awardWeeklyGoal } from "@/lib/xp";
-import { claimStreakDay } from "@/lib/streakRewards";
+import { ageFromDob } from "@/lib/age";
 import {
   PHASE_BLURBS, PHASE_LABELS, PROGRESS_LABELS,
   buildRoadmaps, type DevelopmentPhase, type GoalRoadmap, type RoadmapContext, type RoadmapGoalRow,
@@ -200,25 +199,16 @@ const Goals = () => {
       return;
     }
     if (done) toast.success("Locked in.");
-
-    // XP: completing a daily action may complete a weekly process goal
-    // (target-days in the week). The award goes through xp_award, which
-    // re-checks the logged days against the goal's weekly_target server-side;
-    // one award per goal per week via the ledger's idempotency key.
-    if (done) {
-      const pg = processes.find((p) => p.id === action.process_goal_id);
-      if (pg) {
-        const wk = weeklyCompletionForProcess(pg, actions, [...logs, { id: "tmp", action_id: action.id, log_date: isoDate(new Date()), completed: true } as unknown as ActionLog]);
-        if (wk.done >= wk.target) {
-          void awardWeeklyGoal(pg.id, isoDate(startOfWeek()));
-          // Streak: completing the weekly process goal qualifies today (the
-          // server re-checks the logged days against the goal's target).
-          void claimStreakDay("weekly_goal", `${pg.id}:${isoDate(startOfWeek())}`);
-        }
-      }
-    }
-
     load();
+    // A weekly process goal that just hit its target earns XP for THAT week —
+    // week anchor computed with the local date (the same local days the athlete
+    // logs against), never a UTC shift that could split the week. The server
+    // validates the week window and the idempotent goal+week key, so re-checking
+    // on later toggles is safe: it returns duplicate without awarding twice.
+    for (const pg of processes) {
+      const wk = weeklyCompletionForProcess(pg, actions, logs);
+      if (wk.done >= wk.target) void awardWeeklyGoal(pg.id, isoDate(startOfWeek()));
+    }
   };
 
   const runAiReview = async () => {

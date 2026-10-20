@@ -141,13 +141,21 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
  * Data-URL images: require image/* MIME, cap the decoded byte size.
  * base64-encoded bytes ≈ len(chars) × 3/4 (data-URL prefix is a few dozen bytes
  * and pushes the estimate up slightly — err on the strict side).
+ *
+ * The allowlist is WHAT THE VISION PROVIDER CAN READ, not what looks like a
+ * photo. HEIC/HEIF used to sit here, which made ai-analyze validate an
+ * iPhone library photo, charge its credit, then fail at the provider (their
+ * image input cannot decode HEIC) and refund it — scan always failing for
+ * exactly the gallery photos iPhones produce. The client normalises photos
+ * to JPEG before upload (src/lib/mealImage.ts) where the browser can decode,
+ * and tells the athlete to use the camera button where it can't.
  */
 export function validImagePayload(image: unknown, maxBytes = 8 * 1024 * 1024): string | null {
   if (typeof image !== "string") return null;
   const mimeMatch = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
   if (!mimeMatch) return null;
   const mime = mimeMatch[1];
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
   if (!allowed.includes(mime)) return null;
   const approxBytes = Math.floor((image.length * 3) / 4);
   if (approxBytes <= 0 || approxBytes > maxBytes) return null;

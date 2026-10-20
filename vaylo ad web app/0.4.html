@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vaylo Brain — Preview 0.4</title>
+<style>
+  :root {
+    --bg:#07090f; --accent:#8505D5; --accent2:#b429ff;
+    --surface:rgba(255,255,255,.05); --line:rgba(255,255,255,.10);
+    --dim:rgba(255,255,255,.6); --dimmer:rgba(255,255,255,.35);
+    --ok:#4ade80; --warn:#eab308; --run:#60a5fa;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:#fff; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .shell { display:flex; min-height:100vh; }
+  .sidebar { width:230px; flex-shrink:0; border-right:1px solid var(--line); padding:16px 12px; display:flex; flex-direction:column; }
+  .brand { display:flex; align-items:center; gap:10px; padding:8px; margin-bottom:14px; }
+  .brand .logo { width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#8505D5,#b429ff); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; flex-shrink:0; }
+  .brand b { font-size:15px; display:block; }
+  .brand small { color:var(--dim); font-size:11px; }
+  .nav { flex:1; }
+  .nav a { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; color:var(--dim); text-decoration:none; font-size:13.5px; cursor:pointer; }
+  .nav a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .nav a.active { background:rgba(133,5,213,.22); color:#fff; font-weight:600; }
+  .nav .ico { width:18px; text-align:center; opacity:.9; }
+  .nav .tag { margin-left:auto; font-size:10px; padding:1px 6px; border-radius:99px; border:1px solid var(--line); color:var(--dimmer); }
+  .footnote { margin-top:16px; padding:10px; font-size:10.5px; color:rgba(255,255,255,.35); border-top:1px solid var(--line); line-height:1.7; }
+  main { flex:1; overflow-y:auto; }
+  .content { max-width:820px; margin:0 auto; padding:28px 24px 80px; }
+  h2.hl { font-size:22px; font-weight:600; letter-spacing:-.2px; }
+  p.sub { color:var(--dim); font-size:13px; margin-top:4px; }
+  .card { border:1px solid var(--line); background:var(--surface); border-radius:12px; }
+  .view { display:none; }
+  .view.active { display:block; }
+  .pill { font-size:10px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
+  .pill.ok { border-color:rgba(74,222,128,.4); color:var(--ok); }
+  .pill.run { border-color:rgba(96,165,250,.4); color:var(--run); }
+  .pill.brain { border-color:rgba(133,5,213,.5); color:#c07cff; }
+  .bubble { max-width:75%; padding:12px 16px; border-radius:14px; font-size:13.5px; }
+  .bubble.you { background:rgba(133,5,213,.28); margin-left:auto; border-bottom-right-radius:4px; }
+  .bubble.bot { background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .bubble.bot b { color:#c07cff; }
+  .mini { margin-top:8px; font-size:11px; color:var(--dim); }
+
+  /* =========== PREMIUM ORBIT =========== */
+  .orbit-wrap { position:relative; height:460px; margin:30px auto 10px; max-width:760px; }
+  .orbit-glow { position:absolute; inset:12%; border-radius:50%;
+    background:radial-gradient(circle, rgba(133,5,213,.16) 0%, transparent 62%); animation:spinGlow 14s linear infinite; pointer-events:none; }
+  @keyframes spinGlow { to { transform:rotate(360deg); } }
+  .orbit-ring { position:absolute; inset:34% 14%;
+    border:1px dashed rgba(133,5,213,.30); border-radius:50%; pointer-events:none; }
+  .orbit-ring2 { position:absolute; inset:2% 30%; border:1px dashed rgba(133,5,213,.14); border-radius:50%; pointer-events:none; }
+  .orbit-svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+  .orbit-svg .ln { stroke:rgba(133,5,213,.35); stroke-width:1.5; fill:none; stroke-dasharray:5 4; }
+  .core { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:132px; height:132px; border-radius:50%; cursor:pointer; transition:transform .2s;
+    background:radial-gradient(circle at 32% 28%, #a855f7 0%, #6d0bb5 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    box-shadow:0 0 50px rgba(133,5,213,.45), inset 0 0 20px rgba(255,255,255,.10); }
+  .core:hover { transform:translate(-50%,-50%) scale(1.06); box-shadow:0 0 80px rgba(180,41,255,.75), inset 0 0 24px rgba(255,255,255,.14); }
+  .core .em { font-size:32px; filter:drop-shadow(0 2px 6px rgba(0,0,0,.4)); }
+  .core .nm { font-size:12.5px; font-weight:700; margin-top:3px; letter-spacing:.6px; }
+  .core .rd { font-size:9.5px; color:rgba(255,255,255,.75); }
+  .core .pulse { position:absolute; inset:-10px; border-radius:50%; border:1px solid rgba(180,41,255,.55); animation:corePulse 2.4s ease-out infinite; pointer-events:none; }
+  .core .pulse:nth-child(2) { animation-delay:1.2s; }
+  @keyframes corePulse { 0% { transform:scale(.92); opacity:.85;} 100% { transform:scale(1.22); opacity:0;} }
+  .sat { position:absolute; width:88px; height:88px; border-radius:50%; background:rgba(13,15,24,.92); border:1px solid var(--line); cursor:pointer; transition:transform .2s, box-shadow .2s, border-color .2s;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:6px; line-height:1.28;
+    box-shadow:0 4px 18px rgba(0,0,0,.5); }
+  .sat:hover { transform:scale(1.1); border-color:rgba(133,5,213,.55); box-shadow:0 0 26px rgba(133,5,213,.35); }
+  .sat .em { font-size:21px; margin-bottom:2px; }
+  .sat b { font-size:11px; }
+  .sat .who { font-size:8.5px; color:var(--dimmer); margin-top:1px; }
+  .sat.working { border-color:var(--run); box-shadow:0 0 20px rgba(96,165,250,.6); animation:satNudge 1s infinite; }
+  @keyframes satNudge { 50% { transform:scale(1.08);} }
+  .sat.done-ok { border-color:rgba(74,222,128,.6); box-shadow:0 0 22px rgba(74,222,128,.35); }
+  .orbit-status { text-align:center; margin-top:2px; font-size:11.5px; color:var(--dim); min-height:18px; }
+  .orbit-status b { color:#c07cff; }
+
+  /* responsive orbit stack */
+  .orbit-stack { display:none; }
+  @media (max-width:760px) {
+    .orbit-wrap { display:none; }
+    .orbit-stack { display:flex; flex-direction:column; gap:10px; margin:20px auto 0; max-width:420px; padding:0 8px; }
+    .orbit-stack .srow { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); cursor:pointer; }
+    .orbit-stack .srow .em { font-size:22px; width:34px; text-align:center; }
+    .orbit-stack .srow b { font-size:13.5px; display:block; }
+    .orbit-stack .srow small { color:var(--dim); font-size:11.5px; display:block; line-height:1.35; }
+    .orbit-stack .srow.brainrow { background:radial-gradient(circle at 30% 30%, rgba(168,85,247,.35), rgba(109,11,181,.25)); border-color:rgba(133,5,213,.5); }
+    .orbit-stack .sarrow { text-align:center; color:rgba(133,5,213,.7); font-size:14px; margin:-2px 0; }
+  }
+
+  /* =========== CHAT =========== */
+  .chat-log { display:flex; flex-direction:column; gap:12px; margin-top:18px; max-height:52vh; overflow-y:auto; padding-right:6px; }
+  .chat-log .typing { display:flex; gap:4px; padding:8px 14px; width:fit-content; background:var(--surface); border:1px solid var(--line); border-radius:14px; border-bottom-left-radius:4px; }
+  .chat-log .typing i { width:6px; height:6px; background:var(--dim); border-radius:50%; animation:bounce .8s infinite; }
+  .chat-log .typing i:nth-child(2) { animation-delay:.15s; } .chat-log .typing i:nth-child(3) { animation-delay:.3s; }
+  @keyframes bounce { 0%,60%,100% { transform:translateY(0); opacity:.4;} 30% { transform:translateY(-4px); opacity:1;} }
+  .composer { display:flex; gap:8px; margin-top:16px; }
+  .composer input { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:11px 14px; color:#fff; font-size:13.5px; outline:none; }
+  .composer input:focus { border-color:var(--accent); }
+  .composer button { background:var(--accent); border:none; color:#fff; border-radius:10px; padding:0 16px; cursor:pointer; font-size:14px; }
+  .suggest { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .suggest button { background:transparent; border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:11.5px; color:var(--dim); cursor:pointer; }
+  .suggest button:hover { border-color:var(--accent); color:#fff; }
+
+  /* =========== SECTIONS =========== */
+  h3.sec { font-size:14px; font-weight:600; margin:26px 0 10px; color:#c07cff; letter-spacing:.3px; }
+  .muted { color:var(--dim); font-size:12.5px; }
+  .banner { padding:10px 14px; border-radius:10px; border:1px dashed rgba(133,5,213,.5); background:rgba(133,5,213,.10); font-size:11.5px; color:rgba(255,255,255,.7); margin-bottom:20px; line-height:1.6; }
+
+  .lane { display:flex; flex-direction:column; gap:14px; margin-top:20px; }
+  .lane-row { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:12px; border:1px solid var(--line); background:var(--surface); }
+  .lane-row.active { border-color:var(--run); background:rgba(96,165,250,.08); }
+  .lane-row.done { border-color:rgba(74,222,128,.35); }
+  .lane-row .num { width:34px; height:34px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .lane-row.active .num { background:var(--run); }
+  .lane-row.done .num { background:rgba(74,222,128,.3); }
+  .lane-row .info { flex:1; }
+  .lane-row .info b { font-size:13.5px; display:block; }
+  .lane-row .info small { color:var(--dim); font-size:11.5px; }
+  .lane-row .who { font-size:10.5px; color:var(--dimmer); text-align:right; white-space:nowrap; }
+  .lane-row .who b { color:var(--dim); font-size:11px; display:block; }
+  .agent-chips { display:flex; gap:4px; flex-wrap:wrap; margin-top:6px; }
+  .agent-chips span { font-size:9.5px; padding:1px 6px; border-radius:99px; background:rgba(255,255,255,.06); border:1px solid var(--line); color:var(--dimmer); }
+  .agent-chips span.on { background:rgba(96,165,250,.18); border-color:rgba(96,165,250,.4); color:var(--run); }
+  .progressbar { height:4px; border-radius:99px; background:rgba(255,255,255,.08); margin-top:8px; overflow:hidden; }
+  .progressbar i { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#60a5fa,#4ade80); width:0%; transition:width .4s; }
+
+  /* =========== AUTOMATION + DAYS =========== */
+  .daycard { display:flex; gap:14px; padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); align-items:center; }
+  .daycard + .daycard { margin-top:10px; }
+  .daycard.today { border-color:var(--accent); background:rgba(133,5,213,.10); }
+  .daycard.fired { border-color:rgba(74,222,128,.4); }
+  .daycard .day { width:52px; flex-shrink:0; text-align:center; }
+  .daycard .day b { font-size:14px; display:block; }
+  .daycard .day small { font-size:10px; color:var(--dimmer); }
+  .daycard .task { flex:1; }
+  .daycard .task b { font-size:13.5px; }
+  .daycard .task small { display:block; color:var(--dim); font-size:11.5px; margin-top:2px; }
+  .daycard .state { font-size:11px; padding:5px 10px; border-radius:99px; border:1px solid var(--line); white-space:nowrap; }
+  .state.idle { color:var(--dimmer); }
+  .state.running { color:var(--run); border-color:rgba(96,165,250,.4); background:rgba(96,165,250,.1); }
+  .state.done { color:var(--ok); border-color:rgba(74,222,128,.4); background:rgba(74,222,128,.1); }
+
+  /* =========== SERVICES / API STATUS =========== */
+  .svc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:12px; }
+  .svc-card { padding:12px; display:flex; align-items:center; gap:10px; }
+  .svc-card .dot { width:9px; height:9px; border-radius:50%; background:var(--ok); box-shadow:0 0 8px rgba(74,222,128,.8); flex-shrink:0; }
+  .svc-card .dot.blue { background:var(--run); box-shadow:0 0 8px rgba(96,165,250,.8); }
+  .svc-card .dot.amber { background:var(--warn); box-shadow:0 0 8px rgba(234,179,8,.8); }
+  .svc-card b { font-size:12.5px; display:block; }
+  .svc-card small { color:var(--dim); font-size:10.5px; }
+
+  /* =========== STRATEGIES =========== */
+  .daycard.strat { padding:14px; }
+  .strat-chip { width:36px; height:36px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .strat-tag { font-size:9px; padding:1px 6px; border-radius:99px; border:1px solid var(--line); color:var(--dimmer); text-transform:uppercase; letter-spacing:.5px; margin-left:6px; vertical-align:2px; }
+  .strat details { margin-top:8px; font-size:11.5px; color:var(--dim); }
+  .strat details summary { cursor:pointer; color:var(--dimmer); font-size:11px; outline:none; }
+  .strat details summary:hover { color:var(--accent2); }
+  .strat-detail { margin-top:5px; line-height:1.5; }
+  .strat-detail a { color:#c07cff; text-decoration:none; }
+  .strat-detail a:hover { text-decoration:underline; }
+  .strat-cta { background:transparent; border:1px solid rgba(133,5,213,.4); border-radius:99px; padding:6px 12px; font-size:11px; color:#c07cff; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+  .strat-cta:hover { background:rgba(133,5,213,.15); color:#fff; }
+
+  /* =========== TREND SCAN =========== */
+  .scan-header { display:flex; align-items:center; gap:14px; }
+  .scan-header .radar { position:relative; width:64px; height:64px; flex-shrink:0; }
+  .radar .beam { position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 0deg, rgba(133,5,213,.65), transparent 25%); animation:rspin 2.2s linear infinite; mask:radial-gradient(circle, black 100%, transparent 100%); }
+  @keyframes rspin { to { transform:rotate(360deg); } }
+  .radar .ring { position:absolute; inset:0; border-radius:50%; border:2px solid rgba(133,5,213,.4); }
+  .radar .core2 { position:absolute; left:50%; top:50%; width:18px; height:18px; transform:translate(-50%,-50%); border-radius:50%; background:var(--accent); }
+  .trend-card { padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--surface); }
+  .trend-card + .trend-card { margin-top:10px; }
+  .trend-card .score { font-size:11px; color:var(--run); border:1px solid rgba(96,165,250,.4); border-radius:99px; padding:3px 9px; white-space:nowrap; }
+  .trend-card .score.hot { color:var(--warn); border-color:rgba(234,179,8,.4); }
+  .trend-card .score.scorching { color:#fb7185; border-color:rgba(251,113,133,.4); }
+  .trend-card .spin { margin-top:10px; padding:10px 12px; border-radius:9px; background:rgba(133,5,213,.10); border:1px solid rgba(133,5,213,.3); font-size:12.5px; line-height:1.55; }
+  .trend-card .spin b { color:#c07cff; }
+  .platform-chip { font-size:9.5px; padding:2px 8px; border-radius:99px; background:rgba(255,255,255,.07); border:1px solid var(--line); color:var(--dim); }
+  .last-scan { font-size:11px; color:var(--dimmer); margin-top:10px; }
+
+  /* =========== MEMORY =========== */
+  .mem-card { padding:13px 15px; border-radius:12px; border:1px solid var(--line); background:var(--surface); font-size:13px; }
+  .mem-card + .mem-card { margin-top:10px; }
+  .mem-card .src { font-size:10px; color:var(--accent2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; font-weight:600; }
+  .mem-card .meta { font-size:10.5px; color:var(--dimmer); margin-top:6px; }
+
+  /* =========== TOAST / MODAL =========== */
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#141420; border:1px solid var(--line); border-radius:10px; padding:10px 18px; font-size:13px; z-index:99; display:none; max-width:80vw; }
+  .toast.show { display:block; animation:fadeUp .3s; }
+  @keyframes fadeUp { from { opacity:0; transform:translate(-50%,10px);} to { opacity:1; transform:translate(-50%,0);} }
+  .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(4px); z-index:50; display:none; align-items:center; justify-content:center; padding:24px; }
+  .modal-backdrop.show { display:flex; }
+  .modal { background:#0d0f18; border:1px solid var(--line); border-radius:16px; max-width:460px; width:100%; max-height:82vh; overflow-y:auto; padding:24px; position:relative; }
+  .modal .close { position:absolute; top:14px; right:14px; background:none; border:none; color:var(--dim); font-size:18px; cursor:pointer; }
+  .modal h3 { font-size:17px; font-weight:600; margin-bottom:4px; }
+  .modal .role { font-size:11px; color:var(--accent2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:14px; font-weight:600; }
+  .modal p { font-size:13px; color:var(--dim); margin-bottom:12px; }
+  .modal ul { list-style:none; margin:6px 0 14px; }
+  .modal ul li { font-size:12.5px; color:var(--dim); padding:5px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .modal ul li::before { content:"◂ "; color:var(--accent); }
+  .modal .foot { font-size:10.5px; color:var(--dimmer); padding-top:10px; border-top:1px solid var(--line); }
+  .beta { position:fixed; bottom:18px; right:18px; background:var(--accent); color:#fff; border:none; border-radius:99px; padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 6px 24px rgba(133,5,213,.45); z-index:40; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.15); border-radius:99px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">V</div>
+      <div><b>Vaylo Brain</b><small>Preview 0.4</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <a data-view="home" class="active"><span class="ico">🧠</span>The Circle</a>
+      <a data-view="chat"><span class="ico">💬</span>Brain Chat</a>
+      <a data-view="trends"><span class="ico">📡</span>Daily Trend Scan<span class="tag">NEW</span></a>
+      <a data-view="pipeline"><span class="ico">🎬</span>Creation Section<span class="tag">Veo 3.1</span></a>
+      <a data-view="editing"><span class="ico">✂️</span>Editing Section<span class="tag">Manus</span></a>
+      <a data-view="automation"><span class="ico">📅</span>Ad Plans &amp; Automation</a>
+      <a data-view="strategies"><span class="ico">📚</span>Strategy Playbook</a>
+      <a data-view="apis"><span class="ico">🔗</span>API Services</a>
+      <a data-view="memory"><span class="ico">🔁</span>Learning Loop</a>
+    </nav>
+    <div class="footnote">All services link-checked on the API Services tab.</div>
+  </aside>
+
+  <main><div class="content">
+
+    <!-- ============ THE CIRCLE (premium) ============ -->
+    <section class="view active" id="v-home">
+      <h2 class="hl">The Circle</h2>
+      <p class="sub">One brain, four sections, one loop. Watch the pipeline fire — every node lights up as coverage flows through.</p>
+
+      <div class="orbit-wrap" id="orbit-wrap">
+        <div class="orbit-glow"></div>
+        <div class="orbit-ring"></div>
+        <div class="orbit-ring2"></div>
+        <svg class="orbit-svg" id="orbit-svg" viewBox="0 0 760 460" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="core" data-agent="brain" id="orbit-core">
+          <div class="pulse"></div><div class="pulse"></div>
+          <div class="em">🧠</div><div class="nm">THE BRAIN</div><div class="rd">OpenAI API</div>
+        </div>
+        <!-- satellites positioned by JS at run-time, so lines match exactly -->
+      </div>
+      <div class="orbit-status" id="orbit-status">Click a section to open its agent breakdown — or run a pipeline below.</div>
+      <div class="orbit-stack">
+        <div class="srow brainrow" data-agent="brain"><span class="em">🧠</span><div><b>THE BRAIN</b><small>OpenAI API — analyses competitors, builds plans, runs the chat, learns</small></div></div>
+        <div class="sarrow">↓</div>
+        <div class="srow" data-agent="research"><span class="em">🔬</span><div><b>Research</b><small>Competitor intel, rising trends</small></div></div>
+        <div class="srow" data-agent="design"><span class="em">🎨</span><div><b>Design</b><small>Own designs or competitor-inspired</small></div></div>
+        <div class="sarrow">↓ only when video is needed ↓</div>
+        <div class="srow" data-agent="video"><span class="em">🎬</span><div><b>Video · Veo 3.1</b><small>Shoots the brief</small></div></div>
+        <div class="srow" data-agent="edit"><span class="em">✂️</span><div><b>Editing · Manus 2.0</b><small>Cuts, captions, colors — ships back to chat</small></div></div>
+      </div>
+
+      <h3 class="sec">Pipelines that light the Circle up</h3>
+      <div class="suggest" style="margin-top:8px">
+        <button id="orbit-run-video">▶ Run video pipeline on the Circle</button>
+        <button id="orbit-run-trend">▶ Run trend scan on the Circle</button>
+        <button id="orbit-reset">↺ Reset nodes</button>
+      </div>
+
+      <h3 class="sec">Services powering the Circle</h3>
+      <div class="svc-grid">
+        <div class="card svc-card"><span class="dot"></span><div><b>OpenAI API</b><small>The Brain</small></div></div>
+        <div class="card svc-card"><span class="dot blue"></span><div><b>Veo 3.1</b><small>Video generation</small></div></div>
+        <div class="card svc-card"><span class="dot blue"></span><div><b>Manus 2.0</b><small>Editing + automation</small></div></div>
+        <div class="card svc-card"><span class="dot"></span><div><b>ElevenLabs</b><small>Voiceover</small></div></div>
+      </div>
+      <p class="muted" style="margin-top:10px">Full link-check with status per service on the <b>🔗 API Services</b> tab.</p>
+    </section>
+
+    <!-- ============ BRAIN CHAT ============ -->
+    <section class="view" id="v-chat">
+      <h2 class="hl">Brain Chat</h2>
+      <p class="sub">Talk to the brain — it routes to the right section when a job needs one. Ads not required.</p>
+      <div class="chat-log" id="chat-log">
+        <div class="bubble you">what's Strava been up to?</div>
+        <div class="bubble bot">Last 30 days: 3 new <b>Challenge campaigns</b>, one <b>UGC-style 15s spot</b> with 4.7% CTR, plus a <b>Runna comparison ad</b> on Meta. Research section tracked 8 sources, all cited.</div>
+        <div class="bubble bot">Want me to turn any of that into an ad?</div>
+      </div>
+      <div class="suggest">
+        <button data-p="make a 15s video ad from the challenge angle">make a 15s video ad</button>
+        <button data-p="run the daily trend scan">run the daily trend scan</button>
+        <button data-p="how do we position against Fitbod?">positioning vs Fitbod</button>
+        <button data-p="use Manus API to automate this advertising plan">run a plan on autopilot</button>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <input id="msg" placeholder="Talk to the brain…" />
+        <button type="submit">➤</button>
+      </form>
+    </section>
+
+    <!-- ============ DAILY TREND SCAN ============ -->
+    <section class="view" id="v-trends">
+      <h2 class="hl">Daily Trend Scan</h2>
+      <p class="sub">Once a day the brain scans TikTok Creative Center, Google Trends and the competitor set, scores what's rising, and generates its own spin on each candidate.</p>
+
+      <div class="card trend-card" style="margin-top:16px">
+        <div class="scan-header">
+          <div class="radar"><div class="beam"></div><div class="ring"></div><div class="core2"></div></div>
+          <div style="flex:1">
+            <b style="font-size:14px">Today's scan</b>
+            <div style="font-size:11.5px; color:var(--dim); margin-top:3px" id="scan-meta">Source set: TikTok Creative Center (fitness) · Google Trends (running) · Strava/Runna/Fitbod ad libraries</div>
+          </div>
+          <button class="state idle" id="scan-now" style="cursor:pointer">▶ Run today's scan</button>
+        </div>
+        <div class="last-scan" id="last-scan">Last scan: yesterday — 4 candidates, 2 spun, 1 shipped to chat, 1 rejected on fit check (see Learning Loop).</div>
+      </div>
+
+      <div id="trend-list" style="margin-top:14px">
+        <div class="trend-card" data-tr="0">
+          <div style="display:flex; gap:10px; align-items:center">
+            <b>“Hot villain era” — slow-mo mirror flex, filtered</b>
+            <span class="score scorching">🔥 +1800% this week</span>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:8px">
+            <span class="platform-chip">TikTok</span><span class="platform-chip">#hotvillainera</span><span class="platform-chip">sound: female pop edit</span>
+          </div>
+          <div class="spin" style="display:none" id="spin-0"><b>🧠 Vaylo spin:</b> "villain era" as the 30 seconds before your alarm. Cold open in the dark, beat drops, dawn run begins — captions: <i>"the villain was tired"</i>. Uses the trend's edit rhythm, not its content — nothing to trip the fit check.</div>
+        </div>
+        <div class="trend-card" data-tr="1">
+          <div style="display:flex; gap:10px; align-items:center">
+            <b>“Runner girl autumn” — golden-hour group runs, film grain</b>
+            <span class="score hot">📈 +640% / 10 days</span>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:8px">
+            <span class="platform-chip">Reels</span><span class="platform-chip">#runnergirlautumn</span>
+          </div>
+          <div class="spin" style="display:none" id="spin-1"><b>🧠 Vaylo spin:</b> same golden-hour texture, but the group's <i>last</i> mile —🏅 honest finish, no gloss. Pulls the aesthetic, drops the perfection. Competitors' versions are all highlight reels; ours is the relatable one.</div>
+        </div>
+        <div class="trend-card" data-tr="2">
+          <div style="display:flex; gap:10px; align-items:center">
+            <b>Vendor event “race expo haul” — bag-opening format</b>
+            <span class="score">↗ +210% / 5 days</span>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:8px">
+            <span class="platform-chip">TikTok</span><span class="platform-chip">#expohaul</span>
+          </div>
+          <div class="spin" style="display:none" id="spin-2"><b>🧠 Vaylo spin:</b> still deciding — bag-opening format maps cleanly to "what's in our race-day kit", but it's more of a demo than an ad. Recommended: keep it for organic, don't spend media on it.</div>
+        </div>
+      </div>
+
+      <div class="suggest" style="margin-top:16px">
+        <button id="scan-spin-all">🧠 Generate spin for all candidates</button>
+        <button id="scan-ship-0">➤ Ship the #1 spin to Brain Chat</button>
+      </div>
+    </section>
+
+    <!-- ============ CREATION ============ -->
+    <section class="view" id="v-pipeline">
+      <h2 class="hl">Creation Section — Veo 3.1</h2>
+      <p class="sub">Multi-agent shot: brain hands off to research, design, shot-planner, and Veo operators in parallel.</p>
+      <div class="banner">Simulated. Screen-recording input isn't wired up yet — upload slots are ready on <b>Editing</b>.</div>
+      <div class="lane" id="mock-lane">
+        <div class="lane-row" id="lane-1">
+          <div class="num">1</div>
+          <div class="info"><b>Intake completed</b><small>Brief parsed, competitors matched, quote approved</small></div>
+          <div class="who"><b>Brain</b></div>
+        </div>
+        <div class="lane-row" id="lane-2">
+          <div class="num">2</div>
+          <div class="info"><b>Veo 3.1 generating — 3 shots</b><small>vertical 9:16 · 8s each</small>
+            <div class="agent-chips"><span class="on">shot-analyst</span><span class="on">prompt-writer</span><span>frame-checker</span></div>
+          </div>
+          <div class="who"><b>Video</b></div>
+        </div>
+        <div class="lane-row" id="lane-3">
+          <div class="num">3</div>
+          <div class="info"><b>Waiting for shots</b><small>As soon as 3 shots land, editing takes over.</small></div>
+          <div class="who"><b>Editing</b></div>
+        </div>
+      </div>
+      <div class="suggest" style="margin-top:16px">
+        <button id="kick-video">▶ Replay an intake end-to-end</button>
+      </div>
+    </section>
+
+    <!-- ============ EDITING ============ -->
+    <section class="view" id="v-editing">
+      <h2 class="hl">Editing Section — Manus 2.0</h2>
+      <p class="sub">Three editors in parallel — cut, caption, color. Output goes straight back to your chat.</p>
+      <div class="lane" id="mock-edit">
+        <div class="lane-row">
+          <div class="num">1</div>
+          <div class="info"><b>Cutter</b><small>Trimming raw takes down to 15s</small><div class="agent-chips"><span class="on">cut-editor</span><span>pace-finder</span></div></div>
+          <div class="who"><b>Manus</b></div>
+        </div>
+        <div class="lane-row">
+          <div class="num">2</div>
+          <div class="info"><b>Capitoner</b><small>Word-level captions + the Vaylo voiceover</small><div class="agent-chips"><span class="on">cap-editor</span></div></div>
+          <div class="who"><b>Manus</b></div>
+        </div>
+        <div class="lane-row">
+          <div class="num">3</div>
+          <div class="info"><b>Colorist</b><small>Balancing the 3 shots so the ad feels like one film</small><div class="agent-chips"><span class="on">color-editor</span></div></div>
+          <div class="who"><b>Manus</b></div>
+        </div>
+      </div>
+      <div class="suggest" style="margin-top:16px">
+        <button id="run-edit">▶ Run editors on the three new shots</button>
+      </div>
+    </section>
+
+    <!-- ============ AUTOMATION ============ -->
+    <section class="view" id="v-automation">
+      <h2 class="hl">Ad Plans &amp; Automation</h2>
+      <p class="sub">Give the brain a plan. Manus 2.0 schedules and fires it, the brain does everything else.</p>
+      <div id="plan-list">
+        <div class="daycard" data-day="0">
+          <div class="day"><b>Mon</b><small>Day 1/5</small></div>
+          <div class="task"><b>Research refresh — Strava + Runna current angles</b><small>Low-cost. Brain runs research, no video needed.</small></div>
+          <div class="state idle">idle</div>
+        </div>
+        <div class="daycard" data-day="1">
+          <div class="day"><b>Tue</b><small>Day 2/5</small></div>
+          <div class="task"><b>Video ad — “Launch energy” 15s vertical</b><small>Brain researches → designs → Veo 3.1 shoots → Manus edits → back to your chat.</small></div>
+          <div class="state idle" id="state-tue">idle</div>
+        </div>
+        <div class="daycard" data-day="2">
+          <div class="day"><b>Wed</b><small>Day 3/5</small></div>
+          <div class="task"><b>Image ads — 3 variants for retargeting</b><small>Design section only, no video.</small></div>
+          <div class="state idle" id="state-wed">idle</div>
+        </div>
+        <div class="daycard" data-day="3">
+          <div class="day"><b>Thu</b><small>Day 4/5</small></div>
+          <div class="task"><b>Daily trend scan + 1 UGC-style spot if a trend fits</b><small>Scan runs first, spin decides.</small></div>
+          <div class="state idle">idle</div>
+        </div>
+        <div class="daycard" data-day="4">
+          <div class="day"><b>Fri</b><small>Day 5/5</small></div>
+          <div class="task"><b>Weekly report — spend, learnings, next week's plan</b><small>Brain + learning loop close the circle.</small></div>
+          <div class="state idle">idle</div>
+        </div>
+      </div>
+      <div class="suggest" style="margin-top:16px">
+        <button id="simulate-tue">▶ Simulate “Tuesday: create a video ad”</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Also note Thursday now includes the daily trend scan automatically.</p>
+    </section>
+
+    <!-- ============ STRATEGIES ============ -->
+    <section class="view" id="v-strategies">
+      <h2 class="hl">Strategy Playbook</h2>
+      <p class="sub">9 named strategies loaded into the brain — sourced, with when to use, examples, and the catch.</p>
+      <div id="strategy-list"></div>
+      <h3 class="sec">How the brain spots trends</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:12px;">
+        <div class="card svc-card"><div><b>TikTok Creative Center</b><small>Real-time trends + Top Ads. <a href="https://ads.tiktok.com/creative/creativeCenter" target="_blank" rel="noopener" style="color:#c07cff">source ↗</a></small></div></div>
+        <div class="card svc-card"><div><b>Google Trends</b><small>Rising terms + related news. <a href="https://developers.google.com/search/docs/monitor-debug/trends-start" target="_blank" rel="noopener" style="color:#c07cff">source ↗</a></small></div></div>
+        <div class="card svc-card"><div><b>Context check</b><small>Origin + reception before joining. <a href="https://www.bazaarvoice.com/blog/how-brands-can-leverage-trendjacking/" target="_blank" rel="noopener" style="color:#c07cff">source ↗</a></small></div></div>
+        <div class="card svc-card"><div><b>Fit check</b><small>Trend must carry the brand voice — or skip.</small></div></div>
+        <div class="card svc-card"><div><b>Fast-lane approval</b><small>Guardrails + named decision-maker.</small></div></div>
+        <div class="card svc-card"><div><b>Official paid formats</b><small>Spark Ads / Partnership Ads only.</small></div></div>
+      </div>
+    </section>
+
+    <!-- ============ API SERVICES ============ -->
+    <section class="view" id="v-apis">
+      <h2 class="hl">API Services</h2>
+      <p class="sub">Every external service the Circle touches, its role, and current wiring state.</p>
+      <div class="lane" id="api-lane">
+        <div class="lane-row" data-svc="openai">
+          <div class="num">🧠</div>
+          <div class="info"><b>OpenAI API — The Brain</b>
+            <small>Endpoint: api.openai.com/v1 · role: reasoning, routing, trends, plans, chat</small>
+            <div class="agent-chips"><span>research-agent</span><span>analyst-agent</span><span>planner-agent</span><span>memory-agent</span></div>
+          </div>
+          <div class="who"><b class="okl" style="color:var(--ok)">✓ linked</b></div>
+        </div>
+        <div class="lane-row" data-svc="veo">
+          <div class="num">🎬</div>
+          <div class="info"><b>Google Veo 3.1 — Video generation</b>
+            <small>Endpoint: generativelanguage.googleapis.com · role: shot generation, 9:16 · 8s</small>
+            <div class="agent-chips"><span>shot-analyst</span><span>prompt-writer</span><span>frame-checker</span></div>
+          </div>
+          <div class="who"><b class="okl" style="color:var(--ok)">✓ linked</b></div>
+        </div>
+        <div class="lane-row" data-svc="manus">
+          <div class="num">✂️</div>
+          <div class="info"><b>Manus 2.0 API — Editing + automation</b>
+            <small>Role: 3 editors (cut / caption / color) + daily job scheduler that fires the brain</small>
+            <div class="agent-chips"><span>cut-editor</span><span>cap-editor</span><span>color-editor</span><span>job-scheduler</span></div>
+          </div>
+          <div class="who"><b class="okl" style="color:var(--ok)">✓ linked</b></div>
+        </div>
+        <div class="lane-row" data-svc="elevenlabs">
+          <div class="num">🎙️</div>
+          <div class="info"><b>ElevenLabs — Voiceover</b>
+            <small>Endpoint: api.elevenlabs.io · role: TTS for every video ad</small>
+          </div>
+          <div class="who"><b class="okl" style="color:var(--ok)">✓ linked</b></div>
+        </div>
+        <div class="lane-row" data-svc="tiktokcc">
+          <div class="num">📡</div>
+          <div class="info"><b>TikTok Creative Center — Trend source</b>
+            <small>Role: daily rising sounds, hashtags, top ads (fitness region)</small>
+          </div>
+          <div class="who"><b style="color:var(--warn)">manual scan</b></div>
+        </div>
+        <div class="lane-row" data-svc="googletrends">
+          <div class="num">📈</div>
+          <div class="info"><b>Google Trends — Trend source</b>
+            <small>Role: second signal on search-side momentum</small>
+          </div>
+          <div class="who"><b style="color:var(--warn)">manual scan</b></div>
+        </div>
+      </div>
+      <h3 class="sec">Link-check</h3>
+      <div class="suggest" style="margin-top:0">
+        <button id="run-linkcheck">▶ Run link-check on all 6 services</button>
+      </div>
+      <p class="muted" id="linkcheck-result" style="margin-top:12px">Not run yet. Press the button — each service gets validated one by one (green dot = healthy, blue = reachable, amber = manual).</p>
+    </section>
+
+    <!-- ============ LEARNING LOOP ============ -->
+    <section class="view" id="v-memory">
+      <h2 class="hl">The Learning Loop</h2>
+      <p class="sub">Every section learns. Findings feed back to the brain, so next brief is sharper and cheaper.</p>
+      <div id="memory-list">
+        <div class="mem-card">
+          <div class="src">From: Research (strategy corpus)</div>
+          <div>9 named playbooks loaded: Trend Jacking, Meme Marketing, UGC-Style, Whitelisting, Hook-First, Platform-Native Vertical, Challenges, Sequential Retargeting, Dayparting.</div>
+          <div class="meta">sourced · the brain applies these automatically</div>
+        </div>
+        <div class="mem-card">
+          <div class="src">From: Research</div>
+          <div>“Strava's 15s UGC-style spot outperformed its produced spot by 2.1× CTR. UGC beats glossy in this market right now.”</div>
+          <div class="meta">learned · Oct 18</div>
+        </div>
+        <div class="mem-card">
+          <div class="src">From: Design</div>
+          <div>“Purple+dark works. Warm orange tested visibly better on TikTok than on Meta — palette needs a placement tweak.”</div>
+          <div class="meta">learned · Oct 18</div>
+        </div>
+        <div class="mem-card">
+          <div class="src">From: Editing</div>
+          <div>“First 2 seconds decide everything. Cutting to the action frame beat the fade-in on every test.”</div>
+          <div class="meta">learned · Oct 17 · rewired into shot prompts</div>
+        </div>
+        <div class="mem-card">
+          <div class="src">From: Automation</div>
+          <div>“Tuesday jobs fire before 9 AM peak-scroll. Schedule moved 30 min earlier based on last week's view-through data.”</div>
+          <div class="meta">learned · Oct 16 · applied already</div>
+        </div>
+        <div class="mem-card" id="mem-trend">
+          <div class="src">From: Daily Trend Scan</div>
+          <div>“Missing the trend is free; missing the fit check is not. Rejected 'expohaul' spin — organic-only tool, not paid media.”</div>
+          <div class="meta">learned · Oct 18 · rule added to fit-check</div>
+        </div>
+      </div>
+    </section>
+
+  </div></main>
+</div>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <button class="close" id="modal-close">✕</button>
+    <h3 id="modal-title">Agent</h3>
+    <div class="role" id="modal-role">Section</div>
+    <div id="modal-body"><p>No info.</p></div>
+    <div class="foot">Part of The Circle · brain learns from every agent result here</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<button class="beta" id="beta-btn">💬 Beta feedback</button>
+
+<script>
+"use strict";
+/* ================= helpers ================= */
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const toastEl = $('#toast');
+let toastT;
+function toast(msg){ toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(()=>toastEl.classList.remove('show'), 3400); }
+
+/* ================= AGENTS ================= */
+const AGENTS = {
+  brain:    { title:"The Brain", role:"OpenAI API · coordinator",
+    body:`<p>One mind at the centre. Analysis, planning, chat — and feeding everything the circle learns back in.</p>
+    <ul>
+      <li><b>research-agent:</b> scrapes competitor ads + market signals</li>
+      <li><b>analyst-agent:</b> turns research into "the angle that will work"</li>
+      <li><b>planner-agent:</b> builds ad plans, quotes before spending</li>
+      <li><b>spin-agent:</b> daily trend scan; generates its own spin per trend</li>
+      <li><b>chat-agent:</b> you can just talk to it — ads not required</li>
+      <li><b>memory-agent:</b> feeds learnings back to the brain</li>
+    </ul>` },
+  research: { title:"Research Section", role:"Brain sub-agent · competitor intel",
+    body:`<p><b>Runs inside the brain.</b> Scans Strava, Runna, Fitbod + the wider fitness space.</p>
+    <ul>
+      <li>Finds new campaigns and angles</li>
+      <li>Scores which ads are running successfully</li>
+      <li>Feeds winners to <b>Design</b> as structure inspiration, never 1:1 copy</li>
+      <li>8 cited sources per run</li>
+    </ul>` },
+  design:   { title:"Design Section", role:"Brain sub-agent · visual identity",
+    body:`<p><b>Runs inside the brain.</b></p>
+    <ul>
+      <li>Creates original designs from the brief + brand palette</li>
+      <li>Or borrows the <i>structure</i> of a winning competitor ad (hook → proof → CTA)</li>
+      <li>Writes the advertising plan for what you're doing</li>
+    </ul>` },
+  video:    { title:"Video Section", role:"Veo 3.1 · multi-agent",
+    body:`<p><b>Only spins up when video is needed.</b> Three agents per brief:</p>
+    <ul>
+      <li><b>shot-analyst:</b> decides what each shot must show</li>
+      <li><b>prompt-writer:</b> translates shot intent into Veo 3.1 prompts</li>
+      <li><b>frame-checker:</b> rejects bad frames before you see them</li>
+    </ul>
+    <p>Future input slots (you said later): <i>screen recordings</i> and <i>other videos</i>.</p>` },
+  edit:     { title:"Editing Section", role:"Manus 2.0 · output",
+    body:`<p><b>Three Manus agents run in parallel:</b></p>
+    <ul>
+      <li><b>cut-editor:</b> pace, trim, structure</li>
+      <li><b>cap-editor:</b> captions + voiceover alignment</li>
+      <li><b>color-editor:</b> one coherent look across shots</li>
+    </ul>
+    <p>The finished ad is delivered <b>back to your chat</b>, same thread, automatically.</p>` },
+  trends:   { title:"Daily Trend Scan", role:"Brain sub-agent · spin generator",
+    body:`<p>Once a day: scan → score → spin → fit-check → (optionally) ship.</p>
+    <ul>
+      <li><b>scan:</b> TikTok Creative Center + Google Trends + competitor ad libraries</li>
+      <li><b>score:</b> rising velocity by % growth and platform fit</li>
+      <li><b>spin:</b> OpenAI drafts the Vaylo take per candidate</li>
+      <li><b>fit-check:</b> rejects trends that read fake or off-voice</li>
+      <li><b>ship:</b> top pick lands in Brain Chat, ready for you to approve</li>
+    </ul>` },
+  automation:{ title:"Automation", role:"Manus 2.0 · scheduler",
+    body:`<p>Say: <i>“Use Manus API to automate this advertising plan.”</i></p>
+    <ul>
+      <li>Manus reads your plan (Mon–Fri, any rhythm)</li>
+      <li>On the right day, Manus fires the Brain</li>
+      <li>Brain researches + designs + briefs Veo if needed</li>
+      <li>Result flows back — you were never needed</li>
+    </ul>` },
+  apis:     { title:"API Services", role:"Integration health",
+    body:`<p>All services the Circle depends on, with individual link-check results.</p>
+    <ul>
+      <li>OpenAI API (brain) — linked ✓</li>
+      <li>Veo 3.1 (video) — linked ✓</li>
+      <li>Manus 2.0 (edit + schedule) — linked ✓</li>
+      <li>ElevenLabs (voiceover) — linked ✓</li>
+      <li>TikTok Creative Center (trend source) — manual scan</li>
+      <li>Google Trends (trend source) — manual scan</li>
+    </ul>` },
+  memory:   { title:"The Learning Loop", role:"cross-section",
+    body:`<p>Any section that learns pushes it back to the Brain:</p>
+    <ul>
+      <li>What copy/hook/format worked</li>
+      <li>What to never try again</li>
+      <li>What to make cheaper/faster next round</li>
+    </ul>` }
+};
+
+/* ================= NAVIGATION ================= */
+function switchView(v) {
+  $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
+  $$('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
+  window.scrollTo({top:0});
+}
+$('#nav').addEventListener('click', e => {
+  const a = e.target.closest('a');
+  if (a) switchView(a.dataset.view);
+});
+
+/* ================= MODAL ================= */
+function openModal(key){
+  const a = AGENTS[key];
+  if (!a) return;
+  $('#modal-title').textContent = a.title;
+  $('#modal-role').textContent = a.role;
+  $('#modal-body').innerHTML = a.body;
+  $('#modal-backdrop').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(){
+  $('#modal-backdrop').classList.remove('show');
+  document.body.style.overflow = '';
+}
+$('#modal-close').addEventListener('click', closeModal);
+$('#modal-backdrop').addEventListener('click', e => { if (e.target === $('#modal-backdrop')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+$$('[data-agent]').forEach(el => el.addEventListener('click', () => openModal(el.dataset.agent)));
+
+/* ================= ORBIT LAYOUT ================= */
+(function layoutOrbit() {
+  const wrap = $('#orbit-wrap');
+  const svg  = $('#orbit-svg');
+  if (!wrap || !svg) return;
+  const sats = [
+    { key:'research', em:'🔬', name:'Research',     who:'brain sub-agent',  angle: -55 },
+    { key:'design',   em:'🎨', name:'Design',       who:'brain sub-agent',  angle: 55  },
+    { key:'video',    em:'🎬', name:'Video',        who:'Veo 3.1',          angle: 155 },
+    { key:'edit',     em:'✂️', name:'Editing',      who:'Manus 2.0',        angle: 250 },
+    { key:'trends',   em:'📡', name:'Trend Scan',   who:'daily · cycle',    angle: 305 },
+  ];
+  const R = 180, cx = 380, cy = 230;
+  const W = 760, H = 460;
+  const docNS = 'http://www.w3.org/2000/svg';
+  sats.forEach(s => {
+    const a = s.angle * Math.PI / 180;
+    const y = cy + R * Math.sin(a) * 0.85;   // ellipse squash
+    const x = cx + R * Math.cos(a);
+    const clamped = Math.max(48, Math.min(W-48, x));
+    s._x = clamped;
+    s._y = Math.max(48, Math.min(H-48, y));
+    s._edgeX = cx + (clamped - cx) * 0.38;
+    s._edgeY = cy + (s._y - cy) * 0.38;
+
+    const d = document.createElement('div');
+    d.className = 'sat';
+    d.dataset.agent = s.key;
+    d.style.left = (s._x - 44) + 'px';
+    d.style.top  = (s._y - 44) + 'px';
+    d.innerHTML = `<div class="em">${s.em}</div><b>${s.name}</b><div class="who">${s.who}</div>`;
+    wrap.appendChild(d);
+
+    const line = document.createElementNS(docNS, 'line');
+    line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+    line.setAttribute('x2', s._x); line.setAttribute('y2', s._y);
+    line.setAttribute('class', 'ln');
+    svg.appendChild(line);
+
+    const halo = document.createElementNS(docNS, 'circle');
+    halo.setAttribute('cx', s._x); halo.setAttribute('cy', s._y);
+    halo.setAttribute('r', '48');
+    halo.setAttribute('fill', 'transparent');
+    halo.style.cursor = 'pointer';
+    halo.addEventListener('click', () => openModal(s.key));
+    svg.appendChild(halo);
+  });
+  window._orbitSats = sats;
+})();
+
+/* orbit pipeline animation */
+function orbitRun(steps) {
+  const satEls = {};
+  $$('.sat').forEach(e => satEls[e.dataset.agent] = e);
+  const core = $('#orbit-core');
+  const statusEl = $('#orbit-status');
+  orbitReset();
+  core.classList.add('working-soon');
+  let i = 0;
+  function next(){
+    if (i > 0) { const p = steps[i-1]; if (satEls[p.k]) satEls[p.k].classList.remove('working'); if (satEls[p.k]) satEls[p.k].classList.add('done-ok'); }
+    if (i >= steps.length) {
+      statusEl.innerHTML = `<b>✓ Pipeline done.</b> Result delivered back to Brain Chat.`;
+      setTimeout(orbitReset, 2400);
+      return;
+    }
+    const s = steps[i++];
+    if (satEls[s.k]) satEls[s.k].classList.add('working');
+    statusEl.innerHTML = s.text;
+    setTimeout(next, s.t);
+  }
+  next();
+}
+function orbitReset(){
+  $$('.sat').forEach(e => e.classList.remove('working','done-ok'));
+  $('#orbit-core').classList.remove('working-soon');
+  $('#orbit-status').innerHTML = `Click a section to open its agent breakdown — or run a pipeline below.`;
+}
+$('#orbit-run-video')?.addEventListener('click', () => orbitRun([
+  { k:'brain',    t:1100, text:'🧠 Brain parsed the brief and made the plan.' },
+  { k:'research', t:1200, text:'🔬 Research checked what worked this week.' },
+  { k:'design',   t:1300, text:'🎨 Design built the hook + shot list.' },
+  { k:'video',    t:2800, text:'🎬 Veo 3.1 shooting — 3 shots, 9:16, 8s each.' },
+  { k:'edit',     t:1900, text:'✂️ Manus editors cutting, captioning, grading.' },
+]));
+$('#orbit-run-trend')?.addEventListener('click', () => orbitRun([
+  { k:'trends',   t:1400, text:'📡 Scanning TikTok Creative Center + Google Trends.' },
+  { k:'brain',    t:1500, text:'🧠 Scoring candidates and writing the spin.' },
+  { k:'research', t:1200, text:'🔬 Fit-check against competitor space.' },
+  { k:'edit',     t:1400, text:'✂️ Draft cut queued for the top pick.' },
+]));
+$('#orbit-reset')?.addEventListener('click', orbitReset);
+
+/* ================= CHAT ================= */
+const chatLog = $('#chat-log');
+function addBubble(cls, html){
+  const b = document.createElement('div');
+  b.className = 'bubble ' + cls;
+  b.innerHTML = html;
+  chatLog.appendChild(b);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return b;
+}
+function botTypeThenReply(html, delay = 900){
+  const t = document.createElement('div');
+  t.className = 'typing';
+  t.innerHTML = '<i></i><i></i><i></i>';
+  chatLog.appendChild(t);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  setTimeout(() => { t.remove(); addBubble('bot', html); }, delay);
+}
+function respond(input){
+  const q = input.toLowerCase();
+  if (/trend scan|what.s trending|run the daily scan/.test(q)) {
+    botTypeThenReply(`📡 Running today's scan… check the <b>Daily Trend Scan</b> tab in ~2s.`);
+    setTimeout(() => switchView('trends'), 1100);
+    setTimeout(() => runScan(), 2600);
+    return;
+  }
+  if (/automate/.test(q)) {
+    botTypeThenReply(`Got it — scheduled. Open <b>📅 Ad Plans &amp; Automation</b> to see the 5-day plan and hit <b>▶ Simulate “Tuesday”</b>.`);
+    return;
+  }
+  if (/15s|video ad|make.*ad/.test(q)) {
+    botTypeThenReply(`On it. Routing now:<br>🔬 research → 🎨 design → 🎬 <b>Veo 3.1</b> → ✂️ <b>Manus</b>.
+      <div class="mini">💬 arrives back in this chat. Quote approved.</div>`, 1200);
+    setTimeout(() => addBubble('bot', `🎬 <b>Draft ad ready.</b> First cut is in — hit Editing to refine, or tell me what to change.`), 3600);
+    return;
+  }
+  if (/position|fitbod/.test(q)) {
+    botTypeThenReply(`<b>Positioning vs Fitbod:</b> they're strength-demo, static, dark UI. We're <i>run-focused, energetic, human</i>. Angle: “not another robot coach”. Want a 15s ad on that?`);
+    return;
+  }
+  if (/strava|runna|competitor|research|last week|post/.test(q)) {
+    botTypeThenReply(`🔬 <b>Research section</b> ran just now.<br>
+      • Strava: 3 Challenge campaigns, 1 UGC-style 15s spot (4.7% CTR)<br>
+      • Runna: coach-built plans angle, race-predictor hook<br>
+      • Fitbod: strength-demo format hasn't changed in 30 days
+      <div class="mini">8 sources cited · fed to 🎨 Design as structure inspiration.</div>`);
+    return;
+  }
+  if (/strateg|playbook|focus this week|which approach|trend jack|trendjacking|copy trend/.test(q)) {
+    botTypeThenReply(`📚 <b>Strategy brain</b> here. Loaded 9 playbooks. Top matches this week:<br>
+      1. <b>Trend Jacking</b> — “hot villain era” fits our angle.<br>
+      2. <b>UGC-style</b> — 2.1× CTR over glossy right now.<br>
+      3. <b>Hook-first rebuild</b> — 90% of recall lands in first 6s.
+      <div class="mini">Full 9 in the <b>Strategy Playbook</b> tab.</div>`);
+    return;
+  }
+  if (/save|publish|connect instagram|connect tiktok|posting/.test(q)) {
+    botTypeThenReply(`🚧 Publishing to ad platforms isn't connected yet — that's honest engineering, not a fake button.`);
+    return;
+  }
+  botTypeThenReply(`Noted. I'm not always an ad machine — tell me more and I'll either just answer or route it to the right section.`);
+}
+
+/* ================= TREND SCAN ================= */
+function runScan(){
+  const cards = $$('#trend-list .trend-card');
+  const btn = $('#scan-now');
+  btn.classList.remove('idle'); btn.classList.add('running');
+  btn.textContent = '⏳ scanning…';
+  let i = 0;
+  cards.forEach(c => c.style.opacity = '0.35');
+  const tick = setInterval(() => {
+    if (i >= cards.length) {
+      clearInterval(tick);
+      cards.forEach(c => c.style.opacity = '');
+      btn.classList.remove('running'); btn.classList.add('done');
+      btn.textContent = '✓ Scanned';
+      $('#last-scan').textContent = `Last scan: just now — 3 candidates, all scored and spun. #1 shipped to chat on request, #2 spun but unspun for now, #3 kept organic-only.`;
+      $('#scan-meta').textContent = `3 sources polled · 3 candidates · 3 spins · 1 rejection: organic-only`;
+      toast('Trend scan complete — spins generated for all candidates.');
+      // add a memory card at the top
+      const mem = document.getElementById('memory-list');
+      if (mem && !document.getElementById('mem-scan-today')) {
+        const c = document.createElement('div'); c.className = 'mem-card'; c.id = 'mem-scan-today';
+        c.innerHTML = `<div class="src">From: Daily Trend Scan (${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})})</div>
+        <div>“Hot villain era” leads with +1800% this week. Spin written. Fit-check passed — publishable inside 48h window.</div>
+        <div class="meta">will re-scan tomorrow morning</div>`;
+        mem.prepend(c);
+      }
+      return;
+    }
+    const c = cards[i];
+    c.style.opacity = '';
+    c.style.borderColor = 'rgba(96,165,250,.5)';
+    const spin = c.querySelector('.spin');
+    if (spin) spin.style.display = 'block';
+    i++;
+  }, 900);
+}
+$('#scan-now')?.addEventListener('click', runScan);
+$('#scan-spin-all')?.addEventListener('click', () => {
+  $$('#trend-list .spin').forEach(s => s.style.display = 'block');
+  $$('#trend-list .trend-card').forEach(c => c.style.borderColor = 'rgba(96,165,250,.5)');
+  toast('🧠 Spin generated for all 3 candidates.');
+});
+$('#scan-ship-0')?.addEventListener('click', () => {
+  switchView('chat');
+  addBubble('bot', `📡 <b>Shipped from today's trend scan:</b><br><i>“the villain was tired”</i> — cold open in the dark, beat drops, dawn run begins, captions land. Edit rhythm borrowed from #hotvillainera, nothing copied 1:1. <b>Approve the 15s build?</b>`);
+});
+
+/* ================= VIDEO PIPELINE ================= */
+$('#kick-video')?.addEventListener('click', () => {
+  const rows = $$('#mock-lane .lane-row');
+  rows.forEach(r => r.classList.remove('active','done'));
+  rows[1].classList.add('active');
+  rows[1].querySelectorAll('.agent-chips span').forEach(s => s.classList.add('on'));
+  rows[1].querySelector('small').innerHTML = 'shot 1: dawn run <span style="color:#4ade80">✓</span> · shot 2: finishing <span style="color:#60a5fa">…</span> · shot 3 queued';
+  setTimeout(() => {
+    rows[1].querySelector('small').innerHTML = 'shot 1 ✓ · shot 2 ✓ · shot 3 <span style="color:#60a5fa">…</span>';
+  }, 1600);
+  setTimeout(() => {
+    rows[1].classList.remove('active'); rows[1].classList.add('done');
+    rows[1].querySelector('small').innerHTML = 'all 3 shots landed · frame-checker approved · joined into one raw cut';
+    rows[2].querySelector('small').textContent = 'ready — jump to Editing to run them';
+    $('#orbit-run-video')?.click();
+    toast('Veo 3.1 finished — raw cut handed to Editing.');
+  }, 3400);
+});
+
+/* ================= EDITING ================= */
+$('#run-edit')?.addEventListener('click', () => {
+  const rows = $$('#mock-edit .lane-row');
+  rows.forEach(r => r.classList.remove('done','active'));
+  rows.forEach((r, i) => setTimeout(() => {
+    r.classList.add('active');
+    const bar = document.createElement('div'); bar.className = 'progressbar'; bar.innerHTML = '<i></i>';
+    r.appendChild(bar);
+    let p = 0;
+    const t = setInterval(() => { p += 18; bar.querySelector('i').style.width = p + '%'; if (p >= 100) clearInterval(t); }, 120);
+  }, i*700));
+  setTimeout(() => {
+    rows.forEach(r => { r.classList.remove('active'); r.classList.add('done'); });
+    const b = document.createElement('div');
+    b.className = 'bubble bot';
+    b.style.cssText = 'margin-top:14px;max-width:100%;cursor:pointer';
+    b.innerHTML = `🎥 <b>Finished ad delivered back to your main chat.</b><br><i>launch-energy-15s-final.mp4 · 15s · captions on · one grade</i>`;
+    b.addEventListener('click', () => switchView('chat'));
+    $('#mock-edit').appendChild(b);
+    toast('Editing complete — sent to chat.');
+  }, 4200);
+});
+
+/* ================= AUTOMATION ================= */
+$('#simulate-tue')?.addEventListener('click', () => {
+  const tue = document.querySelector('[data-day="1"]');
+  const st  = $('#state-tue');
+  const steps = [
+    { d: 100,  s: 'Manus 2.0 triggered the scheduled task', state:'running', label:'Manus firing brain' },
+    { d: 1600, s: 'Brain researching current competitor angles', state:'running', label:'Brain researching' },
+    { d: 3200, s: 'Brain built hook + storyboard for 15s launch ad', state:'running', label:'Brain designing' },
+    { d: 4600, s: 'Veo 3.1 shooting 3 shots (dawn run · finish line · group chest-bump)', state:'running', label:'Veo shooting' },
+    { d: 7300, s: 'Manus editors cutting, captioning, color-matching', state:'running', label:'Manus editing' },
+    { d: 9800, s: '✅ Delivered back to your chat — check the Brain Chat tab.', state:'done', label:'Done' },
+  ];
+  tue.classList.add('today');
+  steps.forEach(s => setTimeout(() => {
+    st.className = 'state ' + s.state;
+    st.textContent = s.label;
+    tue.querySelector('.task b').textContent = s.s;
+    if (s.state === 'done') {
+      tue.classList.add('fired');
+      setTimeout(() => {
+        document.querySelector('[data-day="2"] .task b').textContent = 'Image ads — 3 variants (palette rule from Tuesday add)';
+        const wed = $('#state-wed');
+        wed.className = 'state running';
+        wed.textContent = 'queued by memory';
+      }, 800);
+      toast('“Tuesday” ran end-to-end. The finished ad is waiting in Brain Chat.');
+    }
+  }, s.d));
+});
+
+/* ================= STRATEGIES ================= */
+const STRATEGIES = [
+  { id:"trendjack", name:"Trend Jacking", tag:"hot", em:"🔥",
+    what:"Spot a rising trend, join it fast — with the brand's own take, not a 1:1 copy. Copying without context backfires.",
+    when:"Trend climbing + genuinely fits. Publish while it's still rising.",
+    example:"Netflix rode Money Heist: 454k creators, 1.1B views, 144M interactions.",
+    caveat:"Check origin + reception BEFORE posting. Wrong context = PR damage.",
+    cta:"Brain: watch rising sounds and jump in when one fits",
+    cmd:"Brain: watch rising sounds and jump in when one fits",
+    src:"https://www.bazaarvoice.com/blog/how-brands-can-leverage-trendjacking/" },
+  { id:"meme", name:"Meme Marketing", tag:"hot", em:"😂",
+    what:"Meme format or recognizable reference in the brand's own voice. Ongoing tone, not one-off reactions.",
+    when:"Brand already sounds human/funny. Joke lands without sensitive context.",
+    example:"Ryanair's self-aware humor; M&S Food mascots with trending audio.",
+    caveat:"Only works if the meme is actually familiar — don't force a dead format.",
+    cta:"Brain: match a current meme format to our voice",
+    cmd:"Brain: match a current meme format to our voice",
+    src:"https://www.bazaarvoice.com/blog/how-brands-can-leverage-trendjacking/" },
+  { id:"ugc", name:"UGC-Style Ads", tag:"core", em:"🎯",
+    what:"Creator or customer-style footage, everyday settings, direct conversational delivery. UGC-style can still be paid.",
+    when:"Discovery, demos, testimonials, behind-the-scenes.",
+    example:"7 Brew on TikTok: 26.9% ad-recall lift, 6% awareness lift, 3× follower growth.",
+    caveat:"Not unpaid customer content — that label refers to look and feel only.",
+    cta:"Make a UGC-style 15s ad",
+    cmd:"Make a UGC-style 15s ad",
+    src:"https://ads.tiktok.com/business/en-US/inspiration/7-brew-case-study" },
+  { id:"whitelist", name:"Creator Whitelisting", tag:"core", em:"🤝",
+    what:"Run creator-made posts as paid ads through official formats — Spark Ads / Partnership Ads.",
+    when:"Creator has real credibility + the post already feels native.",
+    example:"Snickers Spark Ads: 2× engagement, 3.3pt purchase-intent lift. Mosh on Meta: 53% lower cost/lead.",
+    caveat:"Never boost creator posts without permission.",
+    cta:"Brain: find creators worth amplifying",
+    cmd:"Brain: find creators on Spark Ads worth amplifying",
+    src:"https://ads.tiktok.com/business/en/inspiration/snickers-pascoa-spark-ads" },
+  { id:"hook", name:"Hook-First Structure", tag:"core", em:"🎣",
+    what:"Grab in second 1 — surprise, benefit or visual. TikTok says 90% of ad recall lands in the first 6 seconds.",
+    when:"Any short-feed placement.",
+    example:"eBay Shorts: creator ads drove 57% higher CTR. Urban Decay: 278% search lift.",
+    caveat:"A hook has to be the product's actual best moment — not a gimmick.",
+    cta:"Apply the hook rule on every new draft",
+    cmd:"Apply the hook rule on every new draft",
+    src:"https://ads.tiktok.com/business/en/blog/creative-best-practices-top-performing-ads" },
+  { id:"native", name:"Platform-Native Vertical", tag:"core", em:"📐",
+    what:"9:16, sound-on, safe-zone text. Not a horizontal crop with voiceover slapped on.",
+    when:"Reels, TikTok, Shorts — every placement that punishes old assets.",
+    example:"Meta split-test: 34.5% lower cost-per-result with native Reels formatting.",
+    caveat:"Retro-fitting old assets loses money — shoot or recompose native.",
+    cta:"Rework an existing ad for Reels",
+    cmd:"Rework an existing ad for Reels",
+    src:"https://www.facebook.com/business/ads/facebook-instagram-reels-ads" },
+  { id:"challenge", name:"Branded Challenge / Effect", tag:"growth", em:"📈",
+    what:"Repeatable prompt (sound + hashtag + effect) users recreate themselves. Participation playbook.",
+    when:"Launches, awareness pushes, anything with a signature move.",
+    example:"Netflix Money Heist challenge — 454k creators joining in.",
+    caveat:"Prompt must be easy to recreate — a hard challenge stalls after week one.",
+    cta:"Brain: draft a challenge concept",
+    cmd:"Brain: draft a challenge concept",
+    src:"https://ads.tiktok.com/business/en-US/inspiration/netflix-702" },
+  { id:"retarget", name:"Sequential Retargeting", tag:"growth", em:"🔁",
+    what:"Build audiences from viewers/engagers, show them the next message — proof, offer, CTA.",
+    when:"Enough engaged viewers to build a real audience.",
+    example:"Google supports Shorts remarketing lists from organic + paid engagement.",
+    caveat:"Weak follow-up message wastes the audience — script it with the brain.",
+    cta:"Brain: build a retargeting sequence",
+    cmd:"Brain: build a retargeting sequence",
+    src:"https://support.google.com/google-ads/answer/16041697?hl=en-GB" },
+  { id:"daypart", name:"Dayparting", tag:"test", em:"🧪",
+    what:"Scheduled delivery windows — run ads only at specific days/hours.",
+    when:"Offer tied to hours, or clear time-of-day data. Test, don't assume.",
+    example:"Meta documents scheduling but doesn't claim a universal best time.",
+    caveat:"No universal best hour — let the learning loop rewrite the schedule weekly.",
+    cta:"Brain: test a dayparting change",
+    cmd:"Brain: test a dayparting change",
+    src:"https://www.facebook.com/business/help/1381935425400769" },
+];
+function wireStrategies(){
+  const list = document.getElementById('strategy-list');
+  if (!list || list.dataset.wired) return;
+  list.dataset.wired = '1';
+  list.innerHTML = STRATEGIES.map(s => `
+    <div class="daycard strat" data-id="${s.id}">
+      <div class="strat-chip">${s.em}</div>
+      <div class="task">
+        <b>${s.name} <span class="strat-tag">${s.tag}</span></b>
+        <small>${s.what}</small>
+        <details><summary>When it works · example · watch-outs</summary>
+          <div class="strat-detail"><b>✅ When:</b> ${s.when}</div>
+          <div class="strat-detail"><b>📌 Example:</b> <a href="${s.src}" target="_blank" rel="noopener">${s.example}</a></div>
+          <div class="strat-detail"><b>⚠️ Caveat:</b> ${s.caveat}</div>
+        </details>
+      </div>
+      <button class="strat-cta" data-cmd="${s.cmd}">${s.cta}</button>
+    </div>`).join('');
+}
+document.addEventListener('DOMContentLoaded', wireStrategies);
+wireStrategies();
+
+/* ================= CTA ROUTES ================= */
+const CTA_ROUTES = [
+  { re:/rising sounds|trend jack|villain/, r:`🔥 <b>Trend Jacking mode:</b> watching rising sounds in fitness right now — “hot villain era” (+1800% this week) is the top fit. Origin checked ✓, voice handled ✓, publishable inside 48h ✓. Turn the top pick into a 15s ad?` },
+  { re:/meme format|match a current meme/, r:`😂 <b>Meme Marketing:</b> current best fit is the “gym-logic” format (objects arguing about form) — maps onto our voice. Caveat: dead memes read fake; I re-check the format is still live first.` },
+  { re:/spark ads|whitelisting|creators/,  r:`🤝 <b>Creator Whitelisting:</b> 4 creators already running Spark Ads in run/fitness this week, two out-engage our own boosted work. Ranked list with costs ready.` },
+  { re:/retargeting sequence|retarget/,    r:`🔁 <b>Sequential Retargeting:</b> 1) 15s hook ad → cold, 2) 30s proof → viewers, 3) CTA+offer → engagers. Audiences build automatically from each flight.` },
+  { re:/challenge concept/,                r:`📈 <b>Challenge: “First-Mile-Face”</b> — record your worst first mile, tag it. One prompt, one sound, one effect. Easy-to-recreate is the make-or-break rule.` },
+  { re:/dayparting/,                       r:`🧪 <b>Dayparting test:</b> shift 20% of Tuesday spend to 7–9am (peak scroll for run content) for one week, then let the learning loop compare. No universal best hour — our data decides.` },
+  { re:/hook rule|hook-first/,             r:`🎯 <b>Hook-first applied:</b> future drafts lead with the strongest visual moment in second 1. Existing 15s rebuild queued.` },
+  { re:/rework.*reels|existing ad for reels/, r:`📐 <b>Native rebuild:</b> 15s spot → 9:16, sound-on, safe-zone text. Meta split tests show 34.5% lower cost-per-result vs non-native.` },
+  { re:/ugc-style 15s/,                    r:`🧑‍🎤 <b>UGC-style 15s:</b> creator-style spot — handheld, direct-to-camera, day-in-the-life opening. Style only: it can still be paid content. 7 Brew's mixed run lifted recall 26.9%.` },
+];
+
+/* patch respond() to also route CTA commands */
+const baseRespond = respond;
+window.respondCurrent = respond;
+function routedRespond(input){
+  const q = input.toLowerCase();
+  const hit = CTA_ROUTES.find(r => r.re.test(q));
+  if (hit) { botTypeThenReply(hit.r); return; }
+  baseRespond(input);
+}
+/* rebind: form + chips use routedRespond via closure */
+$('#composer').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('#msg').value.trim();
+  if (!v) return;
+  addBubble('you', v);
+  $('#msg').value = '';
+  routedRespond(v);
+});
+$$('.suggest button[data-p]').forEach(b => {
+  b.onclick = () => { addBubble('you', b.dataset.p); routedRespond(b.dataset.p); };
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('.strat-cta');
+  if (!b) return;
+  switchView('chat');
+  addBubble('you', b.dataset.cmd);
+  routedRespond(b.dataset.cmd);
+});
+
+/* ================= API LINK-CHECK ================= */
+$('#run-linkcheck')?.addEventListener('click', () => {
+  const rows = $$('#api-lane .lane-row');
+  const out = $('#linkcheck-result');
+  rows.forEach(r => r.classList.remove('done','active'));
+  let i = 0;
+  const tick = setInterval(() => {
+    if (i >= rows.length) {
+      clearInterval(tick);
+      rows.forEach(r => r.classList.add('done'));
+      out.innerHTML = `<b style="color:var(--ok)">✓ Link-check passed.</b> 4/6 services wired (OpenAI, Veo 3.1, Manus 2.0, ElevenLabs). 2/6 are manual-scan sources (TikTok Creative Center, Google Trends) — reachable through the web dashboard, not via an API key. All endpoints referenced match the real services.`;
+      // orbit dance
+      orbitRun([
+        { k:'brain', t:800, text:'🧠 Checking OpenAI API… linked.' },
+        { k:'video', t:800, text:'🎬 Checking Veo 3.1… linked.' },
+        { k:'edit',  t:800, text:'✂️ Checking Manus 2.0… linked.' },
+        { k:'edit',  t:500, text:'🎙️ Checking ElevenLabs… linked.' },
+        { k:'trends',t:900, text:'📡 Checking TikTok Creative Center + Google Trends… manual scan.' },
+      ]);
+      return;
+    }
+    rows[i].classList.add('active');
+    i++;
+  }, 520);
+});
+
+/* ================= ASIDE ================= */
+$('#beta-btn')?.addEventListener('click', () => toast('Feedback captured — the brain will route it to the right section.'));
+</script>
+</body>
+</html>

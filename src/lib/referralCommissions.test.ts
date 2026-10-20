@@ -21,8 +21,9 @@ describe("referral codes — server-issued, not guessable", () => {
     expect(CODE_SAFETY).toMatch(/when unique_violation then/);
   });
 
-  it("the client no longer generates codes with Math.random", () => {
+  it("the page calls the server-issued code RPC instead of the old Math.random genCode", () => {
     const page = read("src/pages/Referrals.tsx");
+    expect(page).not.toMatch(/function genCode\(\)/);
     expect(page).not.toMatch(/Math\.random\(\)\.toString\(36\)/);
     expect(page).toMatch(/referral_code_issue/);
   });
@@ -150,6 +151,6 @@ describe("the client never trusts itself", () => {
   });
 
   it("referral clicks are recorded at the landing, anonymously", () => {
-    expect(read("src/pages/Auth.tsx")).toMatch(/referral_click_record/);
+    expect(read("src/pages/Auth.tsx")).toMatch(/void recordReferralClick/);
   });
 });

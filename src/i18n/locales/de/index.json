@@ -49,9 +49,7 @@
     "recoveryCheckIn": "Erholungs-Check-in",
     "recoveryCheckInDesc": "Schlaf, Muskelkater, Belastbarkeit",
     "logMetric": "Messwert erfassen",
-    "logMetricDesc": "Tests zu Geschwindigkeit, Kraft, Ausdauer",
-    "openCollection": "Sammlung",
-    "openCollectionDesc": "Looks, Bundles und Saison-Sets anprobieren"
+    "logMetricDesc": "Tests zu Geschwindigkeit, Kraft, Ausdauer"
   },
   "hub": {
     "brand": "Vaylo Sports",

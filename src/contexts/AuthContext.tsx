@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { queryClient } from "@/lib/queryClient";
 import { clearUserLocalState } from "@/lib/userStorage";
+import { refreshFormattingLocale } from "@/i18n/format";
+import { setRegionCountry } from "@/i18n/region";
 import { unregisterPush } from "@/lib/push";
 import { guestEntryAvailable, GUEST_DISPLAY_NAME, isGuestUser } from "@/lib/guestMode";
 import { DEMO_MODE, demoGuestSession } from "@/lib/demoMode";
@@ -110,6 +112,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(nextSession?.user ?? null);
 
     if (!nextSession?.user) {
+      // No session = no confirmed region: the regional layer (terminology,
+      // units, formatting) falls back to device defaults immediately, and a
+      // different account that signs in next cannot inherit the old one's
+      // country.
+      setRegionCountry(null);
+      refreshFormattingLocale();
       setProfile(null);
       setProfileError(null);
       return;
@@ -127,6 +135,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await ensureProfile(nextSession.user);
       setProfileError(null);
+      // The selected country is the region-of-record for terminology, units
+      // and formatting (Prompt 9). Loading it HERE — at session restore, not
+      // only when Profile opens — is what makes the athlete's choice apply
+      // from the first screen and every AI call of the session.
+      setRegionCountry(null);
+      refreshFormattingLocale();
+      const { data: regionRow } = await supabase
+        .from("user_region")
+        .select("country")
+        .eq("user_id", nextSession.user.id)
+        .maybeSingle();
+      if (regionRow?.country) {
+        setRegionCountry(regionRow.country as string);
+        refreshFormattingLocale();
+      }
     } catch (err) {
       // The session is real but the profile row is unreadable (network error,
       // RLS race, server outage). Expose it: screens keyed on `profile` would
@@ -312,6 +335,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // the safe direction, and the redirect must never strand state.
       queryClient.clear();
       clearUserLocalState();
+      // The regional layer is per-account state: cleared here so the next
+      // sign-in (the same person or another) starts from device defaults
+      // until their own country is loaded.
+      setRegionCountry(null);
+      refreshFormattingLocale();
       setSession(null);
       setUser(null);
       setProfile(null);

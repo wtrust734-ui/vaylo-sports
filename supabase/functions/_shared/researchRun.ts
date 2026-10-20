@@ -184,9 +184,8 @@ export async function modelJson(system: string, user: string, maxTokens = 900): 
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        temperature: 0,
         response_format: { type: "json_object" },
-        max_tokens: maxTokens,
+        max_completion_tokens: maxTokens,
       }),
       signal: controller.signal,
     });

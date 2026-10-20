@@ -40,7 +40,7 @@ const Safety = () => {
         <ArrowLeft size={14} /> Back
       </button>
 
-      <h1 className="text-2xl font-bold tracking-tight">Safety Information</h1>
+      <h1 className="text-2xl font-display font-bold tracking-tight">Safety Information</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         How to use Vaylo Sports without getting hurt, and how to keep yourself and others safe.
       </p>

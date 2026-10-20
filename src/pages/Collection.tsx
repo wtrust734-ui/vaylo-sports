@@ -21,14 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
 import CoinQuickBuySheet from "@/components/market/CoinQuickBuySheet";
 import RewardBoxesPanel from "@/components/cosmetics/RewardBoxesPanel";
-import { Check, Coins, Crown, Gift, Loader2, Lock, Medal, Sparkles, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
-import { useSubscription } from "@/contexts/SubscriptionContext";
-import { COSMETIC_BUNDLES, bundleSavings, isAvailableNow } from "@/lib/cosmeticCatalog";
-import FlexCardModal from "@/components/cosmeticsShop/FlexCardModal";
-import { useUnlockCelebration } from "@/hooks/useUnlockCelebration";
-import { defToFlexItem } from "@/lib/cosmeticsShop/flexFromDef";
+import { Check, Coins, Loader2, Lock, Sparkles, X } from "lucide-react";
 
 // ============================================================================
 // COLLECTION — the cosmetics tab
@@ -47,25 +40,7 @@ const slotOf = (def: CosmeticDef): keyof EquippedRow => SLOT_BY_TYPE[def.type] a
 export default function Collection() {
   const { profile, refreshProfile } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const subscription = useSubscription();
-  const { defs, ownedIds, ownedSourceById, equipped, loading, buy, equip, unequip, defById, refresh } = useCosmetics();
-
-  // FLEX CELEBRATION — epic+ unlocks here get the share card, fed from this
-  // page's own inventory (no shop-store adoption). `ready` keeps the baseline
-  // honest while defs load, so old ownership never re-celebrates on mount.
-  const celebrationSource = useMemo(
-    () => ({
-      ownedItemIds: defs.filter((d) => ownedIds.has(d.id)).map((d) => d.id),
-      resolveItem: (id: string) => {
-        const def = defs.find((d) => d.id === id);
-        return def ? defToFlexItem(def) : undefined;
-      },
-      ready: !loading,
-    }),
-    [defs, ownedIds, loading],
-  );
-  const celebration = useUnlockCelebration(celebrationSource);
+  const { defs, ownedIds, equipped, loading, buy, equip, unequip, defById } = useCosmetics();
 
   const [typeFilter, setTypeFilter] = useState<CosmeticType | "all">("all");
   const [ownedFilter, setOwnedFilter] = useState<"all" | "owned" | "locked">("all");
@@ -78,24 +53,11 @@ export default function Collection() {
   /** What is being tried on the preview card right now. Nothing is equipped. */
   const [trying, setTrying] = useState<CosmeticDef | null>(null);
 
-  const [bundleBusy, setBundleBusy] = useState<string | null>(null);
-
   const coins = (profile as { coins?: number } | null)?.coins ?? 0;
-
-  // Availability is the same rule the server enforces on purchase: a seasonal
-  // item with a window is only on sale inside it. Counting only available
-  // items keeps the progress bar honest — expired seasons do not belong in the
-  // denominator.
-  const visibleDefs = useMemo(() => defs.filter((d) => isAvailableNow(d)), [defs]);
-  // "This season" rail: windowed items currently on sale. Nothing invented.
-  const seasonal = useMemo(
-    () => visibleDefs.filter((d) => !!d.season).slice(0, 8),
-    [visibleDefs],
-  );
 
   const filtered = useMemo(
     () =>
-      visibleDefs.filter((d) => {
+      defs.filter((d) => {
         if (typeFilter !== "all" && d.type !== typeFilter) return false;
         const owned = ownedIds.has(d.id);
         if (ownedFilter === "owned" && !owned) return false;
@@ -103,37 +65,11 @@ export default function Collection() {
         if (q && !d.name.toLowerCase().includes(q.toLowerCase())) return false;
         return true;
       }),
-    [visibleDefs, typeFilter, ownedFilter, q],
+    [defs, typeFilter, ownedFilter, q],
   );
 
-  const totalCollected = visibleDefs.filter((d) => ownedIds.has(d.id)).length;
-  const pct = visibleDefs.length ? Math.round((totalCollected / visibleDefs.length) * 100) : 0;
-
-  /** One transaction, server-priced, all-or-nothing (purchase_cosmetic_bundle). */
-  const handleBundleBuy = async (bundleId: string, name: string, cost: number) => {
-    if (coins < cost) {
-      setTopUp({ gap: cost - coins, itemName: name });
-      return;
-    }
-    setBundleBusy(bundleId);
-    const { error } = await supabase
-      .rpc("purchase_cosmetic_bundle" as never, { p_bundle_id: bundleId } as never);
-    setBundleBusy(null);
-    if (error) {
-      toast({ title: "Bundle unavailable", description: error.message, variant: "destructive" });
-      return;
-    }
-    await Promise.all([refresh(), refreshProfile()]);
-    toast({ title: `${name} unlocked`, description: "The whole set is yours — equip it from the grid below." });
-  };
-
-  // -- Starter recommendation: the cheapest on-sale unlock, tried on directly. --
-  const starter = useMemo(() => {
-    const unowned = visibleDefs.filter((d) => !ownedIds.has(d.id) && d.coin_cost != null);
-    return unowned.length
-      ? unowned.reduce((m, d) => ((d.coin_cost ?? 0) < (m.coin_cost ?? 0) ? d : m))
-      : null;
-  }, [visibleDefs, ownedIds]);
+  const totalCollected = defs.filter((d) => ownedIds.has(d.id)).length;
+  const pct = defs.length ? Math.round((totalCollected / defs.length) * 100) : 0;
 
   // -- Try-on: the slot resolution the preview card renders from --------------
   const shown = (type: CosmeticType): CosmeticDef | undefined => {
@@ -317,15 +253,7 @@ export default function Collection() {
               >
                 <X size={12} /> Cancel
               </button>
-              {ownedIds.has(trying.id) && isAnimated(trying) && !subscription.isActive ? (
-                <button
-                  type="button"
-                  onClick={() => navigate("/subscription")}
-                  className="inline-flex items-center gap-1 rounded-xl border border-energy/40 bg-energy/10 px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider text-energy"
-                >
-                  <Crown size={12} /> Premium
-                </button>
-              ) : ownedIds.has(trying.id) ? (
+              {ownedIds.has(trying.id) ? (
                 <button
                   type="button"
                   disabled={busy !== null}
@@ -349,93 +277,6 @@ export default function Collection() {
           )}
         </AnimatePresence>
       </div>
-
-      {/* ============= THIS SEASON ============= */}
-      {seasonal.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-baseline gap-2 px-1">
-            <Sparkles size={13} className="text-primary" />
-            <h2 className="text-[12px] font-display font-bold uppercase tracking-wider">This season</h2>
-            <span className="truncate text-[11px] text-muted-foreground">On sale through its window — items may return in future seasons.</span>
-          </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar">
-            {seasonal.map((d) => {
-              const meta = RARITY_META[d.rarity];
-              const owned = ownedIds.has(d.id);
-              const color = cosmeticColor(d);
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => tryOn(d)}
-                  className={`w-40 shrink-0 rounded-2xl border p-3 text-left transition-all hover:border-primary/50 ${meta.border}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] font-bold" style={color ? { color } : undefined}>
-                      {d.name}
-                    </span>
-                    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase ${meta.bg} ${meta.text}`}>{meta.label}</span>
-                  </div>
-                  <p className="mt-1 truncate text-[11px] text-muted-foreground">{d.description ?? cosmeticLabel(d)}</p>
-                  <p className="mt-2 flex items-center gap-1 text-[12px] font-bold text-energy">
-                    <Coins size={11} /> {owned ? "Owned" : formatNumber(d.coin_cost ?? 0)}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ============= BUNDLES ============= */}
-      <section className="space-y-2">
-        <div className="flex items-baseline gap-2 px-1">
-          <Gift size={13} className="text-primary" />
-          <h2 className="text-[12px] font-display font-bold uppercase tracking-wider">Bundles</h2>
-          <span className="truncate text-[11px] text-muted-foreground">One checkout, one price — the whole set, or nothing.</span>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {COSMETIC_BUNDLES.map((bundle) => {
-            const items = bundle.itemIds.map((id) => defById(id)).filter(Boolean);
-            return (
-              <div key={bundle.id} className="flex flex-col rounded-2xl border border-energy/25 bg-energy/[0.04] p-4">
-                <p className="text-sm font-display font-bold">{bundle.name}</p>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">{bundle.description}</p>
-                <ul className="mt-3 space-y-1">
-                  {items.map((item) => (
-                    <li key={item!.id} className="flex items-center gap-1.5 text-[12px]">
-                      <Check size={11} className={ownedIds.has(item!.id) ? "text-primary" : "text-muted-foreground"} />
-                      <span className={`truncate ${ownedIds.has(item!.id) ? "text-primary" : ""}`} style={cosmeticColor(item!) ? { color: cosmeticColor(item!)! } : undefined}>
-                        {cosmeticLabel(item!)}
-                      </span>
-                      <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase ${RARITY_META[item!.rarity].bg} ${RARITY_META[item!.rarity].text}`}>
-                        {RARITY_META[item!.rarity].label}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {formatNumber(bundle.itemValue)} Coins of items — save {formatNumber(bundleSavings(bundle))} as a set.
-                </p>
-                <button
-                  type="button"
-                  disabled={bundleBusy !== null}
-                  onClick={() => void handleBundleBuy(bundle.id, bundle.name, bundle.coinCost)}
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-energy py-2 text-[12px] font-bold text-background disabled:opacity-60"
-                >
-                  {bundleBusy === bundle.id ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <>
-                      <Coins size={12} /> Buy for {formatNumber(bundle.coinCost)}
-                    </>
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </section>
 
       {/* ============= FILTERS ============= */}
       <div className="space-y-2.5">
@@ -473,32 +314,14 @@ export default function Collection() {
         </div>
       </div>
 
-      {!loading && totalCollected === 0 && starter && (
-        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">Start your collection</p>
-          <div className="mt-1.5 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{starter.name}</p>
-              <p className="truncate text-[12px] text-muted-foreground">{starter.description ?? starter.category}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => tryOn(starter)}
-              className="shrink-0 rounded-xl bg-energy px-4 py-2 text-[12px] font-bold text-background"
-            >
-              <Coins size={12} className="mr-1 inline" /> {formatNumber(starter.coin_cost ?? 0)}
-            </button>
-          </div>
-          <p className="mt-1.5 text-[12px] text-muted-foreground">
-            Log a session this week and the weekly drip puts Coins toward this — or grab a bundle above.
-          </p>
-        </div>
-      )}
-
       {loading && <p className="py-8 text-center text-sm text-muted-foreground">Loading your collection…</p>}
 
       {/* ============= GRID ============= */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {/* `grid-cols-1` is not decoration: a bare `grid` with only breakpoint
+          variants leaves mobile with an auto track sized to max-content, which
+          overflows the viewport. overflowLayout.test.ts catches it; the explicit
+          base column is the fix. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {filtered.map((d) => {
           const owned = ownedIds.has(d.id);
           const meta = RARITY_META[d.rarity];
@@ -529,8 +352,10 @@ export default function Collection() {
                 className="relative h-24 overflow-hidden"
                 style={{ background: meta.gradient }}
               >
+                {/* pt-7 clears the rarity chip's ~22px band at the tile's top-left;
+                    without it a wrapped 2-line title at 320px collides with the chip. */}
                 {d.type === "title" && (
-                  <span className="absolute inset-0 flex items-center justify-center px-2 text-center font-display text-sm font-black" style={{ color: color ?? "#fff" }}>
+                  <span className="absolute inset-0 flex items-center justify-center px-2 pt-7 text-center font-display text-sm font-black" style={{ color: color ?? "#fff" }}>
                     {cosmeticLabel(d)}
                   </span>
                 )}
@@ -558,7 +383,7 @@ export default function Collection() {
                   />
                 )}
                 {d.type === "badge" && (
-                  <span className="absolute inset-0 flex items-center justify-center font-display text-lg font-black" style={{ color: color ?? "#fff" }}>
+                  <span className="absolute inset-0 flex items-center justify-center pt-7 font-display text-lg font-black" style={{ color: color ?? "#fff" }}>
                     {cosmeticLabel(d)}
                   </span>
                 )}
@@ -589,12 +414,6 @@ export default function Collection() {
                   {d.description ?? TYPE_META[d.type as CosmeticType]?.blurb ?? d.category}
                 </p>
 
-            {owned && ownedSourceById[d.id] && ownedSourceById[d.id] !== "coins" && (
-              <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                <Medal size={9} /> Earned
-              </span>
-            )}
-
                 <div className="mt-auto pt-2">
                   {isEquipped && slot ? (
                     <button
@@ -604,14 +423,6 @@ export default function Collection() {
                       className="w-full rounded-xl border border-border py-1.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground disabled:opacity-60"
                     >
                       {busy === slot ? <Loader2 size={12} className="mx-auto animate-spin" /> : "Unequip"}
-                    </button>
-                  ) : owned && isAnimated(d) && !subscription.isActive ? (
-                    <button
-                      type="button"
-                      onClick={() => navigate("/subscription")}
-                      className="flex w-full items-center justify-center gap-1 rounded-xl border border-energy/40 bg-energy/10 py-1.5 text-[12px] font-bold uppercase tracking-wider text-energy"
-                    >
-                      <Crown size={12} /> Premium
                     </button>
                   ) : owned ? (
                     <button
@@ -706,12 +517,6 @@ export default function Collection() {
         itemName={topUp?.itemName}
       />
       <CoinQuickBuySheet open={quickBuy} onClose={() => setQuickBuy(false)} />
-      {/* Epic+ unlock celebration — same flex card as the wardrobe. */}
-      <FlexCardModal
-        item={celebration.item}
-        athleteName={profile?.full_name || "Athlete"}
-        onClose={celebration.dismiss}
-      />
     </div>
   );
 }

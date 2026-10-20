@@ -35,7 +35,12 @@ export type CacheKey =
   | "profile"
   | "startingAnalysis"
   /** Phase 6: the actionable analytics reading, and the why behind it. */
-  | "insights";
+  | "insights"
+  /** Phase 8: one saved training plan, with its full week/session JSON. */
+  | "plans";
+
+/** Purge key prefix used to clear stale plan snapshots on sign-out / account switch. */
+export const PLANS_CACHE_PREFIX = `${PREFIX}.plans.`;
 
 /**
  * How long each snapshot stays useful.
@@ -60,6 +65,10 @@ export const CACHE_TTLS: Record<CacheKey, number> = {
   // worth showing offline, but it has to say how old it is — which is what
   // `stale` drives on the screen.
   insights: 7 * 24 * 60 * 60 * 1000,
+  // A plan is a durable object the athlete owns. The plan row can be edited or
+  // deleted on another device, so past the TTL the screen has to say the cached
+  // copy may be stale rather than show it as though it were current.
+  plans: 7 * 24 * 60 * 60 * 1000,
 };
 
 export interface CachedSnapshot<T> {
@@ -157,7 +166,31 @@ export function cacheRead<T>(userId: string, key: CacheKey): CachedSnapshot<T> |
   }
 }
 
-/** Removes one snapshot, or every snapshot for a user when no key is given. */
+/**
+ * Stores the current set of saved training plans for the athlete.
+ *
+ * This is the snapshot the offline plan list and plan detail read from when the
+ * network is down. It is intentionally a *fallback*, not a source of truth: the
+ * caller still tries the network first, and only the plans the athlete has
+ * already seen online end up cached here.
+ */
+export function cachePlans(userId: string, plans: unknown[]): boolean {
+  if (!userId) return false;
+  return cacheWrite(userId, "plans", plans);
+}
+
+/**
+ * Reads the cached plan list for the athlete, or null when nothing has been
+ * cached yet / the cached value is unreadable.
+ */
+export function cacheReadPlans(userId: string): CachedSnapshot<unknown[]> | null {
+  if (!userId) return null;
+  return cacheRead<unknown[]>(userId, "plans");
+}
+
+/**
+ * Removes one snapshot, or every snapshot for a user when no key is given.
+ */
 export function cacheClear(userId: string, key?: CacheKey): void {
   try {
     if (key) {
@@ -170,6 +203,11 @@ export function cacheClear(userId: string, key?: CacheKey): void {
   } catch {
     /* nothing to clear */
   }
+}
+
+/** Removes the named user's cached plan snapshot (the key lives at <uid>.plans). */
+export function clearPlansCache(userId: string): void {
+  cacheClear(userId, "plans");
 }
 
 /**

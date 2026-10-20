@@ -10,7 +10,6 @@ import { getRelated } from "@/lib/learningEngine";
 import { publicAppUrl, shareContent } from "@/lib/share";
 import { ContinueCard } from "@/components/learning/LessonCard";
 import { awardAssessment, awardLesson } from "@/lib/xp";
-import { claimStreakDay } from "@/lib/streakRewards";
 
 type FeedbackRating = "helpful" | "not_helpful";
 
@@ -115,16 +114,13 @@ export default function LearningArticle() {
       )
       .then(({ error }) => {
         if (error) toast.error(`Couldn't save your quiz result: ${error.message}`);
+        else {
+          // The row is the proof: XP is only asked for once the completion is
+          // actually saved. Both awards are idempotent per lesson server-side.
+          void awardLesson(lesson.id);
+          if (score >= 80) void awardAssessment(lesson.id);
+        }
       });
-    // XP: finishing the knowledge check completes the lesson (10 XP), and a
-    // passing score also completes the approved assessment (15 XP). Both are
-    // server-validated and idempotent per lesson — re-taking the quiz later
-    // replays the same keys and awards nothing twice.
-    void awardLesson(lesson.id);
-    // Streak: the knowledge check completes a validated learning activity —
-    // the server re-verifies the learning_progress row before the day counts.
-    void claimStreakDay("learning_lesson", lesson.id);
-    if (score >= 80) void awardAssessment(lesson.id);
   }, [quizDone, completed, correctCount, quizTotal, user, lesson, row?.saved]);
 
   const toggleSave = useCallback(

@@ -49,9 +49,7 @@
     "recoveryCheckIn": "リカバリーチェックイン",
     "recoveryCheckInDesc": "睡眠、筋肉痛、コンディション",
     "logMetric": "指標を記録",
-    "logMetricDesc": "スピード・パワー・持久力テスト",
-    "openCollection": "コレクション",
-    "openCollectionDesc": "ルックやバンドル、シーズンセットを試着"
+    "logMetricDesc": "スピード・パワー・持久力テスト"
   },
   "hub": {
     "brand": "Vaylo Sports",

@@ -155,7 +155,6 @@ Deno.serve(async (req) => {
         aspectRatio,
         durationSeconds,
         resolution,
-        personGeneration: "allow_adult",
       });
     } catch (err) {
       return json({ error: err instanceof Error ? err.message : "invalid request" }, 400);

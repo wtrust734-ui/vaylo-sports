@@ -96,12 +96,13 @@ export const FEATURE_FLAGS = {
   wearableSync: envOverride("wearableSync", true),
   gpsTracking: envOverride("gpsTracking", false),
   iphone: envOverride("iphone", false),
-  // Pipeline dashboard: ad workflow stages, QC, and chat controls.
-  // Default OFF until the flagged rollout is intentional — the launch gate
-  // test (`featureFlags.test.ts` → "defaults every not-yet-ready flag to off")
-  // is the guardrail, and the dashboard itself still carries type-level bugs
-  // (see docs/BUG-AUDIT-2026-10-17.md P2-1). Operators flip it on with
-  // VITE_ENABLE_PIPELINE_DASHBOARD=true, not at this default.
+  // Pipeline admin dashboard.
+  // Default OFF for this build: the route behind /pipeline still ships real
+  // defects (a stale v2 auth call, invalid `.select()` args, a
+  // `human_input`/`human_input` column-name miss that silences its banner, and an
+  // icon rendered as text). It is admin-only, so the safe move is to stop exposing
+  // it until the generated Supabase types catch up and the substantive defects are
+  // fixed. Revisit only then.
   pipelineDashboard: envOverride("pipelineDashboard", false),
 } as const satisfies Record<FlagKey, boolean>;
 

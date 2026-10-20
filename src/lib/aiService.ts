@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getAiLocale } from "@/i18n";
+import { getRegionCountry } from "@/i18n/region";
 import { AI_NOT_READY_MESSAGE, isNotReadyMessage } from "@/lib/edgeErrors";
 
 /**
@@ -85,8 +86,12 @@ export async function runAIDetailed(options: RunAIOptions): Promise<AIResult> {
   // The athlete's UI language rides along with every AI request so generated
   // coaching, plans and insights come back in that language. The edge function
   // injects it into the system prompt; English requests are unaffected.
+  // The selected country rides along too (Prompt 9): the server expands it
+  // into a validated terminology directive — sport names (Football vs
+  // Soccer), spelling style and the units plans must be written in. Only the
+  // ISO code is sent; the client never authors prompt text.
   const { data, error } = await supabase.functions.invoke("ai-service", {
-    body: { ...options, userData: enrichedUserData, userPrompt: prompt, userLocale: getAiLocale() },
+    body: { ...options, userData: enrichedUserData, userPrompt: prompt, userLocale: getAiLocale(), userRegion: getRegionCountry() },
   });
 
   if (error) {

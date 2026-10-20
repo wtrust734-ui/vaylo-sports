@@ -129,7 +129,7 @@ begin
 
   select post10_first_delta, post10_growth into v_first, v_growth
     from public.xp_level_config where id = 1;
-n  v_total := (select total_xp from public.xp_levels where level = 10);
+    v_total := (select total_xp from public.xp_levels where level = 10);
   for k in 11..p_level loop
     -- Strictly increasing: the delta itself grows with k, so it can never wrap
     -- back below the level before it.

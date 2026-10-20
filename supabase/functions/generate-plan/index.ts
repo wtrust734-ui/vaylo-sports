@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt, getAgeCaps } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
+import { terminologyDirective } from "../_shared/terminology.ts";
 import { refundCredits } from "../_shared/refund.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
@@ -119,6 +120,10 @@ Deno.serve(async (req) => {
     const goal = typeof body.goal === "string" ? body.goal.slice(0, MAX_GOAL_LEN) : "";
     const level = typeof body.level === "string" ? body.level.slice(0, 40) : "";
     const userLocale = typeof body.userLocale === "string" ? body.userLocale.slice(0, 8) : undefined;
+    // Prompt 9: the athlete's selected country. terminologyDirective validates
+    // it strictly (two-letter code, known region) and expands it into static
+    // text — the client never authors prompt content.
+    const userRegion = typeof body.userRegion === "string" ? body.userRegion : undefined;
     const duration = Math.floor(Number(body.duration_weeks));
     const ageRaw = typeof body.age === "number" ? body.age : parseInt(String(body.age ?? ""), 10);
     const age = Number.isFinite(ageRaw) && ageRaw > 0 && ageRaw < 120 ? ageRaw : null;
@@ -213,6 +218,9 @@ Deno.serve(async (req) => {
 
     const langBase = languageDirective(userLocale);
     const langDirective = langBase ? `${langBase} Keep the JSON schema keys exactly as specified. Keep RPE abbreviations unchanged.` : "";
+    // Regional terminology rides alongside the language directive, never
+    // replacing it: structure and prices are unchanged, only naming/units.
+    const regionDirective = terminologyDirective(userRegion);
 
     const ageGuidance = !age ? "" : age < 13
       ? `CRITICAL UNDER-18 SAFETY (${age}y): NO 1RM lifts, NO max-effort plyometrics, NO adult loading. Bodyweight & technique focus. Max 45-min sessions. Mandatory rest days ≥2/wk. Emphasise multi-sport play & motor skills. No supplementation cues. Every exercise must be safe for an athlete of this age.`
@@ -347,7 +355,7 @@ ${skeletonContinuityNote(own, skeleton)}`;
         body: JSON.stringify({
           model: MODELS.CHAT.MINI,
           messages: [
-            { role: "system", content: chunkSystem + (langDirective ? "\n\n" + langDirective : "") },
+            { role: "system", content: chunkSystem + (langDirective ? "\n\n" + langDirective : "") + (regionDirective ? "\n\n" + regionDirective : "") },
             // `user` first (the athlete, quiz and equipment), then the week range
             // and the targets, so the request ends on what to write.
             { role: "user", content: `${user}\n\nWrite exactly weeks ${first} to ${last} (${own.length} week${own.length === 1 ? "" : "s"}), in the schema above, and nothing else.` },
