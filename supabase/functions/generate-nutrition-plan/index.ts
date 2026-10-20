@@ -201,6 +201,8 @@ Deno.serve(async (req) => {
   // Charged up-front — remembered so a failed generation can be refunded.
   let charged = 0;
   let chargedUserId: string | null = null;
+  // The charge's idempotency key; the refund derives `refund:<charge key>`.
+  let chargedKey: string | undefined = undefined;
 
   try {
     // Provider check BEFORE the charge: an unconfigured key must never debit a
@@ -298,6 +300,7 @@ Deno.serve(async (req) => {
       if (!spend.unlimited && spend.cost > 0) {
         charged = spend.cost;
         chargedUserId = userId;
+        chargedKey = spend.idempotencyKey;
       }
     }
 
@@ -436,6 +439,7 @@ ${OUTPUT_SAFETY_CONTRACT}`;
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: charged,
+        dedupeKey: chargedKey,
         reason,
       });
       chargedUserId = null;

@@ -164,8 +164,25 @@ describe("refund path (edge _shared/refund.ts)", () => {
     expect(refund).not.toMatch(/from\("credit_transactions"\)/);
   });
 
-  it("each refund gets a fresh idempotency key (retry-safe, replay-proof)", () => {
-    expect(refund).toMatch(/p_idempotency_key: `refund:\$\{crypto\.randomUUID\(\)\}`/);
+  it("the refund key derives deterministically from the charge's key (retry-safe, replay-proof)", () => {
+    // The old behavior minted a fresh UUID per refund ATTEMPT: two retries of
+    // one failed refund over-credited twice. Now every attempt of the same
+    // refund reuses `refund:<charge key>`, so attempts collapse into one grant.
+    expect(refund).toMatch(
+      /dedupeKey \? `refund:\$\{dedupeKey\}` : `refund:\$\{crypto\.randomUUID\(\)\}`/,
+    );
+  });
+
+  it("a failed refund is retried once in the function before giving up", () => {
+    expect(refund).toMatch(/MAX_ATTEMPTS = 2/);
+    expect(refund).toMatch(/for \(let attempt = 1; attempt <= MAX_ATTEMPTS/);
+  });
+
+  it("a refund that never lands raises a durable admin alert, not just a log line", () => {
+    // The alert row goes to the existing app_error_reports store — the same
+    // one crash reports use — so /admin/errors is the single triage surface.
+    expect(refund).toMatch(/record_app_error_report/);
+    expect(refund).toMatch(/alertRefundFailure/);
   });
 
   it("never logs provider bodies or tokens", () => {

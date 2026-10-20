@@ -152,6 +152,8 @@ Deno.serve(async (req) => {
 
   let chargedAmount = 0;
   let chargedUserId: string | null = null;
+  // The charge's idempotency key; the refund derives `refund:<charge key>`.
+  let chargedKey: string | undefined = undefined;
   let premiumSlotId: number | null = null;
   let requestClaimUserId: string | null = null;
   let requestClaimId: string | null = null;
@@ -183,11 +185,13 @@ Deno.serve(async (req) => {
       serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       userId: chargedUserId,
       amount: chargedAmount,
+      dedupeKey: chargedKey,
       reason: "AI video form analysis failed — auto refund",
       source: "video-form-analysis-refund",
     });
     chargedAmount = 0;
     chargedUserId = null;
+    chargedKey = undefined;
   };
 
   const releaseRequestClaim = async () => {
@@ -519,6 +523,7 @@ Deno.serve(async (req) => {
       if (!spend.unlimited && spend.cost > 0) {
         chargedAmount = spend.cost;
         chargedUserId = userId;
+        chargedKey = spend.idempotencyKey;
       }
     }
 

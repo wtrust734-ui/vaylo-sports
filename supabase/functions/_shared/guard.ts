@@ -174,6 +174,12 @@ export interface CreditSpend {
   error?: string;
   shortfall?: number;
   duplicate?: boolean;
+  /**
+   * The key credits_spend/credits_spend_metered recorded on the charge
+   * transaction, so a refund can derive its own deterministic key from it.
+   * Present whenever the charge succeeded; charge failures carry none.
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -191,6 +197,9 @@ export async function spendForUser(
 ): Promise<CreditSpend> {
   let data: Record<string, unknown> | null = null;
   let error: { message: string } | null = null;
+  let usedKey: string | undefined;
+
+  const spendKey = opts.idempotencyKey ?? crypto.randomUUID();
 
   if (opts.billUnlimited) {
     // For metered high-cost features, an Unlimited subscription does not exempt
@@ -201,16 +210,19 @@ export async function spendForUser(
       return { success: false, unlimited: false, cost: 0, balance: 0, error: "Not authenticated" };
     }
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    // Always charge under a real key: retries of the same spend collapse into
+    // one debit, and refunds derive `refund:<key>` from it.
     const metered = await admin.rpc("credits_spend_metered", {
       p_user_id: userId,
       p_feature: feature,
       p_reason: reason,
       p_source: opts.source ?? "edge",
-      p_idempotency_key: opts.idempotencyKey ?? crypto.randomUUID(),
+      p_idempotency_key: spendKey,
       p_metadata: {},
     });
     data = metered.data as Record<string, unknown> | null;
     error = metered.error;
+    usedKey = data?.success === true ? spendKey : undefined;
   } else {
     // credits_spend() uses auth.uid() to scope the locked profile row. A
     // service-role JWT has no athlete sub, so use the verified caller's JWT
@@ -229,11 +241,12 @@ export async function spendForUser(
       p_quantity: Math.max(1, opts.quantity ?? 1),
       p_source: opts.source ?? "edge",
       // Retry-safe: pass a per-request idempotency key so a retry cannot double-charge.
-      p_idempotency_key: opts.idempotencyKey ?? null,
+      p_idempotency_key: spendKey,
       p_metadata: {},
     });
     data = spend.data as Record<string, unknown> | null;
     error = spend.error;
+    usedKey = data?.success === true ? spendKey : undefined;
   }
   if (error) return { success: false, unlimited: false, cost: 0, balance: 0, error: error.message };
   return {
@@ -244,6 +257,7 @@ export async function spendForUser(
     error: typeof data?.error === "string" ? data.error : undefined,
     shortfall: typeof data?.shortfall === "number" ? data.shortfall : undefined,
     duplicate: data?.duplicate === true,
+    idempotencyKey: usedKey,
   };
 }
 

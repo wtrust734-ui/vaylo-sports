@@ -312,11 +312,11 @@ android {
         // tightened. No manifest, permission or plugin change — WebView-only.
         // Always increase the code for a Play upload.
         //
-        // 54 / 1.44.54 is the next upload past the last shipped APK/AAB (53) —
+        // 55 / 1.44.55 is the next upload past the last shipped APK/AAB (54) —
         // Play refuses a reused versionCode, and the default must never sit
         // below an artifact already in apk/ (androidNative.test.ts enforces it).
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 54
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.44.54"
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 55
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.44.55"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

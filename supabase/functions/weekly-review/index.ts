@@ -18,6 +18,8 @@ serve(async (req) => {
   let chargedCredits = 0;
   let chargedUserId: string | null = null;
   let chargedUrl = "";
+  // Key of the charge transaction; the refund hangs its deterministic key off it.
+  let chargedKey: string | null = null;
 
   try {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -48,10 +50,14 @@ serve(async (req) => {
 
     // Charge 3 credits per review — single authoritative deduction via credits_spend().
     // The client must pass no amount; cost is resolved server-side from economy_config.
+    // Charge idempotently so a client resend answers "duplicate" — and so the
+    // refund path has a stable key to derive from.
+    const chargeKey = crypto.randomUUID();
     const { data: spend, error: spendErr } = await sb.rpc("credits_spend", {
       p_feature: "weekly_coach_review",
       p_reason: "Weekly Coach Review",
       p_source: "weekly-review",
+      p_idempotency_key: chargeKey,
     });
     if (spendErr) {
       return new Response(JSON.stringify({ error: spendErr.message }), {
@@ -69,6 +75,7 @@ serve(async (req) => {
     chargedCredits = spend?.cost ?? 3;
     chargedUserId = user.id;
     chargedUrl = supabaseUrl;
+    chargedKey = chargeKey;
 
     const body = await req.json().catch(() => ({}));
     // Cap what the athlete can inject into the prompt (abuse guard).
@@ -122,9 +129,11 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
           amount: chargedCredits,
+          dedupeKey: chargedKey ?? undefined,
           reason: "Weekly Coach Review failed — AI error (auto refund)",
         });
         chargedUserId = null;
+        chargedKey = null;
       }
       return new Response(JSON.stringify({ error: "AI error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -143,9 +152,11 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: chargedCredits,
+        dedupeKey: chargedKey ?? undefined,
         reason: "Weekly Coach Review failed — server error (auto refund)",
       });
       chargedUserId = null;
+      chargedKey = null;
     }
     // Internal details stay in logs; the client gets a stable message.
     console.error("weekly-review error:", e);

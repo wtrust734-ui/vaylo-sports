@@ -167,6 +167,10 @@ serve(async (req) => {
   let chargedCredits = 0;
   let chargedUserId: string | null = null;
   let chargedUrl = "";
+  // Key of the charge transaction. The refund derives its own deterministic
+  // key from it (`refund:<charge key>`), so refund retries collapse into one
+  // grant instead of over-crediting.
+  let chargedKey: string | null = null;
 
   try {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -247,10 +251,15 @@ serve(async (req) => {
     // Credits — single shared deduction path
     const serviceClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Charge under a real idempotency key even though nothing else retries
+    // this call: the refund path needs a stable key to hang off, and a client
+    // resend answering "duplicate" is strictly better than a second debit.
+    const chargeKey = crypto.randomUUID();
     const { data: spend, error: spendErr } = await supabase.rpc("credits_spend", {
       p_feature: "vaylo_coach_message",
       p_reason: "Vaylo Sports Coach prompt",
       p_source: "coach-chat",
+      p_idempotency_key: chargeKey,
     });
     if (spendErr) {
       return new Response(JSON.stringify({ error: spendErr.message }), {
@@ -269,6 +278,7 @@ serve(async (req) => {
     chargedCredits = spend?.cost ?? 3;
     chargedUserId = user.id;
     chargedUrl = supabaseUrl;
+    chargedKey = chargeKey;
 
     // ---- Full athlete dossier (PBs, VPR history via metrics, goals, injuries, readiness, memories) ----
     let dossierBlock = "";
@@ -360,9 +370,11 @@ ${dossierBlock}`;
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
           amount: chargedCredits,
+          dedupeKey: chargedKey ?? undefined,
           reason: "Coach reply failed — AI error (auto refund)",
         });
         chargedUserId = null;
+        chargedKey = null;
       }
       if (status === 429) {
         return new Response(JSON.stringify({ error: "Rate limited. Please wait and try again." }), {
@@ -397,9 +409,11 @@ ${dossierBlock}`;
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
           amount: chargedCredits,
+          dedupeKey: chargedKey ?? undefined,
           reason: "Coach reply failed — empty provider response (auto refund)",
         });
         chargedUserId = null;
+        chargedKey = null;
       }
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -425,9 +439,11 @@ ${dossierBlock}`;
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: chargedCredits,
+        dedupeKey: chargedKey ?? undefined,
         reason: "Coach reply failed — server error (auto refund)",
       });
       chargedUserId = null;
+      chargedKey = null;
     }
     // Internal details (config errors, stack traces) stay in the logs; the
     // client gets a stable, non-leaking message.

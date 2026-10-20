@@ -79,6 +79,8 @@ Deno.serve(async (req) => {
   // Charged up-front — remembered so a failed edit can be refunded.
   let charged = 0;
   let chargedUserId: string | null = null;
+  // The charge's idempotency key; the refund derives `refund:<charge key>`.
+  let chargedKey: string | undefined = undefined;
 
   try {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -156,6 +158,7 @@ Deno.serve(async (req) => {
     if (!spend.unlimited && spend.cost > 0) {
       charged = spend.cost;
       chargedUserId = userId;
+      chargedKey = spend.idempotencyKey;
     }
 
     const voice = coachVoiceDirective(sport);
@@ -279,6 +282,7 @@ Level: ${level}. These are the week${targets.length === 1 ? "" : "s"} to return$
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: charged,
+        dedupeKey: chargedKey,
         reason,
       });
       chargedUserId = null;

@@ -96,7 +96,7 @@
       <article class="doc-body">
 <main>
   <h1>Privacy Policy</h1>
-  <p class="doc-meta">Version 1.6 &middot; Effective 20 October 2026</p>
+  <p class="doc-meta">Version 1.7 &middot; Effective 20 October 2026</p>
   <p class="doc-meta">Data controller: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
@@ -464,17 +464,15 @@
   <h2 id="keep">8. How long we keep it</h2>
   <ul>
     <li><strong>Your account and everything in it</strong> — until you delete it.</li>
-    <li><strong>Server logs</strong> — a short, rolling window measured in days to weeks, then discarded.</li>
-    <li><strong>Purchase and refund records</strong> — kept as long as tax and accounting law requires, separate from your profile.</li>
-    <li><strong>Support and legal correspondence</strong> — kept while we handle the
-      request and afterwards so we can show how it was answered. It is not removed by
-      deleting your account; ask us and we will delete it. We have not fixed a
-      retention period for it yet, and we are not going to publish a number we have not
-      chosen.</li>
+    <li><strong>Server logs</strong> — <strong>30 days, rolling</strong>. Logs can carry your IP address, the time of the request, your device's user-agent string and error details. Thirty days is long enough to debug problems you reported to us that week, and short enough that those details do not accumulate: after 30 days they are deleted, not archived. Where the hosting provider controls a log, its own window may be shorter still — never longer than what we promise here.</li>
+    <li><strong>Form analyses and AI usage records</strong> — <strong>30 days, deleted by a scheduled daily purge that runs server-side</strong>. An analysis you did not choose to save is hard-deleted 30 days after it was created, along with AI usage records older than 30 days, and the raw video is never stored by us at all — only the structured result.</li>
+    <li><strong>Purchase and refund records</strong> — kept for up to <strong>six years</strong> after the last transaction, as tax and accounting law requires, separate from your profile.</li>
+    <li><strong>Support and legal correspondence</strong> — kept for <strong>24 months</strong> after your request is closed, so we can show how it was answered, then deleted. It is not removed by deleting your account, but you can ask us to delete any correspondence record earlier and we will do it. The only reasons we would keep it longer are a live legal claim, a safeguarding referral or a law-enforcement request.</li>
+    <li><strong>AI providers' own copies</strong> — what a provider keeps after your request reaches it is governed by that provider's own API terms, not by us: we claim no zero-retention there and do not control it. <a href="/legal/ai-data-use/">AI Data Use &amp; Processing</a> has the detail.</li>
     <li><strong>One deletion record</strong> — when you delete your account we keep a single row proving the deletion happened. It contains a salted hash of your user id, a status and a timestamp. No name, no email, nothing that identifies you.</li>
   </ul>
-  <div class="warn">
-    <strong>One retention period we have not settled.</strong> Server logs can contain your IP address, the time of the request, your device's user-agent string and error details. "A short rolling window" describes the policy but is not a number you can hold us to, so we are not going to dress it up as one. <strong>The exact retention period for server logs has not been decided and is not published here.</strong> When it is fixed it will appear in this section, and this page will be updated with its version number at the same time.
+  <div class="note">
+    <strong>Decided and published 20 October 2026.</strong> The server-log window used to be blank on purpose — an undecided number is not one you could hold us to. It is now decided: 30 days rolling, published here and enforced by the scheduled purge described above, not by a promise alone. If any of these windows are later shortened, this section and the version line update together.
   </div>
 
   <h2 id="safety">9. Safety, reporting and blocking</h2>

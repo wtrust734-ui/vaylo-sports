@@ -299,10 +299,28 @@ describe("no invented operator details", () => {
     // now pins both halves: the documents still say what is missing, and the
     // landing screen no longer shows the operator's to-do list as if it were a
     // user-facing notice.
+    // Changed 2026-10-20 (Prompt 03): the server-log retention window was
+    // DECIDED — 30 days rolling, enforced by a scheduled purge — and the
+    // unpublished-gap language for it was replaced with the actual numbers in
+    // privacy.html section 8 and data-rights.html. The pin therefore no longer
+    // demands an undecided-retention phrase from the documents; it pins that
+    // both pages still carry a decided, number-backed retention section. The
+    // remaining honest gaps (ICO number, registered address) keep their "not
+    // yet" disclosure in data-rights.html and are still guarded.
     const privacy = read("legal/privacy.html");
-    expect(privacy, "the privacy policy dropped its retention disclosure").toMatch(/not published|not yet/i);
+    expect(privacy, "the privacy policy dropped its stated retention windows").toMatch(
+      /server logs\s*&?[\s\S]{0,40}?30 days, rolling/i,
+    );
+    expect(privacy, "the privacy policy no longer shows the purge that enforces retention").toMatch(
+      /scheduled daily purge/i,
+    );
     const dataRights = read("legal/data-rights.html");
-    expect(dataRights, "the data-rights page dropped its retention disclosure").toMatch(/not published|not yet/i);
+    expect(dataRights, "the data-rights page dropped its published retention windows").toMatch(
+      /retention period.{0,200}30 days/si,
+    );
+    expect(dataRights, "the data-rights page dropped the still-unpublished particulars").toMatch(
+      /not yet been inserted/i,
+    );
     expect(read("src/pages/Legal.tsx"), "the unpublished-particulars list is back").not.toMatch(
       /What we have not published yet<\/h2>/i,
     );

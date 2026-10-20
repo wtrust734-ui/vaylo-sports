@@ -51,8 +51,12 @@ import OfflineBanner from "@/components/OfflineBanner";
 import BootVeil, { bootVeilGated, markBootReady } from "@/components/BootVeil";
 import TermsChangeNotice from "@/components/legal/TermsChangeNotice";
 
-import Auth from "./pages/Auth";
-import Onboarding from "./pages/Onboarding";
+// Gate screens are lazy like every other route: a signed-in athlete never
+// renders them, so their weight (~80 kB of source, tens of kB minified)
+// belongs behind the router's Suspense (ScreenFallback), not in the entry
+// chunk that every cold start pays for.
+const Auth = lazy(() => import("./pages/Auth"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 import Index from "./pages/Index";
 // The published legal documents, rendered inside the app rather than on the
 // marketing site. Lazy: it bundles all 26 documents (~330 KB), so the chunk

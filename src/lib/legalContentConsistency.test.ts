@@ -332,3 +332,34 @@ describe("published document set", () => {
     }
   });
 });
+describe("operator contact particulars stay in sync", () => {
+  it("the app's legal landing page mailto matches legal/operator.json", () => {
+    // The inbox is a published particular: documents, the website footer and
+    // this screen must all point at the address somebody actually reads.
+    // This previously failed silently — the landing page carried an
+    // "vaylosportsupport@…" literal that was one character off from the real
+    // inbox, so support mail from the app landed nowhere.
+    const root = resolve(__dirname, "../..");
+    const operator = JSON.parse(readFileSync(join(root, "legal/operator.json"), "utf8")) as {
+      contactEmail?: string;
+    };
+    expect(operator.contactEmail).toMatch(/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/);
+
+    const app = readFileSync(join(root, "src/pages/Legal.tsx"), "utf8");
+    const m = app.match(/CONTACT_EMAIL = "([^"]+)"/);
+    expect(m, "Legal.tsx must define CONTACT_EMAIL").not.toBeNull();
+    expect(
+      m![1],
+      "Legal.tsx CONTACT_EMAIL must equal legal/operator.json contactEmail",
+    ).toBe(operator.contactEmail);
+  });
+
+  it("generated legal pages carry the resolved operator name (no %% tokens ship)", () => {
+    const root = resolve(__dirname, "../..");
+    const generated = readFileSync(
+      join(root, "supabase/functions/legal/pages.generated.ts"),
+      "utf8",
+    );
+    expect(generated).not.toMatch(/%%OPERATOR_NAME%%|%%CONTACT_EMAIL%%/);
+  });
+});

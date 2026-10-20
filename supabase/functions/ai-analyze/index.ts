@@ -25,6 +25,9 @@ Deno.serve(async (req) => {
   // Charged up-front — remembered so a failed AI call can be refunded.
   let charged = 0;
   let chargedUserId: string | null = null;
+  // The charge's idempotency key — the refund derives `refund:<charge key>` from
+  // it, so refund retries collapse into one grant instead of over-crediting.
+  let chargedKey: string | undefined = undefined;
 
   try {
     const userId = await authenticate(req);
@@ -125,6 +128,7 @@ Deno.serve(async (req) => {
       if (!spend.unlimited && spend.cost > 0) {
         charged = spend.cost;
         chargedUserId = userId;
+        chargedKey = spend.idempotencyKey;
       }
     }
 
@@ -301,9 +305,11 @@ ${dossierText}`;
             serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
             userId: chargedUserId,
             amount: charged,
+            dedupeKey: chargedKey,
             reason: "AI form_analysis failed — auto refund",
           });
           chargedUserId = null;
+          chargedKey = undefined;
         }
         if (gemini.status === 429) {
           return json({ error: "Rate limited. Please try again in a moment." }, 429);
@@ -339,9 +345,11 @@ ${dossierText}`;
           serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           userId: chargedUserId,
           amount: charged,
+          dedupeKey: chargedKey,
           reason: `AI ${type} failed — auto refund`,
         });
         chargedUserId = null;
+        chargedKey = undefined;
       }
       if (aiResponse.status === 429) {
         return json({ error: "Rate limited. Please try again in a moment." }, 429);
@@ -365,9 +373,11 @@ ${dossierText}`;
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: charged,
+        dedupeKey: chargedKey,
         reason: "AI analysis failed — server error (auto refund)",
       }).catch(() => undefined);
       chargedUserId = null;
+      chargedKey = undefined;
     }
     // Internal details stay in logs; the client gets a stable message.
     console.error("ai-analyze error:", err instanceof Error ? err.name : err);

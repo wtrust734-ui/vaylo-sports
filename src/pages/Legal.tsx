@@ -28,7 +28,11 @@ import { formatDateTimeExact, formatShortDate } from "@/i18n/format";
 // invented to fill the gap — the disclosures simply stayed where they belong.
 // ============================================================================
 
-const CONTACT_EMAIL = "vaylosportsupport@gmail.com";
+// The operator's monitored inbox — same value the published pages resolve
+// from legal/operator.json at build time. This literal previously dropped an
+// "s" (vaylosportsupport@…) and pointed support mail at an address nobody
+// reads. legal/operator.json is the source; the consistency test pins sync.
+const CONTACT_EMAIL = "vaylosportssupport@gmail.com";
 
 /**
  * Every published document, so nothing is reachable only from one screen.

@@ -275,14 +275,9 @@ export interface StoredChatMessage {
   created_at: string;
 }
 
-export {
-  listCampaigns,
-  type AdCampaign,
-  routeCampaignFromChat,
-  listChatSessions,
-  listChatMessages,
-  sendChatMessage,
-  assistantBubble,
-  planBubble,
-  stageBubble,
-} from "./api";
+export async function listChatMessages(sessionId: string | null): Promise<StoredChatMessage[]> {
+  const { data, error } = await (rawFrom("ad_chat_messages")
+    .select("*").eq("session_id", sessionId ?? "").order("created_at", { ascending: true }) as any);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as StoredChatMessage[];
+}

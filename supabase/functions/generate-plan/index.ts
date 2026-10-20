@@ -100,6 +100,8 @@ Deno.serve(async (req) => {
   // Charged up-front — remembered so a failed AI call can be refunded.
   let charged = 0;
   let chargedUserId: string | null = null;
+  // The charge's idempotency key; the refund derives `refund:<charge key>`.
+  let chargedKey: string | undefined = undefined;
 
   try {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -155,6 +157,7 @@ Deno.serve(async (req) => {
     if (!spend.unlimited && spend.cost > 0) {
       charged = spend.cost;
       chargedUserId = userId;
+      chargedKey = spend.idempotencyKey;
     }
 
     // ---- Authoritative dossier (PBs from client supplement DB) ----
@@ -485,6 +488,7 @@ ${skeletonContinuityNote(own, skeleton)}`;
         serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         userId: chargedUserId,
         amount: charged,
+        dedupeKey: chargedKey,
         reason: "Training plan failed — server error (auto refund)",
       });
       chargedUserId = null;

@@ -50,6 +50,7 @@ export type GeminiResult =
  * success, or the HTTP status on failure — never the response body.
  */
 export async function geminiGenerate(call: GeminiCall): Promise<GeminiResult> {
+  const started = Date.now();
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${call.model}:generateContent?key=${call.apiKey}`,
     {
@@ -66,8 +67,10 @@ export async function geminiGenerate(call: GeminiCall): Promise<GeminiResult> {
   );
 
   if (!res.ok) {
-    // Status + marker only — never the raw provider body.
-    console.error("Gemini request failed", res.status, "upstream_error");
+    // Status + marker only — never the raw provider body. Duration kept so the
+    // log drain carries the same shape the OpenAI adapter emits: feature/model
+    // plus ms on every call, success or failure.
+    console.error("Gemini request failed", res.status, "upstream_error", `model=${call.model}`, `ms=${Date.now() - started}`);
     return { ok: false, status: res.status };
   }
 
@@ -75,6 +78,8 @@ export async function geminiGenerate(call: GeminiCall): Promise<GeminiResult> {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
   const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  // Same success log shape as generateAIResponse: model + duration on one line.
+  console.log("Gemini generate ok", `model=${call.model}`, `ms=${Date.now() - started}`);
   return { ok: true, text: parts.map((p) => p.text ?? "").join("") };
 }
 

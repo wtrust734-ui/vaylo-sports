@@ -7,11 +7,75 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
  */
 type LooseClient = Omit<SupabaseClient, "rpc"> & {
   rpc: (
-    fn: "credit_cost" | "grant_coins" | "spend_credits" | "credits_grant" | "recompute_user_segment" | "grant_infinite_credits",
+    fn: "credit_cost" | "grant_coins" | "spend_credits" | "spend_coins" | "credits_grant" | "recompute_user_segment" | "grant_infinite_credits",
     args?: Record<string, unknown>,
   ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 };
 const asLoose = (c: SupabaseClient): LooseClient => c as unknown as LooseClient;
+
+/**
+ * compensatePurchase — best-effort undo of every side effect a failed purchase
+ * request has already posted (MDF-001).
+ *
+ * An edge function cannot wrap several RPC calls in one database transaction,
+ * so rollback runs in compensating-ledger order, richest side effects first:
+ *
+ *   1. credits granted by THIS request are clawed back with a matching spend
+ *      under the athlete's own auth (spend_credits is SECURITY DEFINER and
+ *      balance-guarded, so it can never drive the balance negative),
+ *   2. credits spent on unlocks in THIS request are refunded through the
+ *      service-role credits_grant routine, with a fresh idempotency key per
+ *      run — the same pattern `_shared/refund.ts` uses, so each failed
+ *      attempt's charge gets exactly one matching refund,
+ *   3. coins granted by THIS request are clawed back with spend_coins,
+ *   4. only then are this request's `user_purchases` rows deleted, so the
+ *      provider_reference duplicate check releases a retry only once the
+ *      money effects above have been reversed.
+ *
+ * A claw-back step that itself fails (e.g. the athlete raced and spent the
+ * credits between grant and failure) is logged loudly, never swallowed: the
+ * state may then be half-undone, but the ledger does not lie silently. This
+ * only ever runs on a FAILED purchase, so nothing an athlete successfully
+ * paid for is ever un-granted by a compensation.
+ */
+async function compensatePurchase(
+  db: LooseClient,
+  userDb: LooseClient | null,
+  userId: string,
+  insertedPurchaseIds: string[],
+  clawbacks: { coins: number; spentCredits: number; grantedCredits: number },
+): Promise<void> {
+  if (userDb && clawbacks.grantedCredits > 0) {
+    const { error } = await userDb.rpc("spend_credits", {
+      p_amount: clawbacks.grantedCredits,
+      p_reason: "Compensation: claw back credits granted by a failed purchase",
+    });
+    if (error) console.error("compensation: credit claw back failed:", error.message);
+  }
+  if (clawbacks.spentCredits > 0) {
+    const { error } = await db.rpc("credits_grant", {
+      p_user: userId,
+      p_amount: clawbacks.spentCredits,
+      p_reason: "Compensation: refund unlock charge from a failed purchase",
+      p_source: "refund",
+      p_idempotency_key: `refund:${crypto.randomUUID()}`,
+      p_metadata: { kind: "compensation" },
+    });
+    if (error) console.error("compensation: credit refund failed:", error.message);
+  }
+  if (userDb && clawbacks.coins > 0) {
+    const { error } = await userDb.rpc("spend_coins", {
+      p_amount: clawbacks.coins,
+      p_reason: "Compensation: claw back coins granted by a failed purchase",
+    });
+    if (error) console.error("compensation: coin claw back failed:", error.message);
+  }
+  for (const purchaseId of insertedPurchaseIds) {
+    const { error } = await db.from("user_purchases").delete().eq("id", purchaseId);
+    if (error) console.error("purchase rollback failed:", error.message);
+  }
+}
+
 import {
   COIN_GRANTS,
   CREDIT_GRANTS,
@@ -179,10 +243,31 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
 
   // Cross-check: the Play-verified product must be one the athlete actually
   // asked for (prevents buying pack_25 and replaying it as pack_500), and the
-  // verified purchase time must not predate the request by more than 48h.
+  // basket may carry exactly ONE money-priced item, which must be that
+  // verified product.
+  //
+  // The official store path never sends more than one (billing.ts rejects
+  // multi-item store baskets), but process-purchase is a public edge
+  // function: a hand-made request could attach several money items and get
+  // all but the first granted on the strength of a single receipt — or the
+  // same item twice. One receipt proves one product; the basket must ask for
+  // nothing else in money. Credit-priced unlocks beside the paid item are
+  // unaffected: they are charged against the credit balance and require no
+  // receipt.
   const verifiedProductId = result.purchase.productId;
-  const basketIds = (items as { product_id?: unknown }[]).map((i) => String(i?.product_id ?? ""));
-  if (!basketIds.includes(verifiedProductId)) {
+  const moneyItems = (items as { product_id?: unknown }[]).filter((i) => {
+    const id = String(i?.product_id ?? "");
+    return PRODUCT_PRICES[id] != null || id.startsWith("offer_");
+  });
+  if (moneyItems.length !== 1) {
+    return {
+      verified: false,
+      error: "Store purchases are one product at a time.",
+      status: 400,
+    };
+  }
+  const moneyId = String((moneyItems[0] as { product_id?: unknown }).product_id ?? "");
+  if (moneyId !== verifiedProductId) {
     return {
       verified: false,
       error: "Verified purchase does not match the requested product.",
@@ -195,6 +280,13 @@ async function verifyStorePurchase(items: unknown[], body: RequestBody): Promise
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Rollback accounting for this request (MDF-001), declared before the try so
+  // the outer catch — an error THROWN mid-grant, not returned — can compensate
+  // too instead of stranding whatever the request already posted.
+  const insertedPurchaseIds: string[] = [];
+  const clawbacks = { coins: 0, spentCredits: 0, grantedCredits: 0 };
+  let verifiedUserId: string | null = null;
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -212,6 +304,7 @@ Deno.serve(async (req) => {
     ));
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    verifiedUserId = user.id;
 
     const body = (await req.json()) as RequestBody;
     const items = Array.isArray(body?.items) ? body.items : [];
@@ -462,6 +555,20 @@ Deno.serve(async (req) => {
     let coinsToAdd = 0;
     let infiniteGrant: { period: string } | null = null;
 
+    /**
+     * Compensating rollback for this request: undo every grant posted so far
+     * (see compensatePurchase), then empty the ledgers so a later rollback in
+     * the same request can never double-undo. Called on EVERY grant failure
+     * after purchase rows have started accumulating — the MDF-001 guarantee.
+     */
+    const rollBackPurchase = async () => {
+      await compensatePurchase(supabase, userClient, user.id, insertedPurchaseIds, clawbacks);
+      clawbacks.coins = 0;
+      clawbacks.spentCredits = 0;
+      clawbacks.grantedCredits = 0;
+      insertedPurchaseIds.length = 0;
+    };
+
     for (const resolvedEntry of resolved) {
       const { productId, productType, priceCents } = resolvedEntry;
       const transactionReference = priceCents > 0 && !transactionReferenceAssigned
@@ -488,29 +595,30 @@ Deno.serve(async (req) => {
 
       // Preserve the exact basket row identity (product IDs may repeat), so the
       // referral qualification is linked to the purchase created for that item.
-      if (purchaseId) resolvedEntry.purchaseId = purchaseId;
-      if (transactionReference && purchaseId) transactionReferenceAssigned = true;
+      if (purchaseId) {
+        resolvedEntry.purchaseId = purchaseId;
+        if (transactionReference) transactionReferenceAssigned = true;
+        insertedPurchaseIds.push(purchaseId);
+      }
       // 23505 = the unique index rejected a replayed store transaction. Bail
       // before granting, so two concurrent retries can never double-credit.
       if (purchaseErr?.code === "23505") {
+        // A duplicate race — but earlier items of THIS basket may already have
+        // granted. Compensate them before refusing, or the losing retry would
+        // strand the just-posted side effects behind its 409.
+        await rollBackPurchase();
         return new Response(
           JSON.stringify({ error: "This purchase has already been applied.", duplicate: true }),
           { status: 409, headers: corsHeaders }
         );
       }
       if (purchaseErr || !purchaseId) {
+        await rollBackPurchase();
         return new Response(
           JSON.stringify({ error: `Could not record purchase: ${purchaseErr?.message ?? "missing purchase row"}` }),
           { status: 500, headers: corsHeaders }
         );
       }
-      // An entitlement row must never outlive a payment that did not happen.
-      const rollBackPurchase = async () => {
-        if (!purchaseId) return;
-        const { error } = await supabase.from("user_purchases").delete().eq("id", purchaseId);
-        if (error) console.error("purchase rollback failed:", error.message);
-      };
-
       // Unlimited credits packs
       const unlimited = UNLIMITED_PACKS.find((p) => p.id === productId);
       if (unlimited) {
@@ -533,6 +641,7 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ error: `Coin grant failed: ${coinsErr.message}` }), { status: 500, headers: corsHeaders });
         }
         coinsToAdd += coinsGrant;
+        clawbacks.coins += coinsGrant;
         continue;
       }
 
@@ -581,6 +690,7 @@ Deno.serve(async (req) => {
             await rollBackPurchase();
             return new Response(JSON.stringify({ error: `Purchase failed: ${spendErr.message}` }), { status: 500, headers: corsHeaders });
           }
+          clawbacks.spentCredits += cost;
         }
         continue;
       }
@@ -618,8 +728,12 @@ Deno.serve(async (req) => {
         p_metadata: { credits: creditsToAdd, bonus: bonusToAdd },
       });
       if (grantErr) {
+        // MDF-001: credits/coins/unlocks may already have been granted above.
+        // Nothing to claw back HERE yet, but every posted effect is undone.
+        await rollBackPurchase();
         return new Response(JSON.stringify({ error: `Credit grant failed: ${grantErr.message}` }), { status: 500, headers: corsHeaders });
       }
+      clawbacks.grantedCredits += totalGranted;
     }
 
     if (infiniteGrant) {
@@ -638,6 +752,10 @@ Deno.serve(async (req) => {
         p_until: until,
       });
       if (infiniteErr) {
+        // Worst case: credits and coins may already be granted. Without the
+        // compensation the purchase rows stay behind and the retry is blocked
+        // double — charged forever, entitlement never delivered.
+        await rollBackPurchase();
         return new Response(
           JSON.stringify({ error: `Unlimited grant failed: ${infiniteErr.message}` }),
           { status: 500, headers: corsHeaders }
@@ -694,6 +812,33 @@ Deno.serve(async (req) => {
       free: freeGrant,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
+    // Compensation safety net: if a grant step THREW (rather than returning an
+    // error) after posting effects, undo them too before answering 500, so no
+    // throw can strand a charge without its grants (MDF-001). The request's
+    // own failure branches already compensated and emptied the ledgers.
+    if (verifiedUserId && (insertedPurchaseIds.length || clawbacks.coins || clawbacks.spentCredits || clawbacks.grantedCredits)) {
+      try {
+        const authHeader = req.headers.get("Authorization");
+        const db = asLoose(createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        ));
+        const userDb = authHeader
+          ? asLoose(createClient(
+              Deno.env.get("SUPABASE_URL")!,
+              Deno.env.get("SUPABASE_ANON_KEY")!,
+              { global: { headers: { Authorization: authHeader } } }
+            ))
+          : null;
+        await compensatePurchase(db, userDb, verifiedUserId, insertedPurchaseIds, clawbacks);
+        clawbacks.coins = 0;
+        clawbacks.spentCredits = 0;
+        clawbacks.grantedCredits = 0;
+        insertedPurchaseIds.length = 0;
+      } catch (e) {
+        console.error("compensation safety net threw:", e);
+      }
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: corsHeaders });
   }
 });

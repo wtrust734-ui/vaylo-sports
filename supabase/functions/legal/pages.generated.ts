@@ -459,22 +459,21 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Privacy Policy — Vaylo Sports</title>
-<!--
+<title>Privacy Policy — Vaylo Sports</title>  <!--
   ============================================================================
   OPERATOR DETAILS ARE TOKENS
   ----------------------------------------------------------------------------
-  "Vaylo Sports" and "vaylosportssupport@gmail.com" are replaced at publish time from
-  LEGAL_OPERATOR_NAME / LEGAL_CONTACT_EMAIL (see supabase/functions/legal/).
-  They are deliberately left unresolved here so compiled output containing a
-  guessed company name or a dead inbox cannot reach a public URL — a privacy
-  policy with a non-working contact is worse than no policy, and Play reviews
-  this page by hand.
+  "Vaylo Sports" and "vaylosportssupport@gmail.com" are substituted at build time by
+  scripts/gen-legal-pages.cjs from legal/operator.json — NOT from environment
+  variables, and NOT baked in here. The real company name and a working support
+  inbox live in one place (operator.json), so a policy naming the wrong company
+  or a dead inbox cannot ship by accident: the generator and the serving function
+  both refuse to publish while those values are placeholders.
 
   This page is also the app's in-app "Privacy Policy" link, so it must stay
   self-contained: no fonts, scripts, analytics or images from anywhere.
   ============================================================================
--->
+-->
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -517,7 +516,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><div class="mark"></div><span>Vaylo Sports</span></div>
 
   <h1>Privacy Policy</h1>
-  <p class="meta">Version 1.6 &middot; Effective 20 October 2026</p>
+  <p class="meta">Version 1.7 &middot; Effective 20 October 2026</p>
   <p class="meta">Data controller: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <p>
@@ -885,17 +884,15 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <h2 id="keep">8. How long we keep it</h2>
   <ul>
     <li><strong>Your account and everything in it</strong> — until you delete it.</li>
-    <li><strong>Server logs</strong> — a short, rolling window measured in days to weeks, then discarded.</li>
-    <li><strong>Purchase and refund records</strong> — kept as long as tax and accounting law requires, separate from your profile.</li>
-    <li><strong>Support and legal correspondence</strong> — kept while we handle the
-      request and afterwards so we can show how it was answered. It is not removed by
-      deleting your account; ask us and we will delete it. We have not fixed a
-      retention period for it yet, and we are not going to publish a number we have not
-      chosen.</li>
+    <li><strong>Server logs</strong> — <strong>30 days, rolling</strong>. Logs can carry your IP address, the time of the request, your device's user-agent string and error details. Thirty days is long enough to debug problems you reported to us that week, and short enough that those details do not accumulate: after 30 days they are deleted, not archived. Where the hosting provider controls a log, its own window may be shorter still — never longer than what we promise here.</li>
+    <li><strong>Form analyses and AI usage records</strong> — <strong>30 days, deleted by a scheduled daily purge that runs server-side</strong>. An analysis you did not choose to save is hard-deleted 30 days after it was created, along with AI usage records older than 30 days, and the raw video is never stored by us at all — only the structured result.</li>
+    <li><strong>Purchase and refund records</strong> — kept for up to <strong>six years</strong> after the last transaction, as tax and accounting law requires, separate from your profile.</li>
+    <li><strong>Support and legal correspondence</strong> — kept for <strong>24 months</strong> after your request is closed, so we can show how it was answered, then deleted. It is not removed by deleting your account, but you can ask us to delete any correspondence record earlier and we will do it. The only reasons we would keep it longer are a live legal claim, a safeguarding referral or a law-enforcement request.</li>
+    <li><strong>AI providers' own copies</strong> — what a provider keeps after your request reaches it is governed by that provider's own API terms, not by us: we claim no zero-retention there and do not control it. <a href="ai-data-use">AI Data Use &amp; Processing</a> has the detail.</li>
     <li><strong>One deletion record</strong> — when you delete your account we keep a single row proving the deletion happened. It contains a salted hash of your user id, a status and a timestamp. No name, no email, nothing that identifies you.</li>
   </ul>
-  <div class="warn">
-    <strong>One retention period we have not settled.</strong> Server logs can contain your IP address, the time of the request, your device's user-agent string and error details. "A short rolling window" describes the policy but is not a number you can hold us to, so we are not going to dress it up as one. <strong>The exact retention period for server logs has not been decided and is not published here.</strong> When it is fixed it will appear in this section, and this page will be updated with its version number at the same time.
+  <div class="note">
+    <strong>Decided and published 20 October 2026.</strong> The server-log window used to be blank on purpose — an undecided number is not one you could hold us to. It is now decided: 30 days rolling, published here and enforced by the scheduled purge described above, not by a promise alone. If any of these windows are later shortened, this section and the version line update together.
   </div>
 
   <h2 id="safety">9. Safety, reporting and blocking</h2>
@@ -1074,7 +1071,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>Vaylo Sports</span></div>
 
   <h1>Child &amp; Young Athlete Safety</h1>
-  <p class="meta">Version 1.3 &middot; 8 October 2026</p>
+  <p class="meta">Version 1.4 &middot; 20 October 2026</p>
   <p class="meta">Operated by Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <div class="note">
@@ -1097,7 +1094,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
       <li><a href="#oversight">Who is responsible for an under-18 account</a></li>
       <li><a href="#reporting">Reporting a child safety concern</a></li>
       <li><a href="#privacy">Privacy for under-18s</a></li>
-      <li><a href="#gaps">What we have not yet finalised</a></li>
+      <li><a href="#gaps">What we have decided, and what is still open</a></li>
       <li><a href="#young-notice">Children's Privacy Notice</a></li>
     </ol>
   </div>
@@ -1218,21 +1215,39 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2 id="reporting">6. Reporting a child safety concern</h2>
   <p>
-    We take child safety reports seriously and act on them as a priority. There are
-    three routes:
+    We take child safety reports seriously and act on them as a priority. The routes:
   </p>
   <table>
     <thead><tr><th>Concern</th><th>Where to go</th></tr></thead>
     <tbody>
-      <tr><td>A child is being harmed or is at risk</td><td><strong>The police</strong>, or the NSPCC Child Protection Helpline on 0808 8000 111. Do not wait for us.</td></tr>
-      <tr><td>Content sexualising a child is on the app</td><td><strong>The police</strong> and the NSPCC helpline above, <strong>and</strong> email us so we can remove the account immediately</td></tr>
-      <tr><td>Adults contacting athletes under 18, bullying, dangerous or disordered-eating content</td><td>In-app <strong>Report</strong> control, and/or email us</td></tr>
+      <tr><td>A child is being harmed or is at risk</td><td><strong>The police</strong> (999 in an emergency), or the NSPCC Child Protection Helpline on 0808 8000 111. Do not wait for us.</td></tr>
+      <tr><td>Content sexualising a child is on the app</td><td><strong>The police</strong> and the NSPCC helpline above; you can also report it anonymously to the Internet Watch Foundation (iwf.org.uk), and email us so we can remove it and act against the account</td></tr>
+      <tr><td>Adults contacting athletes under 18, bullying, dangerous or disordered-eating content aimed at a young athlete</td><td>Email <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a>, or the support page on our website, which has a dedicated child-safety option &mdash; and the in-app <strong>Report</strong> control as well, if the content is visible to you in the app</td></tr>
       <tr><td>An adult has created an account for a child under 13</td><td>Email us and we will delete it</td></tr>
     </tbody>
   </table>
-  <div class="warn">
-    <strong>Our inbox is not an emergency service.</strong> We read every report, but we are a small team and we are not child protection specialists. If a child is in danger, contact the police or the NSPCC. Where the law permits or requires it, we will report child sexual exploitation material, credible threats of violence, or serious self-harm content to the relevant authority ourselves, whether or not the reporter asks us to.
+  <div class="note">
+    <strong>What happens to a child-safety report, and when.</strong> These are commitments we can keep today: the support form stores every report and emails us at once, the inbox route is checked daily, and our internal incident runbook requires a child-safety report to be read the same day it arrives.
+    <ul>
+      <li><strong>Same day &mdash; read.</strong> A child-safety report is read the same day it reaches us, whatever the channel. A report alleging content that sexualises a child, an adult seeking contact with a young athlete, or a credible threat is actioned ahead of everything else in the queue.</li>
+      <li><strong>Before anything is removed &mdash; evidence preserved.</strong> The content and account data involved are kept until any decision about reporting onwards has been made and recorded. Only then is the content taken down.</li>
+      <li><strong>Where thresholds are met &mdash; reported onwards.</strong> Child sexual exploitation material, credible threats of violence or serious self-harm content are reported to the relevant hotline or law enforcement by us, whether or not the reporter asks us to.</li>
+      <li><strong>Within five working days &mdash; acknowledged in writing.</strong> The same service level our <a href="complaints">complaints procedure</a> publishes for every request; we aim to respond substantively within twenty working days, or sooner where the matter is urgent.</li>
+      <li><strong>You are told.</strong> The reporter is told what happened to what they reported. We may not describe exactly what action was taken against another athlete, because their own privacy rights apply too.</li>
+      <li><strong>Records.</strong> The report and our case notes are kept for 24 months after the matter closes &mdash; the same retention window as support correspondence in the <a href="privacy">Privacy Policy</a>, section 8 &mdash; and longer only where a live legal claim, safeguarding referral or law-enforcement request requires it.</li>
+    </ul>
   </div>
+  <div class="warn">
+    <strong>Our inbox is not an emergency service.</strong> We read every report, but we are a small team and we are not child protection specialists. If a child is in danger, contact the police or the NSPCC. Do not wait for any timescale on this page.
+  </div>
+  <p>
+    The in-app <strong>Report</strong> control on a shared activity or profile writes
+    into our moderation queue, which is escalated to the operator's inbox route rather
+    than left unread. What it does not yet give you is a screen that files a
+    child-safety report into the priority channel directly, which is why the email and
+    website routes above are the ones with the timescales. If a concern involves a
+    child, do not rely on the in-app control alone.
+  </p>
 
   <h2 id="privacy">7. Privacy for under-18s</h2>
   <ul>
@@ -1242,16 +1257,55 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
     <li><strong>The usual rights apply, and so do your choices.</strong> Access, correction, deletion and portability all work the same way. See <a href="data-rights">Your Data Rights</a> and <a href="account-deletion">Deleting Your Account</a>.</li>
   </ul>
 
-  <h2 id="gaps">8. What we have not yet finalised</h2>
+  <h2 id="gaps">8. What we have decided, and what is still open</h2>
   <p>
-    We would rather list the gaps than imply we have covered them:
+    <strong>Decided and published 20 October 2026:</strong>
   </p>
   <ul>
-    <li><strong>A response time for child safety reports.</strong> Vaylo Sports has not yet committed to a turnaround time, so we are not publishing one we would not keep.</li>
-    <li><strong>A named child protection lead.</strong> There is no individual we can yet point you to.</li>
-    <li><strong>Age assurance.</strong> We rely on self-declared date of birth and have not implemented age estimation or ID checks.</li>
-    <li><strong>Parent or guardian accounts.</strong> There is no separate guardian account type. A guardian uses their own Vaylo Sports account and a link the athlete approves, which is described in section 5.</li>
-    <li><strong>Annual child safety reporting to the ICO.</strong> If we meet the threshold, Vaylo Sports will need to produce this. It is a business decision that has not yet been taken.</li>
+    <li><strong>A response time for child safety reports.</strong> Section 6 now
+      commits to one: read the same day a report arrives, acknowledged in writing
+      within five working days, urgent reports actioned ahead of everything else in
+      the queue, and evidence preserved before anything is taken down. These are the
+      times the current tooling can actually keep &mdash; the support form stores and
+      emails every report, the inbox route is checked daily &mdash; rather than
+      numbers we have not thought about.</li>
+    <li><strong>Evidence-first handling and onward reporting.</strong> The content and
+      account data involved in a report are preserved before anything is removed, and
+      material that meets the thresholds is reported to a hotline or law enforcement
+      by us. Both are now stated in section 6 instead of living only in our internal
+      runbook.</li>
+    <li><strong>Record keeping.</strong> A child-safety report and the case notes we
+      write for it are kept for 24 months after the matter closes &mdash; the same
+      window and the same exceptions as support correspondence in the
+      <a href="privacy">Privacy Policy</a>, section 8.</li>
+    <li><strong>Parent or guardian involvement.</strong> The arrangement stays as
+      section 5 describes: the athlete creates the code, approves the link, chooses
+      what the guardian can see and can revoke it, a guardian can request deletion of
+      the account at any time, and there is no separate guardian account type. That
+      is a settled decision, not an unfinished piece of work: a separate account type
+      would change what we collect from young athletes and would need its own review
+      before anything like it shipped.</li>
+  </ul>
+  <p>
+    <strong>Still open &mdash; these are decisions that have not been made, and we
+    say so rather than imply otherwise:</strong>
+  </p>
+  <ul>
+    <li><strong>A named child protection lead.</strong> There is no individual we can
+      yet point you to. Until one is designated, the operator behind
+      Vaylo Sports is the accountable owner of child safety. Designating a lead
+      with safeguarding training is a question for the operator and legal review,
+      and is on our launch checklist rather than solved here.</li>
+    <li><strong>Age assurance.</strong> We rely on self-declared date of birth and
+      have not implemented age estimation or ID checks. The trade-off &mdash; the
+      protections apply only to the date of birth a user gives, and someone who
+      enters the wrong one gets the protections for that date of birth &mdash; is
+      the same decision explained in section 2, and it is unchanged.</li>
+    <li><strong>Annual child safety reporting to the ICO.</strong> If
+      Vaylo Sports meets the threshold, this reporting will be required. Whether
+      the service ever meets it depends on how many under-18 accounts it has as it
+      grows, which cannot be decided today; the threshold assessment is with legal
+      review and is not yet done.</li>
   </ul>
   <p>
     None of this makes the app safe for children on its own, and none of this page
@@ -3387,7 +3441,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>Vaylo Sports</span></div>
 
   <h1>Your Data Rights</h1>
-  <p class="meta">Version 1.2 &middot; 8 October 2026</p>
+  <p class="meta">Version 1.3 &middot; 8 October 2026</p>
   <p class="meta">Data controller: Vaylo Sports &middot; Contact: <a href="mailto:vaylosportssupport@gmail.com">vaylosportssupport@gmail.com</a></p>
 
   <div class="note">
@@ -3514,7 +3568,7 @@ export const LEGAL_PAGES: Record<string, LegalPage> = {
 
   <h2 id="gaps">9. What we have not yet finalised</h2>
   <ul>
-    <li><strong>Exact retention periods.</strong> We keep your account data until you delete it, and purchase records for as long as tax law requires. <strong>The precise retention window for server logs &mdash; which can include your IP address and device details &mdash; is not yet settled and we have not published a number.</strong> When it is, it will appear here and in the <a href="privacy">Privacy Policy</a>.</li>
+    <li><strong>Exact retention periods.</strong> As of 20 October 2026 these are published in the <a href="privacy">Privacy Policy</a>, section 8: server logs 30 days rolling; unsaved form analyses and AI usage records 30 days, enforced by a scheduled server-side purge; purchase records up to six years after the last transaction; support correspondence 24 months after your request is closed. Account data lasts until you delete it.</li>
     <li><strong>Controller identity.</strong> Registered company name, company number, registered address and ICO number, as above.</li>
     <li><strong>Whether a data protection representative is required</strong> &mdash; that depends on who the controller turns out to be.</li>
     <li><strong>Whether existing adult profiles get privatised retroactively.</strong> New accounts are private by default and under-18 accounts are always private, but accounts created before that change may still be public. <strong>Vaylo Sports has not decided whether to change them, and a decision either way is owed to existing users.</strong></li>
