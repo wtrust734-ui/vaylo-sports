@@ -21,6 +21,27 @@ export function isNotReadyMessage(message: string): boolean {
   return NOT_READY.test(message);
 }
 
+/** Same read, but problems attached by the server (e.g. concept/script
+ *  refusals answer { error, problems: [...] }) ride along in the message so
+ *  the athlete sees the server's own reasons, not a bare refusal. */
+export async function edgeErrorMessageWithProblems(error: unknown): Promise<string> {
+  if (error && typeof error === "object" && "context" in error) {
+    try {
+      const payload = await (error as { context: Response }).context.json();
+      const base = typeof payload?.error === "string" && payload.error ? payload.error : null;
+      const problems = Array.isArray(payload?.problems) ? (payload.problems as unknown[]).filter((p): p is string => typeof p === "string" && !!p.trim()) : [];
+      if (base) {
+        const msg = problems.length ? `${base} — the server listed: ${problems.slice(0, 6).join("; ")}` : base;
+        return isNotReadyMessage(base) ? AI_NOT_READY_MESSAGE : msg;
+      }
+      if (problems.length) return problems.slice(0, 6).join("; ");
+    } catch {
+      /* body unreadable — fall through */
+    }
+  }
+  return edgeErrorMessage(error);
+}
+
 export async function edgeErrorMessage(error: unknown): Promise<string> {
   if (error && typeof error === "object" && "context" in error) {
     try {

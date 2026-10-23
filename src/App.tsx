@@ -30,9 +30,6 @@ import AppLayout from "@/components/layout/AppLayout";
 import ScreenFallback from "@/components/ScreenFallback";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import CookieNotice from "@/components/CookieNotice";
-import CreditWarning from "@/components/ads/CreditWarning";
-import PromoPopup from "@/components/ads/PromoPopup";
-import StreakShield from "@/components/ads/StreakShield";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
 import PaywallModal from "@/components/PaywallModal";
 import CreditTopUpSheet from "@/components/market/CreditTopUpSheet";
@@ -46,6 +43,10 @@ const CreatorMarketplace = lazy(() => import("./pages/CreatorMarketplace"));
 const BecomeCreator = lazy(() => import("./pages/BecomeCreator"));
 const CoachStudio = lazy(() => import("./pages/CoachStudio"));
 const CoachSignup = lazy(() => import("./pages/CoachSignup"));
+// The Ads Studio is a full-screen product surface with its own sidebar/nav
+// shell — it must NOT render inside AppLayout. Lazy like every other route so
+// its weight stays out of the athlete app's entry chunk.
+const AdsStudio = lazy(() => import("./pages/studio/StudioApp"));
 
 import OfflineBanner from "@/components/OfflineBanner";
 import BootVeil, { bootVeilGated, markBootReady } from "@/components/BootVeil";
@@ -454,6 +455,8 @@ const App = () => {
               <Route path="/c/:id" element={<BareScreen><ChallengeInvite /></BareScreen>} />
               <Route path="/referral-leaderboard" element={<BareScreen><ReferralLeaderboard /></BareScreen>} />
               <Route path="/discord" element={<BareScreen><DiscordCommunity /></BareScreen>} />
+              {/* Ads Studio — standalone shell below; handles its own auth gate. */}
+              <Route path="/ad-studio" element={<BareScreen><AdsStudio /></BareScreen>} />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Index />} />
                 {/* Information-architecture hubs: every tile navigates to an
@@ -623,10 +626,7 @@ const App = () => {
               </Routes>
 
             </Suspense>
-            <CreditWarning />
             <PaywallModal />
-            <PromoPopup />
-            <StreakShield />
             <CreditTopUpSheet />
             <MilestoneCelebration />
           </SubscriptionProvider>

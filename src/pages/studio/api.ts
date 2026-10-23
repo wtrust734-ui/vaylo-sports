@@ -187,7 +187,19 @@ export async function listLibrary(filter?: { kind?: LibraryKind; search?: string
   return (data ?? []) as LibraryItem[];
 }
 
-export async function uploadLibraryItem(file: File, kind: LibraryKind, campaignId?: string | null, name?: string): Promise<LibraryItem> {
+/**
+ * Uploads a file into the owner's private ads bucket and records it in the
+ * asset library. `metadata` is free-form — screen-recording uploads carry
+ * "{ screenRecording: true }" so every section (and the chat brain) can treat
+ * recorded app footage as a first-class source for video ads.
+ */
+export async function uploadLibraryItem(
+  file: File,
+  kind: LibraryKind,
+  campaignId?: string | null,
+  name?: string,
+  metadata?: Record<string, unknown>,
+): Promise<LibraryItem> {
   const { data: sessionData } = await supabase.auth.getSession();
   const uid = sessionData.session?.user.id;
   if (!uid) throw new Error("Sign in to upload assets");
@@ -213,6 +225,7 @@ export async function uploadLibraryItem(file: File, kind: LibraryKind, campaignI
     mime: file.type || null,
     size_bytes: file.size,
     status: "ready",
+    metadata: metadata ?? {},
   } as never).select().single();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -14,6 +14,18 @@ export default tseslint.config(
     // file nobody wrote.
     ignores: [
       "dist",
+      // Stale copies and scratch trees (see .gitignore). They are not linted:
+      // the `.tools/*.mjs` scratch scripts and the stale `vaylo ad web app/`
+      // copy produce parse errors and rule noise on files nobody maintains.
+      ".tools",
+      ".ui-backup",
+      "vaylo ad web app",
+      ".bundles",
+      "apk",
+      // scripts/vercel-redeploy.cjs is a shell script whose name ends .cjs;
+      // Espree parses it as JavaScript and fails on line 2. The name stays for
+      // historical reasons, so the linter is told to step over it.
+      "scripts/vercel-redeploy.cjs",
       "android/app/build",
       "android/build",
       "android/.gradle",

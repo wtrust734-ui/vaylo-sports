@@ -6,6 +6,21 @@ import { describe, expect, it } from "vitest";
 const read = (file: string) =>
   readFileSync(path.resolve(__dirname, "../..", file), "utf8").replace(/\r\n?/g, "\n");
 
+/**
+ * `.env` and `.env.local` are git-ignored local files: CI and fresh clones do
+ * not have them, and a test that threw on their absence would fail every CI
+ * run for a fact about the checkout rather than about the build. The
+ * build-time enforcement is asserted against vite.config.ts above; these
+ * checks are the local belt-and-braces, so they run when the file is there.
+ */
+const readIfPresent = (file: string): string | null => {
+  try {
+    return read(file);
+  } catch {
+    return null;
+  }
+};
+
 const vite = read("vite.config.ts");
 const share = read("src/lib/share.ts");
 const example = read(".env.example");
@@ -21,13 +36,21 @@ describe("native release hardening", () => {
     expect(vite).toContain("publishableKey.startsWith(\"sb_publishable_\")");
     expect(vite).toContain("mode !== \"test\"");
     expect(example).toContain("VITE_SUPABASE_PUBLISHABLE_KEY=");
-    expect(read(".env")).toContain("VITE_SUPABASE_PUBLISHABLE_KEY=\"sb_publishable_");
-    expect(read(".env")).not.toMatch(/VITE_SUPABASE_PUBLISHABLE_KEY=["']?eyJ/);
+    // Guarded on the variable's presence, not the file's: a local .env may
+    // legitimately omit the key (loadEnv falls through to .env.local), and CI
+    // has no .env at all. Whenever it IS configured here, it must be the
+    // rotatable shape.
+    const envFile = readIfPresent(".env");
+    if (envFile?.includes("VITE_SUPABASE_PUBLISHABLE_KEY=")) {
+      expect(envFile).toContain("VITE_SUPABASE_PUBLISHABLE_KEY=\"sb_publishable_");
+      expect(envFile).not.toMatch(/VITE_SUPABASE_PUBLISHABLE_KEY=["']?eyJ/);
+    }
   });
 
   it("does not configure a preview host as a canonical URL", () => {
     expect(example).not.toMatch(/VITE_PUBLIC_APP_URL\s*=\s*https?:\/\/[^\s]*lovable\.app/i);
-    expect(read(".env.local")).not.toMatch(/^VITE_PUBLIC_APP_URL=/m);
+    const envLocal = readIfPresent(".env.local");
+    if (envLocal !== null) expect(envLocal).not.toMatch(/^VITE_PUBLIC_APP_URL=/m);
     expect(ignore).toMatch(/^\.env\.\*$/m);
   });
 

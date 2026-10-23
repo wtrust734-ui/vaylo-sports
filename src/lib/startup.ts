@@ -21,10 +21,14 @@ const INVALID_HOST_RE = /\.invalid(:\d+)?(\/|$)/;
 interface ImportMetaBridge {
   import?: { meta?: { env?: Record<string, unknown> } };
 }
-const envOf = (): Record<string, unknown> | undefined =>
-  typeof window === "undefined"
-    ? undefined
-    : (window as unknown as ImportMetaBridge).import?.meta?.env;
+const envOf = (): Record<string, unknown> | undefined => {
+  if (typeof window === "undefined") return undefined;
+  // Test harnesses stub the env on window; in a real bundle Vite inlines
+  // `import.meta.env`, which is what the browser actually has.
+  const stubbed = (window as unknown as ImportMetaBridge).import?.meta?.env;
+  if (stubbed) return stubbed;
+  return import.meta.env as Record<string, unknown>;
+};
 
 /**
  * True when the browser-side Supabase client is configured with a URL that can
@@ -35,9 +39,22 @@ const envOf = (): Record<string, unknown> | undefined =>
  * `VITE_SUPABASE_URL` value baked into the bundle; in the Capacitor shell the
  * same env var is inlined by Vite into `import.meta.env` before the native
  * bundle is assembled, so the same check covers both builds.
+ *
+ * Demo / clone builds (`VITE_DEMO_MODE=true`) intentionally point at a dead
+ * host with no backend. In that mode the app boots a local guest session
+ * instead, so an unusable backend URL is the expected configuration, not a
+ * failure. The fatal boot screen is reserved for real builds that are missing
+ * their backend.
  */
 export function isConfigBootFailure(): boolean {
   if (typeof window === "undefined") {
+    return false;
+  }
+  // Demo-mode builds are meant to run with no backend at all: the app falls
+  // back to a local guest session, so an unusable Supabase URL here is the
+  // intended configuration, not a misconfiguration.
+  const demoMode: unknown = envOf()?.VITE_DEMO_MODE;
+  if (demoMode === "true") {
     return false;
   }
   const raw: unknown = envOf()?.VITE_SUPABASE_URL;

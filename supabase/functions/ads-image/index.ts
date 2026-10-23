@@ -547,7 +547,7 @@ async function handler(req: Request): Promise<Response> {
       let state = String(j.status);
       let error = j.error;
       let bytesCount = j.bytes;
-      let outputArtifactId = j.output_artifact_id as string | null;
+      const outputArtifactId = j.output_artifact_id as string | null;
       if ((state === "queued" || state === "preparing" || state === "rendering") && RENDER_WORKER_URL && RENDER_TOKEN) {
         const res = await fetch(`${RENDER_WORKER_URL}/jobs/${j.job_id}`, { headers: { "x-render-token": RENDER_TOKEN } });
         if (res.ok) {
@@ -600,7 +600,7 @@ async function handler(req: Request): Promise<Response> {
       // compose from prior.stage === 'generated'? composed on generated: the
       // background for a re-render is prior when prior.stage==='generated';
       // otherwise prior.parent (the original generated image).
-      let backgroundId = prior.stage === "generated" ? prior.id : prior.parent_artifact_id;
+      const backgroundId = prior.stage === "generated" ? prior.id : prior.parent_artifact_id;
       if (!backgroundId) return json({ error: "the artifact has no background to recompose from" }, 400);
       return json({ projectId, recompose: { backgroundArtifactId: backgroundId, text: textChanges, originalArtifactId: artifactId } });
     }

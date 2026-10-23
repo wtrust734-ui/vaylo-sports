@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://vaylo-sports.netlify.app/sitemap.xml
+Sitemap: /sitemap.xml

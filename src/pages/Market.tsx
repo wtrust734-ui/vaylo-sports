@@ -2,15 +2,11 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
-  Zap,
-  Coins,
+  Zap,  Coins,
   X,
   Infinity as InfinityIcon,
-  Gift,
-  Flame,
   Clock,
   Loader2,
-  Check,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,8 +28,6 @@ import { disclaimerShort } from "@/config/disclaimers";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import {
   loadEconomyConfig,
-  applyOffer,
-  getDoubleCreditsOffer,
   formatLocalPrice,
   trackEconomyEvent,
   type CreditPack,
@@ -50,7 +44,6 @@ import LifetimeSection from "@/components/market/LifetimeSection";
 import CoachingSection from "@/components/market/CoachingSection";
 import CreditCostsList from "@/components/market/CreditCostsList";
 import UnlocksSection from "@/components/market/UnlocksSection";
-import FamilyPickBanner from "@/components/market/FamilyPickBanner";
 
 /** Shown in place of a purchasing section when the athlete cannot buy. */
 /** Shown to an under-18 account instead of a block. */
@@ -165,48 +158,10 @@ const Market = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doubleOffer = useMemo(() => getDoubleCreditsOffer(offers), [offers]);
-  // Starter offers must be live rows: an expired row is hidden, not shown.
-  const starterOffer = useMemo(
-    () => offers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
-    [offers]
-  );
-  // Claimed state for the one-time offer: the server refuses a second
-  // redemption (409 duplicate), but showing a live "once per account" button
-  // to someone who already claimed it is the confusing dead end Prompt 10
-  // calls out. One cheap row read; a failure leaves the BUY row visible rather
-  // than hiding an offer a legitimate athlete can still use.
-  const [starterClaimed, setStarterClaimed] = useState(false);
-  useEffect(() => {
-    if (!user || !starterOffer) return;
-    let alive = true;
-    (async () => {
-      const { data } = await supabase
-        .from("user_purchases")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("product_id", `offer_${starterOffer.slug}`)
-        .limit(1)
-        .maybeSingle();
-      if (alive) setStarterClaimed(!!data);
-    })();
-    return () => { alive = false; };
-  }, [user, starterOffer]);
-
   const enhancedPacks = useMemo(
-    () => packs.map((p) => (doubleOffer ? applyOffer(p, doubleOffer) : p)),
-    [packs, doubleOffer],
+    () => packs.map((p) => p),
+    [packs],
   );
-
-  // The pack the starter offer is built on, resolved once. The row below used
-  // to call `packs.find` four times inside its own markup, which meant four
-  // lookups and four chances for the displayed total to disagree with the
-  // credits actually granted on tap.
-  const starterPack = useMemo(
-    () => (starterOffer ? packs.find((p) => p.id === starterOffer.pack_id) ?? null : null),
-    [packs, starterOffer],
-  );
-  const starterCredits = (starterPack?.credits ?? 0) + (starterPack?.bonus ?? 0);
 
   /** Add to basket — optimistically. */
   const addToBasket = (item: {
@@ -593,72 +548,9 @@ const Market = () => {
           </motion.div>
         )}</AnimatePresence>
 
-      {/* Live promo — one quiet line, stopped shouting over products */}
-      {isAdult && doubleOffer && section === "packs" && (
-        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-card px-4 py-3">
-          <Flame size={16} className="shrink-0 text-energy" />
-          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground">
-            <span className="font-semibold text-foreground">{doubleOffer.title}</span> — {doubleOffer.description}
-          </p>
-          <span className="shrink-0 text-[12px] font-bold text-energy">LIVE</span>
-        </div>
-      )}
-
       {/* Section nav — clearer touch targets, better visual hierarchy */}
       <MarketSectionNav active={section} onChange={changeSection} />
       <p className="px-5 pb-4 pt-2 text-xs text-muted-foreground">{activeSection.blurb}</p>
-
-      {/* Starter offer — one quiet row, no purple pill, no shouting */}
-      {isAdult && starterOffer && section === "packs" && (
-        starterClaimed ? (
-          <div className="mb-4 px-5">
-            <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 opacity-70">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted">
-                <Gift size={15} className="text-muted-foreground" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{starterOffer.title}</span>
-                <span className="block truncate text-[12px] text-muted-foreground">Already claimed on this account — one per athlete.</span>
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-1 text-[12px] font-bold text-muted-foreground">
-                <Check size={11} /> Claimed
-              </span>
-            </div>
-          </div>
-        ) : (
-        <div className="mb-4 px-5">
-          <motion.button
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={() => addToBasket({
-              id: `offer_${starterOffer.slug}`,
-              name: starterOffer.title,
-              price_cents: starterOffer.price_cents ?? 0,
-              type: "offer",
-              credits: starterCredits,
-              bonus: starterOffer.bonus_flat,
-            })}
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-start transition-colors hover:border-primary/40"
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <Gift size={15} className="text-primary" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{starterOffer.title}</span>
-              <span className="block truncate text-[12px] text-muted-foreground">
-                <Zap size={10} className="mr-1 inline text-primary" />
-                {starterCredits} credits{starterOffer.bonus_flat > 0 ? ` + ${starterOffer.bonus_flat} bonus` : ""} · once per account
-              </span>
-            </span>
-            <span className="shrink-0 text-sm font-bold">{formatLocalPrice(starterOffer.price_cents ?? 0, region.currency)}</span>
-          </motion.button>
-        </div>
-        )
-      )}
-
-      {/* Picked for you — one unlock recommendation per sport family. */}
-      {isAdult && section === "unlocks" && <FamilyPickBanner />}
 
       {/* No age block on these sections: purchasing is open to every age, and
           the under-18 case is handled by an informational note inside each section

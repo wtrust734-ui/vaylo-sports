@@ -138,6 +138,15 @@ verify_jwt = false
 [functions.waitlist-signup]
 verify_jwt = false
 
+# The agent tool surface. Its caller is the Manus agent, which has no Vaylo
+# session and cannot present a JWT — by design it authenticates with the
+# MANUS_SHARED_SECRET header, checked deny-by-default inside the function.
+# Discovered when wiring the Manus 2.0 video-editing handoff: without this
+# block the deployed function verified a JWT first and answered 401 to every
+# action the agent sent, gate or no gate.
+[functions.manus-invoke]
+verify_jwt = false
+
 # The unsubscribe endpoint is opened from a link inside an email, so it is
 # reached by a browser that has no session and cannot present a JWT. It is safe
 # to expose for the same structural reason as the signup endpoint: the token is

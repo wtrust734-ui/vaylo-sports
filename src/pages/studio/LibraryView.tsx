@@ -38,6 +38,7 @@ export default function LibraryView() {
   const [kind, setKind] = useState<LibraryKind | "">("");
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [asRecording, setAsRecording] = useState(false); // pick flow: next upload marked as a screen recording
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ item: LibraryItem; url: string } | null>(null);
   const [deleting, setDeleting] = useState<LibraryItem | null>(null);
@@ -62,14 +63,21 @@ export default function LibraryView() {
     setUploading(true);
     setError(null);
     try {
-      await uploadLibraryItem(file, deriveKind(file), null);
+      await uploadLibraryItem(file, deriveKind(file), null, undefined, asRecording ? { screenRecording: true } : undefined);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setUploading(false);
+      setAsRecording(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+
+  const pickFile = (recording: boolean) => {
+    if (uploading) return;
+    setAsRecording(recording);
+    fileRef.current?.click();
   };
 
   const openPreview = async (item: LibraryItem) => {
@@ -120,14 +128,23 @@ export default function LibraryView() {
             </option>
           ))}
         </select>
-        <button onClick={() => fileRef.current?.click()} disabled={uploading} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${"bg-[#8505D5] text-white"} disabled:opacity-40`}>
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload
+        <button onClick={() => pickFile(false)} disabled={uploading} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${"bg-[#8505D5] text-white"} disabled:opacity-40`}>
+          {uploading && !asRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload
+        </button>
+        <button
+          onClick={() => pickFile(true)}
+          disabled={uploading}
+          className="flex items-center gap-2 rounded-lg border border-[#8505D5]/50 bg-[#8505D5]/10 px-3 py-2 text-sm text-[#d9b3ff] hover:bg-[#8505D5]/20 disabled:opacity-40"
+        >
+          {uploading && asRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+          Screen recording
         </button>
         <input
           ref={fileRef}
           type="file"
           hidden
           accept="image/*,video/*,audio/*,application/pdf,text/plain"
+          title={asRecording ? "Upload will be marked as a screen recording" : undefined}
           onChange={(e) => void upload(e.target.files?.[0])}
         />
       </div>
@@ -146,9 +163,13 @@ export default function LibraryView() {
 
       {items !== null && items.length === 0 && (
         <div className={`rounded-xl p-8 text-center text-sm text-white/60 ${CARD}`}>
-          Nothing stored yet — upload source material or let the generate workflows add finished assets here.
+          Nothing stored yet — upload source material (screen recordings, footage, stills) or let the generate workflows add finished assets here.
         </div>
       )}
+
+      <p className="text-[11px] text-white/40">
+        Uploaded screen recordings are visible to every section — the Creative Assistant reads them from this library, and any video-ad shot can use one directly instead of a generated clip.
+      </p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(items ?? []).map((it) => (
@@ -157,6 +178,11 @@ export default function LibraryView() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium">{it.name}</span>
+                {(it.metadata as Record<string, unknown> | undefined)?.screenRecording === true && (
+                  <Badge className="shrink-0 border-[#8505D5]/40 bg-[#8505D5]/10 text-[10px] text-[#d9b3ff]" variant="outline">
+                    screen recording
+                  </Badge>
+                )}
                 <Badge variant="outline" className="shrink-0 border-white/20 text-[10px] text-white/70">
                   {it.status}
                 </Badge>

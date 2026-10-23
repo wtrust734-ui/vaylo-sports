@@ -3,85 +3,1013 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Vaylo Ads Studio — Site Preview</title>
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0b0c15" />
+<meta name="description" content="Vaylo Sports Ad Studio — the creative studio for your app's ads. Brief, generate, preview and export every spot from one place." />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Vaylo Sports — Ad Studio" />
+<meta property="og:description" content="Creative assistant, campaigns, research, asset library and brand settings for your app's advertising." />
+<title>Vaylo Sports — Ad Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%228%22%20fill%3D%22%230b0c15%22%2F%3E%3Cpath%20d%3D%22M8%2023V9l8%208%208-8v14%22%20fill%3D%22none%22%20stroke%3D%22%23a6f3ff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E" />
 <style>
   :root {
-    --bg:#07090f; --accent:#8505D7; --accent2:#b429ff;
-    --surface:rgba(255,255,255,.05); --surface2:rgba(255,255,255,.07);
-    --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.16);
-    --dim:rgba(255,255,255,.6); --dimmer:rgba(255,255,255,.35);
-    --ok:#4ade80; --warn:#eab308; --run:#60a5fa; --bad:#f87171;
-    --grad:linear-gradient(135deg,#8505D7 0%,#b429ff 55%,#5b8cff 115%);
+    --bg-0: #0b0c15;
+    --bg-1: #11131f;
+    --bg-2: #171a2a;
+    --glass: rgba(255, 255, 255, 0.04);
+    --glass-strong: rgba(255, 255, 255, 0.07);
+    --line: rgba(255, 255, 255, 0.06);
+    --line-strong: rgba(255, 255, 255, 0.14);
+    --accent: #5b8cff;
+    --accent-soft: rgba(91, 140, 255, 0.22);
+    --vaylo-cyan: #a6f3ff;
+    --vaylo-magenta: #ff5fc8;
+    --vaylo-blue: #4a8cff;
+    --vaylo-text: #f6f7fb;
+    --vaylo-muted: #9aa4bf;
   }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  html { scrollbar-color:rgba(133,5,213,.5) transparent; }
-  body {
-    background:var(--bg); color:#fff; font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    display:flex; min-height:100vh;
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    color: var(--vaylo-text);
+    background: radial-gradient(1200px 800px at 70% -10%, #1a1f3a 0%, transparent 60%),
+                radial-gradient(900px 700px at -10% 110%, #2a1340 0%, transparent 55%),
+                linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  .studio {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    padding: 32px 24px 88px;
+    isolation: isolate;
+  }
+
+  .studio-head {
+    max-width: 1180px;
+    margin: 0 auto 28px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .brand-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    padding: 8px 14px 8px 10px;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .brand-mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--vaylo-cyan), var(--vaylo-blue));
+    box-shadow: 0 0 16px rgba(166, 243, 255, 0.45), inset 0 0 8px rgba(10, 180, 220, 0.6);
+    position: relative;
+  }
+  .brand-mark::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.7), transparent 55%);
+  }
+
+  .brand-name {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.3px;
+    color: var(--vaylo-text);
+  }
+
+  .studio-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    background: linear-gradient(120deg, #ffffff 0%, var(--vaylo-cyan) 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .studio-sub {
+    font-size: 13px;
+    color: var(--vaylo-muted);
+    margin-top: 4px;
+  }
+
+  .stats {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .stat {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    padding: 10px 14px;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    min-width: 110px;
+  }
+  .stat-num {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--vaylo-cyan);
+  }
+  .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--vaylo-muted);
+    margin-top: 2px;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    aspect-ratio: 16 / 9;
+    border-radius: 28px;
+    background:
+      radial-gradient(600px 400px at 85% 20%, rgba(91, 140, 255, 0.18), transparent 60%),
+      radial-gradient(500px 350px at 15% 80%, rgba(255, 95, 200, 0.15), transparent 55%),
+      linear-gradient(180deg, #0f111e 0%, #11131f 60%, #15172b 100%);
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+  }
+  .stage-frame {
+    position: absolute;
+    inset: 0;
+    border-radius: 28px;
+    padding: 14px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), transparent 30%),
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.015) 2px, rgba(255,255,255,0.015) 4px);
+  }
+  .stage .video-wrap {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 18px;
+    display: block;
+  }
+  .stage-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 22px 22px 28px;
+    pointer-events: none;
+  }
+  .stage-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--vaylo-cyan);
+  }
+  .stage-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 6px;
+    color: #fff;
+    line-height: 1.2;
+  }
+  .stage-meta {
+    font-size: 12px;
+    color: var(--vaylo-muted);
+    margin-top: 6px;
+  }
+  .stage-controls {
+    position: absolute;
+    bottom: 18px;
+    right: 18px;
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+  }
+  .stage-controls button {
+    background: var(--glass-strong);
+    border: 1px solid var(--line-strong);
+    color: var(--vaylo-text);
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stage-controls button:hover {
+    background: var(--glass-strong);
+  }
+
+  .studio-body {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 24px;
+    padding-bottom: 40px;
+  }
+
   .sidebar {
-    width:230px; flex-shrink:0; border-right:1px solid var(--line);
-    padding:16px 12px; display:flex; flex-direction:column;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
-  .brand { display:flex; align-items:center; gap:10px; padding:8px; margin-bottom:14px; }
-  .brand .logo { width:34px; height:34px; border-radius:10px; background:var(--grad); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; flex-shrink:0; }
-  .brand b { font-size:15px; display:block; }
-  .brand small { color:var(--dim); font-size:11px; }
-  .nav a { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; color:var(--dim); text-decoration:none; font-size:13.5px; cursor:pointer; }
-  .nav a:hover { background:rgba(255,255,255,.06); color:#fff; }
-  .nav a.active { background:rgba(133,5,213,.22); color:#fff; font-weight:600; }
-  .nav .ico { width:16px; text-align:center; opacity:.9; }
-  .main { flex:1; padding:24px; display:flex; flex-direction:column; gap:16px; }
-  .card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; }
-  .card h1 { font-size:20px; margin-bottom:8px; }
-  .tag { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; background:var(--accent); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
-  .item { background:var(--surface2); border:1px solid var(--line2); border-radius:10px; padding:14px; }
-  .item .label { color:var(--dim); font-size:12px; }
-  .footer { margin-top:auto; padding-top:16px; color:var(--dim); font-size:12px; }
-  @media (max-width:640px) { .sidebar { width:100%; border-right:none; border-bottom:1px solid var(--line); flex-direction:row; gap:8px; padding:8px; } .nav { flex-wrap:wrap; } }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    color: var(--vaylo-muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .nav-item:hover { background: var(--glass); color: var(--vaylo-text); }
+  .nav-item.active {
+    background: var(--glass-strong);
+    color: var(--vaylo-cyan);
+    border-color: var(--line-strong);
+  }
+  .nav-item .nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--vaylo-muted);
+    display: none;
+  }
+  .nav-item.active .nav-icon { color: var(--vaylo-cyan); }
+  .nav-item .nav-label { flex: 1; min-width: 0; }
+  .nav-item .nav-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--vaylo-muted);
+    background: var(--glass);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .nav-item.active .nav-badge {
+    color: var(--vaylo-cyan);
+    background: var(--accent-soft);
+    border-color: var(--vaylo-blue);
+  }
+  .nav-item.logout {
+    margin-top: auto;
+    color: var(--vaylo-muted);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    padding: 11px 14px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .nav-item.logout:hover { background: rgba(255, 95, 200, 0.12); color: #ff5fc8; }
+
+  .panel { display: flex; flex-direction: column; gap: 16px; }
+  .panel-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--vaylo-muted);
+    background: var(--glass);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tab:hover { background: var(--glass-strong); color: var(--vaylo-text); }
+  .tab.active { background: var(--accent-soft); color: var(--vaylo-cyan); border-color: var(--vaylo-blue); }
+
+  .goto-btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #04060a;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .goto-btn:hover { opacity: 0.9; }
+  .goto-btn.secondary {
+    background: transparent;
+    color: var(--vaylo-cyan);
+    border: 1px solid var(--line-strong);
+  }
+  .goto-btn.secondary:hover { background: var(--accent-soft); }
+
+  .chat-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 320px;
+  }
+  .msg-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .msg {
+    max-width: 80%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    position: relative;
+  }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #04060a; border-bottom-right-radius: 4px; }
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    color: var(--vaylo-text);
+    border-bottom-left-radius: 4px;
+  }
+  .msg .msg-role {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--vaylo-muted);
+    margin-bottom: 4px;
+  }
+  .msg .msg-body { white-space: pre-wrap; word-break: break-word; }
+  .msg .msg-plan {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .msg .msg-plan span {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--vaylo-cyan);
+    background: var(--accent-soft);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .composer {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px 14px;
+  }
+  .composer input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--vaylo-text);
+    font-size: 14px;
+    outline: none;
+    padding: 4px 0;
+  }
+  .composer input::placeholder { color: var(--vaylo-muted); }
+  .composer button {
+    background: var(--accent);
+    color: #04060a;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .composer button:hover { opacity: 0.9; }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .artifact {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .artifact:hover { background: var(--glass-strong); border-color: var(--line-strong); }
+  .artifact .artifact-thumb {
+    height: 72px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  .artifact .artifact-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--vaylo-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .artifact .artifact-status {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--vaylo-muted);
+    margin-top: 4px;
+  }
+
+  .session-list { display: flex; flex-direction: column; gap: 6px; }
+  .session {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .session:hover { background: var(--glass); }
+  .session.active { background: var(--glass-strong); border-color: var(--accent); }
+  .session .session-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--vaylo-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .session .session-time { font-size: 11px; color: var(--vaylo-muted); }
+
+  .empty { text-align: center; padding: 48px 20px; color: var(--vaylo-muted); }
+  .empty .empty-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.6; }
+  .empty p { font-size: 14px; color: var(--vaylo-text); }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar button {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--glass);
+    color: var(--vaylo-text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toolbar button:hover { background: var(--glass-strong); }
+  .toolbar button.primary { background: var(--accent); border-color: var(--accent); color: #04060a; }
+
+  @media (max-width: 760px) {
+    .studio-body { grid-template-columns: 1fr; }
+    .sidebar { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+    .nav-item { flex: 1 1 auto; min-width: 0; padding: 8px 10px; font-size: 13px; }
+    .nav-item .nav-icon { display: inline-flex; }
+    .nav-item .nav-badge { display: none; }
+    .studio-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .stage { border-radius: 18px; }
+    .studio { padding: 20px 16px 60px; }
+  }
+  @media (max-width: 480px) {
+    .stats { flex-wrap: wrap; gap: 8px; }
+    .stat { min-width: initial; }
+  }
+/* ---- preview additions: semantics, focus, and the pieces the layout needs ---- */
+
+  :root { color-scheme: dark; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .skip-link {
+    position: absolute;
+    left: 16px; top: -60px;
+    z-index: 50;
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #04060a;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: top 0.15s;
+  }
+  .skip-link:focus { top: 16px; }
+
+  :focus-visible {
+    outline: 2px solid var(--vaylo-cyan);
+    outline-offset: 2px;
+  }
+
+  /* the studio nav, tabs and sessions are real buttons */
+  .nav-item,
+  .session,
+  .tab,
+  .toolbar button,
+  .composer button,
+  .goto-btn,
+  .stage-controls button {
+    font-family: inherit;
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .nav-item,
+  .session {
+    width: 100%;
+    text-align: left;
+  }
+  .nav-item:hover,
+  .session:hover { background: var(--glass); }
+
+  /* nav icons are meaningful on every breakpoint */
+  .nav-item .nav-icon { display: inline-flex; }
+  .nav-item .nav-badge { flex-shrink: 0; }
+
+  /* tab strip + panels */
+  .tab-list { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tab-panel { display: flex; flex-direction: column; gap: 16px; }
+  .tab-panel[hidden] { display: none; }
+
+  /* keep the spot preview short so the studio itself stays above the fold */
+  .stage {
+    aspect-ratio: 16 / 7;
+    max-height: 420px;
+  }
+
+  /* the conversation log scrolls instead of pushing the page down */
+  .chat-wrap {
+    flex: 1 1 auto;
+    max-height: min(52vh, 460px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .composer { margin-top: auto; }
+
+  .studio-foot {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-top: 4px;
+    color: var(--vaylo-muted);
+    font-size: 12px;
+  }
+
+  /* transient status message */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: min(90vw, 460px);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--glass-strong);
+    border: 1px solid var(--line-strong);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--vaylo-text);
+    font-size: 13px;
+    z-index: 60;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  .toast[hidden] { display: none; }
+
+  @media (max-width: 760px) {
+    .stage { aspect-ratio: 16 / 9; max-height: none; }
+  }
+
+  /* ---- phone: the conversation is the point, so everything above it gets
+     compressed into scrollable strips instead of stacked blocks. Without this
+     the session list and the nav push the chat panel ~1000px down the page. ---- */
+  @media (max-width: 760px) {
+    /* stats become one compact row so they cost a single line */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      width: 100%;
+    }
+    .stat { min-width: 0; padding: 7px 6px; text-align: center; }
+    .stat-num { font-size: 15px; }
+    .stat-label { font-size: 9px; letter-spacing: 0.4px; margin-top: 0; }
+
+    /* each sidebar group becomes one horizontally scrollable strip */
+    .sidebar { gap: 8px; }
+    .session-list,
+    .sidebar > nav[aria-label="Studio sections"] {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .session-list::-webkit-scrollbar,
+    .sidebar > nav[aria-label="Studio sections"]::-webkit-scrollbar { display: none; }
+
+    .session,
+    .sidebar > nav[aria-label="Studio sections"] .nav-item {
+      flex: 0 0 auto;
+      width: auto;
+      white-space: nowrap;
+    }
+    .session { padding: 10px 12px; }
+
+    /* the toolbar and sign-out share a row so they cost one line, not three */
+    .sidebar { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+    .session-list,
+    .sidebar > nav[aria-label="Studio sections"] { grid-column: 1 / -1; }
+    .toolbar { grid-column: 1; }
+    .nav-item.logout { grid-column: 2; margin-top: 0; padding: 11px 10px; }
+    .nav-item.logout .nav-label { display: none; }
+
+    .studio-body { gap: 14px; }
+    .panel { gap: 12px; }
+
+    /* the panel carries the tab strip, so it leads on a phone; the sidebar
+       (session history, shortcuts) follows the conversation */
+    .studio-body .panel { order: -1; }
+
+    /* the input stays reachable: it sticks to the bottom of the viewport
+       while the panel is on screen instead of falling below the fold */
+    .composer {
+      position: sticky;
+      bottom: 8px;
+      z-index: 20;
+      background: var(--bg-1);
+      box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  /* ---- phone: every tappable thing gets a 40px target, and the composer
+     input uses a 16px font so iOS does not zoom the page on focus ---- */
+  @media (max-width: 760px) {
+    .toolbar button,
+    .nav-item,
+    .tab,
+    .session,
+    .composer button,
+    .stage-controls button,
+    .goto-btn { min-height: 40px; }
+    .nav-item,
+    .session { padding-top: 11px; padding-bottom: 11px; }
+    .composer { padding: 6px 12px; }
+    .composer input { min-height: 40px; font-size: 16px; }
+    .composer button { padding: 10px 18px; }
+  }
+
 </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="brand">
-      <div class="logo">V</div>
-      <div><b>Vaylo Ads Studio</b><small>Site preview</small></div>
+<a class="skip-link" href="#studio-main">Skip to studio</a>
+<div class="studio">
+
+  <header class="studio-head">
+    <div class="brand-line">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="brand-name">Vaylo Sports</div>
     </div>
-    <div class="nav">
-      <a class="active" href="#chat"><span class="ico">💬</span>Chat</a>
-      <a href="#campaigns"><span class="ico">📋</span>Campaigns</a>
-      <a href="#library"><span class="ico">📦</span>Library</a>
-      <a href="#research"><span class="ico">🔍</span>Research</a>
-      <a href="#brand"><span class="ico">🎨</span>Brand</a>
+    <div>
+      <h1 class="studio-title">Ad Studio</h1>
+      <p class="studio-sub">Creative assistant — brief, generate, preview and export every spot.</p>
     </div>
-  </div>
-  <main class="main">
-    <div class="card">
-      <h1>Vaylo Ads Studio</h1>
-      <p class="tag">Site preview</p>
-      <p>The ads creative studio: chat, campaigns, research workspace, library, and brand settings — the same surfaces shown in <code>0.8.html</code>, rebuilt as a static site preview so a fresh project opens in the browser.</p>
-      <div class="grid">
-        <div class="item"><div class="label">Chat</div>Quick request composer.</div>
-        <div class="item"><div class="label">Campaigns</div>New campaign + search + delete.</div>
-        <div class="item"><div class="label">Library</div>Upload / list library assets.</div>
-        <div class="item"><div class="label">Research</div>Competitor dossier workspace.</div>
-        <div class="item"><div class="label">Brand</div>Brand settings + CTAs.</div>
+    
+
+  
+
+  <div class="studio-body">
+
+    <aside class="sidebar">
+      
+      <nav class="session-list" aria-label="Recent sessions">
+        <div class="empty">
+          <p>No sessions yet - new sessions land here.</p>
+        </div>
+      </nav>
+
+      <div class="toolbar">
+        <button type="button" class="primary" id="new-session">New session</button>
+        <button type="button" id="open-settings">Settings</button>
       </div>
-    </div>
-    <div class="card">
-      <div><span class="tag">v0.8</span></div>
-      <p>Standalone preview built alongside the studio app. The same source-tree styling and layout as the deployed site, without a build step.</p>
-    </div>
-    <div class="card">
-      <h2>Quick start</h2>
-      <ol style="color:var(--dim); font-size:13px; line-height:1.6;">
-        <li>Open this file in a browser (double-click or drag it in).</li>
-        <li>Click a nav link to jump sections.</li>
-        <li>Serve the folder with <code>npx http-server</code> for a full site.</li>
-      </ol>
-    </div>
-  </main>
-  <div class="footer">Vaylo Sports Ads Studio — site preview · dark navy / purple theme</div>
+
+      <nav aria-label="Studio sections">
+        <button type="button" class="nav-item active" data-view="chat" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">💬</span>
+          <span class="nav-label">Creative Assistant</span>
+          
+        </button>
+        <button type="button" class="nav-item" data-view="library">
+          <span class="nav-icon" aria-hidden="true">🎬</span>
+          <span class="nav-label">Asset Library</span>
+          
+        </button>
+        <button type="button" class="nav-item" data-view="brand">
+          <span class="nav-icon" aria-hidden="true">🎨</span>
+          <span class="nav-label">Brand Settings</span>
+        </button>
+        <button type="button" class="nav-item" data-view="research">
+          <span class="nav-icon" aria-hidden="true">📡</span>
+          <span class="nav-label">Competitor Research</span>
+        </button>
+      </nav>
+
+      <button type="button" class="nav-item logout" id="sign-out">
+        <span class="nav-icon" aria-hidden="true">🚪</span>
+        <span class="nav-label">Sign out</span>
+      </button>
+    </aside>
+
+    <main class="panel" id="studio-main" tabindex="-1">
+      <div class="panel-top">
+        <div class="tab-list" role="tablist" aria-label="Studio views">
+          <button type="button" class="tab active" role="tab" id="tab-chat" data-tab="chat" aria-selected="true" aria-controls="panel-chat">Chat</button>
+          <button type="button" class="tab" role="tab" id="tab-library" data-tab="library" aria-selected="false" aria-controls="panel-library" tabindex="-1">Library</button>
+          <button type="button" class="tab" role="tab" id="tab-brand" data-tab="brand" aria-selected="false" aria-controls="panel-brand" tabindex="-1">Brand</button>
+          <button type="button" class="tab" role="tab" id="tab-research" data-tab="research" aria-selected="false" aria-controls="panel-research" tabindex="-1">Research</button>
+        </div>
+        <button type="button" class="goto-btn secondary" id="back-to-chat">← Back to session</button>
+      </div>
+
+      <section class="tab-panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+        <div class="chat-wrap" id="chat-log" role="log" aria-live="polite" aria-label="Conversation with the creative assistant">
+          <div class="msg-row">
+            <div class="msg assistant">
+              <div class="msg-role">Assistant</div>
+              <div class="msg-body">Hi — I'll build your ad campaign. Tell me the product, the platform (Meta / TikTok / YouTube), the target, and the delivery goal.</div>
+            </div>
+          </div>
+        </div>
+        <form class="composer" id="composer" autocomplete="off">
+          <label class="sr-only" for="composer-input">Message the creative assistant</label>
+          <input id="composer-input" name="message" type="text" maxlength="400" placeholder="Ask me to write, cut, or export a spot…" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section class="tab-panel" id="panel-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+        
+        <div class="workspace">
+          <div class="empty">
+            <div class="empty-icon" aria-hidden="true">🗂️</div>
+            <p>No assets yet - anything you create in the live studio shows up here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-research" role="tabpanel" aria-labelledby="tab-research" hidden>
+        <p class="studio-sub">Competitor dossiers — every claim is tied to the page it came from. Ad-library APIs stay blocked until the owner approvals land.</p>
+        
+        <div class="workspace">
+          <div class="empty">
+            <div class="empty-icon" aria-hidden="true">📡</div>
+            <p>No competitor dossiers yet - request one in the live studio; every claim comes with its source.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-brand" role="tabpanel" aria-labelledby="tab-brand" hidden>
+        <div class="empty">
+          <div class="empty-icon" aria-hidden="true">🎨</div>
+          <p>Brand studio — fonts, palette and ad preferences. Your house style is Vaylo’s own: dark navy foundation, purple #8505D5 accent, cyan highlight type.</p>
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <p class="studio-foot">Static preview - UI only, every panel here is empty on purpose. The live studio is at /ad-studio inside the Vaylo Sports app and talks to the real Vaylo Ads backend.</p>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script>
+(function () {
+  "use strict";
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav-item[data-view]'));
+  var sessions = Array.prototype.slice.call(document.querySelectorAll('.session'));
+  var chatLog = document.getElementById('chat-log');
+  var composer = document.getElementById('composer');
+  var input = document.getElementById('composer-input');
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+
+  /* ---------- narrow screens: the long placeholder gets clipped, so use a
+     shorter one that actually fits the input ---------- */
+  var longPlaceholder = input.placeholder;
+  var shortPlaceholder = 'Write, cut or export a spot…';
+  var narrow = window.matchMedia('(max-width: 760px)');
+  function applyPlaceholder() {
+    input.placeholder = narrow.matches ? shortPlaceholder : longPlaceholder;
+  }
+  applyPlaceholder();
+  if (narrow.addEventListener) narrow.addEventListener('change', applyPlaceholder);
+  else if (narrow.addListener) narrow.addListener(applyPlaceholder);
+
+  /* ---------- tabs ---------- */
+  function syncNav(key) {
+    navItems.forEach(function (item) {
+      var on = item.getAttribute('data-view') === key;
+      item.classList.toggle('active', on);
+      if (on) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    });
+  }
+
+  function selectTab(key, moveFocus) {
+    var target = tabs.filter(function (t) { return t.getAttribute('data-tab') === key; })[0];
+    if (!target) return;
+    tabs.forEach(function (tab) {
+      var on = tab === target;
+      tab.classList.toggle('active', on);
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      var panel = document.getElementById(tab.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !on;
+    });
+    /* The sidebar mirrors the tabs, so keep the highlighted nav item in step
+       whichever side the user clicked. */
+    syncNav(key);
+    if (moveFocus) target.focus();
+  }
+
+  tabs.forEach(function (tab, index) {
+    tab.addEventListener('click', function () { selectTab(tab.getAttribute('data-tab')); });
+    tab.addEventListener('keydown', function (e) {
+      var next = null;
+      if (e.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
+      else if (e.key === 'ArrowLeft') next = tabs[(index - 1 + tabs.length) % tabs.length];
+      else if (e.key === 'Home') next = tabs[0];
+      else if (e.key === 'End') next = tabs[tabs.length - 1];
+      if (!next) return;
+      e.preventDefault();
+      selectTab(next.getAttribute('data-tab'), true);
+    });
+  });
+
+  /* ---------- sidebar nav mirrors the tabs ---------- */
+  navItems.forEach(function (item) {
+    item.addEventListener('click', function () {
+      selectTab(item.getAttribute('data-view'));
+    });
+  });
+
+  /* ---------- sessions ---------- */
+  function setSession(session) {
+    sessions.forEach(function (other) {
+      var on = other === session;
+      other.classList.toggle('active', on);
+      if (on) other.setAttribute('aria-current', 'true');
+      else other.removeAttribute('aria-current');
+    });
+  }
+
+  sessions.forEach(function (session) {
+    session.addEventListener('click', function () { setSession(session); });
+  });
+
+  var newSessionBtn = document.getElementById('new-session');
+  if (newSessionBtn) {
+    newSessionBtn.addEventListener('click', function () {
+      var list = document.querySelector('.session-list');
+      var session = document.createElement('button');
+      session.type = 'button';
+      session.className = 'session';
+      session.setAttribute('data-session', 'new-' + Date.now());
+      var title = document.createElement('span');
+      title.className = 'session-title';
+      title.textContent = 'Untitled session';
+      var time = document.createElement('span');
+      time.className = 'session-time';
+      time.textContent = 'just now';
+      session.appendChild(title);
+      session.appendChild(time);
+      session.addEventListener('click', function () { setSession(session); });
+      list.insertBefore(session, list.firstChild);
+      sessions = Array.prototype.slice.call(document.querySelectorAll('.session'));
+      setSession(session);
+      input.focus();
+    });
+  }
+
+  var settingsBtn = document.getElementById('open-settings');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', function () {
+      selectTab('brand');
+      toast('Brand settings are read-only in the static preview.');
+    });
+  }
+
+  var backBtn = document.getElementById('back-to-chat');
+  if (backBtn) {
+    backBtn.addEventListener('click', function () {
+      selectTab('chat');
+      input.focus();
+    });
+  }
+
+  /* ---------- conversation ---------- */
+  function appendMessage(role, text) {
+    var row = document.createElement('div');
+    row.className = 'msg-row';
+    var msg = document.createElement('div');
+    msg.className = 'msg ' + role;
+    var roleEl = document.createElement('div');
+    roleEl.className = 'msg-role';
+    roleEl.textContent = role === 'user' ? 'You' : 'Assistant';
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'msg-body';
+    bodyEl.textContent = text;
+    msg.appendChild(roleEl);
+    msg.appendChild(bodyEl);
+    row.appendChild(msg);
+    chatLog.appendChild(row);
+  }
+
+  function send() {
+    var text = input.value.trim();
+    if (!text) return;
+    appendMessage('user', text);
+    appendMessage('assistant', 'Noted — "' + text + '" is queued for the creative assistant. In the live studio this is where the cost quote and the first three directions arrive.');
+    input.value = '';
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  if (composer) {
+    composer.addEventListener('submit', function (e) {
+      e.preventDefault();
+      send();
+    });
+  }
+
+  /* ---------- stage + sign out ---------- */
+  var previewBtn = document.getElementById('stage-preview');
+  if (previewBtn) {
+    previewBtn.addEventListener('click', function () {
+      toast('Video playback is not wired up in the static preview.');
+    });
+  }
+  var exportBtn = document.getElementById('stage-export');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function () {
+      toast('Export runs in the live studio once a spot is approved.');
+    });
+  }
+  var signOutBtn = document.getElementById('sign-out');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', function () {
+      toast('Sign out is disabled in the static preview.');
+    });
+  }
+
+  /* ---------- toast ---------- */
+  function toast(message) {
+    toastEl.textContent = message;
+    toastEl.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.hidden = true; }, 3200);
+  }
+})();
+</script>
 </body>
 </html>

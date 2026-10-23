@@ -16,8 +16,6 @@ import {
   SlideAction,
 } from "@/components/ui/section";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
-import StarterOfferCard from "@/components/dashboard/StarterOfferCard";
-import RaceOfferCard from "@/components/dashboard/RaceOfferCard";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -169,10 +167,6 @@ const Index = () => {
         </motion.div>
       </header>
 
-      <StarterOfferCard />
-
-      <RaceOfferCard />
-
       <section className="px-5 pb-5 sm:pb-6" aria-label="Your performance">
         <VprHero />
       </section>
@@ -233,7 +227,15 @@ const ReadinessStrip = () => {
             beside it is content-sized, so at 390px "Check in" was breaking
             across two lines inside its own button — a two-line pill for a
             two-word label. A control label should never wrap. */}
-        <SlideAction onClick={() => navigate("/recovery")}>{t("dashboard.checkIn")}</SlideAction>
+        {/* A visual twin of SlideAction, not SlideAction itself: the whole
+            strip is one <button> (navigation lives here), and a button inside
+            a button is invalid DOM — React warns and assistive tech gets two
+            targets for one action. The pill here is decoration; the pill as a
+            real control stays in the insights rows, which are not buttons. */}
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary">
+          {t("dashboard.checkIn")}
+          <ChevronRight size={12} aria-hidden />
+        </span>
       </button>
     );
   }

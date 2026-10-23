@@ -33,7 +33,7 @@ export default function ProfilePicture({ src, onUploaded, className }: ProfilePi
     setProgress(0);
     setError(null);
     setPreview(null);
-    inputRef.current?.value && (inputRef.current.value = "");
+    if (inputRef.current) inputRef.current.value = "";
   };
 
   const handleFile = async (file: File | null) => {
@@ -44,7 +44,7 @@ export default function ProfilePicture({ src, onUploaded, className }: ProfilePi
     if (file.size > PROFILE_PICTURE_LIMIT_MB * 1024 * 1024) {
       setError(`Picture must be under ${PROFILE_PICTURE_LIMIT_MB} MB`);
       setPicking(false);
-      inputRef.current?.value && (inputRef.current.value = "");
+      if (inputRef.current) inputRef.current.value = "";
       return;
     }
     setPicking(false);
@@ -63,7 +63,7 @@ export default function ProfilePicture({ src, onUploaded, className }: ProfilePi
       // Discriminated union: the failure shape carries the reason.
       setError(cameraUploadErrorMessage(result.reason));
       setProgress(0);
-      inputRef.current?.value && (inputRef.current.value = "");
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
 

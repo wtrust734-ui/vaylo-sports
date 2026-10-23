@@ -226,6 +226,10 @@ export default function Onboarding() {
 
 
   return (
+    // A page-height flex column so the bar below is always painted — on a tall
+    // viewport this leaves clean empty space under a short step, which is the
+    // intent. The column is NOT the scroll box; the document is, which is what
+    // lets the action bar sit in normal flow (see the comment on it).
     <div className="min-h-screen bg-background flex flex-col">
       <div className="px-5 pt-6 pb-2">
         <div className="flex items-center gap-2 mb-2">
@@ -249,7 +253,17 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="flex-1 px-5 pt-6 max-w-md w-full mx-auto">
+      {/* The step body fills the space between the progress header and the
+          action bar. It is NOT its own scroll box: as a flex child with `flex-1`
+          inside a page-height column it just grows to fit its content, and the
+          *document* scrolls. That matters because the bar below is in normal
+          flow rather than pinned — a long step pushes the bar down the page and
+          the scroll brings it, and every control stays reachable. A fixed bar
+          would overlap this box's lower ~125px (the last sport/goal row), which
+          left "Other" centred under Continue and untappable at the top of a
+          320x568 screen. */}
+      <div className="flex-1 px-5 pt-6 pb-4 max-w-md w-full mx-auto">
+        {/* step body */}
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -531,16 +545,22 @@ export default function Onboarding() {
         </AnimatePresence>
       </div>
 
-      {/* The action bar stays reachable: sticky so a long step (equipment,
-          preview) never hides it off-screen, and padded with the same
-          --vaylo-inset-bottom the tab bar and every bottom sheet use, because
-          on Android 15+ (targetSdk 36) the WebView runs edge-to-edge and a bar
-          sitting on the raw viewport bottom is inside the gesture/3-button nav
-          strip — taps there are swallowed by the system, which is what made
-          Continue feel impossible to hit. `p-5` + `pb-[...]` mirrors
+      {/* The action bar sits in normal flow at the bottom of the page-height
+          column, NOT sticky/fixed. A bar pinned to the viewport bottom paints
+          over the content behind it, and on a short phone (320x568) that
+          overlap lands squarely on the last row of a tall step — the audit
+          found the sport grid's final options sitting under Continue and
+          unclickable, because the pinned bar won the hit-test. In normal flow
+          the bar never overlaps anything: a long step pushes it down the page
+          and the document scroll brings it into view, and on a short step it
+          rests below the fold where the scroll also reaches it. The same
+          --vaylo-inset-bottom padding is kept because on Android 15+
+          (targetSdk 36) the WebView runs edge-to-edge and a bar sitting on the
+          raw viewport bottom is inside the gesture/3-button nav strip, where
+          taps are swallowed by the system. `p-5` + `pb-[...]` mirrors
           CreditTopUpSheet: directional utilities win over the shorthand in
           Tailwind's cascade. */}
-      <div className="sticky bottom-0 z-10 p-5 pb-[max(1.25rem,var(--vaylo-inset-bottom))] max-w-md w-full mx-auto flex gap-2 bg-background border-t border-border/60">
+      <div className="p-5 pb-[max(1.25rem,var(--vaylo-inset-bottom))] max-w-md w-full mx-auto flex gap-2 bg-background border-t border-border/60">
         {step > 0 && (
           <Button variant="outline" onClick={() => setStep(step - 1)} className="h-12 px-4">
             <ChevronLeft className="h-4 w-4" />

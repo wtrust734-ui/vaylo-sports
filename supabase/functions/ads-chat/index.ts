@@ -92,16 +92,46 @@ interface HistoryRow {
   content: string;
 }
 
-function buildModelMessages(history: HistoryRow[], content: string) {
+/**
+ * The owner's asset library, compact and bounded, injected into the model's
+ * context so the brain reasons over REAL uploaded files — screen recordings,
+ * footage, generated assets — instead of inventing them. Owner-scoped RLS
+ * read, capped to the 20 newest rows, and only the fields the model needs.
+ */
+async function loadLibraryContext(db: ReturnType<typeof admin>, userId: string): Promise<string> {
+  try {
+    const { data, error } = await db
+      .from("ad_library_items")
+      .select("id, kind, name, status, metadata")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error || !data || data.length === 0) return "";
+    const lines = data.map((item) => {
+      const meta = (item.metadata ?? {}) as { screenRecording?: boolean };
+      return `- ${item.name} (${item.kind}${meta.screenRecording ? ", screen recording" : ""}, ${item.status})`;
+    });
+    return `Owner's asset library (real stored files, newest first — reference these by name, never invent assets):
+${lines.join("\n")}`;
+  } catch {
+    // A library read must never take chat down; the assistant works without it.
+    return "";
+  }
+}
+
+function buildModelMessages(history: HistoryRow[], content: string, libraryContext: string) {
+  const system = [SYSTEM_PROMPT, `Brand context: ${BRAND_CONTEXT}`, libraryContext]
+    .filter(Boolean)
+    .join("\n\n");
   return [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\nBrand context: ${BRAND_CONTEXT}` },
+    { role: "system", content: system },
     ...history.slice(-HISTORY_LIMIT).map((h) => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.content }))
       .filter((m) => m.role !== "system"),
     { role: "user", content },
   ];
 }
 
-async function classifyWithModel(history: HistoryRow[], content: string): Promise<Classification | null> {
+async function classifyWithModel(history: HistoryRow[], content: string, libraryContext = ""): Promise<Classification | null> {
   if (!OPENAI_API_KEY) return null;
   try {
     const controller = new AbortController();
@@ -111,7 +141,7 @@ async function classifyWithModel(history: HistoryRow[], content: string): Promis
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODELS.MINI,
-        messages: buildModelMessages(history, content),
+        messages: buildModelMessages(history, content, libraryContext),
         temperature: 1,
         response_format: { type: "json_object" },
       }),
@@ -219,7 +249,8 @@ Deno.serve(async (req) => {
     await db.from("ad_chat_sessions").update({ updated_at: new Date().toISOString() }).eq("id", sessionId);
 
     const priorHistory: HistoryRow[] = (history ?? []).map((h) => ({ role: h.role, content: h.content }));
-    const modelResult = await classifyWithModel(priorHistory, content);
+    const libraryContext = await loadLibraryContext(db, userId);
+    const modelResult = await classifyWithModel(priorHistory, content, libraryContext);
     const localResult = classifyLocal(content);
 
     // Model wins when it produced a valid plan; the rules classify the
@@ -238,6 +269,16 @@ Deno.serve(async (req) => {
     }
 
     let reply = fallbackReply(classification);
+
+    // Video requests acknowledge the owner's real uploaded screen recordings
+    // so the assistant answers with files that exist, never invented ones.
+    const wantsVideo = classification.steps.some((s) => s.type === "video_ad");
+    const hasRecording = libraryContext.includes(", screen recording");
+    if (wantsVideo && hasRecording) {
+      reply += " Your uploaded screen recordings are in the Asset Library; shots can use them directly in the Video Ads workspace — no Veo spend is needed for those shots.";
+    } else if (wantsVideo) {
+      reply += " If you want app screen-recording footage inside the ad, upload it in the Asset Library first — library clips cover shots directly with no Veo spend.";
+    }
 
     // ---- research-aware routing (Prompt 3) ----------------------------------
     // A research step creates a REAL queued project the Research workspace

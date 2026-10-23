@@ -192,57 +192,34 @@ describe("P0-5 legal and safety surfaces", () => {
   });
 });
 
-describe("P0-6 promotional surfaces are adult-only", () => {
-  it("keeps the promotional surfaces adult-only while buying itself is open", () => {
-    // Changed deliberately on 2026-10-04: the owner opened purchasing to
-    // under-18 accounts, with an unconditional refund on request for any
-    // purchase made on one (legal/purchases.html section 8, legal/refunds.html
-    // section 4). What must NOT open is the promotion — a discount offer, a
-    // "double credits" push, a pick-for-you recommendation. Children's Code
-    // standard 37 is about nudging a young athlete to spend, and a listed price
-    // is not a nudge, so the two are now separated instead of sharing one gate.
+describe("P0-6 promotional surfaces are removed", () => {
+  it("promotional surfaces are gone; buying itself stays open", () => {
+    // Removed on 2026-10-22 at the owner's request: every promotional card (the
+    // dashboard Welcome Bundle and race offer, the Market starter row and
+    // double-credits push, the pick-for-you banner, the Challenges sponsored
+    // slot) is gone from the app. What the removal must NOT take with it:
+    // buying itself stays open to every age, and the under-18 note keeps
+    // saying refunds are unconditional.
     const market = read("src/pages/Market.tsx");
-// Purchasing itself is open to all ages, so all four promo gates read the
-    // same age helper as the dashboard banner. Unknown DOB is still "not adult"
-    // — that branch now only hides MERCHANT promotion, never the transaction.
-    expect(market).toContain('ageBand(profile?.date_of_birth) === "adult"');
-    // Unknown age must still count as NOT adult, matching the sponsored rule.
-    expect(market, "the starter-offer promo is no longer adult-only").toMatch(/isAdult && starterOffer/);
-    expect(market, "the double-credits promo is no longer adult-only").toMatch(/isAdult && doubleOffer/);
-    // The banner now also shows in the unlocks section, not only packs — but
-    // the property that matters is the age gate, not the section list. Assert
-    // the gate on the expression that renders it rather than pinning sections.
-    {
-      const at = market.indexOf("<FamilyPickBanner");
-      expect(at, "Market.tsx no longer renders FamilyPickBanner").toBeGreaterThan(-1);
-      const gate = market.slice(market.lastIndexOf("{", at), at);
-      expect(gate, "the recommendation banner is no longer adult-only").toMatch(/isAdult/);
-    }
-    // The buying controls must NOT be age-gated any more.
+    expect(market, "the starter-offer promo row is gone").not.toMatch(/isAdult && starterOffer/);
+    expect(market, "the double-credits LIVE banner is gone").not.toMatch(/doubleOffer|getDoubleCreditsOffer/);
+    expect(market, "the pick-for-you banner is gone").not.toContain("<FamilyPickBanner");
+    const index = read("src/pages/Index.tsx");
+    expect(index, "the dashboard Welcome Bundle card is gone").not.toContain("StarterOfferCard");
+    expect(index, "the dashboard race-offer card is gone").not.toContain("RaceOfferCard");
+    const challenges = read("src/pages/Challenges.tsx");
+    expect(challenges, "the sponsored slot is gone from Challenges").not.toContain("SponsoredSlot");
     expect(market, "the buying sections are age-gated again").not.toContain("canPurchase");
     expect(market, "the under-18 buying note is missing").toContain("GuardianNote");
   });
 
-  it("keeps the dashboard priced offer open to every age while merchant promos stay adult-only", () => {
-    const card = read("src/components/dashboard/StarterOfferCard.tsx");
-    // Renamed 2026-10-06: this test never asserted a child's offer was hidden.
-    // It asserts the opposite, and that is deliberate. Changed 2026-10-04, the
-    // owner opened purchasing to under-18 accounts with an unconditional refund
-    // on request for any purchase made on one (legal/purchases.html section 8,
-    // legal/refunds.html section 4). The dashboard Welcome Bundle is therefore
-    // open to every age: it is a priced item, not a nudge. Children's Code
-    // standard 37 is about pushing a young athlete to spend, and a listed price
-    // is not a push, so it is separated from MERCHANT promotion (a discount, a
-    // "double credits" push, a pick-for-you banner) which stays adult-only.
-    // The sibling test above pins that merchant split in Market.tsx.
-    expect(card).not.toMatch(/if \(!isAdult/);
-    expect(card).not.toContain('ageBand(profile?.date_of_birth) === "adult"');
-    // The card must still be reachable at all — a rename must not leave a
-    // component nobody renders, which would make this test protect nothing.
-    expect(card).toContain("export default StarterOfferCard");
+  it("removes the dashboard promo cards entirely", () => {
+    // The owner removed the Welcome Bundle card and every sibling promo on
+    // 2026-10-22; keeping the fair-purchase properties above is what protects
+    // the athlete now. This asserts neither card leaks back onto the dashboard.
     const index = read("src/pages/Index.tsx");
-    expect(index).toContain("import StarterOfferCard from");
-    expect(index).toContain("<StarterOfferCard />");
+    expect(index).not.toContain("StarterOfferCard");
+    expect(index).not.toContain("RaceOfferCard");
   });
 
   it("treats unknown date of birth as a minor everywhere", () => {

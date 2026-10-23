@@ -205,7 +205,10 @@ function ConfigBootFailureScreen() {
             try {
               window.location.reload();
             } catch {
-              window.location.href = window.location.href;
+              // reload() can throw in some webviews; re-navigating to the same
+              // URL is the reload fallback, written as replace() because
+              // assigning href to itself is the same statement in worse clothes.
+              window.location.replace(window.location.href);
             }
           }}
         >

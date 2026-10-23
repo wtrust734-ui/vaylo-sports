@@ -25,6 +25,12 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: "https://placeholder.supabase.co",
       VITE_SUPABASE_PUBLISHABLE_KEY: "placeholder-publishable-key",
+      // legalHostLayout asserts the app's legal links match the published
+      // site's layout (website/legal/<slug>/). The real base lives in .env,
+      // which CI does not have, and the module's unconfigured fallback is the
+      // edge-function URL whose path is a different thing entirely — so the
+      // suite needs a placeholder whose PATH is the one under test.
+      VITE_LEGAL_BASE_URL: "https://placeholder.example/legal",
     },
   },
   resolve: {

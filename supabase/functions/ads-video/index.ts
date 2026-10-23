@@ -352,18 +352,35 @@ async function jobStatusAction(body: Record<string, unknown>, userId: string, ad
   if (!jobId) return badReq("jobId is required");
   const { data, error } = await admin
     .from("ad_video_render_jobs")
-    .select("job_id, status, progress, error, storage_path, public_url")
+    .select("job_id, status, progress, error, storage_path, public_url, result")
     .eq("job_id", jobId)
     .eq("owner_id", userId)
     .single();
   if (error || !data) return jsonResp({ error: "Render job not found" }, 404);
   const row = data as Record<string, unknown>;
+
+  // A finished render is watched through a FRESHLY SIGNED URL on every status
+  // read: a signed URL persisted at report time expires, and a dead link is
+  // exactly the “success the user cannot see” failure that started this work.
+  // The row is already owner-scoped (eq owner_id), and the path is inside the
+  // owner's own folder by the same rule render-job-result enforces on write.
+  let watchUrl: string | null = typeof row.public_url === "string" && row.public_url.trim() ? row.public_url : null;
+  const storagePath = typeof row.storage_path === "string" && row.storage_path.trim() ? row.storage_path.trim() : "";
+  if (storagePath) {
+    const { data: signed } = await admin.storage.from("ads").createSignedUrl(storagePath.replace(/^ads\//, ""), 60 * 60 * 12);
+    if (signed?.signedUrl) watchUrl = signed.signedUrl;
+  }
+
+  // The editor's stage string (what Manus is doing right now) rides in the
+  // job's result jsonb while it works; surface it so the UI can show motion.
+  const stage = (row.result as { stage?: unknown } | null)?.stage;
   return jsonResp({
     jobId: row.job_id,
     status: row.status,
     progress: row.progress,
     error: row.error ?? null,
-    publicUrl: row.public_url ?? null,
+    stage: typeof stage === "string" ? stage : null,
+    publicUrl: watchUrl,
   });
 }
 
@@ -371,6 +388,53 @@ type AdminClient = ReturnType<typeof supabaseAdmin>;
 
 function supabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+}
+
+// ---------------------------------------------------------------------------
+// Private-asset resolution — screen recordings and narration live in the owner's
+// PRIVATE ads bucket, and the render worker only downloads http(s) URLs. Any
+// storage path passed by the caller is repaired into a signed URL here, but a
+// path is only ever signed when it points INSIDE ads/{ownerId}/… (the same
+// folder layout every upload path enforces), so one owner can never make this
+// function sign, read or lend a file belonging to someone else.
+// ---------------------------------------------------------------------------
+
+const ADS_BUCKET = "ads";
+
+/** A path that is a private ads-bucket object owned by the caller (not an
+ *  already-usable http(s)/data source such as a Veo clip URI). */
+export function isOwnerBucketPath(userId: string, raw: string | null | undefined): raw is string {
+  if (!raw) return false;
+  const s = raw.trim();
+  if (!s || /^https?:\/\//i.test(s) || /^data:/i.test(s)) return false;
+  const bare = s.replace(/^ads\//, "");
+  return bare.startsWith(`${userId}/`) && !bare.includes("..");
+}
+
+/** Signed download URL for an object the owner already has rights to; `null`
+ *  when storage refuses — callers must surface that, not silently drop it. */
+export async function signOwnerAsset(admin: AdminClient, userId: string, raw: string): Promise<string | null> {
+  const path = raw.trim().replace(/^ads\//, "");
+  const { data } = await admin.storage.from(ADS_BUCKET).createSignedUrl(path, 60 * 60 * 12);
+  return data?.signedUrl ?? null;
+}
+
+/** Replace every owner-owned storage path in a bag of render inputs with its
+ *  signed URL; paths that already resolve (Veo URIs) pass through unchanged.
+ *  A failure tones the whole render down: renderRequest is persisted so retry
+ *  after a fix needs no re-quote. */
+export async function resolveRenderSources(
+  admin: AdminClient,
+  userId: string,
+  paths: Record<string, string | undefined>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  for (const [key, raw] of Object.entries(paths)) {
+    if (!raw || !isOwnerBucketPath(userId, raw)) continue;
+    const url = await signOwnerAsset(admin, userId, raw);
+    if (!url) return { ok: false, error: `Could not create a signed link for the stored asset “${key}” — the file could not be made downloadable` };
+    paths[key] = url;
+  }
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -919,14 +983,40 @@ async function renderAction(req: Request, body: Record<string, unknown>, userId:
   const fontFile = typeof body.fontFile === "string" && body.fontFile.trim() ? body.fontFile.trim() : undefined;
   const outputPath = `/tmp/renders/${crypto.randomUUID()}.mp4`;
 
+  // Library screen recordings, narration files and the brand logo sit in the
+  // owner's PRIVATE ads bucket; the render worker only accepts http(s) URLs.
+  // Signed URLs are minted here for the OWNER'S OWN objects only — a caller
+  // cannot make this function sign a file under anyone else's folder. The
+  // stored job keeps the resolved URLs the worker reads.
+  const renderSources: Record<string, string | undefined> = { narration: narrationPath, logo: logoPath, music: musicPath };
+  for (const [shot, path] of Object.entries(assetPaths)) if (path) renderSources[`shot ${shot} clip`] = path;
+  // Storyboard shots already carry their library path (e.g. an app-footage
+  // recording picked when the concept was written). They must go through the
+  // same owner-scoped signing — an unresolvable shot is a hard error below,
+  // never a raw private path handed to the worker.
+  for (const s of storyboard) if (s.source && !renderSources[`shot ${s.shot} clip`]) renderSources[`shot ${s.shot} clip`] = s.source;
+  const resolvedSources = await resolveRenderSources(admin, userId, renderSources);
+  if (!resolvedSources.ok) return jsonResp({ error: resolvedSources.error, code: "asset_resolution_failed" }, 503);
+
+  const clipsResolved: Record<string, string> = {};
+  for (const [key, path] of Object.entries(renderSources)) {
+    const shotMatch = key.match(/^shot (\d+) clip$/);
+    if (shotMatch && path) clipsResolved[shotMatch[1]] = path;
+  }
+
+  // The storyboard handed to the plan builder carries each shot's clip
+  // source; after signing it must carry the signed URL, not the raw private
+  // path, or the worker rejects the job as unresolvable.
+  storyboard = storyboard.map((s) => (clipsResolved[String(s.shot)] ? { ...s, source: clipsResolved[String(s.shot)] } : s));
+
   const planResult = videoConceptToPlan({
     concept,
     presetId,
     storyboard,
     script: { voiceover, captions },
-    narrationPath,
-    musicPath,
-    logoPath,
+    narrationPath: renderSources.narration,
+    musicPath: renderSources.music,
+    logoPath: renderSources.logo,
     fontFile,
     outputPath,
   });
@@ -941,6 +1031,7 @@ async function renderAction(req: Request, body: Record<string, unknown>, userId:
   const jobId = crypto.randomUUID();
   const now = new Date().toISOString();
   const { error: jobErr } = await admin.from("ad_video_render_jobs").insert({
+    id: jobId,
     job_id: jobId,
     concept_id: conceptId,
     owner_id: userId,
@@ -960,12 +1051,30 @@ async function renderAction(req: Request, body: Record<string, unknown>, userId:
   const workerUrl = Deno.env.get("RENDER_WORKER_URL");
   const renderToken = Deno.env.get("RENDER_TOKEN");
   if (!workerUrl) {
+    // No in-house FFmpeg worker on this deployment — Manus 2.0 is the editor.
+    // The queued job already carries the full plan with signed owner-scoped
+    // clip URLs, and the agent picks it up via manus-invoke
+    // (render-jobs-fetch / render-job-result). A real handoff state, not a
+    // fake success: the athlete is told the edit is waiting for the agent.
+    const handedAt = new Date().toISOString();
     try {
-      await admin.from("ad_video_render_jobs").update({ status: "failed", error: "RENDER_WORKER_URL is not configured", updated_at: new Date().toISOString() }).eq("job_id", jobId);
+      await admin.from("ad_video_render_jobs").update({ status: "handed_to_manus", updated_at: handedAt }).eq("job_id", jobId);
     } catch (e) {
-      console.error("[ads-video] could not mark job failed", e);
+      console.error("[ads-video] could not mark job handed to Manus", e);
     }
-    return jsonResp({ error: "Render worker is not configured on this deployment", code: "not_configured" }, 503);
+    return jsonResp({
+      action: "render",
+      jobId,
+      state: "handed_to_manus",
+      editor: "manus-2.0",
+      presetId,
+      totalSeconds: planResult.totalSeconds,
+      missingShots: missingShots.map((s) => s.shot),
+      additionalCostUsd: 0,
+      costNote: "Rendering dispatch cost 1 credit; the edit itself is performed by Manus 2.0, so no FFmpeg worker spend applies.",
+      estimate: costEstimate,
+      notes: [...planResult.notes, "queued for Manus 2.0: the agent edits the clip and reports back the finished file."],
+    });
   }
 
   let workerResponse: Response;

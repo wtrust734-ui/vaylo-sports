@@ -61,7 +61,7 @@ export function assetUrlFromKey(_storageKey: string): string {
 
 export function sanitizeFilename(name: string): string {
   const safe = name
-    .replace(/[^\w.\-]/g, "_")
+    .replace(/[^\w.-]/g, "_")
     .replace(/_+/g, "_")
     .trim() || "asset";
   return safe.slice(0, 120);

@@ -101,7 +101,20 @@ export function useSyncStatus(userId?: string | null): SyncStatus {
       const before = pendingWrites().length;
       await flushQueue();
       const after = pendingWrites().length;
-      if (after === 0) {
+      // Only a drain that actually SENT something may record success. An empty
+      // queue emptying "successfully" sent nothing: recording `lastSyncedAt`
+      // here made the boot-time drain (which runs even with zero writes
+      // waiting) surface a green "Synced — saved to your account" flash in
+      // builds with no backend — a claim about a server the app never reached.
+      // lib/syncStatus's own contract is that an app that has never synced
+      // anything says so; keeping `lastSyncedAt` null on a no-op drain is what
+      // makes that state ("idle") reachable.
+      if (before === 0 && after === 0) {
+        // Empty queue: nothing was sent and nothing failed. Record nothing —
+        // the state stays "idle" and no banner shows (lib/syncStatus's
+        // contract: never claim a sync that never happened).
+      } else if (after === 0) {
+        // Something actually went out.
         const now = Date.now();
         setLastSyncedAt(now);
         writeLastSynced(now);

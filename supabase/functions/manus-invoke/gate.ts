@@ -25,17 +25,25 @@ export function getSharedSecret(): string {
 export const ALLOWED_ACTIONS = new Set([
   // Read-only observations the agent runs to understand an athlete's form
   // and content before it decides to edit or post something.
-  "form-analysis-summary", // given a user_id, returns the latest form-analysis report in a summary shape
-  "leadeboard-summary",    // given a sport + tier, returns the top PBs the agent can reference when writing a hook
+  "form-analysis-summary", // returns the latest (or a named) form-analysis report in a summary shape
+  "leaderboard-summary",   // given a sport, returns the top point totals the agent can reference when writing a hook
+  "leadeboard-summary",    // historical misspelling kept as an alias of leaderboard-summary
   "coach-catalog",         // lists the published coaching plans; the agent surfaces them as "edits/plans" for the athlete to buy
 
   // Write-through actions. The server computes money, prices and ids; the agent
   // never does arithmetic and never receives a secret.
-  "form-analysis-run",     // upload a clip, run video-form-analysis through the existing function, return the report id
-  "plan-edit-request",      // tell the coach what to change on an existing plan; written to the edit-plan queue
-  "plan-delivery-write",    // mark a delivered plan for a paid order; server checks the order and the coach id
-  "buy-coaching-plan",      // spend from the agent's wallet (coach credits) on a listing; server quotes and charges
+  "form-analysis-run",     // honestly refuses: the analysis runner is athlete-session-only (see index.ts)
+  "plan-edit-request",      // records a real edit request: a notification row the plan's coach reads
+  "plan-delivery-write",    // writes a real coach_deliveries row for a PAID order; coach/buyer ids are checked against the order
+  "buy-coaching-plan",      // real purchase through the buy_coach_plan RPC: wallet debited server-side, idempotency enforced
   "leaderboard-bump",       // no-op placeholder: real leaderboard writes are server-side only
+
+  // Video editing handoff — Manus 2.0 is the editor. Vaylo queues
+  // ad_video_render_jobs with the full plan (signed https URLs for every clip,
+  // narration and logo); the agent pulls pending jobs and reports the edit back:
+  "render-jobs-fetch",      // read pending render jobs (plan + signed clip URLs) for the agent to edit
+  "render-job-progress",   // claim a job for editing and push live progress (percent + stage) while working
+  "render-job-result",     // report the edited file (storage path / public URL) or a failure for a pending job
 ]);
 
 /** Shared-secret check. A bare path hit that does not send the secret is 401

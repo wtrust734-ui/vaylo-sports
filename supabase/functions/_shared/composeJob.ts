@@ -75,7 +75,7 @@ export function validateComposeRequest(raw: unknown): ValidateResult {
   // Placement: known preset, or "custom" with a validateCustomSize-compliant
   // size. Value comes from PLACEMENTS server-side; the client never names a
   // custom width/height pair that bypasses the bounded range (audit E5).
-  let placementId = typeof o.placementId === "string" ? o.placementId.trim() : "";
+  const placementId = typeof o.placementId === "string" ? o.placementId.trim() : "";
   let custom: { width: number; height: number } | undefined;
   if (placementId === "custom") {
     const c = (o.custom ?? {}) as Record<string, unknown>;

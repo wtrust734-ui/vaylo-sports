@@ -113,7 +113,7 @@ const VprHero = ({ compact = false }: { compact?: boolean }) => {
               to the column and the rounded border would read as a panel. */}
           <div className="flex w-fit max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1">
             <Activity size={12} className="text-primary shrink-0" aria-hidden />
-            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted-foreground truncate">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted-foreground break-words text-left">
               {sport ?? t("vpr.performance")}
             </span>
           </div>

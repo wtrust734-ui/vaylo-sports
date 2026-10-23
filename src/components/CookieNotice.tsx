@@ -100,8 +100,8 @@ export default function CookieNotice() {
       className="fixed bottom-[calc(var(--vaylo-inset-bottom)+7rem+var(--vaylo-notice-lift))] left-0 right-0 z-[45] mx-auto max-w-2xl px-4"
       hidden
     >
-      <div className="rounded-2xl border border-border bg-card/95 p-4 backdrop-blur shadow-lg dark:bg-card">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 backdrop-blur shadow-lg dark:bg-card">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
           <strong className="text-foreground">No tracking cookies.</strong>{" "}
           No advertising or analytics cookies, and no third-party tracker — only
           preferences kept on this device.{" "}
@@ -129,7 +129,7 @@ export default function CookieNotice() {
               e.preventDefault();
               navigate(legalPath("cookies"));
             }}
-            className="px-1 py-3.5 underline underline-offset-2 hover:text-primary active:opacity-70"
+            className="px-1 py-2 underline underline-offset-2 hover:text-primary active:opacity-70"
           >
             Cookie Policy
           </a>
@@ -137,7 +137,7 @@ export default function CookieNotice() {
         <button
           ref={acceptRef}
           type="button"
-          className="press ml-3 inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="press inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Accept
         </button>

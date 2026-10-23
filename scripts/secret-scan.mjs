@@ -196,6 +196,16 @@ export const RULES = [
       // string literal, so the "value" starts with `)` — closing punctuation
       // no credential begins with.
       /^[)\]}]/,
+      // An environment-variable NAME, not a value. The ads-integrations status
+      // table lists the keys an integration needs as string literals —
+      // `secret: "OPENAI_API_KEY"`, `secret: "RENDER_WORKER_URL / RENDER_TOKEN"`
+      // — and this rule matched them exactly as it would a real assignment.
+      // The shape separates them: a name is ALL_CAPS with underscores
+      // (optionally " / "-joined alternatives), while a real credential always
+      // carries lowercase, digits or separators that put it outside this
+      // pattern. The shape-specific rules (jwt, aws-access-key, openai-key, …)
+      // are unaffected and still catch their own key shapes anywhere.
+      /^(?=.*_)[A-Z0-9_]+(?: *\/ *[A-Z0-9_]+)*$/,
     ],
   },
 ]
@@ -277,6 +287,12 @@ const ALLOW = new Set([
   // command that regenerates them. Nothing here is a live credential, and no
   // Stripe secret is stored anywhere in the repository.
   "supabase/functions/_shared/stripeSignature.test.ts",
+  // The byte-identical copy of the same test under wearable-oauth/_shared/ —
+  // Supabase deploys each edge function with its own _shared directory, so the
+  // fixture ships twice by construction, not by accident. Same fake secret,
+  // same digests published in the test's own header, same reasoning as the
+  // entry above.
+  "supabase/functions/wearable-oauth/_shared/stripeSignature.test.ts",
 ])
 
 function isAllowed(file) {

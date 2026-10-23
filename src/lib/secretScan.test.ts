@@ -209,3 +209,31 @@ describe("secret-scan calibration for the 2026-10-06 audit false positives", () 
     expect(ids('token:",u)),this.rest=new Qr(new URL("rest/v1",i).href')).not.toContain("hardcoded-password")
   })
 })
+
+describe("secret-scan calibration for the env-var-name status table (ads-integrations)", () => {
+  // supabase/functions/ads-integrations/index.ts lists the environment keys an
+  // integration needs as string literals in a status table:
+  // `secret: "OPENAI_API_KEY"`. The hardcoded-password rule matched every one
+  // of them, because to a regex a name and a value have the same shape. They
+  // are pinned here under the same rule as every other calibration: a scanner
+  // whose false positives get allowlisted file by file gets switched off, and
+  // then the next real credential walks through.
+
+  it("ignores an env-var name used as a status-table value", () => {
+    const row = 'secret: "OPENAI_API_KEY",'
+    expect(ids(row)).not.toContain("hardcoded-password")
+  })
+
+  it("ignores the slash-joined alternatives form of the same table", () => {
+    const row = 'secret: "RENDER_WORKER_URL / RENDER_TOKEN",'
+    expect(ids(row)).not.toContain("hardcoded-password")
+  })
+
+  it("still flags an all-caps credential-shaped literal that is not env-var shaped", () => {
+    // No underscore and no " / " join: the reject only covers variable names
+    // and name alternatives, so a credential-shaped literal with digits and no
+    // name structure walks straight through it.
+    const line = 'const TOKEN = "PARTNUMBER20241015";'
+    expect(ids(line)).toContain("hardcoded-password")
+  })
+})

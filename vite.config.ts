@@ -23,6 +23,13 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "::",
       port: 8080,
+      // The Freebuff workspace UI-audit Chromium profile holds a locked Cookies
+      // file, and watching it crashed the dev server with EBUSY; the archived
+      // "vaylo ad web app" snapshot contains no app source either. Neither is
+      // part of the build — watching them only ever broke `npm run dev`.
+      watch: {
+        ignored: ["**/.freebuff/**", "**/vaylo ad web app/**"],
+      },
       hmr: {
         overlay: false,
       },

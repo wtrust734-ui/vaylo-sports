@@ -28,8 +28,14 @@
 // gate.ts, which is pure and unit-tested; this file is the Deno.serve handler
 // that maps the agent's request onto the database.
 
-import { createClient } from "@supabase-js@2";
-import { ALLOWED_ACTIONS, requireSharedSecret } from "./gate";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ALLOWED_ACTIONS, requireSharedSecret } from "./gate.ts";
+
+/** The service-role client this module builds. See the note in ad-engine-tick:
+ *  `ReturnType<typeof createClient>` collapses the schema to `never`, which
+ *  makes every table access a type error; `SupabaseClient`'s default type
+ *  arguments keep the schema open. */
+type AdminClient = SupabaseClient;
 
 export { ALLOWED_ACTIONS, requireSharedSecret };
 
@@ -37,28 +43,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type",
 };
-
-/** Validate a caller-supplied id that names an athlete, plan, order or row.
- *  Because the caller is an agent it cannot identify itself to the user; the
- *  caller must name what it wants, and this function refuses anything that
- *  does not resolve. The id is checked server-side before any row is touched. */
-export function requireTargetColumn<T extends { id: string }>(
-  admin: ReturnType<typeof createClient>,
-  table: string,
-  value: unknown,
-  label: string,
-): Response | null {
-  if (typeof value !== "string" || !value.trim()) {
-    return json({ error: `Missing ${label}` }, 400);
-  }
-  const rows = admin
-    .from(table)
-    .select("id")
-    .eq("id", value.trim())
-    .maybeSingle();
-  // If the table itself cannot answer, we cannot promise anything.
-  return null;
-}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -110,42 +94,47 @@ Deno.serve(async (req) => {
     // itself, because the report exists server-side and is stable.
     // ------------------------------------------------------------------
     if (action === "form-analysis-summary") {
-      const rows = await admin
-        .from("video_form_analyses")
-        .select("id, movement_type, score, summary, created_at")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const row = rows as { id?: string; movement_type?: string; score?: number; summary?: string; created_at?: string } | null;
-      return json({
-        ok: true,
-        row: row ?? null,
-      });
+      const { report_id } = body as { report_id?: unknown };
+      // Real columns: the table carries overall_score and a jsonb `result`; a
+      // summary lives inside that jsonb, not in a dedicated column.
+      const shape = "id, user_id, sport_type, video_name, overall_score, result, created_at";
+      const q = admin.from("video_form_analyses").select(shape).is("deleted_at", null);
+      if (typeof report_id === "string" && report_id.trim()) {
+        const byId = await q.eq("id", report_id.trim()).maybeSingle();
+        const r = byId as { data?: Record<string, unknown> | null } | null | undefined;
+        return json({ ok: true, row: r?.data ?? null });
+      }
+      const latest = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const row = latest as { data?: Record<string, unknown> | null } | null | undefined;
+      return json({ ok: true, row: row?.data ?? null });
     }
 
     // -----------------------------------------------------------------
     // leaderboard-summary — read-only: what the agent prints as a hook
-    // reference when it writes the caption.
+    // reference when it writes the caption. The only backing table is
+    // leaderboard_totals: no caller-supplied filter can widen the columns or
+    // select anything but sport/points/last_event, and the number of rows the
+    // agent sees is capped.
     // -----------------------------------------------------------------
-    if (action === "leadeboard-summary") {
-      const { sport, tier } = body as { sport?: unknown; tier?: unknown };
-      const where: string[] = [];
-      if (typeof sport === "string" && sport.trim()) where.push(`sport = ${JSON.stringify(sport.trim())}`);
-      if (typeof tier === "string" && tier.trim()) where.push(`tier = ${JSON.stringify(tier.trim())}`);
-      const q = admin.from("leaderboards").select("metric, value, unit, date").eq("sport", "Running");
-      // Intentionally narrow: the agent only gets the top rows, and the table
-      // below is the read-only public view. A hostile `sport` value is ignored;
-      // this function never builds a query from caller input.
-      if (where.length) {
-        for (const w of where) {
-          // the only filter allowed is `eq` on a fixed column; the column
-          // list is fixed, so the query cannot be widened.
-        }
+    if (action === "leaderboard-summary" || action === "leadeboard-summary") {
+      const { sport } = body as { sport?: unknown };
+      // eq() on a fixed column, never a composed string: a hostile sport value
+      // can narrow the read, never widen it. Missing sport → the app default.
+      const sportFilter = typeof sport === "string" && sport.trim() ? sport.trim() : "Running";
+      const { data, error } = await admin
+        .from("leaderboard_totals")
+        .select("user_id, sport, points, last_event")
+        .eq("sport", sportFilter)
+        .order("points", { ascending: false })
+        .limit(10);
+      if (error) {
+        console.error("manus-invoke: leaderboard-summary failed", error);
+        return json({ error: "Could not read the leaderboard" }, 500);
       }
       return json({
         ok: true,
-        sport: typeof sport === "string" ? sport.trim() : "Running",
-        top: [], // filled by a fixed column read below
+        sport: sportFilter,
+        top: data ?? [],
       });
     }
 
@@ -183,17 +172,16 @@ Deno.serve(async (req) => {
     // the summary the agent needs to write the caption).
     // -----------------------------------------------------------------
     if (action === "form-analysis-run") {
-      const source = body as { source?: unknown };
-      // source is deliberately under-documented here: the agent only needs the
-      // clip id / url; the actual bytes go through the existing upload path.
-      // We record a job so a dropped connection can be retried against the
-      // stored report rather than a re-upload.
+      // HONEST REFUSAL: the actual analysis runs inside the athlete's session
+      // (video-form-analysis authenticates the caller's JWT and spends the
+      // athlete's own metered credits). No durable queue for a runner exists,
+      // so a fake 'queued: true' here would be an outright lie. The agent
+      // either reads an existing report (form-analysis-summary) or the athlete
+      // runs the clip in their app.
       return json({
-        ok: true,
-        queued: true,
-        request_id: `manus-${crypto.randomUUID()}`,
-        note: "Run the stored clip through video-form-analysis, then return its report id in the same shape as form-analysis-summary.",
-      });
+        error: "form-analysis runner cannot be triggered by the agent",
+        note: "video-form-analysis authenticates the athlete's own JWT; manual form analysis runs through the athlete's app. Read an existing report via form-analysis-summary instead.",
+      }, 503);
     }
 
     // -----------------------------------------------------------------
@@ -209,13 +197,37 @@ Deno.serve(async (req) => {
       if (!plan_id || typeof plan_id !== "string" || !plan_id.trim()) {
         return json({ error: "Missing plan_id" }, 400);
       }
-      // The edit request row is created; the coach reacts to it. The server
-      // never lets the agent edit someone else's plan.
+      // A real delivery surface exists: the plan's coach is notified through
+      // the notifications table the coach UI already reads. The server
+      // validates that the id actually names a published coaching plan before
+      // writing anything.
+      const planRes = await admin
+        .from("marketplace_listings")
+        .select("id, creator_id, title")
+        .eq("id", plan_id.trim())
+        .eq("is_coach_plan", true)
+        .maybeSingle();
+      const plan = (planRes as { data?: { id?: string; creator_id?: string; title?: string } | null } | null | undefined)?.data;
+      if (!plan) return json({ error: "Plan not found" }, 404);
+      const { data: notif, error: notifErr } = await admin
+        .from("notifications")
+        .insert({
+          user_id: (plan.creator_id),
+          type: "plan_edit_request",
+          title: `Edit requested for "${plan.title}"`,
+          body: (typeof change_note === "string" && change_note.trim() ? change_note.trim() : "The agent requested a plan edit").slice(0, 500),
+          read: false,
+        })
+        .select("id")
+        .single();
+      if (notifErr) {
+        console.error("manus-invoke: plan-edit-request failed", notifErr);
+        return json({ error: "Could not record the edit request" }, 500);
+      }
       return json({
         ok: true,
         queued: true,
-        request_id: `manus-edit-${crypto.randomUUID()}`,
-        note: change_note ? String(change_note).slice(0, 500) : undefined,
+        request_id: notif.id,
       });
     }
 
@@ -235,12 +247,52 @@ Deno.serve(async (req) => {
       if (!order_id || typeof order_id !== "string" || !order_id.trim()) {
         return json({ error: "Missing order_id" }, 400);
       }
-      // The server inserts only after RLS checks the order/team/buyer; the
-      // client cannot bypass that no matter how the row is shaped.
+      // Real write, real checks: the order must exist, be paid, and the
+      // coach/buyer columns in the body must MATCH the order — a mismatched
+      // claim is refused, never corrected.
+      const orderRes = await admin
+        .from("coach_orders")
+        .select("id, coach_id, buyer_id, status")
+        .eq("id", order_id.trim())
+        .maybeSingle();
+      const order = (orderRes as { data?: { id?: string; coach_id?: string; buyer_id?: string; status?: string } | null } | null | undefined)?.data;
+      if (!order) return json({ error: "Order not found" }, 404);
+      if (order.status !== "paid") return json({ error: "Order is not paid" }, 409);
+      const sentCoach = typeof coach_id === "string" ? coach_id.trim() : "";
+      const sentBuyer = typeof buyer_id === "string" ? buyer_id.trim() : "";
+      if (sentCoach && sentCoach !== order.coach_id) return json({ error: "coach_id does not match the order" }, 403);
+      if (sentBuyer && sentBuyer !== order.buyer_id) return json({ error: "buyer_id does not match the order" }, 403);
+      // A duplicate delivery for the same order is refused, not re-written.
+      const { count: dupCount, error: dupErr } = await admin
+        .from("coach_deliveries")
+        .select("id", { count: "exact", head: true })
+        .eq("order_id", order_id.trim());
+      if (dupErr) {
+        console.error("manus-invoke: plan-delivery-write duplicate check failed", dupErr);
+        return json({ error: "Could not verify the order" }, 500);
+      }
+      if ((dupCount ?? 0) > 0) return json({ error: "A delivery already exists for this order" }, 409);
+      const { data: delivery, error: insErr } = await admin
+        .from("coach_deliveries")
+        .insert({
+          order_id: order.id,
+          coach_id: order.coach_id,
+          buyer_id: order.buyer_id,
+          title: typeof title === "string" && title.trim() ? title.trim() : "Your coaching plan",
+          body: typeof note === "string" && note.trim() ? note.trim().slice(0, 5000) : "",
+          updated_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      if (insErr) {
+        console.error("manus-invoke: plan-delivery-write insert failed", insErr);
+        return json({ error: "Could not write the delivery" }, 500);
+      }
       return json({
         ok: true,
-        queued: true,
-        request_id: `manus-delivery-${crypto.randomUUID()}`,
+        queued: false,
+        delivered: true,
+        delivery_id: delivery.id,
       });
     }
 
@@ -249,9 +301,10 @@ Deno.serve(async (req) => {
     // Server quotes (marketplace_quote), charges, and returns the split.
     // -----------------------------------------------------------------
     if (action === "buy-coaching-plan") {
-      const { listing_id, idempotency_key } = body as {
+      const { listing_id, idempotency_key, buyer_id } = body as {
         listing_id?: unknown;
         idempotency_key?: unknown;
+        buyer_id?: unknown;
       };
       if (!listing_id || typeof listing_id !== "string" || !listing_id.trim()) {
         return json({ error: "Missing listing_id" }, 400);
@@ -259,10 +312,38 @@ Deno.serve(async (req) => {
       if (!idempotency_key || typeof idempotency_key !== "string") {
         return json({ error: "Missing idempotency_key" }, 400);
       }
+      if (!buyer_id || typeof buyer_id !== "string" || !buyer_id.trim()) {
+        return json({ error: "Missing buyer_id" }, 400);
+      }
+      // Real purchase through the same server-authoritative RPC coach-checkout
+      // uses: the buyer must exist, the listing must be active, the buyer may
+      // not buy their own plan, the wallet is debited server-side and the
+      // idempotency key guards retries (rail='play').
+      const buyer = await admin.auth.admin.getUserById(buyer_id.trim());
+      if (!buyer || !buyer.data?.user) return json({ error: "Buyer not found" }, 404);
+      const { data: orderRow, error: rpcError } = await admin.rpc("buy_coach_plan", {
+        p_buyer: buyer_id.trim(),
+        p_listing_id: listing_id.trim(),
+        p_reference: idempotency_key.trim().slice(0, 200),
+      });
+      if (rpcError) {
+        const msg = String(rpcError.message ?? "");
+        console.error("manus-invoke: buy_coach_plan rpc failed", msg);
+        if (msg.includes("insufficient_credits")) return json({ error: "insufficient_credits" }, 402);
+        if (msg.includes("own_listing")) return json({ error: "Athletes cannot buy their own plan" }, 403);
+        if (msg.includes("listing_not_for_sale")) return json({ error: "Plan is not for sale" }, 409);
+        if (msg.includes("listing_not_found")) return json({ error: "Plan not found" }, 404);
+        return json({ error: "Purchase could not be completed" }, 500);
+      }
+      const order = orderRow as { order_id?: string; net_cents?: number; fee_cents?: number; gross_cents?: number; balance_cents?: number; reused?: boolean } | null;
       return json({
         ok: true,
-        queued: true,
-        note: "Server quotes the plan, transfers the wallet balance, and writes the order. The response is the same shape as buy-coaching-plan on coach-checkout.",
+        order_id: order?.order_id ?? null,
+        net_cents: order?.net_cents ?? null,
+        fee_cents: order?.fee_cents ?? null,
+        gross_cents: order?.gross_cents ?? null,
+        balance_cents: order?.balance_cents ?? null,
+        reused: order?.reused ?? false,
       });
     }
 
@@ -272,6 +353,135 @@ Deno.serve(async (req) => {
     // -----------------------------------------------------------------
     if (action === "leaderboard-bump") {
       return json({ ok: true, bumped: false, note: "Leaderboard writes are server-side; the agent reads only." });
+    }
+
+    // -----------------------------------------------------------------
+    // render-job-progress — the editor's live progress channel. The first
+    // call CLAIMS the job: queued/handed_to_manus → editing, with a percent
+    // and a short, human stage string the athlete's UI reads while waiting.
+    // Later calls update the same fields. A claimed job never reappears in
+    // render-jobs-fetch (it is no longer pending), and a finished job can
+    // never be reopened — a late duplicate ping cannot rewrite history.
+    // -----------------------------------------------------------------
+    if (action === "render-job-progress") {
+      const b = body as { job_id?: unknown; progress?: unknown; stage?: unknown };
+      const jobId = typeof b.job_id === "string" ? b.job_id.trim() : "";
+      if (!jobId) return json({ error: "Missing job_id" }, 400);
+      const progressRaw = Number(b.progress);
+      if (!Number.isFinite(progressRaw) || progressRaw < 0 || progressRaw > 99) {
+        return json({ error: "progress must be a number between 0 and 99; 100 is reserved for the completed report" }, 400);
+      }
+      const stage = typeof b.stage === "string" && b.stage.trim() ? b.stage.trim().slice(0, 160) : undefined;
+      const { data: current, error: currentErr } = await admin
+        .from("ad_video_render_jobs")
+        .select("status, result")
+        .eq("job_id", jobId)
+        .maybeSingle();
+      if (currentErr) {
+        console.error("manus-invoke: render-job-progress read failed", currentErr);
+        return json({ error: "Could not check the job" }, 500);
+      }
+      if (!current) return json({ error: "No render job with that job_id" }, 404);
+      const status = (current as { status?: string; result?: Record<string, unknown> | null }).status ?? "";
+      if (status === "done" || status === "failed") {
+        return json({ error: `The job already finished (${status}); progress can no longer change` }, 409);
+      }
+      const existingResult = ((current as { result?: Record<string, unknown> | null }).result ?? {}) as Record<string, unknown>;
+      const patch: Record<string, unknown> = {
+        status: "editing",
+        progress: Math.floor(progressRaw),
+        updated_at: new Date().toISOString(),
+      };
+      if (stage) patch.result = { ...existingResult, stage };
+      // The guarded transition: only a still-open job takes the write, so a
+      // race between progress and a final report cannot resurrect a closed job.
+      const { error: upErr } = await admin
+        .from("ad_video_render_jobs")
+        .update(patch)
+        .eq("job_id", jobId)
+        .in("status", ["queued", "handed_to_manus", "editing"]);
+      if (upErr) {
+        console.error("manus-invoke: render-job-progress write failed", upErr);
+        return json({ error: "Could not record the progress" }, 500);
+      }
+      return json({ ok: true, job_id: jobId, status: "editing", progress: Math.floor(progressRaw) });
+    }
+
+    // -----------------------------------------------------------------
+    // Video editing handoff — Manus 2.0 is the editor (pull pattern).
+    // Vaylo's ads-video function queues every render with a complete plan:
+    // per-shot clip sources as signed https URLs minted for the owner's own
+    // objects, plus narration/logo paths when they exist. The agent polls for
+    // pending jobs, claims one through render-job-progress, performs the edit,
+    // then reports the finished file back through render-job-result. The agent
+    // never widens the query and never touches a job that is not pending.
+    // -----------------------------------------------------------------
+    if (action === "render-jobs-fetch") {
+      const limitRaw = Number((body as { limit?: unknown }).limit);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 10) : 5;
+      const { data, error } = await admin
+        .from("ad_video_render_jobs")
+        .select("job_id, concept_id, owner_id, preset_id, render_request, status, created_at")
+        .in("status", ["queued", "handed_to_manus"])
+        .order("created_at", { ascending: true })
+        .limit(limit);
+      if (error) {
+        console.error("manus-invoke: render-jobs-fetch failed", error);
+        return json({ error: "Could not read the render queue" }, 500);
+      }
+      return json({ ok: true, jobs: data ?? [] });
+    }
+
+    if (action === "render-job-result") {
+      const b = body as { job_id?: unknown; state?: unknown; storage_path?: unknown; public_url?: unknown; error?: unknown; progress?: unknown };
+      const jobId = typeof b.job_id === "string" ? b.job_id.trim() : "";
+      if (!jobId) return json({ error: "Missing job_id" }, 400);
+      const state = typeof b.state === "string" ? b.state.trim() : "";
+      if (state !== "done" && state !== "failed") return json({ error: "state must be 'done' or 'failed'" }, 400);
+      const storagePath = typeof b.storage_path === "string" && b.storage_path.trim() ? b.storage_path.trim() : undefined;
+      const publicUrl = typeof b.public_url === "string" && b.public_url.trim() ? b.public_url.trim() : undefined;
+      if (state === "done" && !storagePath && !publicUrl) {
+        return json({ error: "A completed job needs storage_path or public_url" }, 400);
+      }
+      // Guard the transition server-side: only a job still pending may claim
+      // its outcome, so a late or duplicate report cannot overwrite a row that
+      // has already finished — the agent cannot invent history.
+      const { data: pending, error: pendingErr } = await admin
+        .from("ad_video_render_jobs")
+        .select("id, owner_id")
+        .eq("job_id", jobId)
+        .in("status", ["queued", "handed_to_manus"])
+        .maybeSingle();
+      if (pendingErr) {
+        console.error("manus-invoke: render-job-result read failed", pendingErr);
+        return json({ error: "Could not check the job" }, 500);
+      }
+      if (!pending) return json({ error: "No pending render job with that job_id" }, 404);
+      const reportedPath = typeof b.storage_path === "string" ? b.storage_path.trim() : "";
+      if (reportedPath && !reportedPath.startsWith(`${pending.owner_id}/`)) {
+        // The edit belongs to the job's owner's storage folder, exactly like
+        // every library asset. A path foldered elsewhere is refused — the
+        // agent cannot attach someone else's file to this job.
+        return json({ error: "storage_path must live inside the job owner's storage folder" }, 403);
+      }
+
+      const patch: Record<string, unknown> = { status: state, updated_at: new Date().toISOString() };
+      if (state === "done") {
+        const progressRaw = Number(b.progress);
+        patch.progress = Number.isFinite(progressRaw) ? Math.max(0, Math.min(100, Math.floor(progressRaw))) : 100;
+        if (storagePath) patch.storage_path = storagePath;
+        if (publicUrl) patch.public_url = publicUrl;
+        patch.result = { editor: "manus-2.0", public_url: publicUrl ?? null, storage_path: storagePath ?? null, reported_at: new Date().toISOString() };
+        patch.error = null;
+      } else {
+        patch.error = (typeof b.error === "string" && b.error.trim() ? b.error.trim() : "Manus 2.0 reported the edit as failed").slice(0, 500);
+      }
+      const { error: upErr } = await admin.from("ad_video_render_jobs").update(patch).eq("job_id", jobId);
+      if (upErr) {
+        console.error("manus-invoke: render-job-result write failed", upErr);
+        return json({ error: "Could not record the render outcome" }, 500);
+      }
+      return json({ ok: true, job_id: jobId, status: state });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

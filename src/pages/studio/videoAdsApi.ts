@@ -15,11 +15,11 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { edgeErrorMessage } from "@/lib/edgeErrors";
+import { edgeErrorMessage, edgeErrorMessageWithProblems } from "@/lib/edgeErrors";
 
 async function invokeAdsVideo<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("ads-video", { body });
-  if (error) throw new Error(await edgeErrorMessage(error));
+  if (error) throw new Error(await edgeErrorMessageWithProblems(error));
   return data as T;
 }
 
@@ -225,6 +225,8 @@ export interface JobStatus {
   status: string;
   progress: number;
   error?: string | null;
+  /** What the editor is doing right now (live stage string from the server). */
+  stage?: string | null;
   publicUrl?: string | null;
 }
 

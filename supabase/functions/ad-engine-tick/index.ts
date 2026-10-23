@@ -19,7 +19,17 @@
 // Operator/agent calls send x-shared-secret = MANUS_SHARED_SECRET.
 // ============================================================================
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
+
+/** The service-role client this module builds. `SupabaseClient` with its
+ *  default type arguments is deliberately loose: the engine reads and writes
+ *  internal tables (ad_engine_*) that are not part of the generated Database
+ *  type, so a strictly-typed client narrows every payload to `never[]`.
+ *  `ReturnType<typeof createClient>` is worse still - TypeScript instantiates
+ *  a generic function's type parameters with their *constraints* (unknown),
+ *  which collapses the schema to `never` and makes every
+ *  `.from(...).upsert(...)` call a type error. */
+type AdminClient = SupabaseClient;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -53,7 +63,7 @@ function isAuthorised(req: Request): boolean {
   return false;
 }
 
-async function budgetHeadroomUsd(admin: ReturnType<typeof createClient>): Promise<number> {
+async function budgetHeadroomUsd(admin: AdminClient): Promise<number> {
   const { data } = await admin.from("ad_engine_budget").select("ceiling_gbp, spent_production_gbp, currency").eq("campaign", "vaylo-sports-2026").maybeSingle();
   if (!data) return 0; // no record → no spend (Part 9: never claim, never spend blindly)
   const ceiling = Number((data as { ceiling_gbp: number }).ceiling_gbp);
@@ -97,7 +107,7 @@ function jobsForDay(day: CalRow): Array<{ asset_kind: string; variant: string; p
   return jobs;
 }
 
-async function spawnDueDays(admin: ReturnType<typeof createClient>): Promise<{ spawnedDays: number; spawnedJobs: number }> {
+async function spawnDueDays(admin: AdminClient): Promise<{ spawnedDays: number; spawnedJobs: number }> {
   const today = new Date().toISOString().slice(0, 10);
   // Days that are due (past or today) and never spawned.
   const { data: due, error } = await admin
@@ -153,7 +163,7 @@ async function spawnDueDays(admin: ReturnType<typeof createClient>): Promise<{ s
 // ---------------------------------------------------------------------------
 // Claim: queued + due, single tick, lease-hold
 // ---------------------------------------------------------------------------
-async function claimJobs(admin: ReturnType<typeof createClient>, max = 3): Promise<Array<Record<string, unknown>>> {
+async function claimJobs(admin: AdminClient, max = 3): Promise<Array<Record<string, unknown>>> {
   const now = new Date().toISOString();
   // A 'running' job is only claimable again when its lease expired — an
   // in-flight job from another live tick is never stolen.
@@ -199,7 +209,7 @@ async function callFunction(name: string, body: unknown, withOwnerJwt = false): 
   return { ok: res.ok, status: res.status, data };
 }
 
-async function executeImageJob(admin: ReturnType<typeof createClient>, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
+async function executeImageJob(admin: AdminClient, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
   const payload = (job.payload ?? {}) as Record<string, unknown>;
   const theme = String(payload.theme ?? "campaign");
   const aspect = String(payload.aspect ?? "square");
@@ -249,7 +259,7 @@ async function executeVariationsJob(job: Record<string, unknown>): Promise<{ res
   return { result: { skipped: true, reason: "variations run against the compose worker in a follow-up tick (primary asset first)", pipeline: "ads-image compose" }, costUsd: 0 };
 }
 
-async function executeVideoJob(admin: ReturnType<typeof createClient>, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
+async function executeVideoJob(admin: AdminClient, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
   const payload = (job.payload ?? {}) as Record<string, unknown>;
   const theme = String(payload.theme ?? "training");
   const sport = String(payload.sport ?? "multisport");
@@ -290,7 +300,7 @@ async function executeVoiceoverJob(job: Record<string, unknown>): Promise<{ resu
   };
 }
 
-async function executeReportJob(admin: ReturnType<typeof createClient>, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
+async function executeReportJob(admin: AdminClient, job: Record<string, unknown>): Promise<{ result: Record<string, unknown>; costUsd: number }> {
   // Real report counts from real data — no fabricated metrics.
   const payload = (job.payload ?? {}) as Record<string, unknown>;
   const [{ count: calTotal }, { count: jobsTotal }, { count: doneTotal }] = await Promise.all([
@@ -319,7 +329,7 @@ async function executeReportJob(admin: ReturnType<typeof createClient>, job: Rec
 // ---------------------------------------------------------------------------
 // Completion bookkeeping
 // ---------------------------------------------------------------------------
-async function recordResult(admin: ReturnType<typeof createClient>, job: Record<string, unknown>, result: Record<string, unknown>, costUsd: number): Promise<void> {
+async function recordResult(admin: AdminClient, job: Record<string, unknown>, result: Record<string, unknown>, costUsd: number): Promise<void> {
   const { error } = await admin
     .from("ad_engine_jobs")
     .update({
@@ -341,7 +351,7 @@ async function recordResult(admin: ReturnType<typeof createClient>, job: Record<
   await admin.from("ad_engine_calendar").update({ status: "completed", updated_at: new Date().toISOString() }).eq("day", String(job.calendar_day));
 }
 
-async function recordFailure(admin: ReturnType<typeof createClient>, job: Record<string, unknown>, message: string): Promise<void> {
+async function recordFailure(admin: AdminClient, job: Record<string, unknown>, message: string): Promise<void> {
   const attempts = Number(job.attempts ?? 0) + 1;
   const maxAttempts = Number(job.max_attempts ?? 3);
   const exhausted = attempts >= maxAttempts;

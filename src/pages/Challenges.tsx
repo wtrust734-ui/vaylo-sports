@@ -7,7 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { joinChallenge, leaveChallenge } from "@/lib/scoring";
 import { toast } from "sonner";
-import SponsoredSlot from "@/components/sponsor/SponsoredSlot";
 import { orderByFamily } from "@/lib/personalization/challengeSuggestions";
 import StandingChallenges from "@/components/challenges/StandingChallenges";
 
@@ -136,10 +135,6 @@ const Challenges = () => {
           </div>
         </div>
       </div>
-
-      {/* Sponsored slot — renders nothing unless there is an active sponsor AND
-          the athlete is 18+. The database refuses it for minors too. */}
-      <SponsoredSlot placement="challenge" sport={profile?.sport ?? null} className="px-5 mb-4" />
 
       {/* Personalised suggestions */}
       {suggestions.length > 0 && (
