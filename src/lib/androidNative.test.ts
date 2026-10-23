@@ -7,7 +7,7 @@
 // Not covered here (needs a device/emulator): hardware back traversal, Health
 // Connect end-to-end sync, keyboard/safe-area rendering, permission dialogs.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { deepLinkId, parseDeepLink } from "@/lib/deepLinks";
@@ -159,6 +159,12 @@ describe("Gradle — release toolchain", () => {
     // Every shipped artifact must be strictly older than the default, or the
     // next upload reuses a versionCode.
     const root = path.resolve(__dirname, "../..");
+    // `apk/` is git-ignored build output: a fresh checkout (which is what CI
+    // has) contains no artifacts, and a readdir there would throw for a fact
+    // about the checkout rather than about the build. Where the directory
+    // exists — a release machine — the cross-check below runs in full,
+    // including its "no artifacts in apk/ to compare against" failure.
+    if (!existsSync(path.join(root, "apk"))) return;
     const shipped = readdirSync(path.join(root, "apk"))
       .map((f) => f.match(/^vaylo-sports-(\d+\.\d+\.\d+)-(\d+)-/))
       .filter((m): m is RegExpMatchArray => !!m);

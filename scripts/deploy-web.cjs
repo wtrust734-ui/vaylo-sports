@@ -63,10 +63,23 @@ function netlifyCommand() {
   const local = path.join(root, "node_modules", "netlify-cli", "bin", "run.js");
   if (fs.existsSync(local)) return [process.execPath, local];
 
-  // npx ships inside the npm that is on PATH, i.e. the same node install that
-  // is running this script: <nodejs>/node_modules/npm/bin/npx-cli.js.
-  const npx = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npx-cli.js");
-  if (fs.existsSync(npx)) return [process.execPath, npx, "--yes", "netlify"];
+  // npx ships inside the npm that came with the node running this script, but
+  // the layout differs by platform: Windows installs npm beside node.exe
+  // (<nodejs>/node_modules/npm/bin/npx-cli.js), while Linux and macOS put it
+  // under the install prefix (<prefix>/lib/node_modules/npm/…, with the node
+  // binary in <prefix>/bin/). GitHub's setup-node ships that Linux layout, so
+  // a Windows-only sibling path made this throw on every CI run — and would
+  // have broken the deploy on any Linux host too. Both layouts are tried,
+  // before and after resolving a symlinked node (/usr/local/bin/node).
+  const bases = [...new Set([path.dirname(process.execPath), path.dirname(fs.realpathSync(process.execPath))])];
+  for (const base of bases) {
+    for (const npx of [
+      path.join(base, "node_modules", "npm", "bin", "npx-cli.js"),
+      path.join(base, "..", "lib", "node_modules", "npm", "bin", "npx-cli.js"),
+    ]) {
+      if (fs.existsSync(npx)) return [process.execPath, npx, "--yes", "netlify"];
+    }
+  }
 
   throw new Error(
     "cannot find the Netlify CLI — install netlify-cli locally, or install Node " +
