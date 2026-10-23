@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { terminologyDirective } from "../_shared/terminology.ts";
 import { aiCallAllowed, throttled } from "../_shared/guard.ts";
@@ -425,6 +426,15 @@ ${dossierBlock}`;
       // remember then. Fire-and-forget is unsafe in a function that may be
       // frozen after the response.
       if (!completed) return;
+      // A completed stream is a delivered coach reply; record it before the
+      // memory write so a memory failure cannot make a delivered reply look
+      // refundable. Best-effort — bookkeeping never fails the response.
+      await markServiceJobDelivered({
+        supabaseUrl,
+        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        userId: memUserId,
+        chargeKey: chargedKey,
+      });
       await persistCoachMemories(adminForMem, memUserId, fullText).catch(() => undefined);
     });
     return new Response(streamed, {

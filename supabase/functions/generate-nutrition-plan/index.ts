@@ -3,6 +3,7 @@ import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteD
 import { MODELS, OUTPUT_SAFETY_CONTRACT, SAFETY_PREAMBLE } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
@@ -425,6 +426,12 @@ ${OUTPUT_SAFETY_CONTRACT}`;
     }
 
     const summary = `${plan.length}-week ${goal} plan · ${targets[0].calories} kcal/day · ${targets[0].protein_g}g protein, ${targets[0].carbs_g}g carbs, ${targets[0].fat_g}g fat`;
+    await markServiceJobDelivered({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      chargeKey: chargedKey,
+    });
     return json({ plan: { summary, weeks: plan }, cost, balance });
   } catch (e) {
     console.error("generate-nutrition-plan error:", e instanceof Error ? e.name : e);

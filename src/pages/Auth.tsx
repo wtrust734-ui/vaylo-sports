@@ -19,6 +19,7 @@ import logo from "@/assets/logo.jpg";
 import { useAuthMethods, passkeySupported, normalisePhone } from "@/hooks/use-auth-providers";
 import { isFlagOn } from "@/config/featureFlags";
 import { startOAuth, awaitOAuthDeepLink, completeNativeOAuth, buildNativeCallbackUrl, usesNativeOAuth } from "@/lib/nativeOAuth";
+import { clearPostAuthPath, consumePostAuthPath } from "@/lib/postAuthReturn";
 
 type Mode = "auth" | "forgot" | "updatePassword";
 
@@ -125,6 +126,19 @@ const Auth = () => {
 
   useEffect(() => {
     if (authLoading || !session || mode === "updatePassword") return;
+    // An admin who followed an emailed refund-review link signed in here; send
+    // them back to that case rather than the dashboard. The path is validated
+    // (same-origin absolute route only) inside consumePostAuthPath. The plain
+    // redirect below is kept verbatim — androidNative.test.ts asserts it.
+    if (profile?.onboarding_complete) {
+      const intended = consumePostAuthPath();
+      if (intended) {
+        navigate(intended, { replace: true });
+        return;
+      }
+    } else {
+      clearPostAuthPath();
+    }
     navigate(profile?.onboarding_complete ? "/" : "/onboarding", { replace: true });
   }, [authLoading, navigate, profile?.onboarding_complete, session, mode]);
 

@@ -32,6 +32,19 @@ const STEP_LABEL: Record<string, string> = {
   export_asset: "Export",
 };
 
+/**
+ * The brief for a planned step is the user's own message: find the nearest
+ * preceding user bubble to this assistant bubble so a plan shown from stored
+ * history still carries its original wording.
+ */
+function userBriefBefore(bubbles: Bubble[], index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const b = bubbles[i];
+    if (b.role === "user" && b.content.trim()) return b.content.trim();
+  }
+  return "";
+}
+
 function optionsSummary(o: Record<string, unknown>): string {
   const parts: string[] = [];
   if (typeof o.format === "string") parts.push(o.format);
@@ -43,7 +56,7 @@ function optionsSummary(o: Record<string, unknown>): string {
   return parts.join(" · ");
 }
 
-export default function ChatView() {
+export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?: (brief: string) => void }) {
   const [sessions, setSessions] = useState<ChatSession[] | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -205,6 +218,21 @@ export default function ChatView() {
                           {optionsSummary(s.options) && <span className="text-white/50">({optionsSummary(s.options)})</span>}
                         </li>
                       ))}
+                      {b.plan.some((s) => s.type === "video_ad") && onOpenVideoWorkflow && (
+                        <li>
+                          <button
+                            type="button"
+                            className="mt-1 rounded-lg bg-[#8505D5] px-2 py-1 text-[11px] text-white disabled:opacity-40"
+                            disabled={!userBriefBefore(bubbles, i)}
+                            onClick={() => {
+                              const brief = userBriefBefore(bubbles, i);
+                              if (brief) onOpenVideoWorkflow(brief);
+                            }}
+                          >
+                            Continue in Video Ads →
+                          </button>
+                        </li>
+                      )}
                     </ol>
                   )}
                 </div>

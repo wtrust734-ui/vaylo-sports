@@ -51,6 +51,24 @@ export async function handler(req: Request): Promise<Response> {
       return jsonResp({ status: res.status, models }, res.status === 200 ? 200 : 502);
     }
 
+    if (action === "generate") {
+      // POST the exact kind of call ads-video's script writer makes, returning
+      // the raw status (never the key) so a 404 with a message can be seen.
+      const model = typeof body.model === "string" && body.model.trim() ? body.model.trim().replace(/^models\//, "") : "gemini-2.5-flash-lite";
+      const res = await fetch(`${BASE}/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: "Reply with the single word: ready" }] }],
+          generationConfig: { maxOutputTokens: 16 },
+        }),
+      });
+      const txt = await res.text();
+      let parsed: unknown = txt;
+      try { parsed = JSON.parse(txt); } catch { /* raw */ }
+      return jsonResp({ model, status: res.status, body: stripData(parsed) }, res.ok ? 200 : 502);
+    }
+
     if (action === "poll-interaction") {
       // Continue watching an interaction the function started earlier, without
       // starting a new (billed) generation.
@@ -116,7 +134,7 @@ export async function handler(req: Request): Promise<Response> {
       return jsonResp({ step: "poll-timeout", id, stateSoFar: polls });
     }
 
-    return jsonResp({ error: "Unknown action", known: ["models", "interactions"] }, 400);
+    return jsonResp({ error: "Unknown action", known: ["models", "generate", "interactions"] }, 400);
   } catch (e) {
     return jsonResp({ error: e instanceof Error ? e.message : "probe failed" }, 500);
   }

@@ -1,16 +1,19 @@
 // ============================================================================
-// ads-video — Google Veo shot generation + render dispatch for Vaylo Ads.
+// ads-video — Google Gemini Omni video-shot generation + render dispatch for Vaylo Ads.
 //
 // Concept-first pipeline (Prompt 5):
-//   1. concept: turn a chat concept into a script + storyboard (Gemini).
-//   2. start: launch ONE Veo shot (one prompt → one operation). Cost is gated:
+//   1. concept: turn a chat concept into a script + storyboard (Gemini text).
+//   2. start: launch ONE generated shot (one prompt → one interaction on the
+//      Gemini Omni Interactions API — Veo 3.1 was retired by Google on
+//      2026-10-22; nothing else on this key generates video). Cost is gated:
 //      nothing is billed until the caller passes confirm AND has seen the
 //      estimate, because a single eight-second clip costs more than every
 //      image this project generates.
-//   3. poll: read the operation; on success the shot's asset path is recorded.
-//   4. render: compose the finished advert from REAL assets only (Veo clips,
-//      app footage, the supplied logo, the generated narration file) and
-//      dispatch to the render worker.
+//   3. poll: read the interaction; on success the shot's clip is stored in the
+//      owner's private ads folder and its path recorded.
+//   4. render: compose the finished advert from REAL assets only (generated
+//      clips, app footage, the supplied logo, the generated narration file)
+//      and dispatch to the render worker.
 //
 // Honesty rules carried from Prompt 4 apply here: a concept is not an asset.
 // Nothing in this file invents a substitute for a missing clip, logo or
@@ -19,16 +22,19 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { aiCallAllowed, authenticate, readJsonBody, spendForUser } from "../_shared/guard.ts";
+import  {
+    normaliseDuration,
+  } from "../_shared/omni.ts";
 import {
-  DEFAULT_VEO_MODEL,
-  buildVeoRequest,
-  describeVeoError,
-  estimateVeoCostUsd,
-  normaliseDuration,
-  parseVeoOperation,
-  type VeoAspectRatio,
-  type VeoResolution,
-} from "../_shared/veo.ts";
+  DEFAULT_OMNI_MODEL,
+  buildOmniRequest,
+  describeOmniError,
+  estimateOmniCostUsd,
+  parseOmniInteraction,
+  type OmniAspectRatio,
+  type OmniResolution,
+} from "../_shared/omni.ts";
+import { GEMINI_MODELS } from "../_shared/aiModels.ts";
 import {
   type CaptionSpec,
   type StoryboardScene,
@@ -50,8 +56,10 @@ const badReq = (message: string) => jsonResp({ error: message }, 400);
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const goKey = () => Deno.env.get("GOOGLE_VIDEO_API");
 
-/** The models this deployment offers; anything else falls back to the default. */
-const ALLOWED_VEO_MODELS = [DEFAULT_VEO_MODEL, "veo-3.1-fast-generate-preview"] as const;
+/** The shot model this deployment offers (Gemini Omni Interactions API — Veo
+ *  3.1 was retired by Google on 2026-10-22 and no longer resolves); anything
+ *  else falls back to the default. */
+const ALLOWED_SHOT_MODELS = [DEFAULT_OMNI_MODEL] as const;
 
 // ---------------------------------------------------------------------------
 // Test injectables — mirror the shared modules the handler is built from.
@@ -65,7 +73,7 @@ export {
   validateCaptionSpecs,
 } from "../_shared/videoPrompt.ts";
 export { estimateVideoCost, videoConceptToPlan } from "../_shared/videoAd.ts";
-export { DEFAULT_VEO_MODEL, estimateVeoCostUsd, normaliseDuration } from "../_shared/veo.ts";
+export { DEFAULT_OMNI_MODEL, estimateOmniCostUsd, normaliseDuration } from "../_shared/omni.ts";
 export type { VideoConcept, StoryboardScene, CaptionSpec } from "../_shared/videoAd.ts";
 
 // ---------------------------------------------------------------------------
@@ -178,7 +186,7 @@ export function parseWrittenScript(text: string): WrittenScript | null {
 async function geminiScript(prompt: string): Promise<{ ok: boolean; problems: string[]; script?: WrittenScript }> {
   if (!goKey()) return { ok: false, problems: ["GOOGLE_VIDEO_API is not configured"] };
   try {
-    const res = await fetch(`${GEMINI_BASE}/models/gemini-2.5-flash-lite:generateContent`, {
+    const res = await fetch(`${GEMINI_BASE}/models/${GEMINI_MODELS.ADS_TEXT}:generateContent`, {
       method: "POST",
       headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -187,7 +195,7 @@ async function geminiScript(prompt: string): Promise<{ ok: boolean; problems: st
       }),
     });
     if (!res.ok) {
-      const described = describeVeoError(res.status, await res.text().catch(() => ""));
+      const described = describeOmniError(res.status, await res.text().catch(() => ""));
       console.error(`[ads-video] script generation failed status=${res.status}`, described.error);
       return { ok: false, problems: [described.error] };
     }
@@ -266,7 +274,7 @@ export function conceptPromptFrom(concept: VideoConcept, script: WrittenScript):
 async function geminiStoryboardPrompt(prompt: string): Promise<{ ok: boolean; scenes?: unknown[]; problems: string[] }> {
   if (!goKey()) return { ok: false, problems: ["GOOGLE_VIDEO_API is not configured"] };
   try {
-    const res = await fetch(`${GEMINI_BASE}/models/gemini-2.5-flash-lite:generateContent`, {
+    const res = await fetch(`${GEMINI_BASE}/models/${GEMINI_MODELS.ADS_TEXT}:generateContent`, {
       method: "POST",
       headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -275,7 +283,7 @@ async function geminiStoryboardPrompt(prompt: string): Promise<{ ok: boolean; sc
       }),
     });
     if (!res.ok) {
-      const described = describeVeoError(res.status, await res.text().catch(() => ""));
+      const described = describeOmniError(res.status, await res.text().catch(() => ""));
       console.error(`[ads-video] storyboard generation failed status=${res.status}`, described.error);
       return { ok: false, problems: [described.error] };
     }
@@ -532,7 +540,7 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
     id: conceptId,
     owner_id: userId,
     concept_prompt: conceptPromptFrom(concept, written.script),
-    model: DEFAULT_VEO_MODEL,
+    model: DEFAULT_OMNI_MODEL,
     duration_seconds: durationSeconds,
     aspect_ratio: placement === "reels" ? ("9:16" as const) : ("16:9" as const),
     hook: concept.hook,
@@ -674,7 +682,7 @@ async function scriptAction(req: Request, body: Record<string, unknown>, userId:
 }
 
 // ---------------------------------------------------------------------------
-// start: one Veo shot generation (cost-gated)
+// start: one generated video shot (Gemini Omni, cost-gated)
 // ---------------------------------------------------------------------------
 
 async function startAction(req: Request, body: Record<string, unknown>, userId: string, admin: AdminClient): Promise<Response> {
@@ -690,23 +698,42 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
   const storyboardRaw = Array.isArray(body.storyboard) ? body.storyboard : [];
   const storyboard = normaliseStoryboard(storyboardRaw, normaliseDuration(body.durationSeconds ?? 8));
 
-  const scene = storyboard.find((s) => Number.isFinite(shot) && s.shot === shot) ?? (storyboard.length === 1 ? storyboard[0] : undefined);
-  const prompt = typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : (scene ? buildScenePrompt(scene, { positioning: "Premium, modern, ambitious sports technology" }) : "");
+  let scene = storyboard.find((s) => Number.isFinite(shot) && s.shot === shot) ?? (storyboard.length === 1 ? storyboard[0] : undefined);
+  if (!scene && conceptId) {
+    // A confirm re-sent by a chat client often carries only the conceptId +
+    // shot number: take that scene from the stored concept row so the shot has
+    // real content to generate instead of refusing.
+    const { data: conceptSceneRow } = await admin
+      .from("ad_video_concepts")
+      .select("storyboard")
+      .eq("id", conceptId)
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (conceptSceneRow) {
+      const stored = normaliseStoryboard(conceptSceneRow.storyboard, normaliseDuration(body.durationSeconds ?? 8));
+      scene = stored.find((s) => Number.isFinite(shot) && s.shot === shot) ?? (stored.length === 1 ? stored[0] : undefined);
+    }
+  }
+  const basePrompt = typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : (scene ? buildScenePrompt(scene, { positioning: "Premium, modern, ambitious sports technology" }) : "");
+  // Gemini Omni exposes no negative-prompt field: the brand bans ride inside
+  // the prompt text.
+  const prompt = basePrompt
+    ? `${basePrompt} Avoid: ${BRAND_NEGATIVE_PROMPT}.`
+    : "";
   if (!prompt) return badReq("prompt or a storyboard scene is required so the shot has something real to generate");
   if (prompt.length > 1500) return badReq("prompt is too long (max 1500 characters)");
 
-  const model = typeof body.model === "string" && (ALLOWED_VEO_MODELS as readonly string[]).includes(body.model) ? body.model : DEFAULT_VEO_MODEL;
+  const model = typeof body.model === "string" && (ALLOWED_SHOT_MODELS as readonly string[]).includes(body.model) ? body.model : DEFAULT_OMNI_MODEL;
   const durationSeconds = normaliseDuration(body.durationSeconds ?? (scene?.durationSeconds ?? 8));
-  const estimatedCost = estimateVeoCostUsd(model, durationSeconds);
+  const estimatedCost = estimateOmniCostUsd(durationSeconds);
 
-  const aspectRatio: VeoAspectRatio | undefined = body.aspectRatio === "16:9" || body.aspectRatio === "9:16" ? body.aspectRatio : undefined;
-  const resolution: VeoResolution | undefined = body.resolution === "720p" || body.resolution === "1080p" ? body.resolution : undefined;
+  const aspectRatio: OmniAspectRatio | undefined = body.aspectRatio === "16:9" || body.aspectRatio === "9:16" ? body.aspectRatio : undefined;
+  const resolution: OmniResolution | undefined = body.resolution === "720p" || body.resolution === "1080p" ? body.resolution : undefined;
 
   let requestBody: Record<string, unknown>;
   try {
-    requestBody = buildVeoRequest({
+    requestBody = buildOmniRequest({
       prompt,
-      negativePrompt: BRAND_NEGATIVE_PROMPT,
       aspectRatio: aspectRatio ?? (placementRatio(body.placement) ?? "9:16"),
       durationSeconds,
       resolution,
@@ -767,7 +794,7 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
   // the same server-side ledger every other AI feature uses. Unlimited plans
   // are NOT exempt (metered path) — a subscription must not become unbounded
   // provider spend.
-  const metered = await spendForUser(req, userId, "ads_video_shot", `Veo shot ${scene?.shot ?? 1} (${model}, ${durationSeconds}s)`, {
+  const metered = await spendForUser(req, userId, "ads_video_shot", `Generated shot ${scene?.shot ?? 1} (${model}, ${durationSeconds}s)`, {
     source: "ads-video",
     billUnlimited: true,
     idempotencyKey: `veo:${crypto.randomUUID()}`,
@@ -785,20 +812,20 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
     );
   }
 
-  const res = await fetch(`${GEMINI_BASE}/models/${model}:predictLongRunning`, {
+  const res = await fetch(`${GEMINI_BASE}/interactions`, {
     method: "POST",
     headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
     body: JSON.stringify(requestBody),
   });
 
   if (!res.ok) {
-    const described = describeVeoError(res.status, await res.text().catch(() => ""));
+    const described = describeOmniError(res.status, await res.text().catch(() => ""));
     return jsonResp({ error: described.error, code: described.code, estimatedCostUsd: estimatedCost, creditsCharged: metered.cost }, described.status === 429 ? 429 : 502);
   }
 
-  const op = parseVeoOperation(await res.json());
+  const op = parseOmniInteraction(await res.json());
   if (!op.name) {
-    return jsonResp({ error: "Google accepted the request but returned no operation to poll.", code: "no_operation" }, 502);
+    return jsonResp({ error: "Google accepted the request but returned no interaction to poll.", code: "no_operation" }, 502);
   }
 
   // Persist the shot record so retry after a page refresh finds the operation.
@@ -809,11 +836,12 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
     owner_id: userId,
     concept_id: conceptId,
     shot_number: scene?.shot ?? 1,
-    scene_json: scene ?? null,
+    scene_json: scene ?? {},
     veo_prompt: prompt.slice(0, 1500),
     operation_id: op.name,
-    state: op.state ?? "running",
-    video_uri: op.videoUri ?? null,
+    state: shotRowState(op.state),
+    // The interaction delivers its clip via the poll, not at start time.
+    video_uri: null,
     model,
     duration_seconds: durationSeconds,
     aspect_ratio: aspectRatio ?? (placementRatio(body.placement) ?? "9:16"),
@@ -844,58 +872,101 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
   });
 }
 
-function placementRatio(placement: unknown): VeoAspectRatio | undefined {
+function placementRatio(placement: unknown): OmniAspectRatio | undefined {
   return placement === "landscape" ? "16:9" : placement === "reels" ? "9:16" : undefined;
 }
 
+/**
+ * The ad_video_shots row only accepts running|done|failed, but the Omni
+ * interaction reports in_progress/completed/failed. Map coarse interaction
+ * states onto the row's enum: anything not known to be terminal stays "running"
+ * so an unforeseen provider word can never break persistence again (a 500 here
+ * used to orphan a billed generation).
+ */
+function shotRowState(state: string | null | undefined): "running" | "done" | "failed" {
+  const s = (state ?? "").toLowerCase();
+  if (["completed", "done", "finished", "succeeded"].includes(s)) return "done";
+  if (["failed", "error", "cancelled", "canceled"].includes(s)) return "failed";
+  return "running";
+}
+
 // ---------------------------------------------------------------------------
-// poll: read an in-flight Veo operation (and update the stored shot)
+// poll: read an in-flight video interaction (and update the stored shot)
 // ---------------------------------------------------------------------------
 
 async function pollAction(body: Record<string, unknown>, userId: string, admin: AdminClient): Promise<Response> {
   if (!goKey()) {
     return jsonResp({ error: "Video generation is not configured on this deployment (GOOGLE_VIDEO_API is missing).", code: "not_configured" }, 503);
   }
-  const operationId = typeof body.operationId === "string" ? body.operationId.trim() : "";
+  const operationId = typeof body.operationId === "string" ? body.operationId.trim().replace(/^interactions\//, "") : "";
   if (!operationId) return badReq("operationId is required");
-  if (operationId.includes("/") && !operationId.startsWith("models/")) return badReq("operationId must be an operation name returned by 'start'");
+  if (operationId.includes("/")) return badReq("operationId must be an interaction id returned by 'start'");
 
-  const res = await fetch(`${GEMINI_BASE}/${operationId}`, { headers: { "x-goog-api-key": goKey()! } });
+  const res = await fetch(`${GEMINI_BASE}/interactions/${operationId}`, { headers: { "x-goog-api-key": goKey()! } });
   if (!res.ok) {
-    const described = describeVeoError(res.status, await res.text().catch(() => ""));
+    const described = describeOmniError(res.status, await res.text().catch(() => ""));
     console.error(`[ads-video] poll failed status=${res.status}`, described.error);
     return jsonResp({ error: described.error, code: described.code }, described.status === 429 ? 429 : 502);
   }
 
-  const op = parseVeoOperation(await res.json());
-  if (op.error && op.state === "failed") {
-    // Preserve the record; a failed shot is a retryable fact, not a loss.
-    if (body.shotId) {
-      const shotId = typeof body.shotId === "string" ? body.shotId : "";
-      if (shotId.length === 36) {
-        try {
-          await admin.from("ad_video_shots").update({ state: "failed", error: op.error, updated_at: new Date().toISOString() }).eq("id", shotId).eq("owner_id", userId);
-        } catch (e) {
-          console.error("[ads-video] could not store failed shot state", e);
-        }
+  const op = parseOmniInteraction(await res.json());
+  const shotId = typeof body.shotId === "string" ? body.shotId : "";
+
+  // A finished interaction with no video anywhere is a real failure. Preserve
+  // the record; a failed shot is a retryable fact, not a loss.
+  if (op.done && !op.videoBase64) {
+    const message = op.error ?? `the video interaction finished in state "${op.state}" without returning a video`;
+    if (shotId.length === 36) {
+      try {
+        await admin.from("ad_video_shots").update({ state: "failed", error: message, updated_at: new Date().toISOString() }).eq("id", shotId).eq("owner_id", userId);
+      } catch (e) {
+        console.error("[ads-video] could not store failed shot state", e);
       }
     }
-    return jsonResp({ action: "poll", done: true, state: "failed", error: op.error });
+    return jsonResp({ action: "poll", done: true, state: "failed", error: message });
   }
 
-  if (op.done && typeof body.shotId === "string" && body.shotId.length === 36) {
+  let videoUri: string | null = null;
+  if (op.done && op.videoBase64) {
+    // The clip arrives inline as base64. It is stored in the OWNER'S folder in
+    // the private ads bucket and the row keeps the storage path: only that
+    // owner's own signed URLs can ever resolve it, so the clip never has to be
+    // public for the render/dispatch pipeline to use it.
+    try {
+      const bytes = Uint8Array.from(atob(op.videoBase64), (c) => c.charCodeAt(0));
+      const itemName = shotId.length === 36 ? shotId : crypto.randomUUID();
+      const storagePath = `${userId}/shots/${itemName}.mp4`;
+      const { error: upErr } = await admin.storage.from(ADS_BUCKET).upload(storagePath, bytes, {
+        contentType: op.videoMimeType ?? "video/mp4",
+      });
+      if (upErr) throw new Error(upErr.message);
+      videoUri = `ads/${storagePath}`;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "the finished clip could not be stored";
+      if (shotId.length === 36) {
+        try {
+          await admin.from("ad_video_shots").update({ state: "failed", error: message, updated_at: new Date().toISOString() }).eq("id", shotId).eq("owner_id", userId);
+        } catch (err) {
+          console.error("[ads-video] could not store failed shot state", err);
+        }
+      }
+      return jsonResp({ error: `The clip was generated but could not be stored: ${message}`, code: "storage_failed" }, 502);
+    }
+  }
+
+  if (op.done && shotId.length === 36) {
     try {
       await admin.from("ad_video_shots").update({
-        state: op.state ?? "done",
-        video_uri: op.videoUri ?? null,
+        state: videoUri ? "done" : shotRowState(op.state),
+        video_uri: videoUri,
         updated_at: new Date().toISOString(),
-      }).eq("id", body.shotId).eq("owner_id", userId);
+      }).eq("id", shotId).eq("owner_id", userId);
     } catch (e) {
       console.error("[ads-video] could not store completed shot", e);
     }
   }
 
-  return jsonResp({ action: "poll", operationId, done: op.done, state: op.state, videoUri: op.videoUri, error: op.error });
+  return jsonResp({ action: "poll", done: op.done, state: op.state, videoUri: videoUri, error: op.error });
 }
 
 // ---------------------------------------------------------------------------

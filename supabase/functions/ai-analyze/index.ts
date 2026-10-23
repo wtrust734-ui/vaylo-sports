@@ -4,6 +4,7 @@ import { GEMINI_MODELS, MODELS } from "../_shared/aiModels.ts";
 import { geminiGenerate } from "../_shared/google.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import {
   authenticate,
   json,
@@ -317,6 +318,12 @@ ${dossierText}`;
         // Status is logged inside the adapter; the client gets a stable message.
         return json({ error: "AI analysis failed" }, 500);
       }
+      await markServiceJobDelivered({
+        supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        userId,
+        chargeKey: chargedKey,
+      });
       return json({
         result: gemini.text || "Analysis unavailable.",
         cost: spend?.cost ?? 0,
@@ -365,6 +372,12 @@ ${dossierText}`;
     const aiData = await aiResponse.json();
     const result = aiData.choices?.[0]?.message?.content || "Analysis unavailable.";
 
+    await markServiceJobDelivered({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      chargeKey: chargedKey,
+    });
     return json({ result, cost: spend?.cost ?? 0, balance: spend?.balance ?? null });
   } catch (err: unknown) {
     if (chargedUserId) {

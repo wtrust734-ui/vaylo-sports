@@ -34,7 +34,7 @@ export function reopenOnboarding(): void {
 const POINTS: { icon: typeof Image; title: string; body: string; view?: StudioView }[] = [
   { icon: MessageSquare, title: "Ask in plain words", body: "The Creative Assistant routes your request — research, image ad, video ad, revision or a question — and never starts a paid step by itself.", view: "chat" },
   { icon: Image, title: "Image ads", body: "Write a brief, pick a concept, generate backgrounds, compose with your brand text, then export. Each generated background is quoted and charged on your approval.", view: "image" },
-  { icon: Video, title: "Video ads", body: "The concept step writes script and storyboard free; each Veo shot is quoted per-shot; narration and render follow. Rendering needs a hosted worker — the app says so when it is missing.", view: "video" },
+  { icon: Video, title: "Video ads", body: "The concept step writes script and storyboard free; each generated shot is quoted per-shot; narration and render follow. Rendering needs a hosted worker — the app says so when it is missing.", view: "video" },
   { icon: FlaskConical, title: "Competitor research", body: "Public pages, press and manual sources. Findings keep their links; ad-platform ad libraries stay marked unavailable until approvals exist.", view: "research" },
   { icon: Megaphone, title: "Campaigns & assets", body: "Campaigns hold concepts, assets and exports. The library stores every file you upload or generate, yours alone, private to your account.", view: "campaigns" },
   { icon: Plug, title: "Integrations", body: "Check what is configured and what is missing at any time. A listed provider is a configured key, not a verified capability — the panel says which is which.", view: "integrations" },
@@ -86,7 +86,7 @@ export default function BetaOnboarding({ onNavigate }: { onNavigate: (v: StudioV
           <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
           <span>
             <strong className="text-white/80">Where your money goes:</strong> credits are charged server-side per confirmed generation
-            (currently one image 4, one Veo shot 40, one narration 5, one render 1). Estimates are provider rates, not your bill —
+            (currently one image 4, one video shot 40, one narration 5, one render 1). Estimates are provider rates, not your bill —
             the provider ("the provider is the final word on cost") settles what is actually charged.
           </span>
         </div>

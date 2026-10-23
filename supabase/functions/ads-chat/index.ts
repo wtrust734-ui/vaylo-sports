@@ -275,9 +275,9 @@ Deno.serve(async (req) => {
     const wantsVideo = classification.steps.some((s) => s.type === "video_ad");
     const hasRecording = libraryContext.includes(", screen recording");
     if (wantsVideo && hasRecording) {
-      reply += " Your uploaded screen recordings are in the Asset Library; shots can use them directly in the Video Ads workspace — no Veo spend is needed for those shots.";
+      reply += " Your uploaded screen recordings are in the Asset Library; shots can use them directly in the Video Ads workspace — no video-model spend is needed for those shots.";
     } else if (wantsVideo) {
-      reply += " If you want app screen-recording footage inside the ad, upload it in the Asset Library first — library clips cover shots directly with no Veo spend.";
+      reply += " If you want app screen-recording footage inside the ad, upload it in the Asset Library first — library clips cover shots directly with no video-model spend.";
     }
 
     // ---- research-aware routing (Prompt 3) ----------------------------------

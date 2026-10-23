@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import VayloLoader from "@/components/VayloLoader";
+import { rememberPostAuthPath } from "@/lib/postAuthReturn";
 
 /**
  * Route-level admin gate.
@@ -47,21 +48,40 @@ export default function RequireAdmin({ children }: { children: ReactNode }) {
   }
 
   if (state !== "admin") {
+    // Signed out is a different situation from signed in without the role: the
+    // emailed review link lands here, and "No access" would be a dead end for
+    // the administrator it was sent to. Offer sign-in, and remember the case URL
+    // so they arrive at it (Auth consumes the parked path).
+    const signedOut = !user;
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-5 text-center">
         <div className="w-14 h-14 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center mb-4">
           <ShieldAlert size={24} className="text-destructive" aria-hidden />
         </div>
-        <h1 className="text-xl font-display font-bold">No access</h1>
+        <h1 className="text-xl font-display font-bold">{signedOut ? "Sign in required" : "No access"}</h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-          This area is restricted to Vaylo Sports administrators.
+          {signedOut
+            ? "This area is restricted to Vaylo Sports administrators. Sign in with an administrator account to continue."
+            : "This area is restricted to Vaylo Sports administrators."}
         </p>
-        <button
-          onClick={() => navigate("/", { replace: true })}
-          className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft size={14} /> Back to the app
-        </button>
+        {signedOut ? (
+          <button
+            onClick={() => {
+              rememberPostAuthPath();
+              navigate("/auth");
+            }}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/15"
+          >
+            Sign in
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate("/", { replace: true })}
+            className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+          >
+            <ArrowLeft size={14} /> Back to the app
+          </button>
+        )}
       </div>
     );
   }

@@ -57,7 +57,6 @@ import {
   renderVideo,
   jobStatus,
   type VideoConceptResult,
-  type ShotQuote,
   type VideoStoryboardScene,
 } from "./videoAdsApi";
 import { listLibrary, type LibraryItem } from "./api";
@@ -69,8 +68,7 @@ const ACCENT = "bg-[#8505D5] text-white";
 interface ShotRow {
   scene: VideoStoryboardScene;
   videoUri: string | null;
-  state: "pending" | "quoting" | "awaiting_confirm" | "generating" | "ready" | "failed";
-  quote?: ShotQuote;
+  state: "pending" | "generating" | "ready" | "failed";
   error?: string | null;
   shotId?: string;
   operationId?: string;
@@ -99,9 +97,30 @@ const RENDER_POLL_INTERVAL_MS = 2500;
 
 const secs = (ms: number) => `${Math.max(1, Math.round(ms / 1000))}s`;
 
-export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void }) {
+export default function VideoAdsView({
+  onOpenChat,
+  /** A brief written in the Creative Assistant, dropped here when the chat's
+   *  video plan continues into this workspace. Consumed once, then cleared. */
+  chatBrief,
+  onConsumeChatBrief,
+}: {
+  onOpenChat: () => void;
+  chatBrief?: string | null;
+  onConsumeChatBrief?: () => void;
+}) {
   // ------------------------------------------------------------------ brief
   const [request, setRequest] = useState("");
+
+  // Accept a brief handed over from the Creative Assistant: prefill the brief
+  // field (never auto-start anything — generation stays behind the quote and
+  // its explicit start) and clear the handover.
+  useEffect(() => {
+    if (typeof chatBrief === "string" && chatBrief.trim()) {
+      setRequest((current) => (current.trim() ? current : chatBrief.trim()));
+      onConsumeChatBrief?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatBrief]);
   const [durationSeconds, setDurationSeconds] = useState("15");
   const [callToAction, setCallToAction] = useState("Join the waitlist");
   const [concept, setConcept] = useState<VideoConceptResult | null>(null);
@@ -121,6 +140,9 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
   const [steps, setSteps] = useState<StepEntry[]>([]);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const pipelineRunRef = useRef(0);
+  // A 1-second clock so every "elapsed" label ticks live instead of only
+  // updating when a server response happens to re-render the view.
+  const [now, setNow] = useState(() => Date.now());
   // The screen recording chosen at brief time: when set, every storyboard shot
   // is cut from it and the pipeline spends nothing on Veo.
   const [briefRecording, setBriefRecording] = useState<LibraryItem | null>(null);
@@ -136,6 +158,15 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
     pipelineRunRef.current += 1; // invalidate any in-flight pipeline loops
     pollTimersRef.current.forEach(clearTimeout);
   }, []);
+
+  // The live clock runs while anything is building, so the step log and the
+  // shot rows show genuinely moving elapsed time.
+  useEffect(() => {
+    if (!pipelineRunning) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [pipelineRunning]);
 
   const duration = Number(durationSeconds);
   const durInvalid = !duration || duration < 6 || duration > 60;
@@ -181,7 +212,6 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
       videoUri: source,
       state: "ready",
       error: null,
-      quote: undefined,
     };
     setShots([...work]);
     setLibPicker(null);
@@ -327,10 +357,10 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
     try {
       const q = await quoteShot({ conceptId: concept?.conceptId ?? "", shot: row.scene.shot, placement: "reels" });
       if (pipelineRunRef.current !== runId) return false;
-      noteStep(stepId, `The server quoted this shot at ~$${(q.estimatedCostUsd ?? 0).toFixed(2)} — paying it now because you started this build`);
+      noteStep(stepId, `The server quoted this shot at ~$${(q.estimatedCostUsd ?? 0).toFixed(2)} — paying it and generating straight away, no approval pause`);
       const s = await startShot(q);
       if (pipelineRunRef.current !== runId) return false;
-      work[index] = { ...work[index], state: "generating", shotId: s.shotId, operationId: s.operationId, quote: undefined, error: null };
+      work[index] = { ...work[index], state: "generating", shotId: s.shotId, operationId: s.operationId, error: null };
       setShots([...work]);
       return await refreshOne(runId, work, index, s.shotId, s.operationId);
     } catch (e) {
@@ -482,39 +512,24 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
 
   const stepForDone = (id: string) => steps.find((s) => s.id === id && s.state === "done");
 
-  // Manual single-shot controls (kept for review and repair; they spend only on
-  // an explicit click, exactly as before — never while the pipeline runs).
-  const quoteOneShot = async (index: number) => {
+  // Manual single-shot controls: a click runs the shot through quote → pay →
+  // generate in one go — the quote is shown in the log, never turned into a
+  // wait. They never run while the pipeline is already going.
+  const generateOneShot = async (index: number) => {
     if (!concept || pipelineRunning) return;
-    const row = shots[index];
-    try {
-      const q = await quoteShot({ conceptId: concept.conceptId, shot: row.scene.shot, placement: "reels" });
-      setShots((rows) => rows.map((r, i) => (i === index ? { ...r, state: "awaiting_confirm", quote: q } : r)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not get a cost quote.");
-    }
-  };
-
-  const confirmOneShot = async (index: number) => {
-    const row = shots[index];
-    if (!row.quote || pipelineRunning) return;
-    try {
-      const s = await startShot(row.quote);
-      setShots((rows) => rows.map((r, i) => (i === index ? { ...r, state: "generating", shotId: s.shotId, operationId: s.operationId, quote: undefined, error: null } : r)));
-      void refreshOne(pipelineRunRef.current, shots, index, s.shotId, s.operationId);
-    } catch (e) {
-      setShots((rows) => rows.map((r, i) => (i === index ? { ...r, state: "failed", error: e instanceof Error ? e.message : "start failed" } : r)));
-    }
+    await generateShot(pipelineRunRef.current, shots, index);
   };
 
   const retryShot = async (index: number) => {
     if (pipelineRunning) return;
     setShots((rows) => rows.map((r, i) => (i === index ? { ...r, state: "pending", error: null } : r)));
-    await quoteOneShot(index);
+    void generateOneShot(index);
   };
 
   const readyShots = shots.filter((s) => s.state === "ready").length;
   const failedShots = shots.filter((s) => s.state === "failed").length;
+  const currentRunningStep = steps.find((s) => s.state === "running");
+  const finishedSteps = steps.filter((s) => s.state === "done" || s.state === "failed").length;
 
   // ------------------------------------------------------------------ view
   return (
@@ -571,7 +586,7 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
           </div>
 
           <p className="text-[10px] text-white/40">
-            One click runs the whole build: concept (free) → narration (billed per character — the server reports the count) → shots (your recording, or one Veo shot per scene, each quoted server-side and paid because you started the build) → render (1 credit to dispatch, then the ads editor reports progress live). Every line below tells you what the server actually said.
+            One click runs the whole build with no approval pauses: concept (free) → narration (billed per character) → shots (each quoted and paid immediately) → render (dispatch, then the ads editor reports progress live). Every line below tells you what the server actually said.
           </p>
           <div className="flex items-center gap-3">
             <button
@@ -579,7 +594,7 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
               disabled={!canStart}
               className={`rounded-lg px-4 py-2 text-sm ${ACCENT} disabled:opacity-40`}
             >
-              {pipelineRunning ? <Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" /> : <Play className="mr-1.5 inline h-4 w-4" />} Build the ad
+              {pipelineRunning ? <Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" /> : <Play className="mr-1.5 inline h-4 w-4" />} {pipelineRunning ? "Building…" : "Build the ad"}
             </button>
             {steps.length > 0 && !pipelineRunning && steps.some((s) => s.state === "failed") && (
               <button
@@ -590,6 +605,13 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
               </button>
             )}
           </div>
+          {pipelineRunning && currentRunningStep && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-sm text-amber-200/90">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              <span className="min-w-0 flex-1">Now working on: {currentRunningStep.label}</span>
+              <span className="shrink-0 tabular-nums text-xs text-amber-200/60">{secs(now - currentRunningStep.startedAt)}</span>
+            </div>
+          )}
           {durInvalid && <p className="text-xs text-red-400">Duration must be between 6 and 60 seconds.</p>}
         </CardContent>
       </Card>
@@ -608,7 +630,13 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
       {steps.length > 0 && (
         <Card className={CARD}>
           <CardContent className="space-y-2 p-4 text-sm">
-            <h3 className="flex items-center gap-2 font-medium"><ListTree className="h-4 w-4" /> What is happening</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="flex items-center gap-2 font-medium"><ListTree className="h-4 w-4" /> What is happening</h3>
+              <span className="ml-auto text-[10px] tabular-nums text-white/40">{finishedSteps}/{steps.length} steps settled</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded bg-black/40">
+              <div className="h-full rounded bg-[#8505D5] transition-all duration-500" style={{ width: `${Math.round((finishedSteps / Math.max(1, steps.length)) * 100)}%` }} />
+            </div>
             <ol className="space-y-2">
               {steps.map((s) => (
                 <li key={s.id} className="rounded-lg bg-black/20 p-2.5">
@@ -617,8 +645,8 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
                     {s.state === "done" && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />}
                     {s.state === "failed" && <XCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />}
                     <span className="min-w-0 flex-1">{s.label}</span>
-                    <span className="shrink-0 text-[10px] text-white/40">
-                      {s.state === "running" ? `${secs(Date.now() - s.startedAt)} elapsed` : s.state}
+                    <span className="shrink-0 text-[10px] tabular-nums text-white/40">
+                      {s.state === "running" ? `${secs(now - s.startedAt)} elapsed` : s.state}
                     </span>
                   </div>
                   {s.detail && (
@@ -677,24 +705,19 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
                   <span className="rounded bg-white/10 px-1.5 py-0.5">shot {row.scene.shot} · {row.scene.durationSeconds}s</span>
                   <span className="text-white/70">{row.scene.visualDescription || "(no visual description — this shot cannot be generated yet)"}</span>
                   <span className={`ml-auto ${row.state === "failed" ? "text-red-400" : row.state === "ready" ? "text-emerald-400" : row.state === "generating" ? "text-amber-300" : "text-white/50"}`}>
-                    {row.state === "awaiting_confirm" ? `awaiting your confirmation (~$${(row.quote?.estimatedCostUsd ?? 0).toFixed(2)})` : row.state}
+                    {row.state}
                   </span>
                 </div>
                 {row.error && <p className="mt-1 text-xs text-red-400">{row.error}</p>}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {row.state === "pending" && !pipelineRunning && (
-                    <button onClick={() => void quoteOneShot(i)} className={`rounded px-2.5 py-1 text-xs ${ACCENT}`}>
-                      Get quote
+                    <button onClick={() => void generateOneShot(i)} className={`rounded px-2.5 py-1 text-xs ${ACCENT}`}>
+                      Generate this shot
                     </button>
                   )}
-                  {(row.state === "pending" || row.state === "awaiting_confirm" || row.state === "failed") && !pipelineRunning && (
+                  {(row.state === "pending" || row.state === "failed") && !pipelineRunning && (
                     <button onClick={() => void openLibraryPicker(i)} className="rounded bg-white/10 px-2.5 py-1 text-xs text-white/80 hover:bg-white/20">
                       <FolderOpen className="mr-1 inline h-3 w-3" /> Use a library clip
-                    </button>
-                  )}
-                  {row.state === "awaiting_confirm" && !pipelineRunning && (
-                    <button onClick={() => void confirmOneShot(i)} className="rounded bg-emerald-600 px-2.5 py-1 text-xs text-white">
-                      Confirm spend & generate
                     </button>
                   )}
                   {row.state === "generating" && (
@@ -758,7 +781,7 @@ export default function VideoAdsView({ onOpenChat }: { onOpenChat: () => void })
                       : renderJob.state}
                   </span>
                   {renderJob.state !== "done" && renderJob.state !== "failed" && (
-                    <span className="ml-auto tabular-nums text-white/50">{secs(Date.now() - renderJob.startedAt)} since dispatch</span>
+                    <span className="ml-auto tabular-nums text-white/50">{secs(now - renderJob.startedAt)} since dispatch</span>
                   )}
                 </div>
                 {/* A bar only from the editor's own number: before it reports a

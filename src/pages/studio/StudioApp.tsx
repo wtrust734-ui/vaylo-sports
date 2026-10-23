@@ -118,6 +118,9 @@ export default function StudioApp() {
   const [session, setSession] = useState<null | boolean>(null); // null = checking
   const [view, setView] = useState<StudioView>("home");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // A video-ad brief written in the Creative Assistant, waiting for the Video
+  // Ads workspace to pick it up. Cleared the moment the brief lands.
+  const [videoBriefFromChat, setVideoBriefFromChat] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(Boolean(data.session)));
@@ -198,9 +201,22 @@ export default function StudioApp() {
               <HomeView onNavigate={setView} />
             </div>
           )}
-          {view === "chat" && <ChatView />}
+          {view === "chat" && (
+            <ChatView
+              onOpenVideoWorkflow={(brief) => {
+                setVideoBriefFromChat(brief);
+                setView("video");
+              }}
+            />
+          )}
           {view === "image" && <ImageAdsView onOpenChat={() => setView("chat")} />}
-          {view === "video" && <VideoAdsView onOpenChat={() => setView("chat")} />}
+          {view === "video" && (
+            <VideoAdsView
+              onOpenChat={() => setView("chat")}
+              chatBrief={videoBriefFromChat}
+              onConsumeChatBrief={() => setVideoBriefFromChat(null)}
+            />
+          )}
           {view === "research" && <ResearchView onOpenChat={() => setView("chat")} />}
           {view === "campaigns" && <CampaignsView />}
           {view === "library" && <LibraryView />}

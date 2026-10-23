@@ -38,7 +38,7 @@ import {
   currencyFor,
   normaliseCountryCode,
 } from "@/lib/geo";
-import { Bell, FileText, Scale, ShieldCheck, Watch } from "lucide-react";
+import { Bell, FileText, ReceiptText, Scale, ShieldCheck, Watch } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
 import { isAndroid } from "@/lib/platform";
 import { isFlagOn } from "@/config/featureFlags";
@@ -445,6 +445,15 @@ const Profile = () => {
       label: "Friends",
       desc: "Connect, message and share sessions",
       path: "/friends",
+    },
+    // The in-app half of the refund system. It sits with the account rows
+    // rather than inside Market: an athlete looking for what they were charged,
+    // or for a refund they already asked for, looks at their own account first.
+    {
+      icon: ReceiptText,
+      label: "Purchases & refunds",
+      desc: "Your transactions, requests and their status",
+      path: "/settings/purchases",
     },
     // Achievements lived here until 2026-10-10. They now live in the Perform
     // hub's Trophy Room (/achievements, /challenges) — they are earned by

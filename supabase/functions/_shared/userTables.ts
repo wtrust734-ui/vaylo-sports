@@ -125,8 +125,17 @@ export const USER_TABLES: [table: string, columns: string[]][] = [
   ["purchase_analytics", ["user_id"]],
   ["push_tokens", ["user_id"]],
   ["recovery_logs", ["user_id"]],
+  // Refund requests are the athlete's: they name what they bought, why they
+  // wanted it back and what was decided. `refund_case_events`, `refund_notifications`
+  // and `refund_cases` cascade from this row (or from auth.users) and hold no
+  // second ownership column, so the case is the row that must be exported and
+  // deleted by its owner.
+  ["refund_cases", ["user_id"]],
   ["referral_codes", ["user_id"]],
   ["referrals", ["referrer_id", "referee_id"]],
+  // One row per charged AI call, linking the ledger debit to whether the call
+  // was delivered. The athlete's own record of what they paid for.
+  ["service_jobs", ["user_id"]],
   ["shared_activities", ["user_id"]],
   ["streaks", ["user_id"]],
   ["subscriptions", ["user_id"]],

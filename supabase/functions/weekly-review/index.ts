@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { fetchAthleteDossier, formatDossierForPrompt } from "../_shared/athleteDossier.ts";
 import { MODELS } from "../_shared/aiModels.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { aiCallAllowed, throttled } from "../_shared/guard.ts";
 
@@ -141,6 +142,12 @@ ${dossierText ? `Full athlete dossier (use to tailor advice — PBs, goals, inju
     }
     const data = await r.json();
     const feedback = data?.choices?.[0]?.message?.content ?? "No feedback generated.";
+    await markServiceJobDelivered({
+      supabaseUrl,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId: user.id,
+      chargeKey,
+    });
     return new Response(JSON.stringify({ feedback, balance: spend?.balance ?? null, cost: spend?.cost ?? 3 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

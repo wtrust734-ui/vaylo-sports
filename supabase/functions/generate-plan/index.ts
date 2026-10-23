@@ -4,6 +4,7 @@ import { MODELS } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { terminologyDirective } from "../_shared/terminology.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 import { equipmentDirective, normaliseEquipment, type EquipmentId } from "../_shared/equipment.ts";
@@ -474,6 +475,12 @@ ${skeletonContinuityNote(own, skeleton)}`;
       return json({ error: "The generated plan was malformed. Please try again." }, 502);
     }
 
+    await markServiceJobDelivered({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      chargeKey: chargedKey,
+    });
     return json({ plan_data: cleanWeeks, cost: spend.cost, balance: spend.balance });
   } catch (e) {
     console.error("generate-plan error:", e instanceof Error ? e.name : e);

@@ -3429,6 +3429,183 @@ export type Database = {
         }
         Relationships: []
       }
+      refund_case_events: {
+        Row: {
+          actor_id: string | null
+          actor_type: string
+          case_id: string
+          created_at: string
+          detail: Json
+          event: string
+          id: number
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_type?: string
+          case_id?: string
+          created_at?: string
+          detail?: Json
+          event?: string
+          id?: number
+        }
+        Update: {
+          actor_id?: string | null
+          actor_type?: string
+          case_id?: string
+          created_at?: string
+          detail?: Json
+          event?: string
+          id?: number
+        }
+        Relationships: []
+      }
+      refund_cases: {
+        Row: {
+          admin_id: string | null
+          admin_note: string | null
+          amount_cents: number | null
+          charge_key: string | null
+          charge_transaction_id: string | null
+          completed_at: string | null
+          created_at: string
+          credits_requested: number | null
+          currency: string
+          decided_at: string | null
+          details: string | null
+          eligibility: Json
+          escalation_rules: string[]
+          feature: string | null
+          id: string
+          kind: string
+          provider: string | null
+          provider_refund_id: string | null
+          provider_state: string | null
+          public_ref: string
+          purchase_id: string | null
+          reason_code: string
+          resolution: string | null
+          service_job_id: string | null
+          source_type: string
+          status: string
+          submission_key: string
+          transaction_ref: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          admin_note?: string | null
+          amount_cents?: number | null
+          charge_key?: string | null
+          charge_transaction_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credits_requested?: number | null
+          currency?: string
+          decided_at?: string | null
+          details?: string | null
+          eligibility?: Json
+          escalation_rules?: string[]
+          feature?: string | null
+          id?: string
+          kind?: string
+          provider?: string | null
+          provider_refund_id?: string | null
+          provider_state?: string | null
+          public_ref?: string
+          purchase_id?: string | null
+          reason_code?: string
+          resolution?: string | null
+          service_job_id?: string | null
+          source_type?: string
+          status?: string
+          submission_key?: string
+          transaction_ref?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          admin_id?: string | null
+          admin_note?: string | null
+          amount_cents?: number | null
+          charge_key?: string | null
+          charge_transaction_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credits_requested?: number | null
+          currency?: string
+          decided_at?: string | null
+          details?: string | null
+          eligibility?: Json
+          escalation_rules?: string[]
+          feature?: string | null
+          id?: string
+          kind?: string
+          provider?: string | null
+          provider_refund_id?: string | null
+          provider_state?: string | null
+          public_ref?: string
+          purchase_id?: string | null
+          reason_code?: string
+          resolution?: string | null
+          service_job_id?: string | null
+          source_type?: string
+          status?: string
+          submission_key?: string
+          transaction_ref?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      refund_notifications: {
+        Row: {
+          attempts: number
+          body: string
+          case_id: string
+          created_at: string
+          dedupe_key: string
+          id: string
+          kind: string
+          last_error: string | null
+          next_attempt_at: string
+          recipient: string
+          sent_at: string | null
+          status: string
+          subject: string
+        }
+        Insert: {
+          attempts?: number
+          body?: string
+          case_id?: string
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          recipient?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+        }
+        Update: {
+          attempts?: number
+          body?: string
+          case_id?: string
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          recipient?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+        }
+        Relationships: []
+      }
       referral_codes: {
         Row: {
           code: string
@@ -3549,6 +3726,45 @@ export type Database = {
           type?: string
           updated_at?: string
           weight_override?: number | null
+        }
+        Relationships: []
+      }
+      service_jobs: {
+        Row: {
+          charge_key: string | null
+          credits: number
+          error_code: string | null
+          feature: string
+          finished_at: string | null
+          id: string
+          metadata: Json
+          started_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          charge_key?: string | null
+          credits?: number
+          error_code?: string | null
+          feature?: string
+          finished_at?: string | null
+          id?: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          user_id?: string
+        }
+        Update: {
+          charge_key?: string | null
+          credits?: number
+          error_code?: string | null
+          feature?: string
+          finished_at?: string | null
+          id?: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          user_id?: string
         }
         Relationships: []
       }

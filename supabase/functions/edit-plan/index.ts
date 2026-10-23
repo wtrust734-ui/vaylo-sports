@@ -1,6 +1,7 @@
 import { MODELS, OUTPUT_SAFETY_CONTRACT, SAFETY_PREAMBLE } from "../_shared/aiModels.ts";
 import { languageDirective } from "../_shared/openai.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 import { cleanPlanWeeks, PLAN_SESSION_TYPES } from "../_shared/planSchema.ts";
 import { aiCallAllowed, authenticate, json, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { coachVoiceDirective } from "../_shared/coachVoice.ts";
@@ -268,6 +269,12 @@ Level: ${level}. These are the week${targets.length === 1 ? "" : "s"} to return$
       return json({ error: "The edit came back incomplete. Your credits were refunded." }, 502);
     }
 
+    await markServiceJobDelivered({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      chargeKey: chargedKey,
+    });
     return json({ weeks: edited, cost: spend.cost, balance: spend.balance });
   } catch (e) {
     console.error("edit-plan error:", e instanceof Error ? e.name : e);

@@ -115,6 +115,8 @@ const AdminRewards = lazy(() => import("./pages/AdminRewards"));
 const AdminEventPacks = lazy(() => import("./pages/AdminEventPacks"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
 const AdminErrorReports = lazy(() => import("./pages/AdminErrorReports"));
+const AdminRefunds = lazy(() => import("./pages/AdminRefunds"));
+const PurchasesRefunds = lazy(() => import("./pages/PurchasesRefunds"));
 const EventPackLanding = lazy(() => import("./pages/EventPackLanding"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const ChallengeDetail = lazy(() => import("./pages/ChallengeDetail"));
@@ -611,6 +613,11 @@ const App = () => {
                 <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
                 <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
                 <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
+                {/* Reached from the emailed secure link (/admin/refunds?case=RF-…).
+                    RequireAdmin is the visible gate; refund-admin re-checks the
+                    role on every request, so the URL alone grants nothing. */}
+                <Route path="/admin/refunds" element={<RequireAdmin><AdminRefunds /></RequireAdmin>} />
+                <Route path="/settings/purchases" element={<PurchasesRefunds />} />
                 <Route path="/collection" element={<Collection />} />
                 <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
                 <Route path="/pipeline" element={<RequireAdmin><PipelineDashboard /></RequireAdmin>} />

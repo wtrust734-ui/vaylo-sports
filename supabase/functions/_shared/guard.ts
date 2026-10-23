@@ -16,6 +16,7 @@
  * the client now calls the function and reads { cost, balance } from the reply.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
+import { beginServiceJob } from "./serviceJobs.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -249,6 +250,24 @@ export async function spendForUser(
     usedKey = data?.success === true ? spendKey : undefined;
   }
   if (error) return { success: false, unlimited: false, cost: 0, balance: 0, error: error.message };
+
+  // The refund system needs to know which charged call this was. Recording a
+  // started job here (rather than in each AI function) means every charged call
+  // is linked to its ledger debit even if a later code path forgets to mark the
+  // outcome — and "started with no outcome" is treated by the refund engine as
+  // unverified, never as failed. Best-effort: bookkeeping cannot fail a charge.
+  if (data?.success === true && usedKey && Number(data?.cost ?? 0) > 0) {
+    await beginServiceJob({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      feature,
+      chargeKey: usedKey,
+      credits: Number(data?.cost ?? 0),
+      metadata: { source: opts.source ?? "edge" },
+    });
+  }
+
   return {
     success: !!data?.success,
     unlimited: !!data?.unlimited,

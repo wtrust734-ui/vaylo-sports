@@ -172,6 +172,20 @@ verify_jwt = false
 [functions.waitlist-campaigns]
 verify_jwt = false
 
+# The refund e-mail outbox retry. Same cron shape as waitlist-campaigns: the
+# caller is pg_cron (through pg_net) or the operator, and neither has a
+# Supabase session. It is gated by REFUND_CRON_SECRET in `x-cron-secret` (or
+# the service-role key in the bearer), compared in constant time; with the
+# secret unset it answers 500 and mails nothing rather than exposing an
+# unauthenticated sender. verify_jwt must stay false or every scheduled retry
+# becomes a 401 nobody watches.
+[functions.refund-notify]
+verify_jwt = false
+
+# refund-request and refund-admin deliberately keep the default (verify_jwt
+# true): both are called by a signed-in athlete or administrator, and
+# refund-admin additionally re-checks has_role() server-side.
+
 # waitlist-broadcast deliberately keeps the default. It mails the whole list,
 # so it requires a valid JWT and then re-checks that the caller holds the
 # service-role key — see the comments in the function for why it is not gated

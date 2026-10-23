@@ -51,16 +51,18 @@ export const GEMINI_MODELS = {
   /** Higher-capability tier — premium video analysis only. */
   PRO: "gemini-3.1-pro-preview",
   /**
-   * Veo 3.1 — AD VIDEO GENERATION ONLY, not analysis, and it is the most
-   * expensive thing in the project by an order of magnitude: roughly $0.15 per
-   * second of video on Fast and $0.40 on Standard, so a single eight-second
-   * clip costs more than every image this app has ever generated combined.
-   * `ad-video` therefore never generates without an explicit `confirm`, and
-   * quotes the estimate first.
-   *
-   * LITE is the default. A `veo-4.1-lite` was requested, but no 4.x model
-   * resolves on this key (every variant returns 404 from predictLongRunning),
-   * so the newest lite tier that actually exists is used.
+   * Ad-studio text on GOOGLE_VIDEO_API (script + storyboard writing). The 2.5
+   * flash family is retired for new keys — generateContent returns 404 “no
+   * longer available to new users” and names this model as the replacement;
+   * verified live on 2026-10-23.
+   */
+  ADS_TEXT: "gemini-3.5-flash-lite",
+  /**
+   * Veo 3.1 — RETIRED BY GOOGLE on 2026-10-22 and named dead by their own
+   * models list: no veo-3.x id resolves on this key any more. The values are
+   * kept only so historical cost records still name what was spent on them;
+   * the live shot pipeline now runs on the Gemini Omni Interactions API
+   * (DEFAULT_OMNI_MODEL in _shared/omni.ts). Do not start anything new here.
    */
   VEO_LITE: "veo-3.1-lite-generate-preview",
   VEO_FAST: "veo-3.1-fast-generate-preview",

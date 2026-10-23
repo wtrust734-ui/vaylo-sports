@@ -4,8 +4,8 @@
 // is configured at build time, which switches every form on the site into an
 // explicit "not available, email us instead" state.
 window.VAYLO_SITE_CONFIG = {
-  supportEndpoint: "https://vvwhausdjzdmsyxekrcl.supabase.co/functions/v1/support-request",
-  waitlistEndpoint: "https://vvwhausdjzdmsyxekrcl.supabase.co/functions/v1/waitlist-signup",
-  sponsorEndpoint: "https://vvwhausdjzdmsyxekrcl.supabase.co/functions/v1/sponsor-enquiry",
+  supportEndpoint: "https://nedxvqnfuwfyfbegptnv.supabase.co/functions/v1/support-request",
+  waitlistEndpoint: "https://nedxvqnfuwfyfbegptnv.supabase.co/functions/v1/waitlist-signup",
+  sponsorEndpoint: "https://nedxvqnfuwfyfbegptnv.supabase.co/functions/v1/sponsor-enquiry",
   contactEmail: "vaylosportssupport@gmail.com",
 };

@@ -5,6 +5,7 @@ import { GEMINI_MODELS } from "../_shared/aiModels.ts";
 import { geminiDeleteFile, geminiGenerate, geminiUploadFile } from "../_shared/google.ts";
 import { aiCallAllowed, authenticate, readJsonBody, spendForUser, throttled } from "../_shared/guard.ts";
 import { refundCredits } from "../_shared/refund.ts";
+import { markServiceJobDelivered } from "../_shared/serviceJobs.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -658,6 +659,15 @@ Deno.serve(async (req) => {
       }
       premiumSlotId = null;
     }
+    // The report exists and is saved: this is a delivered service, which the
+    // refund policy will not auto-refund. Recorded before the charge markers are
+    // cleared, and best-effort — bookkeeping must not fail a delivered report.
+    await markServiceJobDelivered({
+      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      userId,
+      chargeKey: chargedKey,
+    });
     chargedAmount = 0;
     chargedUserId = null;
     return json({ result, model, saved_id, tier: premiumTier ? "premium" : "free", cost: analysisCost });

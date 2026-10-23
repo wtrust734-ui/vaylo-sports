@@ -32,6 +32,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
 import { emailConfigured, sendMail } from "./email.ts";
+import { markServiceJobFailed } from "./serviceJobs.ts";
 
 interface RefundArgs {
   supabaseUrl: string;
@@ -70,6 +71,14 @@ export async function refundCredits({
 }: RefundArgs): Promise<boolean> {
   if (!amount || amount <= 0) return false;
   const idempotencyKey = dedupeKey ? `refund:${dedupeKey}` : `refund:${crypto.randomUUID()}`;
+
+  // This call IS the verified failure signal: the AI function only asks for its
+  // charge back when the provider or persistence failed. Record it on the
+  // service job so a later refund request can be auto-settled from evidence
+  // instead of guessed from absence of success. Best-effort, never throws.
+  if (dedupeKey) {
+    await markServiceJobFailed({ supabaseUrl, serviceRoleKey, userId, chargeKey: dedupeKey });
+  }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
   let lastError: string | null = null;
