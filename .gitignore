@@ -110,3 +110,7 @@ supabase/functions/.bundles/
 /rebuilt-apk/
 /vaylo-sports-*.apk
 /Vaylo-Sports-*.apk
+
+# CI tees the Gradle output here to surface failures in the step summary
+# (job logs need a GitHub sign-in). Never produced by a local build.
+android/gradle-build.log

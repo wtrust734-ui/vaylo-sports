@@ -166,9 +166,13 @@ jobs:
         run: |
           {
             echo '### Gradle bundleRelease failed'
-            echo '```'
-            grep -B2 -A30 -m1 -E '^\* What went wrong|FAILURE: Build failed|error:' gradle-build.log || tail -80 gradle-build.log
-            echo '```'
+            if [ -f gradle-build.log ]; then
+              echo '```'
+              grep -B2 -A30 -m1 -E '^\* What went wrong|FAILURE: Build failed|error:' gradle-build.log || tail -80 gradle-build.log
+              echo '```'
+            else
+              echo 'No Gradle output — the failure was in an earlier step.'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the bundle is signed
