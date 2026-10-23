@@ -87,7 +87,30 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Check the web build's public config is present
+        # A release bundle reaching a Play testing track must talk to the real
+        # Supabase project. The URL and publishable key are public by design
+        # (Vite inlines every VITE_* value into the shipped bundle), so they
+        # belong in Actions *variables*, not secrets — but they still have to
+        # be set, or the bundle would ship with inert placeholders and every
+        # tester would see the boot-failure screen.
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          missing=""
+          [ -n "$VITE_SUPABASE_URL" ]           || missing="$missing VITE_SUPABASE_URL"
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing="$missing VITE_SUPABASE_PUBLISHABLE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository variables:$missing"
+            echo "Settings → Secrets and variables → Actions → Variables: set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (the public client config; see .env.example)."
+            exit 1
+          fi
+
       - name: Build web assets for the native shell
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build:native
 
       - name: Sync Capacitor Android assets

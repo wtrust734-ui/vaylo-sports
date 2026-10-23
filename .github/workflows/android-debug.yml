@@ -80,6 +80,17 @@ jobs:
       - name: Build web assets for the native shell
         # `build:native` is what ships in the APK; the root-absolute base is
         # safe because the native app uses HashRouter for nested routes.
+        #
+        # CI has no .env (it is git-ignored), and vite.config.ts refuses to
+        # build without an sb_publishable_-prefixed key. Repository *variables*
+        # supply the real public config when set (making this APK bootable);
+        # otherwise inert placeholders let the step verify that the bundle
+        # builds — the same trick scripts/build-clone.cjs uses. Either way the
+        # guard stays intact; release-quality builds come from
+        # scripts/build-apk.sh on a machine with the real config.
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ci_placeholder' }}
         run: npm run build:native
 
       - name: Sync Capacitor Android assets
