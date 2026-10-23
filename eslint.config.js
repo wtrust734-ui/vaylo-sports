@@ -26,6 +26,10 @@ export default tseslint.config(
       // Espree parses it as JavaScript and fails on line 2. The name stays for
       // historical reasons, so the linter is told to step over it.
       "scripts/vercel-redeploy.cjs",
+      // Documentation for the external Manus agent — same arrangement as the
+      // tsconfig exclusion: never imported, never meant to compile (it is not
+      // even parseable TypeScript). See tsconfig.app.json's exclude list.
+      "src/integrations/manus/manus-skill-skeleton.ts",
       "android/app/build",
       "android/build",
       "android/.gradle",

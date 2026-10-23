@@ -37,6 +37,14 @@
   ],
   "exclude": [
     "src/components/_archive",
-    "src/lib/profile-upload.ts"
+    "src/lib/profile-upload.ts",
+    // The Manus agent's skill skeleton: documentation the external agent reads,
+    // never imported by the app and never meant to compile — it references a
+    // dependency (type-fest) this project deliberately does not carry and uses
+    // shapes the app has no types for. It exists only in the git repository
+    // checkout, which is why CI (typechecking that tree) failed while local
+    // runs passed. Excluded here rather than deleted so the reference material
+    // stays; docs/BUG-AUDIT-2026-10-17.md describes the same arrangement.
+    "src/integrations/manus/manus-skill-skeleton.ts"
   ]
 }
