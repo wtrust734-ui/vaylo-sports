@@ -101,9 +101,35 @@ jobs:
         # which fails for that reason; v4 is the current release.
         uses: android-actions/setup-android@v4
 
+      - name: Install the SDK packages the build compiles against
+        # setup-android installs cmdline-tools only. The project compiles
+        # against SDK 36, which a fresh runner does not carry: Gradle would try
+        # to auto-download it and refuse without accepted licences. Install the
+        # exact packages and accept the licences explicitly so the build does
+        # not depend on what a runner happens to contain.
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle-build.log
+
+      - name: Surface the Gradle failure
+        # Job logs require a GitHub sign-in to read; the step summary is the
+        # one place this failure can still be diagnosed from the outside.
+        if: failure()
+        working-directory: android
+        run: |
+          {
+            echo '### Gradle assembleDebug failed'
+            echo '```'
+            grep -B2 -A30 -m1 -E '^\* What went wrong|FAILURE: Build failed|error:' gradle-build.log || tail -80 gradle-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

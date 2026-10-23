@@ -119,6 +119,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Install the SDK packages the build compiles against
+        # Same rationale as the debug workflow: a fresh runner carries only
+        # cmdline-tools, and the project compiles against SDK 36.
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+
       - name: Write the upload keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -148,7 +156,20 @@ jobs:
           extra=""
           if [ -n "${VERSION_CODE:-}" ]; then extra="$extra -PversionCode=$VERSION_CODE"; fi
           if [ -n "${VERSION_NAME:-}" ]; then extra="$extra -PversionName=$VERSION_NAME"; fi
-          ./gradlew bundleRelease --no-daemon $extra
+          ./gradlew bundleRelease --no-daemon $extra 2>&1 | tee gradle-build.log
+
+      - name: Surface the Gradle failure
+        # Job logs require a GitHub sign-in to read; the step summary is the
+        # one place this failure can still be diagnosed from the outside.
+        if: failure()
+        working-directory: android
+        run: |
+          {
+            echo '### Gradle bundleRelease failed'
+            echo '```'
+            grep -B2 -A30 -m1 -E '^\* What went wrong|FAILURE: Build failed|error:' gradle-build.log || tail -80 gradle-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the bundle is signed
         working-directory: android
