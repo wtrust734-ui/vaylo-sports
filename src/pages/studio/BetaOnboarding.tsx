@@ -35,7 +35,7 @@ export function reopenOnboarding(): void {
 const POINTS: { icon: typeof Image; title: string; body: string; view?: StudioView }[] = [
   { icon: MessageSquare, title: "Ask in plain words", body: "The Creative Assistant routes your request — research, image ad, video ad, revision or a question — and tells you exactly what it will do before it starts.", view: "chat" },
   { icon: Image, title: "Image ads", body: "Write a brief, pick a concept, generate backgrounds, compose with your brand text, then export. Each generated background is made when you ask for it — there is nothing to buy.", view: "image" },
-  { icon: Video, title: "Video ads", body: "The concept step writes script and storyboard; shots, narration and render follow in one run. Rendering needs a hosted worker — the app says so when it is missing.", view: "video" },
+  { icon: Video, title: "Video ads", body: "The concept step writes the script and storyboard; Gemini Omni generates each shot, ElevenLabs narrates, and the edit is handed to the editing agent with its live progress shown here.", view: "video" },
   { icon: FlaskConical, title: "Competitor research", body: "Public pages, press and manual sources. Findings keep their links; ad-platform ad libraries stay marked unavailable until approvals exist.", view: "research" },
   { icon: Megaphone, title: "Campaigns & assets", body: "Campaigns hold concepts, assets and exports. The library stores every file you upload or generate, yours alone, private to your account.", view: "campaigns" },
   { icon: Plug, title: "Integrations", body: "Check what is configured and what is missing at any time. A listed provider is a configured key, not a verified capability — the panel says which is which.", view: "integrations" },

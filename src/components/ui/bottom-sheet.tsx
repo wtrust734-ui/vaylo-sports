@@ -65,21 +65,34 @@ export default function BottomSheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  // The latest onClose, read through a ref. Callers pass an inline arrow
+  // (`onClose={() => setTarget(null)}`), so its identity changes on every
+  // render of the caller — including the render caused by a single keystroke in
+  // a field inside the sheet. The setup/teardown effect below must therefore
+  // key on `open` only: keying it on `onClose` ran the cleanup on every
+  // keystroke, and that cleanup restored focus to whatever was focused before
+  // the sheet opened, pulling the caret out of the textarea after every letter.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   // The device back button closes the sheet rather than leaving the screen.
   useBackHandler(open, onClose);
 
   useEffect(() => {
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
+    // Captured now, at open, rather than read in the cleanup: by the time the
+    // effect tears down the panel may already be detached, and `!panel` is one
+    // of the cases in which focus should be handed back.
+    const panel = panelRef.current;
 
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", onKey);
 
     // Move focus into the sheet (unless the caller focused something itself).
     const focusTimer = window.setTimeout(() => {
-      const panel = panelRef.current;
       if (!panel) return;
       if (panel.contains(document.activeElement)) return;
       panel.focus({ preventScroll: true });
@@ -88,9 +101,17 @@ export default function BottomSheet({
     return () => {
       document.removeEventListener("keydown", onKey);
       window.clearTimeout(focusTimer);
-      previouslyFocused.current?.focus?.();
+      // Restore focus only when the sheet is actually going away and focus is
+      // still inside it (or its node is gone). If focus has already moved
+      // somewhere else — a native picker, a toast — leaving it alone is the
+      // correct behaviour; stealing it back is how the caret got yanked out of
+      // the refund form.
+      if (!panel || !panel.isConnected || panel.contains(document.activeElement)) {
+        previouslyFocused.current?.focus?.();
+      }
+      previouslyFocused.current = null;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const sheet = (
     <AnimatePresence>

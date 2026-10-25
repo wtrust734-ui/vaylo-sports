@@ -21,7 +21,14 @@
 // screen labels which one it is quoting.
 // ============================================================================
 
-import { EXPECTED_PER_WEEK_SECONDS, MIN_EXPECTED_SECONDS, expectedPlanSeconds, planChunkWeeks } from "./planGeneration";
+import {
+  EXPECTED_PER_WEEK_SECONDS,
+  MIN_EXPECTED_SECONDS,
+  NUTRITION_PER_WEEK_SECONDS,
+  expectedNutritionSeconds,
+  expectedPlanSeconds,
+  planChunkWeeks,
+} from "./planGeneration";
 
 export type PlanGenerationKind = "training" | "nutrition";
 export type PlanGenerationOutcome = "ok" | "failed";
@@ -173,6 +180,18 @@ export type PlanEstimate = {
   samples?: number;
 };
 
+/**
+ * The prior for a kind, from the pipeline it actually runs. Nutrition is a
+ * smaller job than training (a week of meals, no periodisation), so quoting it
+ * the training constant promised nearly double the wait it takes.
+ */
+const modelSeconds = (kind: PlanGenerationKind, weeks: number): number =>
+  kind === "nutrition" ? expectedNutritionSeconds(weeks) : expectedPlanSeconds(weeks);
+
+/** The per-week merge slope of the same kind's model. */
+const perWeekSeconds = (kind: PlanGenerationKind): number =>
+  kind === "nutrition" ? NUTRITION_PER_WEEK_SECONDS : EXPECTED_PER_WEEK_SECONDS;
+
 const median = (values: number[]): number => {
   if (!values.length) return NaN;
   const sorted = [...values].sort((a, b) => a - b);
@@ -201,18 +220,18 @@ export function estimatePlanSeconds(kind: PlanGenerationKind, weeks: number): Pl
   const safeWeeks = Math.max(1, Math.min(52, Number.isFinite(weeks) ? Math.floor(weeks) : 4));
   weeks = safeWeeks;
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
-    return { seconds: expectedPlanSeconds(safeWeeks), source: "model" };
+    return { seconds: modelSeconds(kind, safeWeeks), source: "model" };
   }
   const shape = planChunkWeeks(safeWeeks);
   const shapeMatches = planGenerationHistory(kind).filter(
     (s) => s.outcome === "ok" && planChunkWeeks(s.weeks) === shape,
   );
   if (shapeMatches.length < MIN_SAMPLES_FOR_CALIBRATION) {
-    return { seconds: expectedPlanSeconds(weeks), source: "model" };
+    return { seconds: modelSeconds(kind, weeks), source: "model" };
   }
   const medianWeeks = median(shapeMatches.map((s) => s.weeks));
   const medianSeconds = median(shapeMatches.map((s) => s.ms)) / 1000;
-  const slope = EXPECTED_PER_WEEK_SECONDS * (safeWeeks - medianWeeks);
+  const slope = perWeekSeconds(kind) * (safeWeeks - medianWeeks);
   const seconds = Math.max(
     MIN_EXPECTED_SECONDS,
     Math.min(90, Math.round(medianSeconds + (medianWeeks === safeWeeks ? 0 : Math.max(0, slope)))),

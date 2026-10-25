@@ -1,7 +1,7 @@
 // ============================================================================
 // ACHIEVEMENT SHELF — one shelf of medals, rendered
 // ----------------------------------------------------------------------------
-// The grid the Achievements screen and the Badges screen both show. They differ
+// The grid the Achievements screen and the Trophy Room both show. They differ
 // only in the shelf they pass in — the medal cards themselves must look
 // identical, because they are the same kind of thing: an id, an icon, a name and
 // whether it has been earned.
@@ -10,12 +10,17 @@
 // rule that would earn it: a medal the rule says they qualify for but that has
 // not been saved yet is not on their account, and showing it as earned would be
 // the screen disagreeing with the database.
+//
+// `onShare` is optional on purpose. The Achievements screen is a catalogue —
+// half of it is locked, and offering to share a medal you do not hold would be
+// offering to share something that is not true. The Trophy Room passes it, and
+// only earned cards grow the button.
 // ============================================================================
 
 import { motion } from "framer-motion";
 import {
   Award, Brain, Crown, Droplets, Dumbbell, Flame, Heart, Medal,
-  Shield, ShoppingBag, Star, Target, TrendingUp, Trophy, Zap, type LucideIcon,
+  Share2, Shield, ShoppingBag, Star, Target, TrendingUp, Trophy, Zap, type LucideIcon,
 } from "lucide-react";
 
 const iconMap: Record<string, LucideIcon> = {
@@ -24,12 +29,17 @@ const iconMap: Record<string, LucideIcon> = {
   droplets: Droplets, medal: Medal, award: Award, heart: Heart, trending: TrendingUp,
 };
 
+export type ShelfItem = { id: string; title: string; desc: string; icon: string };
+
 export default function AchievementShelf({
   items,
   earnedIds,
+  onShare,
 }: {
-  items: { id: string; title: string; desc: string; icon: string }[];
+  items: ShelfItem[];
   earnedIds: Set<string>;
+  /** When provided, every earned card gets a Share action. */
+  onShare?: (item: ShelfItem) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 mb-8">
@@ -42,7 +52,7 @@ export default function AchievementShelf({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: Math.min(i * 0.02, 1), type: "spring", stiffness: 300, damping: 25 }}
-            className={`rounded-xl p-3 text-center border transition-all duration-300 ${
+            className={`flex flex-col rounded-xl p-3 text-center border transition-all duration-300 ${
               earned ? "bg-gradient-card border-primary/30 shadow-card" : "bg-card/50 border-border/50 opacity-60"
             }`}
           >
@@ -57,6 +67,16 @@ export default function AchievementShelf({
             <span className={`mt-1 block text-[10px] font-bold ${earned ? "text-primary" : "text-muted-foreground/60"}`}>
               {earned ? "✓ Earned" : "Locked"}
             </span>
+            {onShare && earned ? (
+              <button
+                type="button"
+                onClick={() => onShare(ach)}
+                aria-label={`Share ${ach.title}`}
+                className="mx-auto mt-2 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-full border border-border px-3 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              >
+                <Share2 size={11} aria-hidden /> Share
+              </button>
+            ) : null}
           </motion.div>
         );
       })}

@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { authenticate, readJsonBody } from "../_shared/guard.ts";
+import { buildOmniRequest } from "../_shared/omni.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 const jsonResp = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -67,6 +68,35 @@ export async function handler(req: Request): Promise<Response> {
       let parsed: unknown = txt;
       try { parsed = JSON.parse(txt); } catch { /* raw */ }
       return jsonResp({ model, status: res.status, body: stripData(parsed) }, res.ok ? 200 : 502);
+    }
+
+    if (action === "start") {
+      // Fire ONE generation with the exact body ads-video builds, then return
+      // the provider's immediate answer without waiting. Used to tell a
+      // deterministic rejection (bad request/prompt) from a slow failure
+      // without paying for a second call.
+      const prompt = typeof body.prompt === "string" ? body.prompt : "";
+      if (!prompt.trim()) return jsonResp({ error: "prompt is required" }, 400);
+      let requestBody: Record<string, unknown>;
+      try {
+        requestBody = buildOmniRequest({
+          prompt,
+          aspectRatio: body.aspectRatio === "16:9" ? "16:9" : "9:16",
+          durationSeconds: body.durationSeconds ?? 3.3,
+          resolution: body.resolution === "720p" ? "720p" : body.resolution === "1080p" ? "1080p" : undefined,
+        });
+      } catch (e) {
+        return jsonResp({ error: e instanceof Error ? e.message : "bad request" }, 400);
+      }
+      const postRes = await fetch(`${BASE}/interactions`, {
+        method: "POST",
+        headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const txt = await postRes.text();
+      let parsed: unknown = txt;
+      try { parsed = JSON.parse(txt); } catch { /* raw */ }
+      return jsonResp({ action: "start", httpStatus: postRes.status, body: stripData(parsed) }, postRes.ok ? 200 : 502);
     }
 
     if (action === "poll-interaction") {

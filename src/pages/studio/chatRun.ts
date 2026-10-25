@@ -29,8 +29,8 @@ import {
   validateVoiceover,
   generateVoiceover,
   uploadNarration,
-  renderVideo,
-  jobStatus,
+  previewAd,
+  type AdPreview,
   type VideoConceptResult,
 } from "./videoAdsApi";
 import {
@@ -50,8 +50,6 @@ const IMAGE_PLACEMENT = "ig_story_reels"; // one 9:16 Story/Reels ad (the agreed
 // workspaces show; nothing claims motion the server has not reported.
 const SHOT_POLL_INTERVAL_MS = 15_000;
 const SHOT_POLL_MAX_MS = 6 * 60_000;
-const RENDER_POLL_INTERVAL_MS = 10_000;
-const RENDER_POLL_MAX_MS = 15 * 60_000;
 const IMAGE_STATUS_INTERVAL_MS = 3_000;
 const IMAGE_STATUS_MAX_MS = 3 * 60_000;
 
@@ -84,6 +82,9 @@ export type RunDeliverable =
       conceptId: string;
       jobId: string | null;
       publicUrl: string | null;
+      /** The playable cut: every shot clip signed, in storyboard order, with
+       *  the narration track and the caption timing. */
+      ad?: AdPreview | null;
       shotsDone: number;
       shotsFailed: number;
       researchProjectId: string | null;
@@ -216,7 +217,8 @@ async function runVideoBuild(
       });
       const started = await startShot(quote);
       row.shotId = started.shotId;
-      row.operationId = started.operationId;
+      let operationId = started.operationId;
+      row.operationId = operationId;
       row.state = "generating";
 
       const paidAt = Date.now();
@@ -233,7 +235,16 @@ async function runVideoBuild(
             if (Date.now() - paidAt >= 2 * SHOT_POLL_MAX_MS) break;
             await new Promise((r) => setTimeout(r, SHOT_POLL_INTERVAL_MS));
             try {
-              const p = await pollShot(started.shotId, started.operationId);
+              const p = await pollShot(started.shotId, operationId);
+              if (p.retrying && p.operationId) {
+                operationId = p.operationId;
+                row.operationId = operationId;
+                emit({
+                  level: "progress",
+                  text: `Shot ${row.sceneShot}: the provider rejected the first attempt (${p.retryReason ?? "no clip"}) without charging it — retrying automatically`,
+                });
+                continue;
+              }
               if (p.done && p.state !== "failed") {
                 row.videoUri = p.videoUri ?? null;
                 row.state = "ready";
@@ -258,7 +269,26 @@ async function runVideoBuild(
           return { kind: "failed", reason: msg };
         }
         await new Promise((r) => setTimeout(r, SHOT_POLL_INTERVAL_MS));
-        const p = await pollShot(started.shotId, started.operationId);
+        let p;
+        try {
+          p = await pollShot(started.shotId, operationId);
+        } catch (e) {
+          // A dropped status request says nothing about the clip itself.
+          emit({
+            level: "progress",
+            text: `Shot ${row.sceneShot}: a status check failed (${e instanceof Error ? e.message : "network error"}) — the shot is untouched, asking again`,
+          });
+          continue;
+        }
+        if (p.retrying && p.operationId) {
+          operationId = p.operationId;
+          row.operationId = operationId;
+          emit({
+            level: "progress",
+            text: `Shot ${row.sceneShot}: the provider rejected the first attempt (${p.retryReason ?? "no clip"}) without charging it — retrying automatically`,
+          });
+          continue;
+        }
         if (p.done) {
           if (p.state === "failed") {
             const msg = p.error ?? "The server reported this shot as failed";
@@ -308,72 +338,39 @@ async function runVideoBuild(
     return { kind: "failed", reason: msg };
   }
 
-  // ---- render --------------------------------------------------------------
+  // ---- assemble ------------------------------------------------------------
   if (notReady > 0) {
-    const msg = `${notReady} shot${notReady === 1 ? "" : "s"} still has no clip — the server refuses a render without them.`;
+    const msg = `${notReady} shot${notReady === 1 ? "" : "s"} still has no clip — the ad cannot be cut without ${notReady === 1 ? "it" : "them"}.`;
     emit({ level: "error", text: msg });
     return { kind: "failed", reason: msg };
   }
-  emit({ level: "start", text: "Dispatching the render — the editable cuts are being assembled into one finished ad" });
+  emit({ level: "start", text: "Assembling the ad — signing every shot clip for playback" });
   try {
-    const assetPaths: Record<string, string> = {};
-    for (const w of work) if (w.videoUri) assetPaths[String(w.sceneShot)] = w.videoUri;
-    const render = await renderVideo({
-      conceptId: concept.conceptId,
-      voiceover: concept.concept.script,
-      captions: concept.captions,
-      narrationPath,
-      assetPaths,
+    const ad = await previewAd(concept.conceptId, narrationPath);
+    if (ad.missing.length > 0) {
+      const msg = `The server has no playable clip for shot${ad.missing.length === 1 ? "" : "s"} ${ad.missing.join(", ")}.`;
+      emit({ level: "error", text: msg });
+      return { kind: "failed", reason: msg };
+    }
+    emit({
+      level: "done",
+      text: `The ad is ready — ${ad.clips.length} shot${ad.clips.length === 1 ? "" : "s"}, ${ad.totalSeconds.toFixed(1)}s${ad.narrationUrl ? ", with the narration track" : ""}. Play it below.`,
     });
-    if (render.state === "handed_to_manus") {
-      emit({ level: "progress", text: "Render queued with the editor — I will watch for the finished file" });
-    }
-
-    // ---- watch -------------------------------------------------------------
-    emit({ level: "progress", text: render.notes?.[0] ?? "Watching the render job for the finished ad" });
-    const startedAt = Date.now();
-    let lastStage: string | null = null;
-    for (;;) {
-      if (Date.now() - startedAt >= RENDER_POLL_MAX_MS) {
-        const msg = "The editor has not reported back after 15 minutes of checking. The job stays queued — I will pick it up next time you ask here.";
-        emit({ level: "error", text: msg });
-        return {
-          kind: "failed",
-          reason: msg,
-        };
-      }
-      await new Promise((r) => setTimeout(r, RENDER_POLL_INTERVAL_MS));
-      const st = await jobStatus(render.jobId);
-      if (st.stage && st.stage !== lastStage) {
-        lastStage = st.stage;
-        emit({ level: "progress", text: `Editor: ${st.stage}` });
-      }
-      if (st.status === "failed") {
-        const msg = st.error ?? "The server reported the render as failed";
-        emit({ level: "error", text: msg });
-        return { kind: "failed", reason: msg };
-      }
-      if (st.status === "done") {
-        emit({
-          level: "done",
-          text: st.publicUrl
-            ? "Edit complete — the finished ad is ready below"
-            : "The server marked the edit done but attached no watchable file",
-        });
-        return {
-          kind: "video",
-          conceptId: concept.conceptId,
-          jobId: render.jobId,
-          publicUrl: st.publicUrl ?? null,
-          shotsDone: work.filter((w) => w.state === "ready")?.length ?? work.length,
-          shotsFailed: work.filter((w) => w.state === "failed").length,
-          researchProjectId: research?.projectId ?? null,
-          notes: libraryShots > 0 ? [`${libraryShots} shot(s) came from your own library clips`] : [],
-        };
-      }
-    }
+    return {
+      kind: "video",
+      conceptId: concept.conceptId,
+      jobId: null,
+      // A single playable file for the stored message: the first shot's signed
+      // clip. The full cut (every shot, in order, with narration) rides in `ad`.
+      publicUrl: ad.clips[0]?.url ?? null,
+      ad,
+      shotsDone: work.filter((w) => w.state === "ready")?.length ?? work.length,
+      shotsFailed: work.filter((w) => w.state === "failed").length,
+      researchProjectId: research?.projectId ?? null,
+      notes: libraryShots > 0 ? [`${libraryShots} shot(s) came from your own library clips`] : [],
+    };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Render dispatch failed.";
+    const msg = e instanceof Error ? e.message : "The ad could not be assembled.";
     emit({ level: "error", text: msg });
     return { kind: "failed", reason: msg };
   }

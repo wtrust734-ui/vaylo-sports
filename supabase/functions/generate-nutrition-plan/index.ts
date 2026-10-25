@@ -411,10 +411,18 @@ ${OUTPUT_SAFETY_CONTRACT}`;
       }
     };
 
+    // One retry, but only where a retry can succeed. A 429 is the provider
+    // asking us to slow down and a 402 is an exhausted balance — asking again
+    // immediately cannot change either answer, and the serial second call
+    // doubles the athlete's wait (the whole overlay sits there until every
+    // chunk settles) before failing anyway. Transient 5xx/502s are retried,
+    // because those genuinely are worth a second attempt.
+    const retryable = (status: number) => status !== 402 && status !== 429;
     const results = await Promise.all(
       chunks.map(async (chunk) => {
         const first = await generateChunk(chunk, targets);
-        return first.ok ? first : await generateChunk(chunk, targets);
+        if (first.ok || !retryable(first.status)) return first;
+        return generateChunk(chunk, targets);
       }),
     );
 

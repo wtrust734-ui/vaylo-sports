@@ -21,8 +21,10 @@
 //     here rather than in the component, so the same plan reads the same way
 //     whether it was saved today or a month ago.
 //
-// Pure: no React, no Supabase.
+// Pure: no React, no Supabase. Depends only on the equipment catalogue.
 // ============================================================================
+
+import { describeEquipment, normaliseEquipment } from "@/config/equipment";
 
 /** One item inside a week — "Days 1-3: isometrics, 3×10, pain-free only". */
 export type InjuryPlanItem = {
@@ -44,9 +46,31 @@ export type InjuryPlanWeek = {
   stopIf: string;
 };
 
+/**
+ * What the plan says about their NORMAL training, separately from the rehab
+ * work. An injury plan that only lists mobility drills quietly pretends the
+ * athlete's training week does not exist; the useful answer says whether to
+ * stop, what can continue, and how to build back in. `stop` is deliberately a
+ * first-class value: for a significant injury the honest advice is "do not
+ * train this for a while", not a modified session.
+ */
+export type InjuryTrainingStatus = "stop" | "modified" | "continue";
+
+export type InjuryTrainingGuidance = {
+  status: InjuryTrainingStatus;
+  /** How long to stop for, e.g. "10–14 days". Empty when not stopping. */
+  stopFor: string;
+  /** What the athlete can still do while the injury settles. */
+  during: string;
+  /** Ordered steps for returning to training once the checkpoints are met. */
+  buildBack: string[];
+};
+
 export type InjuryPlan = {
   summary: string;
   weeks: InjuryPlanWeek[];
+  /** How this sits alongside their normal training. Null for older plans. */
+  training: InjuryTrainingGuidance | null;
   /** Signs that mean stop and see a clinician. Never displayed as optional. */
   redFlags: string[];
   seeAProfessional: string;
@@ -55,6 +79,22 @@ export type InjuryPlan = {
 
 /** The plan most the model may return; anything beyond this is dropped. */
 export const MAX_PLAN_WEEKS = 12;
+
+/**
+ * The percentage the wait screen holds at until the plan has been saved.
+ *
+ * It never reaches 100% on a timer: the athlete paid for a plan, and the bar is
+ * only allowed to finish once that plan exists on their injury row.
+ */
+export const INJURY_PROGRESS_CEILING = 94;
+
+/**
+ * How long the wait screen takes to climb to its ceiling, in seconds.
+ *
+ * One plan call usually answers in 8–20 seconds, so the bar is paced to the
+ * middle of that range rather than crawling toward a made-up number.
+ */
+export const injuryPlanSeconds = (): number => 12;
 
 /**
  * Longest site we store. The same 40 the briefing caps `Reported site` at, so
@@ -123,12 +163,25 @@ export type InjuryBriefingInput = {
   severity: number;
   notes?: string | null;
   /** Optional answers the athlete can give in the form. */
+  mechanism?: string | null;
   hurts?: string | null;
   stillDoing?: string | null;
+  /** "none" | "some" | "significant" — swelling or bruising at the site. */
+  swelling?: string | null;
   /** Days since it started, when known. */
   daysSince?: number | null;
   /** Anything the app already knows, e.g. the athlete's sport. */
   sport?: string | null;
+  /** Training days in their current plan, so the plan fits the real week. */
+  trainingDays?: number | null;
+  /** Equipment ids from the profile, so rehab work matches what they own. */
+  equipment?: readonly string[] | null;
+};
+
+const SWELLING_WORDS: Record<string, string> = {
+  none: "none reported",
+  some: "some swelling or bruising",
+  significant: "significant swelling or bruising",
 };
 
 /**
@@ -148,8 +201,20 @@ export function buildInjuryBriefing(input: InjuryBriefingInput): string {
     lines.push(`Started about ${days} day${days === 1 ? "" : "s"} ago`);
   }
   if (input.sport) lines.push(`Sport: ${toText(input.sport, 60)}`);
+  if (input.trainingDays != null && Number.isFinite(Number(input.trainingDays))) {
+    const days = Math.max(0, Math.min(14, Math.round(Number(input.trainingDays))));
+    if (days > 0) lines.push(`Training days in their current plan: ${days} a week`);
+  }
+  if (input.equipment) {
+    lines.push(`Equipment available: ${describeEquipment(normaliseEquipment(input.equipment))}`);
+  }
+  if (input.mechanism) lines.push(`How it happened: ${toText(input.mechanism, MAX_NOTES)}`);
   if (input.hurts) lines.push(`What hurts / makes it worse: ${toText(input.hurts, MAX_NOTES)}`);
-  if (input.stillDoing) lines.push(`Still able to do: ${toText(input.stillDoing, MAX_NOTES)}`);
+  if (input.stillDoing) lines.push(`Still able to do pain-free: ${toText(input.stillDoing, MAX_NOTES)}`);
+  if (input.swelling) {
+    const swelling = SWELLING_WORDS[toText(input.swelling, 20).toLowerCase()];
+    if (swelling) lines.push(`Swelling or bruising: ${swelling}`);
+  }
   if (input.notes) lines.push(`Athlete's own note: ${toText(input.notes, MAX_NOTES)}`);
   lines.push("The athlete has not been examined; nothing here is a diagnosis.");
   return lines.join("\n");
@@ -169,6 +234,31 @@ export type InjuryPlanParseResult = {
 function unwrapJson(raw: string): string {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
   return (fenced ? fenced[1] : raw).trim();
+}
+
+/**
+ * Parse JSON that may be surrounded by a sentence of prose.
+ *
+ * JSON mode removes most of this, but the athlete is charged for whatever comes
+ * back: a readable plan wrapped in "Here is your plan:" must not become an
+ * unreadable answer they paid for. The object is located by its outer braces
+ * only when a direct parse fails.
+ */
+function parseJsonDocument(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
 }
 
 const readItem = (raw: unknown): InjuryPlanItem | null => {
@@ -203,6 +293,48 @@ const readWeek = (raw: unknown, index: number): InjuryPlanWeek | null => {
 };
 
 /**
+ * Read the plan's advice about their normal training.
+ *
+ * The model is asked for a `training` object, but a plan is still a plan if it
+ * arrives with those fields at the top level (models drift), so both shapes are
+ * accepted. When the status is unusable but the object exists, the reading is
+ * "modified": saying "continue as planned" from a broken field would be the one
+ * unsafe guess, and "stop" would be an invented restriction.
+ */
+const readTraining = (container: Record<string, unknown>): InjuryTrainingGuidance | null => {
+  const nested = container.training;
+  if (!isObject(nested) && nested != null) return null;
+  const obj = isObject(nested) ? nested : container;
+  const statusRaw = toText(
+    obj.status ?? obj.training_status ?? obj.trainingStatus,
+    40,
+  ).toLowerCase();
+  const stopFor = toText(obj.stop_for ?? obj.stopFor, 80);
+  const during = toText(
+    obj.during ?? obj.while_healing ?? obj.training_while_settling ?? obj.training,
+    400,
+  );
+  const buildBack = toList(
+    obj.build_back ?? obj.buildBack ?? obj.return_steps ?? obj.returnSteps,
+    8,
+    300,
+  );
+  if (!isObject(nested) && !statusRaw && !stopFor && !during && buildBack.length === 0) {
+    return null;
+  }
+
+  let status: InjuryTrainingStatus;
+  if (/(stop|pause|off|no train|rest from|hold)/.test(statusRaw)) status = "stop";
+  else if (/(continue|full|normal|as planned|carry on)/.test(statusRaw)) status = "continue";
+  else if (/(modif|reduc|adjust|limit|adapt|alter|change)/.test(statusRaw)) status = "modified";
+  // A plan that asks the athlete to stop but gives no duration still has to say
+  // so; the renderer supplies the "until the checkpoints" wording.
+  else status = stopFor ? "stop" : "modified";
+
+  return { status, stopFor, during, buildBack };
+};
+
+/**
  * Turn whatever `ai-analyze` returned into something renderable.
  *
  * Accepts the raw JSON string, an already-parsed object, or a fenced block. A
@@ -215,19 +347,19 @@ export function parseInjuryPlan(raw: unknown): InjuryPlanParseResult {
   if (typeof raw === "string") {
     const text = unwrapJson(raw);
     if (!text) return { plan: null, error: "The plan came back empty." };
-    try {
-      container = JSON.parse(text);
-    } catch {
+    const parsed = parseJsonDocument(text);
+    if (parsed === undefined) {
       return { plan: null, error: "The plan came back in a shape we could not read." };
     }
+    container = parsed;
   }
   if (typeof container === "string") {
     // Double-encoded (a JSON string inside the JSON string).
-    try {
-      container = JSON.parse(container);
-    } catch {
+    const parsed = parseJsonDocument(container);
+    if (parsed === undefined) {
       return { plan: null, error: "The plan came back in a shape we could not read." };
     }
+    container = parsed;
   }
   if (isObject(container) && "plan" in container) container = container.plan;
   if (!isObject(container)) {
@@ -260,6 +392,7 @@ export function parseInjuryPlan(raw: unknown): InjuryPlanParseResult {
     plan: {
       summary: toText(container.summary, 600),
       weeks,
+      training: readTraining(container),
       redFlags,
       seeAProfessional: toText(container.see_a_professional ?? container.seeAProfessional, 400),
       disclaimer: toText(container.disclaimer, 400),
@@ -309,6 +442,34 @@ export function renderInjuryProtocol(plan: InjuryPlan, kind: "ai" | "mobility" =
     `${marker} — for a qualified professional to supervise.`,
   ];
   if (plan.summary) lines.push(plan.summary);
+
+  // How the plan sits alongside their NORMAL training comes before the rehab
+  // weeks: if the answer is "stop for two weeks", that is the first thing an
+  // injured athlete has to read, not a footnote under week 3.
+  const training = plan.training;
+  if (training) {
+    if (training.status === "stop") {
+      lines.push(
+        training.stopFor
+          ? `Training: stop for ${training.stopFor} — build back only through the steps below.`
+          : "Training: stop — build back only through the steps below.",
+      );
+    } else if (training.status === "modified") {
+      lines.push(
+        training.stopFor
+          ? `Training: keep training, modified for ${training.stopFor}.`
+          : "Training: keep training, modified.",
+      );
+    } else {
+      lines.push("Training: keep training as planned, with the rehab work added on.");
+    }
+    if (training.during) lines.push(`What you can still do: ${training.during}`);
+    if (training.buildBack.length > 0) {
+      lines.push("Build back into training:");
+      for (const step of training.buildBack) lines.push(`• ${step}`);
+    }
+  }
+
   if (plan.disclaimer) lines.push(plan.disclaimer);
   else lines.push(FALLBACK_DISCLAIMER);
 
@@ -589,6 +750,45 @@ export function splitStoredProtocol(stored: string): {
     return { kind: "mobility", personalised: false, lines: lines.slice(1) };
   }
   return { kind: "generic", personalised: false, lines };
+}
+
+/**
+ * The training advice as stored text, for the card that shows a saved plan.
+ *
+ * The stored protocol is plain lines, so the screen reads the same three
+ * labels back rather than parsing the whole plan again. Everything else is
+ * left for the generic renderer; only these lines get the highlighted panel.
+ */
+export type StoredTrainingAdvice = {
+  /** "stop" when the stored text tells them to stop training. */
+  status: "stop" | "modified" | "continue";
+  headline: string;
+  during: string;
+  buildBack: string[];
+};
+
+export function readStoredTrainingAdvice(lines: readonly string[]): StoredTrainingAdvice | null {
+  const training = lines.find((line) => line.startsWith("Training:"));
+  if (!training) return null;
+  const detail = training.slice("Training:".length).trim();
+  const status: StoredTrainingAdvice["status"] = /^stop/i.test(detail)
+    ? "stop"
+    : /^keep training, modified/i.test(detail)
+      ? "modified"
+      : "continue";
+  const during = (lines.find((line) => line.startsWith("What you can still do:")) ?? "")
+    .slice("What you can still do:".length)
+    .trim();
+  const start = lines.findIndex((line) => line === "Build back into training:");
+  const buildBack: string[] = [];
+  if (start >= 0) {
+    for (const line of lines.slice(start + 1)) {
+      if (!line.startsWith("•")) break;
+      const step = line.slice(1).trim();
+      if (step) buildBack.push(step);
+    }
+  }
+  return { status, headline: detail, during, buildBack };
 }
 
 /** One line for a toast: the first thing the athlete should read. */

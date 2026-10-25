@@ -24,8 +24,10 @@ import { achievementShelf, earnedIn, percentEarned } from "@/lib/achievements";
 // actually written to the account. Both read the same catalogue and the same
 // earned set, so a medal cannot appear in one and not the other.
 //
-// Badges (purchases) and Challenges keep their own screens. The old `?tab=`
-// links still redirect, because they were shared before the split.
+// The Trophy Room holds the earned side — medals, Market ownership and finished
+// challenges — and Challenges keeps its own screen. There is no Badges screen
+// any more; an old `?tab=badges` link lands on the Trophy Room, which owns that
+// shelf now.
 // ============================================================================
 
 const FILTERS = ["All", "Earned", "Locked"] as const;
@@ -35,7 +37,7 @@ const Achievements = () => {
   const [searchParams] = useSearchParams();
   const legacyTab = searchParams.get("tab");
 
-  if (legacyTab === "badges") return <Navigate to="/badges" replace />;
+  if (legacyTab === "badges") return <Navigate to="/trophies" replace />;
   if (legacyTab === "challenges") return <Navigate to="/challenges" replace />;
 
   return <AchievementsScreen />;

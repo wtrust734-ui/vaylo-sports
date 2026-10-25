@@ -318,8 +318,13 @@ android {
         //
         // 61 / 1.48.61 carries the injury rehab plans (built on device), the
         // plan build screen, the faster nutrition request and the layout fixes.
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 61
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.48.61"
+        //
+        // 62 / 1.48.62 replaces that on-device rehab plan with the full injury
+        // intake and the paid AI plan: how it happened, triggers, what still
+        // works, swelling and onset, a variable-length plan, stop-training
+        // advice with build-back steps, and the percentage wait screen.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 62
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.48.62"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

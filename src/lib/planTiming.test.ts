@@ -18,7 +18,7 @@ import {
   planGenerationHistory,
   recordPlanGenerationMs,
 } from "./planTiming";
-import { expectedPlanSeconds } from "./planGeneration";
+import { expectedNutritionSeconds, expectedPlanSeconds } from "./planGeneration";
 
 const SEM = 1000;
 
@@ -76,6 +76,16 @@ describe("the calibrated estimate", () => {
     const estimate = estimatePlanSeconds("training", 4);
     expect(estimate.source).toBe("model");
     expect(estimate.seconds).toBe(expectedPlanSeconds(4));
+  });
+
+  it("quotes the nutrition model, not the training one, for meal plans", () => {
+    // The kind is part of the prior: a week of meals is less work than a week
+    // of training, and quoting the training constant made the wait screen
+    // promise nearly double the time the plan takes.
+    const estimate = estimatePlanSeconds("nutrition", 4);
+    expect(estimate.source).toBe("model");
+    expect(estimate.seconds).toBe(expectedNutritionSeconds(4));
+    expect(estimate.seconds).toBeLessThan(expectedPlanSeconds(4));
   });
 
   it("requires a believable number of samples before it substitutes its judgement", () => {

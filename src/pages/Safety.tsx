@@ -82,8 +82,10 @@ const Safety = () => {
           </ul>
 
           <p>
-            Injury Management in this app produces a <em>generic</em> return-to-play scaffold, not a
-            diagnosis. Nutrition planning is restricted to athletes aged 18 and over for this reason.
+            Injury Management in this app produces starter safety guidance with every injury, and —
+            when you ask for it — an AI-written rehabilitation plan built from what you logged. Neither
+            is a diagnosis, and both are written for a qualified professional to supervise. Nutrition
+            planning is restricted to athletes aged 18 and over for this reason.
           </p>
         </Section>
       </section>

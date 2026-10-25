@@ -24,6 +24,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import { supabase } from "@/integrations/supabase/client";
 import {
+  generateVoiceover,
   quoteShot,
   startShot,
   renderVideo,
@@ -79,6 +80,17 @@ describe("render + narration", () => {
     // as "no narration file yet", never as some default audio.
     const passed = JSON.stringify((invoke.mock.calls[0] as unknown[])[1]);
     expect(passed).not.toContain('"narrationPath"');
+  });
+
+  it("generateVoiceover always names a style so the server has a voice", async () => {
+    invoke.mockResolvedValueOnce({
+      data: { characters: 180, audio: "AAAA", mimeType: "audio/mpeg", cached: false },
+      error: null,
+    });
+    await generateVoiceover({ text: "Your season starts before the first whistle." });
+    expect(invoke).toHaveBeenCalledWith("voiceover", {
+      body: expect.objectContaining({ action: "generate", styleId: "premium_tech" }),
+    });
   });
 
   it("uploadNarration writes into the caller's folder and returns the storage path", async () => {

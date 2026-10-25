@@ -75,7 +75,6 @@ const Events = lazy(() => import("./pages/Events"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const EventPacks = lazy(() => import("./pages/EventPacks"));
 const Achievements = lazy(() => import("./pages/Achievements"));
-const Badges = lazy(() => import("./pages/Badges"));
 const TrophyRoom = lazy(() => import("./pages/TrophyRoom"));
 const VPR = lazy(() => import("./pages/VPR"));
 const Train = lazy(() => import("./pages/Train"));
@@ -238,8 +237,24 @@ const NativeBackButton = () => {
   // hours. This is the one place the app asks for a fresh one: fire-and-forget,
   // because a rate provider being slow must never delay the first screen. When
   // it lands, FX_UPDATED_EVENT re-renders every mounted price surface.
+  //
+  // Refreshed again whenever the app comes back to the foreground. A phone app
+  // is not reloaded between uses — it can sit open for days — and asking only
+  // on mount meant an athlete who returned a week later still saw the rates the
+  // table had on the day they installed it. `ensureFxRates()` is a no-op while
+  // the cache is still fresh, so this costs nothing until it is actually stale.
   useEffect(() => {
     ensureFxRates();
+    const onForeground = () => ensureFxRates();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") ensureFxRates();
+    };
+    window.addEventListener("focus", onForeground);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onForeground);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   useEffect(() => {
@@ -493,12 +508,15 @@ const App = () => {
               <Route path="/event-packs" element={<EventPacks />} />
               <Route path="/packs/:packId" element={<EventPackLanding />} />
               <Route path="/achievements" element={<Achievements />} />
-              {/* The Trophy Room's other screens. Each is its own page:
-                  Badges are bought, Achievements is the catalogue of what can
-                  be earned, the Trophy Room holds what HAS been earned, and
-                  Challenges were always a page of their own. */}
-              <Route path="/badges" element={<Badges />} />
+              {/* The Trophy Room's screens. Achievements is the catalogue of
+                  what can be earned, the Trophy Room holds what HAS been —
+                  medals, Market ownership and finished challenges together —
+                  and Challenges were always a page of their own. */}
               <Route path="/trophies" element={<TrophyRoom />} />
+              {/* The Badges screen was folded into the Trophy Room (its shelf
+                  is "Owned from the Market" there). Kept as a redirect so an
+                  old bookmark lands on the case instead of a 404. */}
+              <Route path="/badges" element={<Navigate to="/trophies" replace />} />
               <Route path="/vpr" element={<VPR />} />
               <Route path="/skills" element={<SkillAnalytics />} />
               <Route path="/tactics" element={<Tactics />} />

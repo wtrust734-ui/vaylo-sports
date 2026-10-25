@@ -184,12 +184,14 @@ export default function Streaks() {
         </p>
       </div>
 
-      {/* Achievements badge room: link to the existing badges screen */}
+      {/* The catalogue lives on Achievements; what is already earned is in the
+          Trophy Room. This goes to the catalogue, because a streak page is a
+          reason to look at what else can be earned. */}
       <a
         href={appHref("/achievements")}
         className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold"
       >
-        <span className="flex items-center gap-2"><Trophy size={16} /> See all your achievement badges</span>
+        <span className="flex items-center gap-2"><Trophy size={16} /> See all achievements</span>
         <span aria-hidden>→</span>
       </a>
     </div>

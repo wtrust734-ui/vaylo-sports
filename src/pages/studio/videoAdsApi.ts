@@ -4,9 +4,11 @@
 // Every call maps to a server endpoint that owns its own auth, validation and
 // cost gate:
 //   concept    → OpenAI writes the hook, script and storyboard (no shot spend)
-//   start      → ONE Veo shot; always quotes first (confirm:false), spends only
-//                when the caller re-sends confirm:true with the same shape
-//   poll       → operation state; a failed shot is retained for retry
+//   start      → ONE generated shot (Gemini Omni); always quotes first
+//                (confirm:false), spends only when the caller re-sends
+//                confirm:true with the same shape
+//   poll       → operation state; a provider-rejected attempt is retried once
+//                server-side, then retained for a manual retry
 //   generate   → ElevenLabs narration (billed characters reported per call)
 //   render     → compose the finished ad; requires real assets for every shot
 //   jobStatus  → render job state as persisted server-side
@@ -81,7 +83,7 @@ export function generateVideoConcept(input: {
 }
 
 // ---------------------------------------------------------------------------
-// Veo shots — quote-then-confirm
+// Generated shots — quote-then-confirm
 // ---------------------------------------------------------------------------
 
 export interface ShotQuote {
@@ -123,7 +125,7 @@ export async function quoteShot(input: {
   return res;
 }
 
-/** Spends on one Veo shot only after the quote was reviewed. */
+/** Spends on one generated shot only after the quote was reviewed. */
 export async function startShot(quote: ShotQuote): Promise<ShotStart> {
   const body: Record<string, unknown> = {
     action: "start",
@@ -141,6 +143,14 @@ export interface ShotPoll {
   state: string;
   videoUri?: string | null;
   error?: string | null;
+  /** True when the server replaced a provider-rejected interaction with a
+   *  fresh attempt on the same shot record. Poll the `operationId` returned
+   *  alongside it, not the original one. */
+  retrying?: boolean;
+  /** The new interaction id after an automatic retry. */
+  operationId?: string;
+  /** The provider's own reason for the rejected attempt. */
+  retryReason?: string | null;
 }
 
 export function pollShot(shotId: string, operationId: string): Promise<ShotPoll> {
@@ -171,9 +181,16 @@ export interface VoiceAudio {
   cached: boolean;
 }
 
-export async function generateVoiceover(input: { text: string; voiceId?: string }): Promise<VoiceAudio> {
+export async function generateVoiceover(input: { text: string; voiceId?: string; styleId?: string }): Promise<VoiceAudio> {
   const { data, error } = await supabase.functions.invoke("voiceover", {
-    body: { action: "generate", text: input.text, ...(input.voiceId ? { voiceId: input.voiceId } : {}) },
+    body: {
+      action: "generate",
+      text: input.text,
+      // The server defaults to premium_tech as well; sending it keeps the brand
+      // read explicit here instead of relying on an invisible fallback.
+      styleId: input.styleId ?? "premium_tech",
+      ...(input.voiceId ? { voiceId: input.voiceId } : {}),
+    },
   });
   if (error) throw new Error(await edgeErrorMessage(error));
   return data as VoiceAudio;
@@ -190,6 +207,40 @@ export async function uploadNarration(audioBase64: string, mimeType: string): Pr
   const { error } = await supabase.storage.from("ads").upload(path, bytes, { contentType: mimeType });
   if (error) throw new Error(error.message);
   return `ads/${path}`;
+}
+
+// ---------------------------------------------------------------------------
+// Playback — the finished cut, signed for the owner
+// ---------------------------------------------------------------------------
+
+export interface AdClip {
+  shot: number;
+  url: string;
+  durationSeconds: number;
+  description: string;
+}
+
+export interface AdPreview {
+  conceptId: string;
+  hook: string;
+  callToAction: string;
+  durationSeconds: number;
+  totalSeconds: number;
+  clips: AdClip[];
+  /** Storyboard shots with no stored clip — reported, never substituted. */
+  missing: number[];
+  narrationUrl: string | null;
+  captions: VideoCaptions[];
+}
+
+/** Returns every shot clip and the narration as freshly signed URLs, so the ad
+ *  plays immediately without a render worker or an external editor. */
+export function previewAd(conceptId: string, narrationPath: string | null): Promise<AdPreview> {
+  return invokeAdsVideo<AdPreview>({
+    action: "preview",
+    conceptId,
+    ...(narrationPath ? { narrationPath } : {}),
+  });
 }
 
 // ---------------------------------------------------------------------------

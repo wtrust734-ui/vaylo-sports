@@ -37,6 +37,7 @@ import {
   type OmniResolution,
 } from "../_shared/omni.ts";
 import { AIServiceError, generateAIResponse } from "../_shared/openai.ts";
+import { fitStoryboardToDuration, normaliseAdDuration, shotCountFor } from "../_shared/videoDuration.ts";
 import {
   type CaptionSpec,
   type StoryboardScene,
@@ -81,11 +82,15 @@ export {
 } from "../_shared/videoPrompt.ts";
 export { estimateVideoCost, videoConceptToPlan } from "../_shared/videoAd.ts";
 export { DEFAULT_OMNI_MODEL, estimateOmniCostUsd, normaliseDuration } from "../_shared/omni.ts";
+export { MIN_AD_SECONDS, MAX_AD_SECONDS, normaliseAdDuration, shotCountFor, fitStoryboardToDuration } from "../_shared/videoDuration.ts";
 export type { VideoConcept, StoryboardScene, CaptionSpec } from "../_shared/videoAd.ts";
 
 // ---------------------------------------------------------------------------
 // Storyboard parsing
 // ---------------------------------------------------------------------------
+
+/** One automatic retry after a provider-side failure (the failed call is not billed). */
+export const MAX_SHOT_ATTEMPTS = 2;
 
 /**
  * Normalise a storyboard handed to this function from the chat layer. Every
@@ -225,7 +230,7 @@ export function deriveStoryboard(concept: VideoConcept): StoryboardScene[] {
   // Deterministic default storyboard: hooks and CTAs are short; an eight
   // second spot is three beats. Every shot starts as an unbilled Veo shot with
   // a shared continuity key so a multi-shot spot reads as one film.
-  const shotCount = Math.min(3, Math.max(1, Math.floor(concept.durationSeconds / 3)));
+  const shotCount = shotCountFor(concept.durationSeconds);
   const per = Math.max(2, Math.round((concept.durationSeconds / shotCount) * 10) / 10);
   const beats = concept.sceneSequence.split(",").map((b) => b.trim()).filter(Boolean);
   const sourceTexts = [concept.hook, concept.message, concept.voiceover];
@@ -327,6 +332,8 @@ export async function handler(req: Request): Promise<Response> {
         return await startAction(req, body, userId, admin);
       case "poll":
         return await pollAction(body, userId, admin);
+      case "preview":
+        return await previewAction(body, userId, admin);
       case "render":
         return await renderAction(req, body, userId, admin);
       case "jobStatus":
@@ -459,7 +466,7 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
   const message = typeof body.message === "string" && body.message.trim() ? body.message.trim().slice(0, 300) : "";
   const product = "Vaylo Sports";
   const placement = body.placement === "landscape" ? "landscape" : "reels";
-  const durationSeconds = normaliseDuration(body.durationSeconds ?? 8);
+  const durationSeconds = normaliseAdDuration(body.durationSeconds ?? 10);
   const callToAction = typeof body.callToAction === "string" && body.callToAction.trim() ? body.callToAction.trim().slice(0, 120) : "Join the waitlist";
   const appeal = typeof body.appeal === "string" ? body.appeal.trim().slice(0, 300) : "";
 
@@ -532,12 +539,19 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
   // outage still yields a usable production plan the caller can review.
   let storyboardSource = "";
   let storyboardScenes: StoryboardScene[] = [];
-  const storyboardPrompt = buildStoryboardPrompt({ ...concept }, { name: brand.name, positioning: brand.positioning }, 3);
+  const requestedShots = shotCountFor(durationSeconds);
+  const storyboardPrompt = buildStoryboardPrompt({ ...concept }, { name: brand.name, positioning: brand.positioning }, requestedShots);
   const generatedStoryboard = await openaiStoryboard(storyboardPrompt);
   if (generatedStoryboard.ok && generatedStoryboard.scenes) {
     const modelStoryboard = normaliseStoryboard(generatedStoryboard.scenes, durationSeconds);
-    if (modelStoryboard.length > 0) storyboardScenes = modelStoryboard;
-    storyboardSource = "model";
+    // The model decides how many scenes to return; the advert's length is ours.
+    // Re-time them so the shots cover the requested seconds exactly, and fall
+    // back when its scene count cannot cover that length legally.
+    const fitted = fitStoryboardToDuration(modelStoryboard, durationSeconds);
+    if (fitted) {
+      storyboardScenes = fitted;
+      storyboardSource = "model";
+    }
   }
   if (storyboardScenes.length === 0) {
     storyboardScenes = deriveStoryboard(concept);
@@ -556,6 +570,10 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
     hook: concept.hook,
     core_message: concept.message,
     script: concept.voiceover,
+    // The captions are returned to the caller AND stored: the player reads the
+    // row later, so a caption spec that only existed in the response left every
+    // finished ad playing without its timed text.
+    script_captions: written.script.captions,
     storyboard: storyboardScenes,
     on_screen_text: concept.onScreenText,
     call_to_action: callToAction,
@@ -713,7 +731,7 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
   const conceptId = typeof body.conceptId === "string" && body.conceptId.length === 36 ? body.conceptId : null;
   const shot = Number(body.shot);
   const storyboardRaw = Array.isArray(body.storyboard) ? body.storyboard : [];
-  const storyboard = normaliseStoryboard(storyboardRaw, normaliseDuration(body.durationSeconds ?? 8));
+  const storyboard = normaliseStoryboard(storyboardRaw, normaliseAdDuration(body.durationSeconds ?? 10));
 
   let scene = storyboard.find((s) => Number.isFinite(shot) && s.shot === shot) ?? (storyboard.length === 1 ? storyboard[0] : undefined);
   if (!scene && conceptId) {
@@ -727,7 +745,7 @@ async function startAction(req: Request, body: Record<string, unknown>, userId: 
       .eq("owner_id", userId)
       .maybeSingle();
     if (conceptSceneRow) {
-      const stored = normaliseStoryboard(conceptSceneRow.storyboard, normaliseDuration(body.durationSeconds ?? 8));
+      const stored = normaliseStoryboard(conceptSceneRow.storyboard, normaliseAdDuration(body.durationSeconds ?? 10));
       scene = stored.find((s) => Number.isFinite(shot) && s.shot === shot) ?? (stored.length === 1 ? stored[0] : undefined);
     }
   }
@@ -929,11 +947,62 @@ async function pollAction(body: Record<string, unknown>, userId: string, admin: 
   const op = parseOmniInteraction(await res.json());
   const shotId = typeof body.shotId === "string" ? body.shotId : "";
 
-  // A finished interaction with no video anywhere is a real failure. Preserve
-  // the record; a failed shot is a retryable fact, not a loss.
+  // A finished interaction with no video anywhere is a real failure — but the
+  // provider rejecting a request it never charged for is often transient
+  // (Google answers with a generic INVALID_ARGUMENT and no clip; the identical
+  // prompt then succeeds). Retry ONE new interaction on the same shot record
+  // before reporting failure, so a flaky call cannot dead-end a whole advert.
   if (op.done && !op.videoBase64) {
     const message = op.error ?? `the video interaction finished in state "${op.state}" without returning a video`;
     if (shotId.length === 36) {
+      const { data: shotRow } = await admin
+        .from("ad_video_shots")
+        .select("attempts, veo_prompt, duration_seconds, aspect_ratio, resolution")
+        .eq("id", shotId)
+        .eq("owner_id", userId)
+        .maybeSingle();
+      const row = (shotRow ?? null) as Record<string, unknown> | null;
+      const attempts = Number(row?.attempts) || 1;
+      const storedPrompt = typeof row?.veo_prompt === "string" ? row.veo_prompt : "";
+      if (row && storedPrompt && attempts < MAX_SHOT_ATTEMPTS) {
+        try {
+          const retryRes = await fetch(`${GEMINI_BASE}/interactions`, {
+            method: "POST",
+            headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
+            body: JSON.stringify(buildOmniRequest({
+              prompt: storedPrompt,
+              aspectRatio: row.aspect_ratio === "16:9" ? "16:9" : "9:16",
+              durationSeconds: Number(row.duration_seconds) || 8,
+              resolution: row.resolution === "720p" ? "720p" : undefined,
+            })),
+          });
+          if (retryRes.ok) {
+            const retryOp = parseOmniInteraction(await retryRes.json());
+            if (retryOp.name) {
+              await admin.from("ad_video_shots").update({
+                operation_id: retryOp.name,
+                state: "running",
+                attempts: attempts + 1,
+                error: null,
+                updated_at: new Date().toISOString(),
+              }).eq("id", shotId).eq("owner_id", userId);
+              console.warn(`[ads-video] shot ${shotId} failed at the provider (${message}); retrying once`);
+              return jsonResp({
+                action: "poll",
+                done: false,
+                state: "running",
+                retrying: true,
+                operationId: retryOp.name,
+                retryReason: message,
+              });
+            }
+          } else {
+            console.error(`[ads-video] retry start failed status=${retryRes.status}`);
+          }
+        } catch (e) {
+          console.error("[ads-video] retry attempt threw", e);
+        }
+      }
       try {
         await admin.from("ad_video_shots").update({ state: "failed", error: message, updated_at: new Date().toISOString() }).eq("id", shotId).eq("owner_id", userId);
       } catch (e) {
@@ -984,6 +1053,98 @@ async function pollAction(body: Record<string, unknown>, userId: string, admin: 
   }
 
   return jsonResp({ action: "poll", done: op.done, state: op.state, videoUri: videoUri, error: op.error });
+}
+
+// ---------------------------------------------------------------------------
+// preview: the finished advert as a playable cut
+// ---------------------------------------------------------------------------
+// Every shot clip is already a real stored file. This action signs each one
+// (owner-scoped, 12h) plus the narration track and returns the cut — shot
+// order, each clip's slot in the timeline, and the caption timing — so the app
+// can play the advert back immediately, with no external editor and no FFmpeg
+// host to be down. Nothing is invented: a shot with no stored clip is reported
+// in `missing`, never skipped or substituted.
+
+async function previewAction(body: Record<string, unknown>, userId: string, admin: AdminClient): Promise<Response> {
+  const conceptId = typeof body.conceptId === "string" && body.conceptId.length === 36 ? body.conceptId : "";
+  if (!conceptId) return badReq("conceptId is required");
+
+  const { data: rawConcept, error } = await admin
+    .from("ad_video_concepts")
+    .select("*")
+    .eq("id", conceptId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (error || !rawConcept) return jsonResp({ error: "Concept not found" }, 404);
+  const row = rawConcept as Record<string, unknown>;
+
+  const durationSeconds = Number(row.duration_seconds) > 0 ? Number(row.duration_seconds) : 8;
+  const storyboard = normaliseStoryboard(Array.isArray(row.storyboard) ? row.storyboard : [], durationSeconds);
+
+  // Latest COMPLETED generation per shot number. A failed or running row never
+  // stands in for a clip.
+  const { data: shotRows } = await admin
+    .from("ad_video_shots")
+    .select("shot_number, video_uri, updated_at")
+    .eq("owner_id", userId)
+    .eq("concept_id", conceptId)
+    .eq("state", "done")
+    .order("updated_at", { ascending: false });
+  const clipByShot = new Map<number, string>();
+  for (const raw of (shotRows ?? []) as Record<string, unknown>[]) {
+    const n = Number(raw.shot_number);
+    const uri = typeof raw.video_uri === "string" ? raw.video_uri.trim() : "";
+    if (!Number.isFinite(n) || !uri || clipByShot.has(n)) continue;
+    clipByShot.set(n, uri);
+  }
+
+  const clips: { shot: number; url: string; durationSeconds: number; description: string }[] = [];
+  const missing: number[] = [];
+  for (const scene of storyboard) {
+    const uri = clipByShot.get(scene.shot);
+    if (!uri) { missing.push(scene.shot); continue; }
+    let url: string | null = null;
+    if (isOwnerBucketPath(userId, uri)) url = await signOwnerAsset(admin, userId, uri);
+    else if (/^https?:\/\//i.test(uri)) url = uri;
+    if (!url) { missing.push(scene.shot); continue; }
+    clips.push({
+      shot: scene.shot,
+      url,
+      durationSeconds: Math.max(1, Math.round((scene.endSeconds - scene.startSeconds) * 100) / 100) || scene.durationSeconds,
+      description: scene.visualDescription,
+    });
+  }
+
+  const narrationRaw = typeof body.narrationPath === "string" ? body.narrationPath.trim() : "";
+  let narrationUrl: string | null = null;
+  if (narrationRaw && isOwnerBucketPath(userId, narrationRaw)) narrationUrl = await signOwnerAsset(admin, userId, narrationRaw);
+  // No narration path is passed when the build that made it is gone from this
+  // session. Picking "the newest narration file in the account" would silently
+  // put another concept's voiceover under this ad, so the cut plays silent and
+  // the player says so instead.
+
+  const captionsRaw = Array.isArray(row.script_captions) ? (row.script_captions as Record<string, unknown>[]) : [];
+  const captions: CaptionSpec[] = captionsRaw.flatMap((c) => {
+    const start = Number(c.startSeconds);
+    const end = Number(c.endSeconds);
+    const text = typeof c.text === "string" ? c.text.trim() : "";
+    if (!text || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+    return [{ startSeconds: start, endSeconds: end, text }];
+  });
+
+  const totalSeconds = clips.reduce((sum, c) => sum + c.durationSeconds, 0);
+  return jsonResp({
+    action: "preview",
+    conceptId,
+    hook: typeof row.hook === "string" ? row.hook : "",
+    callToAction: typeof row.call_to_action === "string" ? row.call_to_action : "",
+    durationSeconds,
+    totalSeconds: Math.round(totalSeconds * 100) / 100,
+    clips,
+    missing,
+    narrationUrl,
+    captions,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,7 +1229,16 @@ async function renderAction(req: Request, body: Record<string, unknown>, userId:
 
   const logoPath = typeof body.logoPath === "string" && body.logoPath.trim() ? body.logoPath.trim() : undefined;
   const musicPath = typeof body.musicPath === "string" && body.musicPath.trim() ? body.musicPath.trim() : undefined;
-  const fontFile = typeof body.fontFile === "string" && body.fontFile.trim() ? body.fontFile.trim() : undefined;
+  // The worker ignores this value and uses its own bundled font (FONT_FILE,
+  // /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf); the plan still
+  // requires one whenever the concept carries on-screen text. Without this
+  // default EVERY render failed 422 ("a fontFile is required because the
+  // concept has on-screen text") because no caller ever sends one.
+  const fontFile = typeof body.fontFile === "string" && body.fontFile.trim()
+    ? body.fontFile.trim()
+    : Array.isArray(conceptRow.on_screen_text) && conceptRow.on_screen_text.length > 0
+      ? (Deno.env.get("FONT_FILE") ?? "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+      : undefined;
   const outputPath = `/tmp/renders/${crypto.randomUUID()}.mp4`;
 
   // Library screen recordings, narration files and the brand logo sit in the
@@ -1159,7 +1329,7 @@ async function renderAction(req: Request, body: Record<string, unknown>, userId:
       totalSeconds: planResult.totalSeconds,
       missingShots: missingShots.map((s) => s.shot),
       additionalCostUsd: 0,
-      costNote: "Rendering dispatch cost 1 credit; the edit itself is performed by Manus 2.0, so no FFmpeg worker spend applies.",
+      costNote: "There is no charge for dispatch; the edit itself is performed by Manus 2.0, so no FFmpeg worker spend applies.",
       estimate: costEstimate,
       notes: [...planResult.notes, "queued for Manus 2.0: the agent edits the clip and reports back the finished file."],
     });

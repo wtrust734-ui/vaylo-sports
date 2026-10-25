@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Plus, Sparkles, X, Activity } from "lucide-react";
+import { ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Plus, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeLoads, type LoadRow } from "@/lib/performance";
@@ -10,16 +10,18 @@ import { shortfallFromEdgeError } from "@/lib/shortfall";
 import { requestCreditTopUp } from "@/lib/topUpStore";
 import { getAiLocale } from "@/i18n";
 import { getLocalPBs } from "@/lib/athleteDossier";
+import { normaliseEquipment } from "@/config/equipment";
 import {
   buildInjuryBriefing,
+  freeInjuryProtocol,
   MAX_SITE_LENGTH,
   parseInjuryPlan,
   planHeadline,
+  readStoredTrainingAdvice,
   renderInjuryProtocol,
   resolveInjurySite,
   splitStoredProtocol,
 } from "@/lib/injuryPlan";
-import { buildInjuryRehabPlan } from "@/lib/injuryRehabPlan";
 import { asPlanWeeks } from "@/lib/planSchedule";
 import { useUnlockFeature } from "@/hooks/useUnlockFeature";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -28,82 +30,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import InjuryPlanProgress from "@/components/injury/InjuryPlanProgress";
 
 const BODY_PARTS = ["Knee", "Hamstring", "Calf", "Achilles", "Foot/Ankle", "Hip", "Lower Back", "Shoulder", "Elbow", "Wrist", "Other"];
 
-// Generic, evidence-led recovery scaffolds. NOT medical advice — disclaimer always shown.
-const RECOVERY_PLANS: Record<string, string[]> = {
-  Knee: [
-    "Days 1–3: Rest, ice 15min ×3/day, compression sleeve, elevate when seated.",
-    "Days 4–7: Quad sets, straight-leg raises 3×10. Stationary bike, no resistance.",
-    "Week 2: Wall sits 3×30s, step-ups (low box), terminal knee extension band work.",
-    "Week 3–4: Single-leg balance, Bulgarian split squats (bodyweight), gradual jog return.",
-    "Red flags: locking, giving way, swelling that doesn't drop → see a physio.",
-  ],
-  Hamstring: [
-    "Days 1–3: Ice, gentle isometrics (bridges 3×10s holds), avoid stretching.",
-    "Days 4–7: Nordic curl negatives 3×3, single-leg deadlift (light), walking lunges.",
-    "Week 2: Romanian deadlift, prone hamstring curls, sled drags.",
-    "Week 3+: Build to sprints — start at 50% and add 10% per session.",
-    "Red flags: bruising, popping sensation, inability to bear weight → get imaged.",
-  ],
-  Calf: [
-    "Days 1–3: Ice, calf compression sleeve, walking only.",
-    "Days 4–10: Seated calf raises 3×15, ankle ABCs, eccentric calf drops on stairs.",
-    "Week 2: Standing calf raises (both then single leg), pogo hops low height.",
-    "Week 3+: Skipping rope, then progressive jogging at 30%/50%/70%/100% over 4 sessions.",
-  ],
-  Achilles: [
-    "Days 1–5: Heel lift in shoes, isometric calf holds 5×45s daily, no jumping.",
-    "Week 1–3: Alfredson protocol — heavy slow eccentric heel drops 3×15 twice daily.",
-    "Week 4+: Reintroduce skipping, then 20s strides at 60% effort.",
-    "Avoid: stretching to pain, plyos until pain on hopping <2/10.",
-  ],
-  "Foot/Ankle": [
-    "Days 1–3: PEACE & LOVE — Protection, Elevation, Avoid anti-inflammatories, Compression, Education.",
-    "Days 4–10: Single-leg balance 3×30s, alphabet drills, towel scrunches.",
-    "Week 2: Heel-to-toe walking, lateral band walks, controlled hops.",
-    "Week 3+: Plyo progression — pogos → broad jumps → cutting.",
-  ],
-  Hip: [
-    "Days 1–7: Hip flexor stretch (couch stretch) 2×60s/side, glute bridges 3×15.",
-    "Week 2: Banded clams, side-lying hip abduction, deadbugs.",
-    "Week 3+: Goblet squats, lateral lunges, single-leg RDL progression.",
-  ],
-  "Lower Back": [
-    "Days 1–3: Walking 10–15min ×2/day. Avoid prolonged sitting. Cat-cow gently.",
-    "Days 4–10: McKenzie press-ups 10 reps every 2h, glute bridges, deadbugs.",
-    "Week 2+: Bird-dogs, hip hinge practice (broomstick), kettlebell deadlifts (very light).",
-    "Red flags: leg numbness, bladder/bowel changes → ER immediately.",
-  ],
-  Shoulder: [
-    "Days 1–7: Pendulum swings, scapular squeezes 3×10, avoid overhead.",
-    "Week 2: External rotation band work 3×15, prone Y-T-W raises.",
-    "Week 3+: Push-up plus, landmine press, gradual return to overhead.",
-  ],
-  Elbow: [
-    "Days 1–7: Wrist eccentrics (flexion + extension) 3×15, ice 10min post-activity.",
-    "Week 2+: Forearm strengthening — pronation/supination with hammer, towel twists.",
-    "Avoid: gripping under load until pain on resisted wrist extension <3/10.",
-  ],
-  Wrist: [
-    "Days 1–5: Splint, wrist circles, gentle pronation/supination.",
-    "Week 2+: Wrist curls (very light), grip work with stress ball, gradual loading.",
-  ],
-  Other: [
-    "General protocol: 48–72h relative rest, then begin pain-free movement.",
-    "Re-introduce strength at 50% load, progress 10% per session if pain stays <3/10.",
-    "Sleep 8h+, protein 1.6–2.0g/kg/day, manage stress — recovery is systemic.",
-  ],
-};
+const SWELLING_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "some", label: "Some swelling or bruising" },
+  { value: "significant", label: "Significant swelling or bruising" },
+] as const;
 
-const planForInjury = (bodyPart: string, severity: number): string[] => {
-  const base = RECOVERY_PLANS[bodyPart] ?? RECOVERY_PLANS.Other;
-  if (severity >= 7) {
-    return ["⚠ Severity 7+: see a qualified physiotherapist or doctor BEFORE following any plan.", ...base];
-  }
-  return base;
-};
 
 /**
  * Load trend drawn as plain SVG.
@@ -246,11 +182,37 @@ const Injury = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loads, setLoads] = useState<LoadRow[]>([]);
   type RecoveryRow = { fatigue?: number | null; soreness?: number | null; sleep_quality?: number | null; [key: string]: unknown };
-  type InjuryRow = { id: string; status: string; body_part: string; severity: number; notes?: string | null; recovery_protocol?: string | null; [key: string]: unknown };
+  type InjuryRow = {
+    id: string;
+    status: string;
+    body_part: string;
+    severity: number;
+    notes?: string | null;
+    mechanism?: string | null;
+    hurts?: string | null;
+    still_doing?: string | null;
+    swelling?: string | null;
+    onset_days?: number | null;
+    recovery_protocol?: string | null;
+    [key: string]: unknown;
+  };
   const [recovery, setRecovery] = useState<RecoveryRow[]>([]);
   const [injuries, setInjuries] = useState<InjuryRow[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ body_part: "Knee", severity: 3, notes: "" });
+  const emptyForm = {
+    body_part: "Knee",
+    severity: 3,
+    mechanism: "",
+    hurts: "",
+    still_doing: "",
+    swelling: "none" as "none" | "some" | "significant",
+    onset_days: "",
+    notes: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  // The intake opens by itself for an athlete with nothing logged: the first
+  // thing this tab should do is ask about the injury, not show an empty list.
+  const openedIntake = useRef(false);
   // The athlete's own words for a site the list cannot name. The list is a set of
   // shortcuts, not the set of injuries that exist: everything else used to be
   // collapsed to "Other" on save, which threw away the one detail that makes a
@@ -261,11 +223,10 @@ const Injury = () => {
   // The injury whose personalised plan is being written right now. One at a
   // time: a double tap used to be two paid calls.
   const [planningId, setPlanningId] = useState<string | null>(null);
-  // The injury whose on-device mobility plan is being saved. Separate from
-  // `planningId` because the two actions are different: one waits on a provider
-  // call, the other is local and finishes in a moment.
-  const [rehabPlanId, setRehabPlanId] = useState<string | null>(null);
-  /** Training days in the athlete's active plan, so the rehab plan wraps around it. */
+  // True once the answer has been written AND saved, so the progress bar can
+  // reach 100% without ever showing it before the plan exists on the row.
+  const [planDone, setPlanDone] = useState(false);
+  /** Training days in the athlete's active plan, so the plan fits their real week. */
   const [trainingDays, setTrainingDays] = useState<number | null>(null);
   const unlock = useUnlockFeature();
   const { hasFeature, loading: entitlementsLoading, refresh: refreshEntitlements } = useSubscription();
@@ -293,7 +254,7 @@ const Injury = () => {
       supabase.from("recovery_logs").select("*").eq("user_id", user.id).order("log_date", { ascending: false }).limit(14),
       supabase.from("injury_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       // The active training plan, read for one fact: how many days a week the
-      // athlete is training. The mobility plan is written around that week so
+      // athlete is training. The rehab plan is written alongside that week, so
       // the two pieces of programming agree instead of competing.
       supabase.from("training_plans").select("plan_data").eq("user_id", user.id).eq("active", true).maybeSingle(),
     ]);
@@ -306,7 +267,12 @@ const Injury = () => {
     setLoadError(null);
     setLoads((l.data as LoadRow[] | null) || []);
     setRecovery((r.data as RecoveryRow[] | null) || []);
-    setInjuries((i.data as InjuryRow[] | null) || []);
+    const loadedInjuries = (i.data as InjuryRow[] | null) || [];
+    setInjuries(loadedInjuries);
+    if (!openedIntake.current) {
+      openedIntake.current = true;
+      if (loadedInjuries.length === 0) setShowForm(true);
+    }
     const weeks = asPlanWeeks((p.data as { plan_data?: unknown } | null)?.plan_data);
     const sessions = weeks[0]?.sessions ?? [];
     setTrainingDays(
@@ -377,6 +343,12 @@ const Injury = () => {
     : risk >= 40 ? { label: "BUILDING", color: "energy", action: "Cap intensity below 80%. Prioritize sleep & soft-tissue work." }
     : { label: "STEADY", color: "primary", action: "Keep current load. Maintain mobility routine." };
 
+  /** Bounded, control-character-free text for a column, or null when blank. */
+  const clean = (value: string, max = 600): string | null => {
+    const text = (value || "").replace(/\p{C}/gu, " ").trim();
+    return text ? text.slice(0, max) : null;
+  };
+
   const submitInjury = async () => {
     if (!user) return;
     // Mirror the injury_logs DB checks: severity 1–10, closed status set,
@@ -387,21 +359,57 @@ const Injury = () => {
     // so the athlete's own words are kept when they gave them (see
     // resolveInjurySite, which is where that rule is tested).
     const bodyPart = resolveInjurySite({ listed: form.body_part, typed: otherSite, known: BODY_PARTS });
-    const status = "active";
-    const plan = planForInjury(bodyPart, severity);
+    const mechanism = clean(form.mechanism);
+    const hurts = clean(form.hurts);
+    const stillDoing = clean(form.still_doing);
+    const notes = clean(form.notes, 1000);
+    const onsetRaw = form.onset_days.trim();
+    const onsetDays = onsetRaw === ""
+      ? null
+      : Math.max(0, Math.min(3650, Math.round(Number(onsetRaw) || 0)));
+
+    // The row still opens with the free safety guidance — the general pattern of
+    // care for the area and the red flags — so an athlete is never left with an
+    // empty card while deciding whether to pay for the personalised plan. The
+    // full week-by-week rehab plan is the AI one, below.
+    const scaffold = freeInjuryProtocol({
+      bodyPart,
+      severity,
+      reported: [mechanism, hurts, stillDoing, notes].filter(Boolean).join(". "),
+    });
+
     const { error } = await supabase.from("injury_logs").insert({
       user_id: user.id,
       body_part: bodyPart,
       severity,
-      status,
-      notes: (form.notes || "").replace(/\p{C}/gu, " ").slice(0, 1000) || null,
-      recovery_protocol: plan.join("\n"),
+      status: "active",
+      mechanism,
+      hurts,
+      still_doing: stillDoing,
+      swelling: form.swelling,
+      onset_days: onsetDays,
+      notes,
+      recovery_protocol: scaffold.lines.join("\n"),
     });
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Injury logged — a free generic scaffold is below. A personalised plan costs credits.");
-      setShowForm(false); setForm({ body_part: "Knee", severity: 3, notes: "" }); setOtherSite(""); load();
+    if (error) {
+      toast.error(error.message);
+      return;
     }
+    if (scaffold.referral) {
+      toast.success("Injury logged", {
+        description:
+          "This needs a qualified clinician before any training plan. The referral note is on the injury.",
+      });
+    } else {
+      toast.success("Injury logged", {
+        description:
+          "Create your personalised plan below — it is written from these answers and slots into your normal training.",
+      });
+    }
+    setShowForm(false);
+    setForm(emptyForm);
+    setOtherSite("");
+    load();
   };
 
   const resolveInjury = async (id: string) => {
@@ -427,18 +435,38 @@ const Injury = () => {
    */
   const generateInjuryPlan = async (injury: InjuryRow) => {
     if (!user || !profile || planningId) return;
+    setPlanDone(false);
     setPlanningId(injury.id);
     try {
       const created = typeof injury.created_at === "string" ? injury.created_at : null;
       const daysSince = created
         ? Math.max(1, Math.round((Date.now() - new Date(created).getTime()) / 86_400_000))
         : null;
+      // Every answer the intake asked for goes into the briefing. These are the
+      // facts the plan is personalised from; dropping one here is the same as
+      // never asking the question.
       const briefing = buildInjuryBriefing({
         bodyPart: injury.body_part,
         severity: injury.severity,
+        mechanism: injury.mechanism ?? null,
+        hurts: injury.hurts ?? null,
+        stillDoing: injury.still_doing ?? null,
+        swelling: injury.swelling ?? null,
         notes: injury.notes ?? null,
-        daysSince: Number.isFinite(daysSince as number) ? daysSince : null,
+        daysSince:
+          injury.onset_days != null
+            ? Number(injury.onset_days)
+            : Number.isFinite(daysSince as number)
+              ? daysSince
+              : null,
         sport: profile.sport ?? null,
+        trainingDays,
+        // The profile already knows what they can train with; a rehab plan that
+        // prescribes a band or a gym machine they do not have is a plan they
+        // cannot follow.
+        equipment: normaliseEquipment(
+          (profile.extended_profile as { equipment?: unknown } | null)?.equipment,
+        ),
       });
 
       const { data, error } = await supabase.functions.invoke("ai-analyze", {
@@ -504,57 +532,18 @@ const Injury = () => {
       // subscriber they spent 6 credits would be a lie about their own balance.
       const charged = Number((data as { cost?: unknown } | null)?.cost ?? 0);
       toast.success(planHeadline(parsed.plan), {
-        description: charged > 0 ? `${charged} credits used.` : "Included with Unlimited.",
+        description: charged > 0 ? `${charged} credits used. It is saved on this injury.` : "Included with Unlimited. It is saved on this injury.",
       });
-      await refreshProfile();
-      load();
+      await Promise.all([refreshProfile(), load()]);
+      // Hold the finished bar for a beat: dropping the overlay in the same frame
+      // the plan appears reads as a glitch rather than a completion.
+      setPlanDone(true);
+      await new Promise((resolve) => window.setTimeout(resolve, 420));
     } catch (e) {
       toast.error((e as Error)?.message || "Could not create the plan");
     } finally {
       setPlanningId(null);
-    }
-  };
-
-  /**
-   * The on-device mobility plan: what the athlete actually needs to fix it.
-   *
-   * This is the primary action on the tab because it always works — no provider
-   * call, no credits, no answer to parse. It is deliberately NOT a training
-   * plan: three weeks of range, activation and gentle strength for the injured
-   * area, with the training week treated as the thing it runs alongside. The
-   * paid AI version stays available underneath for a longer, personalised
-   * scaffold.
-   */
-  const createRehabPlan = async (injury: InjuryRow) => {
-    if (!user || rehabPlanId) return;
-    const result = buildInjuryRehabPlan({
-      bodyPart: injury.body_part,
-      severity: injury.severity,
-      notes: injury.notes ?? null,
-      sport: profile?.sport ?? null,
-      trainingDaysPerWeek: trainingDays,
-    });
-    if (!result.plan) {
-      toast.error(result.reason);
-      return;
-    }
-    setRehabPlanId(injury.id);
-    try {
-      const { error } = await supabase
-        .from("injury_logs")
-        .update({ recovery_protocol: renderInjuryProtocol(result.plan, "mobility") })
-        .eq("id", injury.id)
-        .eq("user_id", user.id);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      toast.success("Mobility plan ready", {
-        description: "Three weeks of range, activation and strength work, written around your training week — it is on this injury now.",
-      });
-      load();
-    } finally {
-      setRehabPlanId(null);
+      setPlanDone(false);
     }
   };
 
@@ -566,12 +555,12 @@ const Injury = () => {
         <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest mb-2"><ShieldAlert size={14} /> Training strain & recovery</div>
         <h1 className="text-2xl font-display font-bold mt-1">Injury Management</h1>
         <div className="mt-8 p-6 rounded-2xl border-2 border-primary/40 bg-card/40 backdrop-blur space-y-4">
-          <div className="text-sm text-muted-foreground">Unlock a training-strain reading, a free generic return-to-training scaffold with every injury, and personalised AI plans.</div>
+          <div className="text-sm text-muted-foreground">Log an injury properly, get a personalised rehab plan written from it, and see how your load is treating you.</div>
           <ul className="text-sm space-y-1.5">
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Strain reading 0–100 from your load, recovery and sleep</li>
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> A body-area scaffold with every injury you log — free, and it stays free</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> A full injury intake — how it happened, triggers, what still works, swelling, timing</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Starter safety guidance with every injury you log</li>
             <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Load & A:C ratio tracking</li>
-            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Personalised AI plans, {creditCost("injury_plan")} credits each — charged per plan, even once the tab is unlocked</li>
+            <li className="flex gap-2"><CheckCircle2 size={14} className="text-primary mt-0.5" /> Personalised AI rehab plans, {creditCost("injury_plan")} credits each — charged per plan, even once the tab is unlocked</li>
           </ul>
           <div className="text-3xl font-display font-bold">{creditCost("injury_management_unlock")} <span className="text-sm text-muted-foreground">credits · one-time</span></div>
           <Button onClick={unlockInjury} disabled={unlocking} className="w-full">{unlocking ? "Unlocking..." : `Unlock for ${creditCost("injury_management_unlock")} credits`}</Button>
@@ -685,15 +674,105 @@ const Injury = () => {
               </div>
             )}
             <div>
-              <label className="text-xs text-muted-foreground">Severity: {form.severity}/10</label>
-              <input type="range" min={1} max={10} value={form.severity} onChange={(e) => setForm({ ...form, severity: Number(e.target.value) })} className="w-full" />
+              <label className="text-xs text-muted-foreground" htmlFor="injury-severity">
+                How bad is it right now: {form.severity}/10
+              </label>
+              <input
+                id="injury-severity"
+                type="range"
+                min={1}
+                max={10}
+                value={form.severity}
+                onChange={(e) => setForm({ ...form, severity: Number(e.target.value) })}
+                className="w-full"
+              />
             </div>
-            <Textarea placeholder="Notes / how it happened" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-mechanism">
+                How did it happen?
+              </label>
+              <Textarea
+                id="injury-mechanism"
+                placeholder="e.g. sprinting, changed direction and felt it go"
+                value={form.mechanism}
+                maxLength={600}
+                onChange={(e) => setForm({ ...form, mechanism: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-hurts">
+                What makes it worse?
+              </label>
+              <Textarea
+                id="injury-hurts"
+                placeholder="e.g. running downhill, cutting, sitting for long, pushing off"
+                value={form.hurts}
+                maxLength={600}
+                onChange={(e) => setForm({ ...form, hurts: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-still-doing">
+                What can you still do pain-free?
+              </label>
+              <Textarea
+                id="injury-still-doing"
+                placeholder="e.g. walk, cycle, upper-body gym work"
+                value={form.still_doing}
+                maxLength={600}
+                onChange={(e) => setForm({ ...form, still_doing: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-swelling">
+                  Swelling or bruising
+                </label>
+                <Select
+                  value={form.swelling}
+                  onValueChange={(v) => setForm({ ...form, swelling: v as typeof form.swelling })}
+                >
+                  <SelectTrigger id="injury-swelling"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SWELLING_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-onset">
+                  Days ago it started
+                </label>
+                <Input
+                  id="injury-onset"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={3650}
+                  placeholder="e.g. 3"
+                  value={form.onset_days}
+                  onChange={(e) => setForm({ ...form, onset_days: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground" htmlFor="injury-notes">
+                Anything else the plan should take into account?
+              </label>
+              <Textarea
+                id="injury-notes"
+                placeholder="e.g. I have a physio appointment next week, or I cannot take time off work"
+                value={form.notes}
+                maxLength={1000}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
             <div className="text-[12px] text-muted-foreground p-2 rounded-lg bg-energy/5 border border-energy/20 flex gap-2">
               <AlertTriangle size={14} className="text-energy flex-shrink-0 mt-0.5" />
-              <span><strong>Not medical advice.</strong> Vaylo Sports generates a generic return-to-training scaffold. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
+              <span><strong>Not medical advice.</strong> These answers become the briefing for your plan. Sharp, persistent, or worsening pain — see a qualified physiotherapist or doctor.</span>
             </div>
-            <Button onClick={submitInjury} className="w-full">Save injury — free generic scaffold</Button>
+            <Button onClick={submitInjury} className="w-full">Save injury and answers</Button>
           </motion.div>
         )}
         {injuries.length === 0 ? (
@@ -713,6 +792,41 @@ const Injury = () => {
                   <div className="min-w-0">
                     <div className="text-sm font-medium">{i.body_part} <span className="text-xs text-muted-foreground">· severity {i.severity}/10</span></div>
                     {i.notes && <div className="mt-1 break-words text-xs text-muted-foreground">{i.notes}</div>}
+                    {(i.mechanism || i.hurts || i.still_doing || i.onset_days != null) && (
+                      <details className="mt-1.5 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer select-none text-[11px] font-semibold text-primary">
+                          Your logged answers
+                        </summary>
+                        <dl className="mt-1.5 space-y-1">
+                          {i.mechanism ? (
+                            <div className="flex gap-1.5">
+                              <dt className="shrink-0 font-medium text-foreground/80">How:</dt>
+                              <dd className="min-w-0 break-words">{i.mechanism}</dd>
+                            </div>
+                          ) : null}
+                          {i.hurts ? (
+                            <div className="flex gap-1.5">
+                              <dt className="shrink-0 font-medium text-foreground/80">Worse with:</dt>
+                              <dd className="min-w-0 break-words">{i.hurts}</dd>
+                            </div>
+                          ) : null}
+                          {i.still_doing ? (
+                            <div className="flex gap-1.5">
+                              <dt className="shrink-0 font-medium text-foreground/80">Still can:</dt>
+                              <dd className="min-w-0 break-words">{i.still_doing}</dd>
+                            </div>
+                          ) : null}
+                          {i.onset_days != null ? (
+                            <div className="flex gap-1.5">
+                              <dt className="shrink-0 font-medium text-foreground/80">Started:</dt>
+                              <dd className="min-w-0">
+                                {i.onset_days === 0 ? "Today" : `${i.onset_days} day${Number(i.onset_days) === 1 ? "" : "s"} ago`}
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </details>
+                    )}
                   </div>
                   {i.status === "active" && <Button size="sm" variant="ghost" className="shrink-0" onClick={() => resolveInjury(i.id)}>Resolve</Button>}
                 </div>
@@ -722,22 +836,80 @@ const Injury = () => {
                   // than from state: a generic scaffold must never be shown as
                   // the thing the athlete paid for, and vice versa.
                   const stored = splitStoredProtocol(i.recovery_protocol);
+                  // The training advice is stored as labelled lines so it can be
+                  // lifted out of the plan and shown first — an athlete told to
+                  // stop training must not have to read three weeks of drills to
+                  // find that out.
+                  const advice = stored.kind === "ai" ? readStoredTrainingAdvice(stored.lines) : null;
+                  // The model chooses the length, so the card states it from the
+                  // plan itself. The highest week number is the length even if a
+                  // week is missing, which a count would understate.
+                  const planWeeks = stored.lines.reduce((longest, line) => {
+                    const match = /^Week (\d+)/.exec(line);
+                    return match ? Math.max(longest, Number(match[1])) : longest;
+                  }, 0);
+                  let planLines = stored.lines;
+                  if (advice) {
+                    const skip = new Set<number>();
+                    stored.lines.forEach((line, index) => {
+                      if (line.startsWith("Training:") || line.startsWith("What you can still do:")) {
+                        skip.add(index);
+                        return;
+                      }
+                      if (line === "Build back into training:") {
+                        skip.add(index);
+                        for (let k = index + 1; k < stored.lines.length; k += 1) {
+                          if (!stored.lines[k].startsWith("•")) break;
+                          skip.add(k);
+                        }
+                      }
+                    });
+                    planLines = stored.lines.filter((_, index) => !skip.has(index));
+                  }
                   return (
                     <div className="mt-2 pt-2 border-t border-border/40">
                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-primary">
                         {stored.kind === "ai"
-                          ? "AI-written plan"
+                          ? `Your personalised plan${planWeeks > 0 ? ` · ${planWeeks} week${planWeeks === 1 ? "" : "s"}` : ""}`
                           : stored.kind === "mobility"
                             ? "Mobility & rehab plan"
-                            : "Generic scaffold (free)"}
+                            : "Starter safety guidance"}
                       </div>
+                      {advice ? (
+                        <div className="mb-3 rounded-xl border border-energy/30 bg-energy/5 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-energy">
+                            Training while this heals
+                          </p>
+                          <p className="mt-1 text-xs font-medium leading-relaxed text-foreground">
+                            {(() => {
+                              // The panel heading already says "Training while this
+                              // heals", so the stored prefix would repeat it.
+                              const detail = advice.headline.replace(/^Training:\s*/i, "");
+                              return detail.charAt(0).toUpperCase() + detail.slice(1);
+                            })()}
+                          </p>
+                          {advice.during ? (
+                            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{advice.during}</p>
+                          ) : null}
+                          {advice.buildBack.length > 0 ? (
+                            <ol className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+                              {advice.buildBack.map((step, index) => (
+                                <li key={step} className="flex gap-2">
+                                  <span aria-hidden className="shrink-0 font-semibold text-energy">{index + 1}.</span>
+                                  <span className="min-w-0">{step}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {/* The stored plan is line-based text, so the shape has to
                           come from the lines: week headings get their own band,
                           checklist lines keep the bullet in its own column (so a
                           wrapped line lines up under the text, not under the
                           dot), and everything else reads as a paragraph. */}
                       <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
-                        {stored.lines.map((line, idx) => {
+                        {planLines.map((line, idx) => {
                           const isWeek = /^Week \d+/.test(line);
                           const isBullet = line.startsWith("•");
                           if (isWeek) {
@@ -767,49 +939,56 @@ const Injury = () => {
 
                 {/* The paid action. The price comes from the credit config, never
                     from a literal written here, and the reason is on screen
-                    rather than implied: a plan is written for this injury at this
-                    severity against the athlete's training week, so it costs us a
-                    provider call every time it is made. */}
-                {/* Two ways to get a plan, and the one that always works comes
-                    first. The mobility plan is built on the device: no provider
-                    call, no charge, no unreadable answer — it is the button an
-                    athlete can rely on when they are hurt and need something
-                    to do today. The AI scaffold is the optional longer version. */}
+                    rather than implied: the plan is written for this injury at
+                    this severity against the athlete's training week, so it
+                    costs a provider call every time it is made. */}
                 <div className="mt-3 space-y-2 border-t border-border/40 pt-2">
+                  {(() => {
+                    // Show which of the intake answers this plan will be written
+                    // from. The answers were asked for one reason — they change
+                    // the plan — so the athlete should see them going in.
+                    const facts = [
+                      i.mechanism ? "how it happened" : null,
+                      i.hurts ? "what makes it worse" : null,
+                      i.still_doing ? "what still works" : null,
+                      i.swelling && i.swelling !== "none" ? "swelling" : null,
+                      i.onset_days != null ? "how long ago" : null,
+                    ].filter((fact): fact is string => Boolean(fact));
+                    return facts.length > 0 ? (
+                      <ul aria-label="Written from your logged answers" className="flex flex-wrap gap-1.5">
+                        {facts.map((fact) => (
+                          <li
+                            key={fact}
+                            className="rounded-full border border-border bg-background/60 px-2.5 py-1 text-[10px] leading-none text-muted-foreground"
+                          >
+                            {fact}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null;
+                  })()}
                   <Button
                     size="sm"
-                    onClick={() => void createRehabPlan(i)}
-                    disabled={rehabPlanId === i.id || planningId === i.id}
-                    className="w-full gap-1.5"
-                  >
-                    {rehabPlanId === i.id ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
-                    {rehabPlanId === i.id
-                      ? "Building your mobility plan…"
-                      : i.recovery_protocol
-                        ? "Rebuild the mobility plan"
-                        : "Create a mobility plan"}
-                  </Button>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Three weeks of range, activation and gentle strength for this injury, with a pain rule on every
-                    drill and your training week written around it. Free, instant, and works offline.
-                  </p>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
                     onClick={() => void generateInjuryPlan(i)}
-                    disabled={planningId === i.id || rehabPlanId === i.id}
+                    disabled={Boolean(planningId) || i.status !== "active"}
                     className="w-full gap-1.5"
                   >
                     {planningId === i.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                     {planningId === i.id
-                      ? "Writing your AI plan…"
-                      : `AI-written personalised plan · ${creditCost("injury_plan")} credits`}
+                      ? "Writing your plan…"
+                      : i.recovery_protocol
+                        ? "Write a new plan"
+                        : "Create my personalised plan"}
                   </Button>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    {creditCost("injury_plan")} credits per AI plan — written for this injury against your training
-                    week by the model, so it costs a provider call every time. The tab unlock does not cover it. The
-                    mobility plan above is free.
+                    Mobility, activation and strength work added on to your normal training — not a replacement
+                    for it. The plan runs for however many weeks this injury actually needs, tells you if you
+                    should stop training and for how long, and builds you back in step by step. Written from
+                    every answer you logged.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {creditCost("injury_plan")} credits per plan — each one is a provider call, so the tab unlock
+                    does not cover it. Failed calls are refunded automatically.
                   </p>
                 </div>
               </div>
@@ -817,6 +996,20 @@ const Injury = () => {
           </div>
         )}
       </motion.div>
+
+      {/* The wait screen is rendered from `planningId`, not from a local flag:
+          it has to survive every toast and profile refresh in between. */}
+      {planningId && (() => {
+        const active = injuries.find((injury) => injury.id === planningId);
+        if (!active) return null;
+        return (
+          <InjuryPlanProgress
+            bodyPart={active.body_part}
+            severity={active.severity}
+            done={planDone}
+          />
+        );
+      })()}
     </div>
   );
 };

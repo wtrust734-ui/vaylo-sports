@@ -203,9 +203,10 @@ const VPRPage = () => {
       </motion.div>
 
       <p className="text-xs text-muted-foreground text-center">
-        100 needs a perfect six-area profile — every index maxed, not an average that rounds up.
+        Your VPR is the average of the areas you have measured — add them up and divide. An
+        untested area is left out, not counted as zero.
       </p>
-      <p className="text-xs text-muted-foreground text-center">Sport: {sport}{position && ` · ${position}`} · Weighted by sport profile</p>
+      <p className="text-xs text-muted-foreground text-center">Sport: {sport}{position && ` · ${position}`}</p>
     </PageShell>
   );
 };

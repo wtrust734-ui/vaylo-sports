@@ -245,14 +245,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    const styleId = typeof body.styleId === "string" ? body.styleId : "";
-    const style = styleId ? VOICEOVER_STYLES[styleId] : undefined;
-    if (styleId && !style) return json({ error: `styleId must be one of: ${STYLE_IDS.join(", ")}` }, 400);
+    const styleId = typeof body.styleId === "string" ? body.styleId.trim() : "";
+    // Default to the brand's own read. Every caller (Video Ads, the Creative
+    // Assistant, a script) used to omit styleId, and this endpoint answered
+    // "voiceId is required, or choose a style that supplies one" — so narration
+    // failed 100% of the time and no advert could ever be completed. A style
+    // supplies the voice, model and settings, so no caller needs to know a
+    // provider voice id.
+    const style = styleId ? VOICEOVER_STYLES[styleId] : VOICEOVER_STYLES.premium_tech;
+    if (!style) return json({ error: `styleId must be one of: ${STYLE_IDS.join(", ")}` }, 400);
 
     const voiceId = typeof body.voiceId === "string" && body.voiceId.trim()
       ? body.voiceId.trim()
-      : style?.voiceId;
-    if (!voiceId) return json({ error: "voiceId is required, or choose a style that supplies one" }, 400);
+      : style.voiceId;
 
     const modelId = typeof body.modelId === "string" && body.modelId.trim()
       ? body.modelId.trim()

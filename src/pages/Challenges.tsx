@@ -110,7 +110,7 @@ const Challenges = () => {
         eyebrow="Compete"
         icon={Trophy}
         title="Challenges"
-        subtitle="Take on challenges, unlock trophies and badges for your Trophy Room."
+        subtitle="Take on challenges and put the ones you finish in your Trophy Room."
       />
 
       <div className="mb-4">

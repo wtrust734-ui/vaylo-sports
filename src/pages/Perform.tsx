@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb, Trophy, Award, Medal, Flag } from "lucide-react";
+import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb, Trophy, Award, Flag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
@@ -24,11 +24,12 @@ const Perform = () => {
       ],
     },
     {
-      // The Trophy Room: achievements, purchase badges and challenges live
-      // here in Perform — not in Profile — because they are earned by
-      // performing, and this is where an athlete comes to see how good they
-      // are. The Challenges page behind the tile carries creating, personal
-      // suggestions and sponsored challenges.
+      // The Trophy Room: everything that shows status — earned medals, what
+      // was bought from the Market and finished challenges — lives here in
+      // Perform, not in Profile, because it is earned by performing. There is
+      // no Badges tile: that shelf is part of the Trophy Room now. The
+      // Challenges page behind its tile carries creating, personal suggestions
+      // and sponsored challenges.
       title: t("hub.perform.groupTrophyRoom"),
       links: [
         // Two different ideas, two tiles: the Trophy Room is what the account
@@ -38,7 +39,6 @@ const Perform = () => {
         // of what was left to do.
         { icon: Trophy, label: t("hub.perform.trophies"), description: t("hub.perform.trophiesDesc"), path: "/trophies", feature: "perform.achievements" },
         { icon: Award, label: t("hub.perform.achievements"), description: t("hub.perform.achievementsDesc"), path: "/achievements", feature: "perform.achievements" },
-        { icon: Medal, label: t("hub.perform.badges"), description: t("hub.perform.badgesDesc"), path: "/badges", feature: "perform.achievements" },
         { icon: Flag, label: t("hub.perform.challenges"), description: t("hub.perform.challengesDesc"), path: "/challenges", feature: "perform.challenges" },
       ],
     },

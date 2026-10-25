@@ -12,7 +12,7 @@
 //  • Missing data → null or exclusion, never a fabricated number.
 
 import { describe, expect, it } from "vitest";
-import { metricToIndex, calculateVPR, analyzeLoads, getSportWeights, type LoadRow, type MetricRow } from "@/lib/performance";
+import { metricToIndex, calculateVPR, plainVprFromScores, analyzeLoads, getSportWeights, type LoadRow, type MetricRow } from "@/lib/performance";
 import { kmToMiles, milesToKm, kgToLb, lbToKg, cmToFtIn, ftInToCm, cToF, formatDistance } from "@/lib/units";
 import { localDateKey, localDateKeyDaysAgo } from "@/lib/dates";
 import {
@@ -135,7 +135,7 @@ describe("metricToIndex (0–100, piecewise good/elite/worldClass)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// calculateVPR — weighted, renormalised over present buckets
+// calculateVPR — the plain average of the measured factors
 // ─────────────────────────────────────────────────────────────────────────────
 describe("calculateVPR", () => {
   it("returns zeros across the board with no metrics", () => {
@@ -143,15 +143,18 @@ describe("calculateVPR", () => {
     expect(vpr.overall_vpr).toBe(0);
   });
 
-  it("caps overall by data completeness (1 bucket → ≤70)", () => {
+  it("scores a profile with one measured area as that area, not as a fraction", () => {
+    // Untested areas are left out of the average; they are not zeros. So a
+    // one-area profile is that area — the score is an average of what has been
+    // measured, and the UI names how many areas that is.
     const rows: MetricRow[] = [
       { metric_type: "sprint_40m", value: 5.0, log_date: "2026-09-01" },
     ];
     const vpr = calculateVPR(rows, "Sprinting");
-    expect(vpr.overall_vpr).toBeLessThanOrEqual(70);
+    expect(vpr.overall_vpr).toBe(vpr.speed_index);
   });
 
-  it("a perfect spread across all six buckets can reach 100", () => {
+  it("a perfect spread across all six buckets is 100", () => {
     const rows: MetricRow[] = [
       { metric_type: "sprint_100m", value: 9.5, log_date: "2026-09-01" }, // speed
       { metric_type: "squat", value: 300, log_date: "2026-09-01" }, // power
@@ -165,30 +168,30 @@ describe("calculateVPR", () => {
       { metric_type: "passing_accuracy", value: 99, log_date: "2026-09-03" },
     );
     const vpr = calculateVPR(rows, "Football");
-    expect(vpr.overall_vpr).toBeGreaterThanOrEqual(90);
+    expect(vpr.overall_vpr).toBe(100);
   });
 
-  it("does not average a world-record sprint down into 'very good'", () => {
-    // Reported: entering 4.64 s for the 40 m — Usain Bolt's split in the 9.58 s
-    // world record — produced an overall VPR of 97. The speed index was maxed,
-    // but the composite averaged it with four ordinary buckets. A maxed domain
-    // has to lift the whole profile, or the number is telling an athlete at the
-    // limit of human performance that they are merely very good.
+  it("is the mean of the factors it reports, with no weighting or bonus", () => {
+    // The reported failure: a profile reading 0 / 60 / 75 / 100 showed 98. The
+    // overall is now exactly the mean of the visible factors, so the athlete
+    // can add them up and predict it.
+    expect(plainVprFromScores([0, 60, 75, 100])).toBe(59);
+    expect(plainVprFromScores([100])).toBe(100);
+    expect(plainVprFromScores([])).toBe(0);
+
     const rows: MetricRow[] = [
-      { metric_type: "sprint_40m", value: 4.64, log_date: "2026-09-01" }, // speed 100
-      { metric_type: "squat", value: 200, log_date: "2026-09-01" }, // power 90
-      { metric_type: "vo2_max", value: 70, log_date: "2026-09-01" }, // endurance 90
-      { metric_type: "passing_accuracy", value: 95, log_date: "2026-09-01" }, // skill 90
-      { metric_type: "reaction_time", value: 180, log_date: "2026-09-01" }, // reaction 90
+      { metric_type: "sprint_40m", value: 5.4, log_date: "2026-09-01" },
+      { metric_type: "squat", value: 120, log_date: "2026-09-01" },
+      { metric_type: "vo2_max", value: 55, log_date: "2026-09-01" },
+      { metric_type: "reaction_time", value: 260, log_date: "2026-09-01" },
     ];
     const vpr = calculateVPR(rows, "Sprinting");
-    expect(vpr.speed_index).toBe(100);
-    expect(vpr.overall_vpr).toBeGreaterThan(97);
-    // Still below the ceiling: five buckets is not a complete profile.
-    expect(vpr.overall_vpr).toBeLessThanOrEqual(99);
+    const factors = [vpr.speed_index, vpr.power_index, vpr.endurance_capacity, vpr.reaction_efficiency];
+    expect(new Set(factors).size).toBeGreaterThan(1);
+    expect(vpr.overall_vpr).toBe(Math.round(factors.reduce((a, b) => a + b, 0) / factors.length));
   });
 
-  it("keeps a complete but imperfect profile below 100", () => {
+  it("keeps a profile with one imperfect area below 100", () => {
     const rows: MetricRow[] = [
       // One bucket short of its world-class line: speed indexes ~96, not 100.
       { metric_type: "sprint_100m", value: 10.0, log_date: "2026-09-01" },
@@ -200,8 +203,7 @@ describe("calculateVPR", () => {
       { metric_type: "passing_accuracy", value: 99, log_date: "2026-09-03" },
     ];
     const vpr = calculateVPR(rows, "Football");
-    // Six buckets are present, so the completeness cap is 99 — and 100 is
-    // reserved for every one of those buckets being maxed.
+    expect(vpr.speed_index).toBeLessThan(100);
     expect(vpr.overall_vpr).toBeLessThan(100);
   });
 

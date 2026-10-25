@@ -660,10 +660,11 @@ const Nutrition = () => {
       // the plan request does not read them back (the same answers go in
       // `notes`). Running it alongside the call removes a whole settings round
       // trip from the wait before the first token is written, which is the part
-      // of plan creation the athlete actually sits through. Failures are still
-      // logged, and it is awaited at the end so the write has settled before
-      // the screen says the plan is ready.
-      const intakeSaved = Promise.resolve(
+      // of plan creation the athlete actually sits through. It is not awaited
+      // after the call either — the plan is already saved by then, and keeping
+      // the full-screen progress overlay up to watch a settings write settle
+      // made the screen look slower than the work was. Failures are logged.
+      void Promise.resolve(
         supabase.from("user_settings").upsert(
           {
             user_id: user.id,
@@ -762,8 +763,6 @@ const Nutrition = () => {
         return;
       }
 
-      // Settled by now (the plan took seconds), so this costs nothing.
-      await intakeSaved;
       // Not awaited: the plan is already written and saved, so waiting on the
       // profile refresh kept the full-screen progress overlay up for one more
       // round trip after the work was done. The credits badge catches up on its

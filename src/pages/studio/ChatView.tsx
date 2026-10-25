@@ -18,6 +18,7 @@ import {
   type RunDeliverable,
   type RunEvent,
 } from "./chatRun";
+import AdPlayer from "./AdPlayer";
 
 type Deliverable = Exclude<RunDeliverable, { kind: "failed" }>;
 
@@ -315,7 +316,12 @@ export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?
                     <p className="whitespace-pre-wrap">{b.content}</p>
 
                     {/* ---- finished deliverable ---- */}
-                    {b.run?.status === "done" && b.run.deliverable?.kind === "video" && b.run.deliverable.publicUrl && (
+                    {b.run?.status === "done" && b.run.deliverable?.kind === "video" && b.run.deliverable.ad && (
+                      <div className="mt-2 rounded-lg border border-white/10 p-2">
+                        <AdPlayer ad={b.run.deliverable.ad} />
+                      </div>
+                    )}
+                    {b.run?.status === "done" && b.run.deliverable?.kind === "video" && !b.run.deliverable.ad && b.run.deliverable.publicUrl && (
                       <video data-testid="chat-delivered-video" className="mt-2 w-full rounded-lg border border-white/10" controls src={b.run.deliverable.publicUrl} />
                     )}
                     {b.run?.status === "done" && b.run.deliverable?.kind === "image" && b.run.deliverable.previewUrl && (

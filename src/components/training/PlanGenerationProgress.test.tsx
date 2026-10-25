@@ -7,9 +7,9 @@
 // no panel at all, which is what this replaces.
 //
 // So this file advances the clock and asserts the bar actually advanced, that
-// the stage names are the real work (so nobody reads a fake step), and that the
-// screen admits when it has run past its own estimate instead of sitting at
-// 99% forever.
+// the figure on screen is a percentage rather than a clock, that the stage names
+// are the real work (so nobody reads a fake step), and that the screen admits
+// when it has run past its own estimate instead of sitting at 99% forever.
 // ============================================================================
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -38,11 +38,17 @@ const renderWith = (children: React.ReactNode) => {
   return utils;
 };
 
-
+/** No countdown, no elapsed clock, no "about 40s": the screen is a percentage. */
+const expectNoClock = () => {
+  expect(screen.queryByText(/\d+\s*(?:s|sec|secs|seconds)\b/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/seconds? left/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/so far/i)).not.toBeInTheDocument();
+};
 
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
+  clearPlanGenerationHistory();
 });
 
 describe("the plan generation progress panel", () => {
@@ -62,8 +68,8 @@ describe("the plan generation progress panel", () => {
   it("promises only what the server actually does on failure", () => {
     const utils = renderWith(<PlanGenerationProgress weeks={4} />);
 
-    // generate-plan refunds on every failure path, so this claim is true —
-    // and it is the sentence an athlete reading a long wait needs.
+    // generate-plan refunds on every failure path, so this claim is true — and
+    // it is the sentence an athlete reading a long wait needs.
     expect(screen.getByText(/refunded automatically/i)).toBeInTheDocument();
   });
 
@@ -86,64 +92,63 @@ describe("the plan generation progress panel", () => {
     expect(percent()).toBeLessThanOrEqual(94);
   });
 
-  it("stops promising a time and says it is still working instead", () => {
+  it("leads with a percentage, not a clock", () => {
+    const utils = renderWith(<PlanGenerationProgress weeks={4} kind="nutrition" />);
+    advance(8);
+
+    // The big figure is a share of the estimate. It is also in the status row
+    // of the card, so there is more than one match.
+    expect(screen.getAllByText(/^\d+%$/).length).toBeGreaterThanOrEqual(1);
+    expect(percent()).toBeGreaterThan(0);
+    expectNoClock();
+  });
+
+  it("admits an overrun without dropping the percentage", () => {
     const utils = renderWith(<PlanGenerationProgress weeks={12} />);
 
-    expect(screen.queryByText(/still working/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/taking longer than usual/i)).not.toBeInTheDocument();
 
-    // Past 1.5× the estimate the panel stops pretending to know. It says so
-    // in the header and in the bar track, so there is more than one match.
+    // Past 1.5× the estimate the panel stops pretending to know. It says so in
+    // the headline subtitle and in the note under the bar — and the figure
+    // stays a percentage, because swapping it for a word at the moment the
+    // athlete is most anxious is how a moving screen starts to look stuck.
     advance(240);
 
-    expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/taking longer than usual/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/^\d+%$/).length).toBeGreaterThanOrEqual(1);
+    expectNoClock();
   });
 
-  it("never prints a fake countdown, even mid-overrun", () => {
-    // The reported lie: the screen parked on "5 seconds left" for the whole
-    // overrun (the old `max(5, …)` floor held until 2.2× the estimate). A
-    // countdown of remaining seconds must never appear — elapsed seconds
-    // and the usual wait are the only numbers allowed.
-    const utils = renderWith(<PlanGenerationProgress weeks={4} />);
-    // expectedPlanSeconds(4) ≈ 38s; 45s is past the estimate but the screen
-    // must still show no countdown, only elapsed + usual.
-    advance(45);
-    expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/about \d+s left/i)).not.toBeInTheDocument();
-    // The header renders in both the overlay headline and the status card.
-    // With no recorded history on this device, the quote is honest about being
-    // an estimate: "usually" is a claim about measurements the app cannot
-    // make, so without measurements it says "estimated".
-    expect(screen.getAllByText(/estimated at about \d+s/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/usually about \d+s/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/\d+s so far/i)).toBeInTheDocument();
-
-    // Well past 1.5× (≈57s): "longer than usual", still no countdown.
-    advance(60);
-    expect(screen.getAllByText(/still working/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/\d+s left/i)).not.toBeInTheDocument();
+  it("keeps a short nutrition wait from reading as a long one", () => {
+    // The reported problem: a four-week meal plan was quoted at the training
+    // model's ~38s, so the screen implied a wait twice as long as the work. The
+    // nutrition pipeline's own estimate is in the low twenties, and the bar has
+    // to be moving visibly by the time an athlete glances at it.
+    const utils = renderWith(<PlanGenerationProgress weeks={4} kind="nutrition" />);
+    advance(6);
+    expect(percent()).toBeGreaterThan(45);
+    expect(screen.queryByText(/taking longer than usual/i)).not.toBeInTheDocument();
   });
 
-  it("quotes recorded history as 'usually', because that is what a measurement is", () => {
-    // Seed enough calibrated successful runs of the same shape that the
-    // estimate switches source, then assert the header says the measured
-    // thing — the switch from "estimated" to "usually" is the visible proof
-    // the historical timing is actually used.
-    clearPlanGenerationHistory();
+  it("paces from this device's recorded nutrition timings once it has them", () => {
+    // Three measured 14s generations of the same shape. The component must use
+    // them — which is visible as the panel admitting the overrun at 22s, where
+    // the uncalibrated model (≈21s) would still be claiming it is on track.
     for (let i = 0; i < 3; i++) {
-      recordPlanGenerationMs({ kind: "training", weeks: 6, ms: (25 + i) * 1000, outcome: "ok", at: Date.now() + i });
+      recordPlanGenerationMs({
+        kind: "nutrition",
+        weeks: 4,
+        ms: 14_000,
+        outcome: "ok",
+        at: Date.now() + i,
+      });
     }
-    const utils = renderWith(<PlanGenerationProgress weeks={6} />);
-    expect(screen.getAllByText(/usually about \d+s/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/estimated at about \d+s/i)).not.toBeInTheDocument();
-    clearPlanGenerationHistory();
-  });
+    const utils = renderWith(<PlanGenerationProgress weeks={4} kind="nutrition" />);
+    expect(screen.queryByText(/taking longer than usual/i)).not.toBeInTheDocument();
 
-  it("shows elapsed seconds in the headline instead of a fabricated percent", () => {
-    const utils = renderWith(<PlanGenerationProgress weeks={4} />);
-    advance(10);
-    // The big figure is a measurement (10s waited), not a model claiming
-    // the wait is N% done with no progress stream behind it.
-    expect(screen.getByText("10s")).toBeInTheDocument();
+    advance(22);
+    expect(screen.getAllByText(/taking longer than usual/i).length).toBeGreaterThanOrEqual(1);
+    expectNoClock();
   });
 
   it("covers the screen, and can be dismissed without cancelling the wait", () => {

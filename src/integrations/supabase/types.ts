@@ -2325,36 +2325,51 @@ export type Database = {
         Row: {
           body_part: string
           created_at: string
+          hurts: string | null
           id: string
           log_date: string
+          mechanism: string | null
           notes: string | null
+          onset_days: number | null
           recovery_protocol: string | null
           severity: number
           status: string
+          still_doing: string | null
+          swelling: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           body_part: string
           created_at?: string
+          hurts?: string | null
           id?: string
           log_date?: string
+          mechanism?: string | null
           notes?: string | null
+          onset_days?: number | null
           recovery_protocol?: string | null
           severity?: number
           status?: string
+          still_doing?: string | null
+          swelling?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           body_part?: string
           created_at?: string
+          hurts?: string | null
           id?: string
           log_date?: string
+          mechanism?: string | null
           notes?: string | null
+          onset_days?: number | null
           recovery_protocol?: string | null
           severity?: number
           status?: string
+          still_doing?: string | null
+          swelling?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -168,6 +168,19 @@ function readError(j: Record<string, unknown>): string | null {
     if (str(obj.message)) return str(obj.message);
     return JSON.stringify(obj).slice(0, 400);
   }
+  // A failed interaction carries its reason in `errors: [{ code, message }]`,
+  // not in `error`. Reading only `error` is why the athlete saw the useless
+  // "finished in state failed without returning a video" for every broken shot
+  // while Google's own sentence (and status code) sat right there.
+  const list = Array.isArray(j.errors) ? j.errors : [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const message = str(row.message);
+    const code = str(row.code);
+    if (message) return code ? `${message} (${code})` : message;
+    if (code) return code;
+  }
   return null;
 }
 

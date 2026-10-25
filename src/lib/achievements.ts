@@ -1,15 +1,19 @@
 // ============================================================================
 // THE ACHIEVEMENT CATALOGUE — one definition, read by two screens
 // ----------------------------------------------------------------------------
-// Achievements and Badges are separate screens in the Trophy Room, and they must
-// not show each other's medals. They are, however, the same table of rules: a
-// "badge" is an achievement whose `check` reads `d.purchases`, and nothing else
-// distinguishes them. So the catalogue lives here once, with the shelves derived
-// from it, rather than being copied into a page and drifting.
+// Achievements and the Trophy Room are separate screens, and they must not show
+// each other's medals. They are, however, the same table of rules: a trophy
+// "owned from the Market" is an achievement whose `check` reads `d.purchases`,
+// and nothing else distinguishes it. So the catalogue lives here once, with the
+// shelves derived from it, rather than being copied into a page and drifting.
 //
-// `builtInAchievements` is the whole catalogue. `BADGE_IDS` names the purchase
-// ids inside it, and the two shelves are `badgeShelf()` and
+// `builtInAchievements` is the whole catalogue. `MARKET_ACHIEVEMENT_IDS` names
+// the purchase ids inside it, and the two shelves are `marketShelf()` and
 // `achievementShelf()` — disjoint, and together the catalogue.
+//
+// There is no separate Badges screen any more. What used to be a badge tab is
+// now the "Owned from the Market" shelf of the Trophy Room, because a trophy
+// case holding your status is the same shelf as the medals, not a sibling of it.
 // ============================================================================
 
 import type { Tables } from "@/integrations/supabase/types";
@@ -199,11 +203,11 @@ export const builtInAchievements = [
 
 
 /**
- * The achievements earned by buying something from the Market — the Badges
- * screen. These are the only achievement ids whose `check` reads
- * `d.purchases`, so this set is the definition of "badge".
+ * The achievements earned by buying something from the Market — the Trophy
+ * Room's ownership shelf. These are the only achievement ids whose `check`
+ * reads `d.purchases`, so this set is the definition of a market trophy.
  */
-export const BADGE_IDS = new Set([
+export const MARKET_ACHIEVEMENT_IDS = new Set([
   "mental_owner",
   "form_owner",
   "injury_owner",
@@ -215,13 +219,13 @@ export const BADGE_IDS = new Set([
 ]);
 
 /**
- * The two shelves, derived so they cannot disagree: every badge id is also a row
- * in the catalogue (the badges are achievement rules), so filtering is the only
- * definition that keeps them disjoint and complete at the same time.
+ * The two shelves, derived so they cannot disagree: every market id is also a
+ * row in the catalogue (the market trophies are achievement rules), so filtering
+ * is the only definition that keeps them disjoint and complete at the same time.
  */
-export const badgeShelf = () => builtInAchievements.filter((ach) => BADGE_IDS.has(ach.id));
+export const marketShelf = () => builtInAchievements.filter((ach) => MARKET_ACHIEVEMENT_IDS.has(ach.id));
 
-export const achievementShelf = () => builtInAchievements.filter((ach) => !BADGE_IDS.has(ach.id));
+export const achievementShelf = () => builtInAchievements.filter((ach) => !MARKET_ACHIEVEMENT_IDS.has(ach.id));
 
 /** How many of a shelf the athlete has earned. */
 export const earnedIn = (

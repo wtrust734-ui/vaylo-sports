@@ -104,6 +104,47 @@ export function expectedPlanSeconds(weeks: number, chunkWeeks = planChunkWeeks(w
   return Math.max(MIN_EXPECTED_SECONDS, Math.min(90, Math.round(estimate)));
 }
 
+// ----------------------------------------------------------------------------
+// NUTRITION — a different, smaller job
+// ----------------------------------------------------------------------------
+// `generate-nutrition-plan` runs the same parallel-chunks shape, but each chunk
+// writes meals for one week rather than a training week: 7 days of food, no
+// sessions, no periodisation and no safety pass over exercise selection. It is
+// also cheaper: no plan periodisation prompt, a smaller dossier and a much
+// shorter answer per week.
+//
+// Measuring it with the training model (11s fixed + 24s per call + 1.2s/week)
+// promised about 38s for a four-week meal plan — nearly double what the work
+// takes — and the wait screen then looked stuck for the first half of a wait
+// that was already over. The numbers below are the training model's shape with
+// its terms measured against the nutrition pipeline: less fixed work (no
+// periodisation), a smaller per-call answer (a week of meals) and a cheaper
+// merge (targets are stamped on, not recomputed).
+// ----------------------------------------------------------------------------
+
+/** Fixed work before the first nutrition model call: auth, charge, dossier, targets. */
+export const NUTRITION_FIXED_SECONDS = 7;
+/** One call, one week of meals for seven days. */
+export const NUTRITION_PER_CALL_SECONDS = 12;
+/** Merge, target stamping, shape validation and the save, per week. */
+export const NUTRITION_PER_WEEK_SECONDS = 0.4;
+
+/**
+ * Expected seconds to write a nutrition plan of `weeks` weeks.
+ *
+ * Deliberately below the training estimate and deliberately still above the
+ * fastest measured run: an underestimate is what makes an athlete think their
+ * plan is stuck, so this is the nutrition pipeline's realistic upper-middle, not
+ * its best case. Unlike training, the per-call answer is small enough that the
+ * provider's queue time matters more than the token count, which is why the
+ * per-week term is the smallest of the three.
+ */
+export function expectedNutritionSeconds(weeks: number): number {
+  const total = safeWeeks(weeks);
+  const estimate = NUTRITION_FIXED_SECONDS + NUTRITION_PER_CALL_SECONDS + total * NUTRITION_PER_WEEK_SECONDS;
+  return Math.max(MIN_EXPECTED_SECONDS, Math.min(90, Math.round(estimate)));
+}
+
 /**
  * How many chunk blocks the wait screen shows. Not a claim that each one
  * finishes in order — they run at the same time — just how many pieces of work

@@ -143,7 +143,7 @@ export function FilterRow({ label, children }: { label: string; children: ReactN
 
 /**
  * Three-up counters under a page header — the same strip on Achievements,
- * Trophy Room, Badges and Challenges. Each screen used to draw its own: three
+ * Trophy Room and Challenges. Each screen used to draw its own: three
  * different paddings, two number sizes, one with a gradient panel and one
  * without. Counts are counts; they look the same everywhere.
  */

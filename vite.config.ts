@@ -27,8 +27,14 @@ export default defineConfig(({ mode }) => {
       // file, and watching it crashed the dev server with EBUSY; the archived
       // "vaylo ad web app" snapshot contains no app source either. Neither is
       // part of the build — watching them only ever broke `npm run dev`.
+      //
+      // Root-scoped, NOT "**/.freebuff/**": this project's own directory is
+      // named .freebuff, and the glob form matched the absolute path of every
+      // source file. The watcher then ignored the whole tree, so edits were
+      // never picked up and the browser kept serving stale modules while every
+      // "fix" looked like it had not been made.
       watch: {
-        ignored: ["**/.freebuff/**", "**/vaylo ad web app/**"],
+        ignored: [".freebuff/**", "**/vaylo ad web app/**"],
       },
       hmr: {
         overlay: false,

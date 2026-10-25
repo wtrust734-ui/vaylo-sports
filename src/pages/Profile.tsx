@@ -723,9 +723,13 @@ const Profile = () => {
                 {/* A converted price is only trustworthy if the athlete can see
                     what it was converted at. Rates refresh daily and are cached
                     for six hours; the source is named where the choice is made
-                    rather than buried in a price screen. */}
+                    rather than buried in a price screen. The margin is stated
+                    too: a non-GBP price is deliberately a little above the bare
+                    conversion (see NON_GBP_PRICE_MARGIN), and a price that is
+                    quietly marked up is worse than one that says it is. */}
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  Prices are converted at today's exchange rate. Rates by ExchangeRate-API.
+                  Prices are converted at today's exchange rate. Prices outside the UK include a
+                  small card-processing margin. Rates by ExchangeRate-API.
                 </p>
               </div>
               <div>

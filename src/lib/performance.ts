@@ -136,7 +136,11 @@ export function metricBucket(type: string): keyof Omit<VPRScores, "overall_vpr">
   return METRIC_TO_BUCKET[type] ?? null;
 }
 
-export function calculateVPR(metrics: MetricRow[], sport: string, position?: string): VPRScores {
+// `sport` and `position` are kept in the signature because every caller passes
+// them and they still describe the athlete; they no longer weight the overall.
+// The factors they influence are ranked separately (see rankFactors in
+// vprSystem.ts), which is where a sport-specific emphasis belongs.
+export function calculateVPR(metrics: MetricRow[], _sport?: string, _position?: string): VPRScores {
   const buckets: Record<string, number[]> = {
     speed_index: [], power_index: [], endurance_capacity: [],
     repeatability: [], skill_consistency: [], reaction_efficiency: [],
@@ -157,45 +161,37 @@ export function calculateVPR(metrics: MetricRow[], sport: string, position?: str
   const scores = {} as VPRScores;
   for (const k of Object.keys(buckets)) scores[k] = Math.round(avg(buckets[k]));
 
-  // Renormalize over buckets that have data — adding one bench press shouldn't
-  // drag the score down just because endurance/skill buckets are still empty.
-  const w = getSportWeights(sport, position);
-  const presentKeys = Object.keys(buckets).filter((k) => buckets[k].length > 0);
-  const weightSum = presentKeys.reduce((a, k) => a + (w[k] ?? 0), 0) || 1;
-  const weighted = presentKeys.reduce(
-    (a, k) => a + scores[k] * ((w[k] ?? 0) / weightSum),
-    0,
-  );
-
-  // A world-class domain is not just another bucket.
+  // The overall is the plain average of the factors that have data.
   //
-  // The overall is an average of the domains that have data, and an average is
-  // exactly the measure that cannot see a world record: an athlete who matched
-  // Usain Bolt's 40 m split had a maxed speed index, and the composite diluted
-  // it with five ordinary buckets down to 97 — the screen said "very good"
-  // about a performance at the limit of human ability. 90 is where the index
-  // enters the world-class band, so the strongest bucket's distance into that
-  // band counts half again: a 100 lifts the composite by 5 points, a 94 by 2.
-  // The completeness cap below still applies, so one maxed test cannot buy a
-  // 99 profile on its own.
-  const peak = Math.max(0, ...presentKeys.map((k) => scores[k]));
-  const peakLift = peak > 90 ? (peak - 90) * 0.5 : 0;
-  const blended = weighted + peakLift;
-
-  // Data-completeness cap. A complete profile (all six buckets) still tops out
-  // at 99 unless EVERY bucket is maxed: 100 is reserved for a genuinely perfect
-  // six-domain profile, not for a good average that rounds up.
+  // It used to be a sport-weighted composite with a "peak lift" on top, so the
+  // headline number was not the mean of anything the athlete could see: a
+  // profile reading 0 / 60 / 75 / 100 came out at 98 because the weights
+  // favoured the strong factor and a maxed domain earned a bonus. That is not a
+  // rating the athlete can reason about — improving a factor did not move the
+  // score by the amount the bars suggested. The average does: it is exactly the
+  // six bars added up and divided, so 0 / 60 / 75 / 100 is 59, and every point
+  // earned in any area moves it by one sixth.
   //
-  // Five buckets → 99, not 98. A world-record sprint is a maxed speed index,
-  // and an athlete who is at that level in five domains should not be held one
-  // point below the ceiling by a sixth bucket they have not tested yet. 100
-  // still requires all six, so the ceiling stays hard.
-  // 1 bucket → 70, 2 → 80, 3 → 88, 4 → 94, 5 → 99, 6 → 99.
-  const completeCap = [0, 70, 80, 88, 94, 99, 99][Math.min(6, presentKeys.length)];
-  const perfect = presentKeys.length === 6 && presentKeys.every((k) => scores[k] === 100);
-  const cap = perfect ? 100 : completeCap;
-  scores.overall_vpr = Math.min(cap, Math.round(blended));
+  // A bucket with no data is left out rather than counted as zero: an untested
+  // area is not a failing one, and adding a bench press should not drag the
+  // score down because endurance has not been measured yet.
+  const factorScores = Object.keys(buckets)
+    .filter((k) => buckets[k].length > 0)
+    .map((k) => scores[k]);
+  scores.overall_vpr = plainVprFromScores(factorScores);
   return scores;
+}
+
+/**
+ * The VPR formula, as one testable function: the mean of the measured factor
+ * scores, rounded, with no weighting, bonus or cap. Exported so the contract can
+ * be asserted directly (0 / 60 / 75 / 100 → 59) instead of inferred from the
+ * index tables.
+ */
+export function plainVprFromScores(factors: readonly number[]): number {
+  if (factors.length === 0) return 0;
+  const mean = factors.reduce((a, b) => a + b, 0) / factors.length;
+  return Math.round(Math.min(100, Math.max(0, mean)));
 }
 
 /**

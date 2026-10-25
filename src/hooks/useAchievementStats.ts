@@ -2,12 +2,12 @@
 // USE ACHIEVEMENT STATS — the counters behind every achievement rule
 // ----------------------------------------------------------------------------
 // Moved out of the Achievements page when the Trophy Room stopped being one
-// screen. Achievements and Badges are separate screens now, but they read the
-// same numbers and, crucially, they both AWARD: a badge the athlete has just
-// earned by buying something must be written the first time they open Badges,
-// and an achievement must be written when they open Achievements. Two copies of
-// this would be two places that could disagree about what has been earned, so
-// there is one.
+// screen. Achievements and the Trophy Room are separate screens now, but they
+// read the same numbers and, crucially, they both AWARD: a trophy the athlete
+// has just earned by buying something must be written the first time any of
+// these screens loads, and an achievement must be written when they open
+// Achievements. Two copies of this would be two places that could disagree
+// about what has been earned, so there is one.
 //
 // The write is an insert per newly earned rule, and `23505` (the unique
 // `(user_id, type, title)` index) is treated as already-earned rather than as a
@@ -26,17 +26,26 @@ import {
   type AchievementStats,
 } from "@/lib/achievements";
 
+/** A challenge row the athlete has finished — what the Trophy Room shows. */
+export type CompletedChallenge = {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+};
+
 export function useAchievementStats() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [earnedAchievements, setEarnedAchievements] = useState<Achievement[]>([]);
+  const [completedChallenges, setCompletedChallenges] = useState<CompletedChallenge[]>([]);
   const [stats, setStats] = useState<AchievementStats>(emptyStats);
 
   useEffect(() => { if (user) void fetchAll(); }, [user]);
 
   const fetchAll = async () => {
     if (!user) return;
-    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes, streakRes, nutRes, partRes] = await Promise.all([
+    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes, streakRes, nutRes, partRes, partRowsRes] = await Promise.all([
       supabase.from("achievements").select("*").eq("user_id", user.id),
       supabase.from("challenges").select("*").order("created_at", { ascending: false }),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
@@ -64,9 +73,19 @@ export function useAchievementStats() {
       // counts of the athlete's own rows.
       supabase.from("nutrition_plans").select("id", { count: "exact" }).eq("user_id", user.id),
       supabase.from("challenge_participants").select("id", { count: "exact" }).eq("user_id", user.id).eq("status", "completed"),
+      // The same rows, with the challenge id, so the Trophy Room can name the
+      // challenges it lists instead of only counting them. One extra cheap read
+      // beats a second copy of this loader on another screen.
+      supabase.from("challenge_participants").select("challenge_id").eq("user_id", user.id).eq("status", "completed"),
     ]);
 
     setEarnedAchievements(achRes.data || []);
+    const completedIds = new Set((partRowsRes.data || []).map((row) => row.challenge_id));
+    setCompletedChallenges(
+      (chRes.data || [])
+        .filter((row) => completedIds.has(row.id))
+        .map((row) => ({ id: row.id, title: row.title, description: row.description, icon: row.icon })),
+    );
     const pIds = (purchRes.data || []).map(p => p.product_id);
 
     const greenDays = (recRes.data || []).filter((r) => r.readiness_score != null && r.readiness_score >= 85).length;
@@ -130,6 +149,8 @@ export function useAchievementStats() {
   return {
     stats,
     earnedAchievements,
+    /** Finished challenges, named — the Trophy Room's third shelf. */
+    completedChallenges,
     /** The ids already earned — what both shelves mark as earned. */
     earnedIds: new Set(earnedAchievements.map(a => a.type)),
   };

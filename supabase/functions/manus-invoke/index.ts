@@ -443,21 +443,31 @@ Deno.serve(async (req) => {
       if (state === "done" && !storagePath && !publicUrl) {
         return json({ error: "A completed job needs storage_path or public_url" }, 400);
       }
-      // Guard the transition server-side: only a job still pending may claim
-      // its outcome, so a late or duplicate report cannot overwrite a row that
-      // has already finished — the agent cannot invent history.
+      // Guard the transition server-side: only a job still open may claim its
+      // outcome, so a late or duplicate report cannot overwrite a row that has
+      // already finished — the agent cannot invent history.
+      //
+      // "editing" MUST be included: render-job-progress claims a job by moving
+      // it queued/handed_to_manus → editing, so a completed edit was being
+      // rejected with 404 "No pending render job with that job_id" — the file
+      // was rendered and uploaded, and the athlete still saw it fail.
       const { data: pending, error: pendingErr } = await admin
         .from("ad_video_render_jobs")
         .select("id, owner_id")
         .eq("job_id", jobId)
-        .in("status", ["queued", "handed_to_manus"])
+        .in("status", ["queued", "handed_to_manus", "editing"])
         .maybeSingle();
       if (pendingErr) {
         console.error("manus-invoke: render-job-result read failed", pendingErr);
         return json({ error: "Could not check the job" }, 500);
       }
       if (!pending) return json({ error: "No pending render job with that job_id" }, 404);
-      const reportedPath = typeof b.storage_path === "string" ? b.storage_path.trim() : "";
+      // Accept the bucket-qualified form the editor actually reports
+      // ("ads/<owner>/renders/x.mp4") as well as the bare object path. The
+      // editor uploads into the owner's folder and reports what it uploaded; a
+      // leading "ads/" used to fail this check, so every successful edit was
+      // rejected with 403 after the file was already in storage.
+      const reportedPath = typeof b.storage_path === "string" ? b.storage_path.trim().replace(/^ads\//, "") : "";
       if (reportedPath && !reportedPath.startsWith(`${pending.owner_id}/`)) {
         // The edit belongs to the job's owner's storage folder, exactly like
         // every library asset. A path foldered elsewhere is refused — the

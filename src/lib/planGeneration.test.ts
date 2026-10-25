@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MIN_EXPECTED_SECONDS,
+  expectedNutritionSeconds,
   expectedPlanSeconds,
   planChunkCount,
   planChunkWeeks,
@@ -82,6 +83,33 @@ describe("the plan-generation estimate", () => {
     expect(planChunkCount(12)).toBe(12);
     expect(planChunkCount(24)).toBe(12);
     expect(planChunkCount(52)).toBe(26);
+  });
+
+  it("predicts the nutrition pipeline separately from training", () => {
+    // A meal plan is a smaller job than a training week: no periodisation, a
+    // shorter answer per week and a cheaper merge. Quoting the training model
+    // promised ~38s for four weeks of meals and made a fast wait look stuck.
+    for (const weeks of [1, 4, 8, 12]) {
+      const nutrition = expectedNutritionSeconds(weeks);
+      expect(nutrition, `${weeks} weeks`).toBeLessThan(expectedPlanSeconds(weeks));
+      expect(nutrition).toBeGreaterThanOrEqual(MIN_EXPECTED_SECONDS);
+      expect(nutrition).toBeLessThanOrEqual(90);
+    }
+
+    // Still a wait, and still grows with the plan — slowly, because the weeks
+    // are written in parallel.
+    expect(expectedNutritionSeconds(4)).toBeGreaterThanOrEqual(18);
+    expect(expectedNutritionSeconds(12)).toBeGreaterThan(expectedNutritionSeconds(4));
+    expect(expectedNutritionSeconds(12) / expectedNutritionSeconds(4)).toBeLessThan(2);
+  });
+
+  it("survives the same junk input for nutrition", () => {
+    for (const bad of [NaN, -5, 1e9, Infinity, undefined as unknown as number]) {
+      const value = expectedNutritionSeconds(bad);
+      expect(Number.isFinite(value)).toBe(true);
+      expect(value).toBeGreaterThanOrEqual(MIN_EXPECTED_SECONDS);
+      expect(value).toBeLessThanOrEqual(90);
+    }
   });
 
   it("uses exactly the chunk size the server uses", () => {

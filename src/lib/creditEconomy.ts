@@ -135,10 +135,29 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
   return result;
 }
 
+/**
+ * Margin added to every price that is not in GBP (2.5%).
+ *
+ * GBP is the currency the price list is written in, so a GBP price is the price.
+ * Every other number on a price tag is a conversion, and converting costs
+ * money: the card network charges a cross-border fee, the processor charges a
+ * non-GBP settlement fee, and the rate the feed publishes is the mid-market
+ * rate, which nobody actually gets. Absorbing all of that made a non-GBP sale
+ * quietly worth less than the same sale in GBP. A small, explicit margin keeps
+ * the take per sale the same in every market; it is applied here, at the one
+ * place a price becomes a string, so the market, the top-up sheets, the starter
+ * offer and the subscription plans cannot disagree about it.
+ *
+ * This is a pricing decision, not a conversion — the conversion itself stays
+ * exact, and is refreshed from the live table (src/lib/fxRates.ts).
+ */
+export const NON_GBP_PRICE_MARGIN = 0.025;
+
 export function formatLocalPrice(priceCents: number, currencyOrCountry: string): string {
   const currency = SUPPORTED_CURRENCIES.has(currencyOrCountry) ? currencyOrCountry : "USD";
   const info = getCurrencyInfo(currency);
-  const localAmount = (priceCents / 100) * info.rate;
+  const margin = currency === "GBP" ? 1 : 1 + NON_GBP_PRICE_MARGIN;
+  const localAmount = (priceCents / 100) * info.rate * margin;
   const display = info.rate >= 50
     ? Math.round(localAmount).toLocaleString()
     : localAmount.toFixed(2);
