@@ -8,11 +8,11 @@
 // to somebody in the web build who arrived from a shared link.
 //
 // So this renders once, in the app shell, for every route that is neither a tab
-// root nor one of the screens that already draws its own control. Those nine
-// are listed in OWN_BACK_ROUTES below: a static list rather than a registry the
-// screens opt into, because a registry needs an edit in each of nine lazy route
-// chunks and the failure mode of forgetting one is a second "Back" stacked
-// directly above the first — a visible bug, in a screen nobody re-checks.
+// root nor one of the screens that already draws its own control. Those are
+// listed in OWN_BACK_ROUTES below: a static list rather than a registry the
+// screens opt into, because a registry needs an edit in each lazy route chunk
+// and the failure mode of forgetting one is a second "Back" stacked directly
+// above the first — a visible bug, in a screen nobody re-checks.
 //
 // Where it goes when there is nowhere to go back to: a cold load of a deep link
 // (a shared challenge, a notification) has no previous entry, and navigate(-1)
@@ -33,15 +33,21 @@ import { hapticTap } from "@/lib/haptics";
  * /profile/:username, which draws its own floating back button.
  */
 export const OWN_BACK_ROUTES = [
+  // Admin screens draw their own header back control (and RequireAdmin has a
+  // "Back to the app" fallback), so the shell must not stack a second one.
+  "/admin/",
   "/challenges/",
   "/coach",
   "/settings/delete-account",
   "/packs/",
+  "/friends/",
   "/learning/",
   "/mental",
   "/profile/",
   "/safety",
+  "/streaks",
   "/subscription",
+  "/training",
 ] as const;
 
 /** True when this pathname belongs to a screen that draws its own back control. */

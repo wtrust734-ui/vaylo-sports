@@ -127,6 +127,20 @@ describe("evaluateLogAgainstEvents: PB + trophies for one log", () => {
     expect(slower.tier).toBe("gold");
   });
 
+  it("matches a hand-typed event label without the sport prefix", () => {
+    const stored = [{ metric: "5K", value: 1440 }];
+    const ev = evaluateLogAgainstEvents({ ...firstEver, time_seconds: 1500 }, stored);
+    expect(ev.isPb).toBe(false);
+    expect(ev.previous_seconds).toBe(1440);
+  });
+
+  it("does not borrow another sport's bare event label", () => {
+    const stored = [{ metric: "Cycling · 5K", value: 600 }];
+    const ev = evaluateLogAgainstEvents({ ...firstEver, time_seconds: 1500 }, stored);
+    expect(ev.isPb).toBe(true);
+    expect(ev.previous_seconds).toBeNull();
+  });
+
   it("untimed or non-event logs evaluate to nothing", () => {
     const blank = [] as { metric: string; value: number }[];
     expect(evaluateLogAgainstEvents({ sport: "Running", log_type: "race", distance_km: 5, time_seconds: null }, blank).event).toBeNull();

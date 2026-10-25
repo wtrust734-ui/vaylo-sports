@@ -11,12 +11,12 @@ import {
   Gamepad2,
   MessageSquare,
   Package,
-  Medal,
   Target,
   TrendingUp,
   Fingerprint,
   Flag,
   CalendarRange,
+  ClipboardList,
   GraduationCap,
   BarChart3,
   Award,
@@ -25,7 +25,6 @@ import {
   Flame,
   Gift,
   Trophy,
-  Palette,
   HeartPulse,
   Apple,
   Calendar,
@@ -49,7 +48,6 @@ import { discordInviteUrl } from "@/config/community";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import { NAV_CATALOG, visibleByEntitlement } from "@/lib/personalization/nav";
 import { isRouteVisible } from "@/config/featureFlags";
-import { useSubscription } from "@/contexts/SubscriptionContext";
 import logo from "@/assets/logo.jpg";
 
 function CommunityLink() {
@@ -84,6 +82,7 @@ const navGroups: NavGroup[] = [
     icon: Dumbbell,
     items: [
       { icon: Zap, labelKey: "sidebar.trainingPlans", path: "/training" },
+      { icon: ClipboardList, labelKey: "sidebar.workouts", path: "/workouts" },
       { icon: CalendarRange, labelKey: "sidebar.availability", path: "/availability" },
       { icon: Flame, labelKey: "sidebar.pbs", path: "/pbs" },
       { icon: ScanLine, labelKey: "sidebar.formAnalysis", path: "/form" },
@@ -141,8 +140,6 @@ const navGroups: NavGroup[] = [
     icon: User,
     items: [
       { icon: Activity, labelKey: "sidebar.achievements", path: "/achievements" },
-      { icon: Medal, labelKey: "sidebar.avatarStudio", path: "/avatar" },
-      { icon: Palette, labelKey: "sidebar.collection", path: "/collection" },
       { icon: Package, labelKey: "sidebar.eventPacks", path: "/event-packs" },
       { icon: ShoppingBag, labelKey: "sidebar.creditsCoins", path: "/market" },
       { icon: Award, labelKey: "sidebar.subscription", path: "/subscription" },
@@ -200,13 +197,11 @@ const AppSidebar = () => {
   const { t } = useTranslation();
   const { profile, signOut } = useAuth();
   const personalization = usePersonalization();
-  // Paid screens are absent until they are owned (or Unlimited covers them).
-  // `hasFeature` is false while entitlements are still loading, so a paid entry
-  // is never briefly listed and then removed — it simply is not there yet.
-  const { hasFeature } = useSubscription();
   const setOpen = setShowAllOpen; // keep existing naming intact
 
-  // Personalised nav: same groups/icons, filtered + reordered per athlete.
+  // The nav catalogue is unfiltered: every section is always available to the
+  // athlete. No credits, subscriptions or unlocks mean there is nothing to
+  // gate, so every route that exists in the route table appears in the menu.
   const navGroupsFiltered = useMemo<NavGroup[]>(() => {
     const iconFor = new Map(navGroups.flatMap((g) => g.items.map((it) => [it.path, it.icon] as const)));
     const groupIcon = new Map(navGroups.map((g) => [g.titleKey, g.icon] as const));
@@ -215,19 +210,13 @@ const AppSidebar = () => {
     return NAV_CATALOG.map((spec) => {
       const base = byTitle.get(spec.titleKey);
       if (!base) return null;
-      // Entitlement first: a route the athlete has not bought is not a nav item
-      // at all, so it cannot be reordered, badged or reached from the drawer.
-      const entitled = visibleByEntitlement(spec.items, hasFeature);
       const items: NavItem[] = personalization
-        .visible(entitled.map((it) => ({ ...it })))
+        .visible(spec.items.map((it) => ({ ...it })))
         .map(({ labelKey, path }) => ({
           labelKey,
           path,
           icon: iconFor.get(path) ?? base.icon,
         }))
-        // Launch flags, applied after personalisation so a feature that is off
-        // for the build cannot reappear because the athlete's sport happens to
-        // match it. A route that is flagged off must not stay in the menu.
         .filter((it) => isRouteVisible(it.path));
       if (items.length === 0) return null; // whole group irrelevant
       return {
@@ -237,7 +226,7 @@ const AppSidebar = () => {
         items,
       };
     }).filter((g): g is NavGroup => g !== null);
-  }, [personalization, hasFeature]);
+  }, [personalization]);
 
   const activeGroupKey = useMemo(() => {
     const found = navGroupsFiltered.find((g) => groupContainsPath(g, location.pathname));

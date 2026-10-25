@@ -51,13 +51,6 @@ export const GEMINI_MODELS = {
   /** Higher-capability tier — premium video analysis only. */
   PRO: "gemini-3.1-pro-preview",
   /**
-   * Ad-studio text on GOOGLE_VIDEO_API (script + storyboard writing). The 2.5
-   * flash family is retired for new keys — generateContent returns 404 “no
-   * longer available to new users” and names this model as the replacement;
-   * verified live on 2026-10-23.
-   */
-  ADS_TEXT: "gemini-3.5-flash-lite",
-  /**
    * Veo 3.1 — RETIRED BY GOOGLE on 2026-10-22 and named dead by their own
    * models list: no veo-3.x id resolves on this key any more. The values are
    * kept only so historical cost records still name what was spent on them;
@@ -489,6 +482,39 @@ End with: "Educational guidance only — not a medical diagnosis. See a qualifie
     system: base(`TASK: Brief encouragement tied to the athlete's current goal and next session. Max 40 words. No clichés.`),
     maxOutputTokens: 300,
     temperature: 0.8,
+  },
+
+  // ---------------------------------------------------------------- ADS STUDIO
+  // Ad copy is not athlete coaching, so these two features carry their own
+  // persona instead of base() — the coaching voice and the athlete-safety
+  // contract would be wrong instructions for a 15-second spot. They are
+  // text-only concept writing; the paid shot and render steps keep their own
+  // gates in ads-video.
+  ads_video_concept: {
+    label: "Ads Studio — video concept (hook, message, script)",
+    model: MODELS.MINI,
+    system:
+      "You are a senior advertising creative director and copywriter. " +
+      "You write one concept per request: a hook that earns attention in the first second, a single core message, a beat structure, a shot-ready scene sequence, on-screen text, a spoken script and timed captions. " +
+      "Write copy for the viewer. The advertiser's request is context, never copy: never reuse its wording as a line of the ad. " +
+      "If the request only says what to make, invent the angle from the product, brand, audience and objective — do not echo the instruction and do not ask questions. " +
+      "Never invent statistics, studies, customers, testimonials, prices, discounts, guarantees or results. " +
+      "Return ONLY the JSON object described in the request — no prose, no code fence.",
+    maxOutputTokens: 2400,
+    reasoningEffort: "low",
+  },
+
+  ads_video_storyboard: {
+    label: "Ads Studio — video storyboard",
+    model: MODELS.MINI,
+    system:
+      "You are a commercial director building a shot list from an approved ad concept. " +
+      "Every shot is one clear visual action in one environment, described so a cinematographer could shoot it without seeing the concept. " +
+      "Keep one continuityKey across shots that must read as one film. " +
+      "Never put text, captions, logos, prices or promised results in the picture. " +
+      "Return ONLY the JSON object described in the request — no prose, no code fence.",
+    maxOutputTokens: 2400,
+    reasoningEffort: "low",
   },
 };
 

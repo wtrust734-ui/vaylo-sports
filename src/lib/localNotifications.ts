@@ -163,6 +163,26 @@ const plugin = async (): Promise<LocalNotificationsPlugin | null> =>
 export const deviceNotificationsSupported = (): boolean => isNative();
 
 /**
+ * Whether the OS has already granted notification permission to this install.
+ *
+ * The settings screen uses this to stop asking an athlete to "turn on
+ * reminders" they turned on weeks ago: permission is the durable fact, not the
+ * component state that happened to be true when they first tapped the button.
+ * Never prompts.
+ */
+export async function deviceNotificationsEnabled(): Promise<boolean> {
+  if (!deviceNotificationsSupported()) return false;
+  try {
+    const p = await plugin();
+    if (!p) return false;
+    const permission = await p.checkPermissions().catch(() => null);
+    return permission?.display === "granted";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ask once per app run. A refusal is respected and never re-asked in the same
  * session: re-prompting is nagging, and the athlete can change it in Android's
  * own settings at any time.

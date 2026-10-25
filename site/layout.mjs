@@ -128,6 +128,10 @@ function header(current) {
       <nav class="site-nav" aria-label="Main">
           ${navLinks(current)}
       </nav>
+
+      <a class="nav-cta" href="/waitlist/"${isCurrent("/waitlist/", current) ? ' aria-current="page"' : ""}>
+        Join the waiting list
+      </a>
     </div>
 
     <div class="mobile-nav" id="mobile-nav" hidden>
@@ -278,7 +282,7 @@ export function shell(page, opts, operator) {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(page.title)} | ${esc(siteName)}</title>
 <meta name="description" content="${esc(page.description)}" />
-<meta name="theme-color" content="#05070f" />
+<meta name="theme-color" content="#07080c" />
 <meta name="color-scheme" content="dark light" />
 ${opts.noindex ? '<meta name="robots" content="noindex, follow" />' : ""}
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}" />` : ""}
@@ -298,10 +302,26 @@ ${canonical ? `<meta property="og:url" content="${esc(canonical)}" />` : ""}
 <meta name="twitter:image:alt" content="${esc(page.ogImageAlt || SITE.ogImageAlt)}" />
 <link rel="icon" href="/assets/logo.png" type="image/png" />
 <link rel="apple-touch-icon" href="/assets/logo.png" />
+<!-- The one webfont, preloaded. Without the preload it is discovered only
+     after the stylesheet has parsed, which is exactly the half-second in which
+     the headline renders in the fallback and then reflows. crossorigin is
+     required on a font request even when it is same-origin. -->
+<link
+  rel="preload"
+  href="/assets/fonts/archivo-latin.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
 <link rel="stylesheet" href="/assets/theme.css${ASSET_VERSION.theme}" />
 ${jsonLd(operator, page, origin)}
 </head>
 <body>
+  <!-- Reading progress. Decorative, hidden from the accessibility tree, and
+       driven by one transform in site.js rather than by a width change. -->
+  <div class="scroll-progress" aria-hidden="true">
+    <span data-scroll-progress></span>
+  </div>
 ${header(page.path)}
   <main id="main">
 ${applyReveal(page.body)}

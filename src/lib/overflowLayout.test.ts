@@ -235,6 +235,55 @@ describe("mobile overflow regression", () => {
     ).toEqual([]);
   });
 
+  it("keeps a list bullet in its own column, never inside the label string", () => {
+    // `<span>• {name}</span>` in a row puts the bullet INSIDE the text box, so
+    // a name long enough to wrap continues under the dot instead of under its
+    // own first word. On a phone this reads as text that has slid sideways —
+    // the app's most-reported "text is in the wrong place" shape, and it was
+    // live on the dashboard's recovery list. The bullet has to be a sibling
+    // span (with `shrink-0`) that the text never wraps under.
+    const offenders: string[] = [];
+    const BULLET_IN_STRING = /<span[^>]*>\s*•\s*\{/;
+
+    for (const file of files) {
+      const rel = relative(SRC, file).replace(/\\/g, "/");
+      stripComments(readFileSync(file, "utf8"))
+        .split("\n")
+        .forEach((line, i) => {
+          if (BULLET_IN_STRING.test(line)) {
+            offenders.push(`${rel}:${i + 1}  the bullet is inside the label string`);
+          }
+        });
+    }
+
+    expect(
+      offenders,
+      `\nBullets welded to the text they label:\n` +
+        offenders.map((o) => `  ${o}`).join("\n") +
+        `\n\nRender the bullet as its own <span aria-hidden className="shrink-0"> ` +
+        `and give the text \`min-w-0\`.\n`,
+    ).toEqual([]);
+  });
+
+  it("never puts an interactive pill inside a row that is already a button", () => {
+    // Two bugs in one shape: a nested <button> is invalid DOM (React warns and
+    // a screen reader announces two targets for one action), and the inner pill
+    // takes the tap so the row stops being clickable around it. The dashboard's
+    // insight rows used to nest a SlideAction inside a motion.button; the CTA
+    // there is decorative now, and the whole row is the target.
+    const index = stripComments(readFileSync(join(SRC, "pages/Index.tsx"), "utf8"));
+    expect(index).not.toMatch(/<SlideAction/);
+  });
+
+  it("lets a section header's title shrink before its action pill is pushed", () => {
+    // `justify-between` with a non-shrinking title column is how a long (often
+    // translated) section title pushed its action off the right edge.
+    const section = stripComments(
+      readFileSync(join(SRC, "components/ui/section.tsx"), "utf8"),
+    );
+    expect(section).toMatch(/min-w-0">\s*<h2/);
+  });
+
   it("does not use a bare auto-track grid for stacked content", () => {
     // A bare `grid gap-*` produces an `auto` track, and `auto` is sized to the
     // items' *max-content*. `truncate` is `white-space: nowrap`, so a card

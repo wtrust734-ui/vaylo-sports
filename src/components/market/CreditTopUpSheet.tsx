@@ -13,6 +13,7 @@ import {
 import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import { formatLocalPrice } from "@/lib/creditEconomy";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { formatNumber } from "@/i18n/format";
 import { useToast } from "@/hooks/use-toast";
 import { planCreditTopUp, type CreditPackOffer } from "@/lib/creditTopUp";
@@ -33,19 +34,9 @@ const CreditTopUpSheet = () => {
   const { toast } = useToast();
   const [, force] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [region, setRegion] = useState<{ currency: string }>({ currency: "USD" });
+  const currency = useDisplayCurrency();
 
   useEffect(() => subscribeTopUp(() => force((n) => n + 1)), []);
-
-  useEffect(() => {
-    let alive = true;
-    import("@/lib/creditEconomy").then(({ detectRegion }) =>
-      detectRegion().then((r) => {
-        if (alive) setRegion({ currency: r.currency });
-      }).catch(() => { /* USD fallback */ })
-    );
-    return () => { alive = false; };
-  }, []);
 
   const { open, request } = getTopUpState();
   const plan = useMemo(() => (open && request ? planCreditTopUp(request.shortfall) : null), [open, request]);
@@ -127,8 +118,8 @@ const CreditTopUpSheet = () => {
         )}
         <span className={`${kind === "upgrade" ? "" : "ml-auto"} text-sm font-bold tabular-nums`}>
           {freeCreditsActive()
-            ? <><span className="text-success">Free</span> <s className="text-muted-foreground font-normal text-[12px]">{formatLocalPrice(offer.price_cents, region.currency)}</s></>
-            : formatLocalPrice(offer.price_cents, region.currency)}
+            ? <><span className="text-success">Free</span> <s className="text-muted-foreground font-normal text-[12px]">{formatLocalPrice(offer.price_cents, currency)}</s></>
+            : formatLocalPrice(offer.price_cents, currency)}
         </span>
       </div>
       <p className="mt-1.5 text-[12px] text-muted-foreground">

@@ -9,6 +9,10 @@ import { joinChallenge, leaveChallenge } from "@/lib/scoring";
 import { toast } from "sonner";
 import { orderByFamily } from "@/lib/personalization/challengeSuggestions";
 import StandingChallenges from "@/components/challenges/StandingChallenges";
+import BottomSheet from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { FilterChip, FilterRow, PageHeader, PageShell, StatStrip } from "@/components/layout/PageShell";
 
 
 interface Challenge {
@@ -101,44 +105,33 @@ const Challenges = () => {
   const completedCount = Object.values(mine).filter(m => m.status === "completed").length;
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      {/* Hero — on the plain page background. Two 288px blurred colour blobs
-          used to sit behind this header, which painted a purple wash that faded
-          out partway down the screen: the header read as a different surface
-          from the rest of the page, with a visible band where the wash ended.
-          The body already carries the app-wide mesh; nothing local is needed
-          (owner report, 2026-10-11). */}
-      <div>
-        <div className="relative px-5 pt-[var(--vaylo-screen-top)] pb-5">
-          <p className="text-[12px] uppercase tracking-widest text-energy font-semibold flex items-center gap-1.5">
-            <Trophy size={12} /> Compete
-          </p>
-          <h1 className="text-3xl font-display font-bold mt-1 tracking-tight">Challenges</h1>
-          <p className="text-sm text-muted-foreground mt-1">Take on challenges, unlock trophies & badges for your Trophy Room.</p>
-          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-            <p className="text-[12px] leading-relaxed text-amber-200/90">
-              <span className="font-bold text-amber-200">Disclaimer:</span> Challenges are community goals for motivation and bragging rights — they are <span className="font-semibold">not personalised training prescriptions</span>. Train responsibly, respect any injury or recovery guidance from your coach or clinician, and skip anything that doesn’t fit your programme or health status. Brand challenges are paid partnerships and are always labelled; the brand’s products are not part of your training plan, and nothing in a brand challenge is medical or professional advice.
-            </p>
-          </div>
+    <PageShell>
+      <PageHeader
+        eyebrow="Compete"
+        icon={Trophy}
+        title="Challenges"
+        subtitle="Take on challenges, unlock trophies and badges for your Trophy Room."
+      />
 
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            {[
-              { label: "Active", value: activeCount, color: "text-primary" },
-              { label: "Joined", value: joinedCount, color: "text-energy" },
-              { label: "Won", value: completedCount, color: "text-success" },
-            ].map(s => (
-              <div key={s.label} className="bg-card/60 backdrop-blur border border-border rounded-xl px-3 py-2 text-center">
-                <p className={`text-xl font-display font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[12px] uppercase tracking-widest text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="mb-4">
+        <StatStrip
+          items={[
+            { label: "Active", value: activeCount, tone: "text-primary" },
+            { label: "Joined", value: joinedCount, tone: "text-energy" },
+            { label: "Won", value: completedCount, tone: "text-success" },
+          ]}
+        />
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+        <p className="text-[12px] leading-relaxed text-amber-200/90">
+          <span className="font-bold text-amber-200">Disclaimer:</span> Challenges are community goals for motivation and bragging rights — they are <span className="font-semibold">not personalised training prescriptions</span>. Train responsibly, respect any injury or recovery guidance from your coach or clinician, and skip anything that doesn’t fit your programme or health status. Brand challenges are paid partnerships and are always labelled; the brand’s products are not part of your training plan, and nothing in a brand challenge is medical or professional advice.
+        </p>
       </div>
 
       {/* Personalised suggestions */}
       {suggestions.length > 0 && (
-        <div className="px-5 mb-4">
+        <div className="mb-4">
           <p className="text-[12px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5 mb-2">
             <Sparkles size={11} /> Suggested for you
           </p>
@@ -179,20 +172,19 @@ const Challenges = () => {
           now scrolls on its own and the filter moved down to the count row,
           so the tabs get the full width instead of being clipped mid-word
           against a pinned dropdown. */}
-      <div className="px-5 mb-3">
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
-                tab === t ? "bg-gradient-to-r from-primary to-electric-purple text-primary-foreground border-transparent shadow-glow" : "bg-card border-border text-muted-foreground hover:border-primary/40"
-              }`}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+      <FilterRow label="Challenge lists">
+        {TABS.map(t => (
+          <FilterChip key={t} active={tab === t} onClick={() => setTab(t)}>
+            {t}
+          </FilterChip>
+        ))}
+      </FilterRow>
 
-      <div className="px-5 flex items-center justify-between gap-2 mb-3">
+      {/* `PageShell` already owns the 20px gutter. Every block below used to
+          repeat `px-5` on top of it, which indented this screen's content to
+          40px while Achievements, Badges and the Trophy Room sat at 20px — the
+          column visibly jumped sideways when moving between Trophy Room tabs. */}
+      <div className="flex items-center justify-between gap-2 mb-3">
         <p className="text-xs text-muted-foreground shrink-0">{filtered.length} challenges</p>
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1 text-xs shrink-0">
@@ -207,20 +199,20 @@ const Challenges = () => {
         </div>
       </div>
 
-      {loading ? <p className="px-5 text-sm text-muted-foreground">Loading…</p> : loadError ? (
-        <div className="px-5">
+      {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : loadError ? (
+        <div>
           <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 text-center">
             <p className="text-sm text-destructive mb-2">Couldn't load challenges.</p>
             <button onClick={load} className="text-xs font-semibold text-primary underline">Try again</button>
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="px-5 py-16 text-center">
+        <div className="py-16 text-center">
           <Target className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No challenges here yet.</p>
         </div>
       ) : (
-        <div className="px-5 space-y-3">
+        <div className="space-y-3">
           {filtered.map((c, i) => {
             const p = mine[c.id];
             const pct = Math.min(100, Math.round(((p?.progress || 0) / Number(c.target_value || 1)) * 100));
@@ -270,7 +262,7 @@ const Challenges = () => {
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, ease: "easeOut" }}
-                      className={`h-full rounded-full ${done ? "bg-gradient-to-r from-primary to-electric-purple" : "bg-gradient-to-r from-energy to-primary"}`} />
+                      className={`h-full rounded-full ${done ? "bg-gradient-primary" : "bg-gradient-to-r from-energy to-primary"}`} />
                   </div>
                 </div>
 
@@ -278,13 +270,13 @@ const Challenges = () => {
                   {p ? (
                     <>
                       <button onClick={() => nav(`/challenges/${c.id}`)}
-                        className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold shadow-glow">
+                        className="flex-1 py-2 rounded-lg bg-gradient-primary text-primary-foreground text-xs font-semibold shadow-glow">
                         {done ? "View trophy" : "Log progress"}
                       </button>
                       {!done && <button onClick={() => handleLeave(c.id)} disabled={busy[c.id]} className="px-3 py-2 rounded-lg border border-border text-xs hover:border-destructive/40 hover:text-destructive transition-colors disabled:opacity-40">Leave</button>}
                     </>
                   ) : (                      <button onClick={() => handleJoin(c.id)} disabled={busy[c.id]}
-                        className="flex-1 py-2 rounded-lg bg-gradient-to-r from-primary to-electric-purple text-primary-foreground text-xs font-semibold shadow-glow disabled:opacity-40">
+                        className="flex-1 py-2 rounded-lg bg-gradient-primary text-primary-foreground text-xs font-semibold shadow-glow disabled:opacity-40">
                         Join challenge
                       </button>
                   )}
@@ -301,7 +293,7 @@ const Challenges = () => {
           inside Achievements. It is challenges, so it lives on the Challenges
           screen — folded away, because the joinable ones are above it. */}
       <StandingChallenges />
-    </div>
+    </PageShell>
   );
 };
 
@@ -414,39 +406,99 @@ const CreateChallengeModal = ({ onClose, onCreated, userId, prefill }: { onClose
   };
 
 
+  const fieldLabel = "mb-1 block text-[12px] font-semibold text-muted-foreground";
+  const field = "h-10 w-full rounded-xl border border-border bg-muted px-3 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none";
+
   return (
-    // z-[59] clears the floating tab bar (see the ladder in BottomNav) and
-    // the bottom padding keeps the Cancel/Create row above the home indicator.
-    <div className="fixed inset-0 bg-black/60 z-[59] flex items-end sm:items-center justify-center p-4 pb-[max(1rem,var(--vaylo-inset-bottom))]" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-2xl border border-border p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="font-display font-bold mb-3">New challenge</h3>
-        <div className="space-y-2 text-sm">
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" className="w-full bg-muted rounded-lg px-3 py-2" />
-          <div className="grid grid-cols-2 gap-2">
-            <select value={type} onChange={e => setType(e.target.value)} className="bg-muted rounded-lg px-3 py-2">
+    <BottomSheet
+      open
+      onClose={onClose}
+      z="z-[59]"
+      title="New challenge"
+      subtitle="Distance, duration or a session count — you set the target."
+      footer={
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-4">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void save()}
+            disabled={saving}
+            className="h-11 flex-1 rounded-xl bg-gradient-primary font-semibold text-primary-foreground"
+          >
+            {saving ? "Creating…" : "Create"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="challenge-title" className={fieldLabel}>Title</label>
+          <Input
+            id="challenge-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. 30km this week"
+            className="h-10 rounded-xl"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="challenge-type" className={fieldLabel}>Measured by</label>
+            <select id="challenge-type" value={type} onChange={(e) => setType(e.target.value)} className={field}>
               <option value="distance">Distance</option>
               <option value="duration">Duration</option>
               <option value="count">Activity count</option>
               <option value="sport">Sport-specific</option>
             </select>
-            <select value={scope} onChange={e => setScope(e.target.value)} className="bg-muted rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label htmlFor="challenge-scope" className={fieldLabel}>Window</label>
+            <select id="challenge-scope" value={scope} onChange={(e) => setScope(e.target.value)} className={field}>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="custom">Custom</option>
             </select>
-            <input value={target} onChange={e => setTarget(e.target.value)} placeholder="Target" className="bg-muted rounded-lg px-3 py-2" />
-            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Unit" className="bg-muted rounded-lg px-3 py-2" />
-            <input value={sport} onChange={e => setSport(e.target.value)} placeholder="Sport (optional)" className="col-span-2 bg-muted rounded-lg px-3 py-2" />
           </div>
         </div>
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm">Cancel</button>
-          <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40">
-            {saving ? "Creating…" : "Create"}
-          </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="challenge-target" className={fieldLabel}>Target</label>
+            <Input
+              id="challenge-target"
+              inputMode="decimal"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="25"
+              className="h-10 rounded-xl"
+            />
+          </div>
+          <div>
+            <label htmlFor="challenge-unit" className={fieldLabel}>Unit</label>
+            <Input
+              id="challenge-unit"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              placeholder="km"
+              className="h-10 rounded-xl"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="challenge-sport" className={fieldLabel}>Sport (optional)</label>
+          <Input
+            id="challenge-sport"
+            value={sport}
+            onChange={(e) => setSport(e.target.value)}
+            placeholder="Any sport"
+            className="h-10 rounded-xl"
+          />
         </div>
       </div>
-    </div>
+    </BottomSheet>
   );
 };
 

@@ -45,8 +45,19 @@ const SITE_DIR = path.join(root, "website");
  * still tested — only the preview itself was removed.
  */
 const PLAY_BASE = "/play/";
-/** The marketing site. The repo root is linked to it, which is why --dir is used. */
-const MARKETING_SITE_ID = "388b0b24-27ee-472b-9197-aa8eb2782493";
+/**
+ * The marketing site. The repo root is linked to it, which is why --dir is used.
+ *
+ * vaylo-sports-606, not vaylo-sports: the original project (388b0b24…) lives on
+ * the gemmellj175/fraiche account, and Netlify refused every deploy to it with
+ * "Account credit usage exceeded". The site was rebuilt and published under the
+ * jamesgemmell140912 account instead, where the CLI is now authenticated and the
+ * project is set to Public.
+ *
+ * If deploys start failing with a 404 on the site id, the CLI has been switched
+ * back to an account that cannot see this project — run `netlify status` first.
+ */
+const MARKETING_SITE_ID = "598e5f2b-06d5-421c-a520-f8c27c614163";
 /** The standalone app site, deployed only with --standalone. */
 const APP_SITE_ID = "79d67cae-c1cd-4cdb-a72a-14e180145880";
 

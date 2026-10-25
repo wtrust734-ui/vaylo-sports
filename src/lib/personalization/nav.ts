@@ -114,8 +114,6 @@ export const NAV_CATALOG: NavGroupSpec[] = [
     feature: null,
     items: [
       { feature: "perform.goals", labelKey: "sidebar.achievements", path: "/achievements" },
-      { feature: "perform.identity", labelKey: "sidebar.avatarStudio", path: "/avatar" },
-      { feature: "perform.goals", labelKey: "sidebar.collection", path: "/collection" },
       { feature: "perform.goals", labelKey: "sidebar.eventPacks", path: "/event-packs" },
       { feature: "perform.goals", labelKey: "sidebar.creditsCoins", path: "/market" },
       { feature: "perform.goals", labelKey: "sidebar.subscription", path: "/subscription" },

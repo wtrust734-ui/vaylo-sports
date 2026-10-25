@@ -19,6 +19,7 @@ interface HealthConnectPluginShape {
   checkPermissionsStatus(): Promise<{ granted: string[]; missing: string[]; partial: boolean; version: number }>;
   requestPermissionsStatus(): Promise<{ granted: string[]; missing: string[]; cancelled?: boolean }>;
   openHealthConnectSettings(): Promise<{ opened: boolean; store?: boolean }>;
+  disconnect(): Promise<{ revoked: boolean; granted: string[]; missing: string[] }>;
   syncPull(options: { sinceMs?: number | null; limit?: number }): Promise<{
     workouts: NormalizedWorkout[];
     samples: NormalizedSample[];
@@ -83,6 +84,19 @@ export async function bridgeRequestPermissions(): Promise<{
     };
   } catch {
     return null;
+  }
+}
+
+export async function bridgeRevokePermissions(): Promise<boolean> {
+  const bridge = await loadHealthBridge();
+  // Web / iOS has no native grant to withdraw; local consent is the only
+  // connection there, and disconnectHealthConnect clears it.
+  if (!bridge) return true;
+  try {
+    const res = await bridge.disconnect();
+    return res.revoked === true;
+  } catch {
+    return false;
   }
 }
 

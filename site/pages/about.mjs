@@ -1,14 +1,17 @@
 // ============================================================================
 // ABOUT
 // ----------------------------------------------------------------------------
-// The brief for this page is the hardest constraint in the whole build: "do not
-// invent legal-company information; use clearly marked placeholders if
-// information is genuinely missing."
+// Two briefs meet here.
 //
-// So this page says what Vaylo is, why it exists, how it treats sport, and who
-// it is for — and then has an explicit "what we have not published yet" section
-// with visibly marked placeholders, rather than a plausible company name, a
-// fabricated founding date, or a team of people who do not exist.
+// The first is the story: the idea in 2024, the first build in 2025, the long
+// build through 2026, launch in 2027 — told plainly, in the owner's own
+// sequence, without inventing a founding myth.
+//
+// The second is the hardest constraint in the whole build: do not invent
+// legal-company information. So the page says what Vaylo is, why it exists, how
+// it treats sport and who it is for, and then has an explicit "what we have not
+// published yet" section with visibly marked placeholders rather than a
+// plausible company name or a fabricated address.
 // ============================================================================
 
 import { section, list, esc } from "../parts.mjs";
@@ -19,8 +22,8 @@ import { SPORTS } from "../data/site.mjs";
  *
  * Every value here is null because none of them is known. The page renders them
  * as visible placeholders. The generator fails if a null placeholder ever starts
- * rendering as a real-looking value, which is the failure mode this whole page
- * exists to prevent.
+ * rendering as a real-looking value, which is the failure mode this page exists
+ * to prevent.
  */
 export const COMPANY = {
   legalName: null,
@@ -51,24 +54,81 @@ function placeholder(label, value) {
   </div>`;
 }
 
+/** One year of the story, as a timeline row. */
+function year({ year, tag, body, now }) {
+  return `        <div class="tl-item${now ? " is-now" : ""}">
+          <p class="tl-year">${year}${now ? '<span class="tl-tag">Now</span>' : ""}</p>
+          <p style="margin-top:0.2rem"><strong>${esc(tag)}.</strong> ${esc(body)}</p>
+        </div>`;
+}
+
 export const about = {
   path: "/about/",
   title: "About Vaylo Sports",
   description:
-    "What Vaylo Sports is, why it was built, why it works across every sport, who it is designed for, and which company details are not yet published.",
+    "The story of Vaylo Sports: the idea in 2024, the first build in 2025, the long build through 2026, and the Android launch in 2027 — plus what the app is, and which company details are not yet published.",
+  updated: "2026-10-23",
   body: `
     <div class="shell">
       <div style="padding-top:2.5rem">
         <p class="eyebrow">About</p>
-        <h1>What Vaylo Sports is, and what it is not</h1>
+        <h1 class="page-title">The story of Vaylo Sports</h1>
       </div>
 
       <p class="lead" style="margin-top:1rem;max-width:64ch">
-        Vaylo Sports is a training log with analysis attached. You record what you
-        train; the app works it back to you. That is the whole idea, and it is
-        deliberately narrower than what most apps in this category promise.
+        A training log with analysis attached, built by one person over four
+        years. You record what you train; the app works it back to you. That is
+        the whole idea, and it is deliberately narrower than what most apps in
+        this category promise.
       </p>
     </div>
+
+  <section class="story" id="story" style="margin-top:2.5rem">
+    <div class="shell story-grid">
+      <div>
+        <p class="chapter-label"><b>01</b> 2024 &ndash; 2027</p>
+        <h2>Four years, one build.</h2>
+        <p class="story-lead" style="margin-top:1.25rem">
+          The idea arrived in 2024. Building started in 2025. It has been built
+          through 2026, and it launches in 2027.
+        </p>
+        <p>
+          Nothing about that timeline was planned as a marketing story. It is how
+          long it took to get the parts that matter right, and to stop adding the
+          parts that did not.
+        </p>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-rail" aria-hidden="true"><div class="timeline-fill"></div></div>
+${[
+  {
+    year: "2024",
+    tag: "The idea",
+    body: "The starting point was a gap: a training log already knows every session you have done, and still shows you a calendar. The idea for Vaylo was to make the record answer back — load, readiness, recovery, and the single limiter worth working on.",
+  },
+  {
+    year: "2025",
+    tag: "Building begins",
+    body: "The first year of writing the app: a log that is quick to fill in, metrics that are arithmetic on that log rather than guesses, and a plan that adapts to the week you actually had. The all-sport decision was made here, because the underlying maths does not care which sport produced the effort.",
+  },
+  {
+    year: "2026",
+    tag: "The long build",
+    body: "The year spent making the app safe to hand to someone: age caps and switched-off features for younger athletes, a refund and purchase path that works without emailing anyone, and twenty-six published documents behind every claim the product makes. Slower than adding features, and the reason it can launch at all.",
+    now: true,
+  },
+  {
+    year: "2027",
+    tag: "Launch",
+    body: "The Android release opens. Until then the app is not on the Play Store, and this site will not link to a listing that does not exist. The waiting list is the only place that changes.",
+  },
+]
+  .map(year)
+  .join("\n")}
+      </div>
+    </div>
+  </section>
 
 ${section({
   eyebrow: "Purpose",
@@ -134,12 +194,12 @@ ${section({
   eyebrow: "Honesty",
   heading: "What Vaylo will not claim",
   body: `      ${list([
-        "<strong>Vaylo does not prevent injury.</strong> It has an injury-risk flag, which is arithmetic on your own data, not a medical assessment.",
-        "<strong>Vaylo does not guarantee performance.</strong> Nothing here promises you will get faster, stronger or healthier.",
-        "<strong>Vaylo has no medical approval of any kind.</strong> No regulator, medical body or standards organisation has reviewed or endorsed it, and there is no clinical validation behind any number in the app.",
-        "<strong>Vaylo holds no certification or accreditation.</strong> No sport body, governing organisation or standards body has endorsed it or reviewed this app.",
-        "<strong>Vaylo does not sell your data</strong> and does not share it for advertising.",
-      ])}`,
+    "<strong>Vaylo does not prevent injury.</strong> It has an injury-risk flag, which is arithmetic on your own data, not a medical assessment.",
+    "<strong>Vaylo does not guarantee performance.</strong> Nothing here promises you will get faster, stronger or healthier.",
+    "<strong>Vaylo has no medical approval of any kind.</strong> No regulator, medical body or standards organisation has reviewed or endorsed it, and there is no clinical validation behind any number in the app.",
+    "<strong>Vaylo holds no certification or accreditation.</strong> No sport body, governing organisation or standards body has endorsed it or reviewed this app.",
+    "<strong>Vaylo does not sell your data</strong> and does not share it for advertising.",
+  ])}`,
 })}
 
 ${section({

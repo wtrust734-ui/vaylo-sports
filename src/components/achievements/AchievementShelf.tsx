@@ -43,15 +43,20 @@ export default function AchievementShelf({
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: Math.min(i * 0.02, 1), type: "spring", stiffness: 300, damping: 25 }}
             className={`rounded-xl p-3 text-center border transition-all duration-300 ${
-              earned ? "bg-gradient-card border-primary/30 shadow-card" : "bg-card/50 border-border/50 opacity-50"
+              earned ? "bg-gradient-card border-primary/30 shadow-card" : "bg-card/50 border-border/50 opacity-60"
             }`}
           >
             <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1.5 ${earned ? "bg-primary/15" : "bg-muted/30"}`}>
-              <Icon size={18} className={earned ? "text-primary" : "text-muted-foreground/40"} />
+              <Icon size={18} className={earned ? "text-primary" : "text-muted-foreground/50"} />
             </div>
-            <h4 className="text-[12px] font-bold">{ach.title}</h4>
-            <p className="text-[8px] text-muted-foreground mt-0.5">{ach.desc}</p>
-            {earned && <span className="text-[8px] text-primary font-bold">✓ Earned</span>}
+            <h4 className="text-[13px] font-bold leading-tight">{ach.title}</h4>
+            {/* 8px was unreadable on a phone, and it was the only place the
+                earning rule was ever written down. The description IS the
+                requirement, so it gets a legible size. */}
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{ach.desc}</p>
+            <span className={`mt-1 block text-[10px] font-bold ${earned ? "text-primary" : "text-muted-foreground/60"}`}>
+              {earned ? "✓ Earned" : "Locked"}
+            </span>
           </motion.div>
         );
       })}

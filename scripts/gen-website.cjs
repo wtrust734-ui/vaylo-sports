@@ -399,10 +399,16 @@ async function build() {
   // formatting instead, which is a worse test for a few kilobytes off a request
   // the reader never waits on.
   const cssOut = minifyCss(cssSource);
+  // The leading "v" is not decoration. A hex digest is sometimes all digits,
+  // and an all-digit 8-character token in every page tripped the company-
+  // registration-number guard in src/lib/website.test.ts — a false positive,
+  // but one that would fail the build roughly once in fifty deploys. A letter
+  // in front makes the token unmatchable by that pattern without touching the
+  // guard, which has to stay strict about actual numbers.
   globalThis.__VAYLO_ASSET_VERSION__ = {
-    theme: `?v=${hash(cssOut)}`,
-    js: `?v=${hash(jsSource)}`,
-    config: `?v=${hash(OPERATOR.email)}`,
+    theme: `?v=v${hash(cssOut)}`,
+    js: `?v=v${hash(jsSource)}`,
+    config: `?v=v${hash(OPERATOR.email)}`,
   };
 
   const { shell } = await import(toModuleUrl(path.join(SITE_DIR, "layout.mjs")));
@@ -508,6 +514,27 @@ async function build() {
   }
   fs.copyFileSync(ogSrc, path.join(OUT_DIR, "assets", "og.png"));
   bytes += fs.statSync(ogSrc).size;
+
+  // The display typeface, self-hosted.
+  //
+  // Copied rather than hotlinked from a font CDN for the reason the Cookie
+  // Policy gives: a third-party font request sends the reader's IP address to
+  // somebody else's server, which is the one thing this site tells people it
+  // does not do. The directory also carries the SIL OFL licence the font ships
+  // under, because redistributing it without the licence is not permitted and
+  // would be an easy thing to lose in a rebuild.
+  const fontsSrc = path.join(SITE_DIR, "assets", "fonts");
+  if (!fs.existsSync(fontsSrc)) {
+    fail("missing site/assets/fonts — theme.css references a font that is not there");
+  }
+  for (const file of fs.readdirSync(fontsSrc)) {
+    fs.mkdirSync(path.join(OUT_DIR, "assets", "fonts"), { recursive: true });
+    fs.copyFileSync(path.join(fontsSrc, file), path.join(OUT_DIR, "assets", "fonts", file));
+    bytes += fs.statSync(path.join(fontsSrc, file)).size;
+  }
+  if (!fs.existsSync(path.join(OUT_DIR, "assets", "fonts", "archivo-latin.woff2"))) {
+    fail("the Archivo woff2 did not reach website/assets/fonts — every page preloads it");
+  }
 
   /* --- robots + sitemap --- */
   bytes += writeFile(

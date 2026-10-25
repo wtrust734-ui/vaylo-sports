@@ -105,25 +105,39 @@ async function callComposeWorker(jobReq: ComposeJobRequest, backgroundPath: stri
   if (!RENDER_WORKER_URL || !RENDER_TOKEN) {
     return json({ error: "the composition worker is not configured on this deployment (RENDER_WORKER_URL/RENDER_TOKEN missing)", code: "worker_not_configured" }, 503);
   }
-  const res = await fetch(`${RENDER_WORKER_URL}/compose`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-render-token": RENDER_TOKEN },
-    body: JSON.stringify({
-      jobId: jobReq.jobId,
-      placementId: jobReq.placementId,
-      custom: jobReq.custom,
-      background: backgroundPath,
-      logo: logoPath ?? undefined,
-      brand: jobReq.brand,
-      text: jobReq.text,
-      allowOverflow: jobReq.allowOverflow,
-    }),
-  });
-  return res;
+  try {
+    const res = await fetch(`${RENDER_WORKER_URL}/compose`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-render-token": RENDER_TOKEN },
+      body: JSON.stringify({
+        jobId: jobReq.jobId,
+        placementId: jobReq.placementId,
+        custom: jobReq.custom,
+        background: backgroundPath,
+        logo: logoPath ?? undefined,
+        brand: jobReq.brand,
+        text: jobReq.text,
+        allowOverflow: jobReq.allowOverflow,
+      }),
+    });
+    return res;
+  } catch (e) {
+    // A worker URL that no longer resolves used to throw out of the handler:
+    // the edge runtime answered a bare 500 with no CORS headers, which the
+    // browser reports only as "Failed to fetch" — the real cause invisible.
+    // Answer with the reachable host and a JSON body instead.
+    let host = RENDER_WORKER_URL;
+    try { host = new URL(RENDER_WORKER_URL).host; } catch { /* keep raw */ }
+    console.error(`[ads-image] compose worker unreachable (${host}):`, e);
+    return json(
+      { error: `the composition worker is unreachable (${host || "no RENDER_WORKER_URL"}) — start it and retry, or compose from the exported background`, code: "worker_unreachable" },
+      503,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Storage — finished ads land in the PRIVATE ads bucket under ads/{userId}/…
+// Storage — finished ads land in the PRIVATE ads bucket under {userId}/…
 // (not the public renders bucket: download is signed, per audit E3).
 // ---------------------------------------------------------------------------
 
@@ -136,7 +150,12 @@ async function storeArtifact(
   bytes: Uint8Array,
   placementId: string,
 ): Promise<{ path: string; publicUrl: string | null; size: number; error?: string }> {
-  const path = `ads/${ownerId}/image-ads/${artifactId}.png`;
+  // The bucket is ALREADY named "ads"; prefixing the object key with "ads/"
+  // made every read strip the prefix and miss the object it had just written —
+  // compose failed with "could not read the background image" while the image
+  // was sitting one directory deeper. Keep the key bucket-relative, which is
+  // also what every storage_path reader in this file expects.
+  const path = `${ownerId}/image-ads/${artifactId}.png`;
   const { error } = await admin.storage.from(ADS_BUCKET).upload(path, bytes, {
     contentType: "image/png",
     upsert: true,
@@ -159,6 +178,21 @@ function pngBytesFromB64(b64: string): Uint8Array {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+/**
+ * Base64 an arbitrary byte array in chunks. `String.fromCharCode(...bytes)` on
+ * a full 1–2 MB PNG overflows the JS call stack (RangeError: Maximum call
+ * stack size exceeded), which is what made compose fail with a CORS-less 500
+ * every time — the image was fine, the encoder was not.
+ */
+function bytesToB64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let out = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    out += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(out);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +235,10 @@ async function loadArtifactView(admin: ReturnType<typeof supabaseAdmin>, ownerId
 // ---------------------------------------------------------------------------
 
 async function handler(req: Request): Promise<Response> {
+  // CORS preflight. Without this the browser's OPTIONS is answered 405 and the
+  // real POST is never sent — every Image Ads action failed at the network
+  // layer before it could reach this function.
+  if (req.method === "OPTIONS") return corsOnly();
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const userId = await authenticate(req);
   if (!userId) return json({ error: "Unauthorized" }, 401);
@@ -384,9 +422,21 @@ async function handler(req: Request): Promise<Response> {
         continue;
       }
       const bytes = pngBytesFromB64(outcome.imageB64);
-      const { data: inserted, error: insErr } = await admin
+      // The artifact ROW cannot be inserted before the upload: storage_path is
+      // NOT NULL, and the old order inserted first and filled the path in a
+      // second update — so every successful provider image died on
+      // "null value in column storage_path" and nothing was ever stored. Mint
+      // the id here, upload to its path, then insert the complete row.
+      const artifactId = crypto.randomUUID();
+      const stored = await storeArtifact(admin, userId, artifactId, bytes, placementId);
+      if (stored.error) {
+        outcomes[placementId] = { ok: false, error: `uploading the generated image failed: ${stored.error}` };
+        continue;
+      }
+      const { error: insErr } = await admin
         .from("ad_image_artifacts")
         .insert({
+          id: artifactId,
           project_id: projectId,
           concept_id: concept.id,
           owner_id: userId,
@@ -397,6 +447,7 @@ async function handler(req: Request): Promise<Response> {
           width: placement.genWidth,
           height: placement.genHeight,
           bytes: bytes.byteLength,
+          storage_path: stored.path,
           provider: {
             model: outcome.model,
             requestSize: outcome.size,
@@ -410,21 +461,14 @@ async function handler(req: Request): Promise<Response> {
           },
           source_brief: concept.payload,
           status: "ready",
-        })
-        .select("id")
-        .single();
+        });
       if (insErr) {
+        // Don't leave an orphaned object behind when the row cannot be written.
+        await admin.storage.from(ADS_BUCKET).remove([stored.path.replace(/^ads\//, "")]);
         outcomes[placementId] = { ok: false, error: `storing the generated image failed: ${insErr.message}` };
         continue;
       }
-      const stored = await storeArtifact(admin, userId, inserted.id, bytes, placementId);
-      if (stored.error) {
-        await admin.from("ad_image_artifacts").update({ status: "failed", failure_reason: stored.error }).eq("id", inserted.id);
-        outcomes[placementId] = { ok: false, error: `uploading the generated image failed: ${stored.error}` };
-        continue;
-      }
-      await admin.from("ad_image_artifacts").update({ storage_path: stored.path }).eq("id", inserted.id);
-      outcomes[placementId] = { ok: true, artifactId: inserted.id, size };
+      outcomes[placementId] = { ok: true, artifactId, size };
     }
 
     const anyOk = Object.values(outcomes).some((o) => o.ok);
@@ -457,7 +501,7 @@ async function handler(req: Request): Promise<Response> {
     const { data: bgBytes, error: dlErr } = await admin.storage.from(ADS_BUCKET).download(String(bg.storage_path).replace(/^ads\//, ""));
     if (dlErr || !bgBytes) return json({ error: "could not read the background image" }, 500);
     const bgBuf = new Uint8Array(await bgBytes.arrayBuffer());
-    const bgB64 = btoa(String.fromCharCode(...bgBuf.subarray(0, Math.min(bgBuf.length, 32 * 1024 * 1024))));
+    const bgB64 = bytesToB64(bgBuf);
     const backgroundDataUrl = `data:image/png;base64,${bgB64}`;
 
     const concept = bg.concept_id
@@ -479,18 +523,33 @@ async function handler(req: Request): Promise<Response> {
       brand: { purple: brand.colors.purple },
       text: { headline, supportingCopy, cta, disclaimer: undefined },
     };
-    const verdict = validateComposeRequest(composeRequest);
+    let verdict = validateComposeRequest(composeRequest);
     if (!verdict.ok) return json({ error: verdict.reason }, 400);
 
     // Preview the layout server-side first — the worker refuses overflow, but
     // spending a job slot on guaranteed overflow is a wasted render.
-    const preview = buildComposePlan({
-      request: verdict.request!,
-      backgroundPath: "job/bg.png",
-      logoPath: "job/logo.png",
-      fontPath: "fonts/brand.ttf",
-      outPath: "job/out.png",
-    });
+    const previewLayout = (req: NonNullable<typeof verdict.request>) =>
+      buildComposePlan({
+        request: req,
+        backgroundPath: "job/bg.png",
+        logoPath: "job/logo.png",
+        fontPath: "fonts/brand.ttf",
+        outPath: "job/out.png",
+      });
+    let preview = previewLayout(verdict.request!);
+
+    // The concept writer does not know how many pixels a line may take, so a
+    // perfectly good supporting sentence can be too long for the layout. That
+    // is not a reason to refuse the compose: drop the optional supporting copy
+    // and try again. Headline and CTA are the ad; supporting copy is extra.
+    if ("overflow" in preview && composeRequest.text.supportingCopy) {
+      composeRequest.text = { ...composeRequest.text, supportingCopy: undefined };
+      const retryVerdict = validateComposeRequest(composeRequest);
+      if (retryVerdict.ok) {
+        verdict = retryVerdict;
+        preview = previewLayout(retryVerdict.request!);
+      }
+    }
     if ("overflow" in preview) return json({ error: "layout overflow", overflow: preview.overflow }, 422);
 
     // Logo file: read from the brand-bucket (ads/{userId}/brand/logo.jpg) when
@@ -502,7 +561,7 @@ async function handler(req: Request): Promise<Response> {
       if (logoBytes) {
         const buf = new Uint8Array(await logoBytes.arrayBuffer());
         const mimeGuess = logoStoragePath.endsWith(".jpg") || logoStoragePath.endsWith(".jpeg") ? "image/jpeg" : "image/png";
-        logoDataUrl = `data:${mimeGuess};base64,${btoa(String.fromCharCode(...buf.subarray(0, Math.min(buf.length, 4 * 1024 * 1024))))}`;
+        logoDataUrl = `data:${mimeGuess};base64,${bytesToB64(buf)}`;
       }
     }
 
@@ -530,6 +589,76 @@ async function handler(req: Request): Promise<Response> {
     }
     await admin.from("ad_image_jobs").update({ status: workerBody.state ?? "queued", started_at: new Date().toISOString() }).eq("job_id", jobId);
     return json({ projectId, jobId, artifactId: bg.id, placementId: bg.placement_id });
+  }
+
+  // ---- store_composed -------------------------------------------------------
+  // The browser draws the finished still (canvas) and posts the PNG here. This
+  // action is deliberately narrow: it cannot choose arbitrary storage paths,
+  // cannot touch another owner's project, and records the composed artifact as
+  // a child of the generated background it was drawn from.
+  if (action === "store_composed") {
+    const projectId = String(body.projectId ?? "");
+    const backgroundArtifactId = String(body.artifactId ?? "");
+    const { data: bg } = await admin
+      .from("ad_image_artifacts")
+      .select("id, owner_id, project_id, concept_id, placement_id, width, height, stage, source_brief")
+      .eq("id", backgroundArtifactId)
+      .eq("project_id", projectId)
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (!bg) return json({ error: "Background artifact not found" }, 404);
+    if (bg.stage !== "generated") return json({ error: "compose expects a generated background" }, 400);
+
+    const headline = typeof body.headline === "string" ? body.headline.trim().slice(0, 300) : "";
+    const supportingCopy = typeof body.supportingCopy === "string" ? body.supportingCopy.trim().slice(0, 300) : "";
+    const cta = typeof body.cta === "string" ? body.cta.trim().slice(0, 120) : "";
+    if (!headline || !cta) return json({ error: "headline and cta are required" }, 400);
+
+    const png = typeof body.pngBase64 === "string" ? body.pngBase64 : "";
+    const match = png.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return json({ error: "pngBase64 must be an image/png data URL" }, 400);
+    if (match[1].length > 12 * 1024 * 1024) return json({ error: "the composed PNG is too large" }, 413);
+
+    const bytes = pngBytesFromB64(match[1]);
+    const composedId = crypto.randomUUID();
+    const stored = await storeArtifact(admin, userId, composedId, bytes, String(bg.placement_id));
+    if (stored.error) return json({ error: `uploading the composed ad failed: ${stored.error}` }, 500);
+
+    const { error: insErr } = await admin.from("ad_image_artifacts").insert({
+      id: composedId,
+      project_id: projectId,
+      concept_id: bg.concept_id,
+      owner_id: userId,
+      artifact_kind: "composed",
+      stage: "composed",
+      parent_artifact_id: bg.id,
+      placement_id: bg.placement_id,
+      mime: IMAGE_MIME,
+      width: bg.width,
+      height: bg.height,
+      bytes: bytes.byteLength,
+      storage_path: stored.path,
+      provider: {
+        renderer: "browser-canvas",
+        backgroundArtifactId: bg.id,
+        headline,
+        supportingCopy: supportingCopy || null,
+        cta,
+      },
+      source_brief: bg.source_brief,
+      status: "ready",
+    });
+    if (insErr) {
+      await admin.storage.from(ADS_BUCKET).remove([stored.path.replace(/^ads\//, "")]);
+      return json({ error: insErr.message }, 500);
+    }
+
+    await admin
+      .from("ad_image_projects")
+      .update({ status: "composed", updated_at: new Date().toISOString() })
+      .eq("id", projectId);
+
+    return json({ projectId, artifactId: composedId, placementId: bg.placement_id });
   }
 
   // ---- status --------------------------------------------------------------
@@ -624,7 +753,7 @@ async function handler(req: Request): Promise<Response> {
     const { data: srcBytes, error: dlErr } = await admin.storage.from(ADS_BUCKET).download(String(source.storage_path).replace(/^ads\//, ""));
     if (dlErr || !srcBytes) return json({ error: "could not read the source image for the edit" }, 500);
     const buf = new Uint8Array(await srcBytes.arrayBuffer());
-    const srcB64 = btoa(String.fromCharCode(...buf.subarray(0, Math.min(buf.length, 48 * 1024 * 1024))));
+    const srcB64 = bytesToB64(buf);
 
     // Beta cost control: a variant is a NEW provider edit — metered like the
     // first generation, for every plan type.
@@ -649,9 +778,15 @@ async function handler(req: Request): Promise<Response> {
       return json({ error: outcome.error ?? "the provider returned no edited image", creditsCharged: editMetered.cost }, 502);
     }
     const bytes = pngBytesFromB64(outcome.imageB64);
-    const { data: inserted, error: insErr } = await admin
+    // Same ordering rule as a first generation: upload first, then insert the
+    // row with storage_path already set — the column is NOT NULL.
+    const variantId = crypto.randomUUID();
+    const stored = await storeArtifact(admin, userId, variantId, bytes, String(prior.placement_id));
+    if (stored.error) return json({ error: `uploading the variant failed: ${stored.error}` }, 500);
+    const { error: insErr } = await admin
       .from("ad_image_artifacts")
       .insert({
+        id: variantId,
         project_id: projectId,
         concept_id: prior.concept_id,
         owner_id: userId,
@@ -663,6 +798,7 @@ async function handler(req: Request): Promise<Response> {
         width: prior.width,
         height: prior.height,
         bytes: bytes.byteLength,
+        storage_path: stored.path,
         provider: {
           model: outcome.model,
           fromArtifactId: source.id,
@@ -673,17 +809,12 @@ async function handler(req: Request): Promise<Response> {
         },
         source_brief: source.source_brief,
         status: "ready",
-      })
-      .select("id")
-      .single();
-    if (insErr) return json({ error: insErr.message }, 500);
-    const stored = await storeArtifact(admin, userId, inserted.id, bytes, String(prior.placement_id));
-    if (stored.error) {
-      await admin.from("ad_image_artifacts").update({ status: "failed", failure_reason: stored.error }).eq("id", inserted.id);
-      return json({ error: `uploading the variant failed: ${stored.error}` }, 500);
+      });
+    if (insErr) {
+      await admin.storage.from(ADS_BUCKET).remove([stored.path.replace(/^ads\//, "")]);
+      return json({ error: insErr.message }, 500);
     }
-    await admin.from("ad_image_artifacts").update({ storage_path: stored.path }).eq("id", inserted.id);
-    return json({ projectId, variantArtifactId: inserted.id, priorArtifactId: prior.id });
+    return json({ projectId, variantArtifactId: variantId, priorArtifactId: prior.id });
   }
 
   // ---- export --------------------------------------------------------------

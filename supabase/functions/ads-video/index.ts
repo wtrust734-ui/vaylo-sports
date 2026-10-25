@@ -2,7 +2,9 @@
 // ads-video — Google Gemini Omni video-shot generation + render dispatch for Vaylo Ads.
 //
 // Concept-first pipeline (Prompt 5):
-//   1. concept: turn a chat concept into a script + storyboard (Gemini text).
+//   1. concept: turn a chat request into real ad copy — hook, core message,
+//      script and storyboard — written by OpenAI (the Creative Assistant's
+//      provider). Google is used only for the generated shots below.
 //   2. start: launch ONE generated shot (one prompt → one interaction on the
 //      Gemini Omni Interactions API — Veo 3.1 was retired by Google on
 //      2026-10-22; nothing else on this key generates video). Cost is gated:
@@ -34,7 +36,7 @@ import {
   type OmniAspectRatio,
   type OmniResolution,
 } from "../_shared/omni.ts";
-import { GEMINI_MODELS } from "../_shared/aiModels.ts";
+import { AIServiceError, generateAIResponse } from "../_shared/openai.ts";
 import {
   type CaptionSpec,
   type StoryboardScene,
@@ -45,10 +47,13 @@ import {
 import {
   BRAND_NEGATIVE_PROMPT,
   buildScenePrompt,
+  buildScriptCorrection,
   buildScriptPrompt,
   buildStoryboardPrompt,
+  hookProblem,
   validateCaptionSpecs,
 } from "../_shared/videoPrompt.ts";
+
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 const jsonResp = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -67,8 +72,10 @@ const ALLOWED_SHOT_MODELS = [DEFAULT_OMNI_MODEL] as const;
 
 export {
   buildScriptPrompt,
+  buildScriptCorrection,
   buildStoryboardPrompt,
   buildScenePrompt,
+  hookProblem,
   BRAND_NEGATIVE_PROMPT,
   validateCaptionSpecs,
 } from "../_shared/videoPrompt.ts";
@@ -183,31 +190,24 @@ export function parseWrittenScript(text: string): WrittenScript | null {
   return null;
 }
 
-async function geminiScript(prompt: string): Promise<{ ok: boolean; problems: string[]; script?: WrittenScript }> {
-  if (!goKey()) return { ok: false, problems: ["GOOGLE_VIDEO_API is not configured"] };
+/**
+ * Concept and script text run on OpenAI — the same provider as the Creative
+ * Assistant. Google on this project is for form analysis and video shots only.
+ */
+async function openaiScript(prompt: string): Promise<{ ok: boolean; problems: string[]; script?: WrittenScript }> {
   try {
-    const res = await fetch(`${GEMINI_BASE}/models/${GEMINI_MODELS.ADS_TEXT}:generateContent`, {
-      method: "POST",
-      headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
-      }),
+    const result = await generateAIResponse({
+      feature: "ads_video_concept",
+      userPrompt: prompt,
+      maxOutputTokens: 2048,
     });
-    if (!res.ok) {
-      const described = describeOmniError(res.status, await res.text().catch(() => ""));
-      console.error(`[ads-video] script generation failed status=${res.status}`, described.error);
-      return { ok: false, problems: [described.error] };
-    }
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
-    if (!text) return { ok: false, problems: ["the script writer returned an empty response"] };
-    const parsed = parseWrittenScript(text);
-    if (!parsed) return { ok: false, problems: ["the script writer returned text that could not be parsed as JSON"] };
+    const parsed = parseWrittenScript(result.text);
+    if (!parsed) return { ok: false, problems: ["the concept writer returned text that could not be parsed as JSON"] };
     return { ok: true, problems: [], script: parsed };
   } catch (e) {
-    console.error("[ads-video] script generation threw", e);
-    return { ok: false, problems: ["script generation failed"] };
+    const message = e instanceof AIServiceError ? e.message : "concept generation failed";
+    console.error("[ads-video] concept generation failed", message);
+    return { ok: false, problems: [message] };
   }
 }
 
@@ -271,25 +271,14 @@ export function conceptPromptFrom(concept: VideoConcept, script: WrittenScript):
 // Gemini storyboard generation
 // ---------------------------------------------------------------------------
 
-async function geminiStoryboardPrompt(prompt: string): Promise<{ ok: boolean; scenes?: unknown[]; problems: string[] }> {
-  if (!goKey()) return { ok: false, problems: ["GOOGLE_VIDEO_API is not configured"] };
+async function openaiStoryboard(prompt: string): Promise<{ ok: boolean; scenes?: unknown[]; problems: string[] }> {
   try {
-    const res = await fetch(`${GEMINI_BASE}/models/${GEMINI_MODELS.ADS_TEXT}:generateContent`, {
-      method: "POST",
-      headers: { "x-goog-api-key": goKey()!, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.6 },
-      }),
+    const result = await generateAIResponse({
+      feature: "ads_video_storyboard",
+      userPrompt: prompt,
+      maxOutputTokens: 2048,
     });
-    if (!res.ok) {
-      const described = describeOmniError(res.status, await res.text().catch(() => ""));
-      console.error(`[ads-video] storyboard generation failed status=${res.status}`, described.error);
-      return { ok: false, problems: [described.error] };
-    }
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
-    if (!text) return { ok: false, problems: ["the storyboard writer returned an empty response"] };
+    const text = result.text;
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const candidate = start >= 0 && end > start ? text.slice(start, end + 1) : text;
@@ -301,8 +290,9 @@ async function geminiStoryboardPrompt(prompt: string): Promise<{ ok: boolean; sc
       return { ok: false, problems: ["the storyboard writer returned text that could not be parsed as JSON"] };
     }
   } catch (e) {
-    console.error("[ads-video] storyboard generation threw", e);
-    return { ok: false, problems: ["storyboard generation failed"] };
+    const message = e instanceof AIServiceError ? e.message : "storyboard generation failed";
+    console.error("[ads-video] storyboard generation failed", message);
+    return { ok: false, problems: [message] };
   }
 }
 
@@ -464,7 +454,9 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
   const objective = typeof body.objective === "string" && body.objective.trim() ? body.objective.trim().slice(0, 300) : "drive waitlist sign-ups";
   const audience = typeof body.audience === "string" && body.audience.trim() ? body.audience.trim().slice(0, 300) : "athletes 18-30";
   const angle = typeof body.angle === "string" ? body.angle.trim().slice(0, 600) : "";
-  const message = typeof body.message === "string" && body.message.trim() ? body.message.trim().slice(0, 300) : prompt.slice(0, 300);
+  // The request is context, not copy. It used to be the default `message`,
+  // which is how a request like "create a video ad" became the ad's content.
+  const message = typeof body.message === "string" && body.message.trim() ? body.message.trim().slice(0, 300) : "";
   const product = "Vaylo Sports";
   const placement = body.placement === "landscape" ? "landscape" : "reels";
   const durationSeconds = normaliseDuration(body.durationSeconds ?? 8);
@@ -495,7 +487,7 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
     {
       objective,
       audience,
-      angle: angle || message,
+      angle,
       message,
       product,
       durationSeconds,
@@ -504,15 +496,33 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
       callToAction,
     },
     brand,
+    prompt,
   );
 
-  const written = await geminiScript(scriptPrompt);
+  // One corrective retry when the writer produces a hook that is really the
+  // request in disguise. An instruction is never a valid fallback for ad copy:
+  // if the retry also fails, the caller is told why instead of being handed a
+  // script whose hook is their own sentence.
+  let written = await openaiScript(scriptPrompt);
+  let hookIssue = written.ok && written.script ? hookProblem(written.script.hook, prompt) : null;
+  if (hookIssue) {
+    console.warn(`[ads-video] concept hook rejected (${hookIssue}) — retrying once`);
+    written = await openaiScript(buildScriptCorrection(scriptPrompt, hookIssue));
+    hookIssue = written.ok && written.script ? hookProblem(written.script.hook, prompt) : null;
+  }
   if (!written.ok || !written.script) {
-    return jsonResp({ error: "Could not generate the script", problems: written.problems }, 422);
+    return jsonResp({ error: "Could not generate the concept", problems: written.problems }, 422);
+  }
+  if (hookIssue) {
+    return jsonResp({
+      error: `The writer did not produce a usable hook (${hookIssue}). Say what the ad should tell the viewer, or who it is for, and try again.`,
+      code: "concept_hook_unusable",
+      problems: [hookIssue],
+    }, 422);
   }
 
-  concept.hook = written.script.hook || message;
-  concept.message = written.script.coreMessage || message;
+  concept.hook = written.script.hook;
+  concept.message = written.script.coreMessage || written.script.hook;
   concept.onScreenText = written.script.onScreenText;
   concept.narrativeStructure = written.script.narrativeStructure;
   concept.sceneSequence = written.script.sceneSequence;
@@ -523,7 +533,7 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
   let storyboardSource = "";
   let storyboardScenes: StoryboardScene[] = [];
   const storyboardPrompt = buildStoryboardPrompt({ ...concept }, { name: brand.name, positioning: brand.positioning }, 3);
-  const generatedStoryboard = await geminiStoryboardPrompt(storyboardPrompt);
+  const generatedStoryboard = await openaiStoryboard(storyboardPrompt);
   if (generatedStoryboard.ok && generatedStoryboard.scenes) {
     const modelStoryboard = normaliseStoryboard(generatedStoryboard.scenes, durationSeconds);
     if (modelStoryboard.length > 0) storyboardScenes = modelStoryboard;
@@ -567,6 +577,10 @@ async function conceptAction(req: Request, body: Record<string, unknown>, userId
     concept: {
       id: conceptId,
       ...concept,
+      // The client (and chatRun's narration/render steps) read `script`; the
+      // domain object names the same text `voiceover`. Returning only
+      // `voiceover` left every caller with an empty script and no narration.
+      script: concept.voiceover,
       aspectRatio: placement === "reels" ? "9:16" : "16:9",
     },
     storyboard: storyboardScenes,
@@ -651,17 +665,20 @@ async function scriptAction(req: Request, body: Record<string, unknown>, userId:
     ].join("\n")
     : buildScriptPrompt(concept, brand);
 
-  const written = await geminiScript(rewritePrompt);
+  const written = await openaiScript(rewritePrompt);
   if (!written.ok || !written.script) {
     return jsonResp({ error: "Could not generate the script", problems: written.problems }, 422);
   }
 
   const updatedScript = written.script;
+  // A revision may rewrite the hook, but it may not replace one with an
+  // instruction. An unusable candidate keeps the hook the concept already had.
+  const revisedHook = hookProblem(updatedScript.hook) === null ? updatedScript.hook : concept.hook;
   if (conceptId) {
     try {
       await admin.from("ad_video_concepts").update({
         script: updatedScript.script,
-        hook: updatedScript.hook || concept.hook,
+        hook: revisedHook,
         core_message: updatedScript.coreMessage || concept.message,
         script_captions: updatedScript.captions,
         on_screen_text: updatedScript.onScreenText,
@@ -677,7 +694,7 @@ async function scriptAction(req: Request, body: Record<string, unknown>, userId:
     conceptId,
     script: updatedScript.script,
     captions: updatedScript.captions,
-    hook: updatedScript.hook || concept.hook,
+    hook: revisedHook,
   });
 }
 

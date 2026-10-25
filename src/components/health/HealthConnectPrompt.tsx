@@ -75,6 +75,12 @@ const StatusLine = ({ ok, children }: { ok: boolean; children: React.ReactNode }
 const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps) => {
   const hc = useHealthConnect();
   const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(null);
+  const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
+  // Set the moment the athlete confirms, and cleared when they connect again.
+  // The notice is only rendered when the resolved status has actually left
+  // "connected", so a revoke that failed shows its error instead of a
+  // congratulation — the sheet never claims a disconnect that did not happen.
+  const [justDisconnected, setJustDisconnected] = useState(false);
 
   // Both halves of the gate: the plugin only exists on Android, and the whole
   // surface is behind the launch flag.
@@ -116,6 +122,7 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
 
   const connect = async () => {
     setBusy("connect");
+    setJustDisconnected(false);
     try {
       // Status is re-read by the hook itself, so the sheet re-renders into the
       // connected state (with the first sync) on its own. Deliberately no
@@ -138,10 +145,12 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
 
   const disconnect = async () => {
     const confirmed = confirm(
-      "Disconnect Health Connect? Vaylo will stop reading your health data. Already-imported workouts stay until you delete them or your account.",
+      "Disconnect Health Connect? Vaylo will stop reading your health data and its Health Connect permissions will be revoked. Already-imported workouts stay until you delete them or your account.",
     );
     if (!confirmed) return;
     setBusy("disconnect");
+    setDeletedNotice(null);
+    setJustDisconnected(true);
     try {
       await hc.disconnect();
     } finally {
@@ -154,8 +163,37 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
       "Delete ALL imported health data (workouts, samples, sleep, heart rate)? This cannot be undone.",
     );
     if (!confirmed) return;
-    await hc.deleteImported();
+    setDeletedNotice(null);
+    const deleted = await hc.deleteImported();
+    if (deleted) {
+      setDeletedNotice("Imported health data deleted. Your live Health Connect records were not touched.");
+    }
   };
+
+  /**
+   * The delete control, in one place.
+   *
+   * It used to live only inside the connected branch, which meant the one
+   * action that erases imported data disappeared the moment the athlete
+   * disconnected — even though disconnecting deliberately KEEPS that data.
+   * It is offered wherever there is something to erase (`hc.hasImported`),
+   * connected or not, because deleting and disconnecting are independent.
+   */
+  const deleteButton = (
+    <Button
+      onClick={() => void deleteImported()}
+      disabled={busy !== null || hc.deleting}
+      variant="outline"
+      className="w-full h-10 rounded-xl border-destructive/30 bg-destructive/10 text-destructive"
+    >
+      {hc.deleting ? (
+        <Loader2 size={14} className="mr-1.5 animate-spin" />
+      ) : (
+        <Trash2 size={14} className="mr-1.5" />
+      )}
+      Delete imported data
+    </Button>
+  );
 
   const body = () => {
     if (pendingSession) {
@@ -249,23 +287,13 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
             </StatusLine>
           )}
           {hc.error && !lastSyncFailed && <StatusLine ok={false}>{hc.error}</StatusLine>}
+          {deletedNotice && <StatusLine ok>{deletedNotice}</StatusLine>}
           <p className="text-[12px] leading-relaxed text-muted-foreground">
-            Disconnecting stops future syncs but keeps what was already imported. Delete imported
-            data to erase those workouts and samples from Vaylo now.
+            Disconnecting revokes Vaylo's Health Connect permissions and stops future syncs, but
+            keeps what was already imported. Delete imported data to erase those workouts and
+            samples from Vaylo now.
           </p>
-          <Button
-            onClick={() => void deleteImported()}
-            disabled={busy !== null || hc.deleting}
-            variant="outline"
-            className="w-full h-10 rounded-xl border-destructive/30 bg-destructive/10 text-destructive"
-          >
-            {hc.deleting ? (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            ) : (
-              <Trash2 size={14} className="mr-1.5" />
-            )}
-            Delete imported data
-          </Button>
+          {deleteButton}
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => void hc.managePermissions()}
@@ -295,6 +323,12 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
 
     return (
       <div className="space-y-3">
+        {justDisconnected && (
+          <StatusLine ok>
+            Disconnected. Vaylo has withdrawn its Health Connect permissions and will not read
+            anything until you connect again.
+          </StatusLine>
+        )}
         <p className="text-sm leading-relaxed text-muted-foreground">
           Your watch already writes into Health Connect on your phone. Connect it once here and the
           workouts, heart rate, sleep, steps and calories land in your log as normal sessions — no
@@ -306,6 +340,14 @@ const HealthConnectPrompt = ({ open, onClose, onArm }: HealthConnectPromptProps)
           any time. Vaylo never sells this data, never uses it for advertising, and deletes it with
           your account.
         </p>
+        {justDisconnected && (
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Disconnecting does not delete what was already imported — those sessions are still in
+            your log. Erase them below, or from this sheet at any time.
+          </p>
+        )}
+        {deletedNotice && <StatusLine ok>{deletedNotice}</StatusLine>}
+        {hc.hasImported && deleteButton}
         {hc.error && <StatusLine ok={false}>{hc.error}</StatusLine>}
       </div>
     );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import logo from "@/assets/logo.jpg";
 import { isConfigBootFailure, isConfigKeyMissing } from "@/lib/startup";
+import logo from "@/assets/logo.jpg";
 
 /**
  * BootVeil — one continuous surface from the first frame to the first usable one.

@@ -16,7 +16,6 @@
  * the client now calls the function and reads { cost, balance } from the reply.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.0";
-import { beginServiceJob } from "./serviceJobs.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -190,94 +189,21 @@ export interface CreditSpend {
  * into server-only metering via credits_spend_metered even for those plans.
  */
 export async function spendForUser(
-  req: Request,
-  userId: string,
-  feature: string,
-  reason: string,
-  opts: { quantity?: number; source?: string; idempotencyKey?: string; billUnlimited?: boolean } = {},
+  _req: Request,
+  _userId: string,
+  _feature: string,
+  _reason: string,
+  _opts: { quantity?: number; source?: string; idempotencyKey?: string; billUnlimited?: boolean } = {},
 ): Promise<CreditSpend> {
-  let data: Record<string, unknown> | null = null;
-  let error: { message: string } | null = null;
-  let usedKey: string | undefined;
-
-  const spendKey = opts.idempotencyKey ?? crypto.randomUUID();
-
-  if (opts.billUnlimited) {
-    // For metered high-cost features, an Unlimited subscription does not exempt
-    // the request. The service role is restricted to this internal Edge path;
-    // never accept a client-controlled idempotency key for a credit debit.
-    const authorization = (req.headers.get("Authorization") ?? "").trim();
-    if (!authorization) {
-      return { success: false, unlimited: false, cost: 0, balance: 0, error: "Not authenticated" };
-    }
-    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    // Always charge under a real key: retries of the same spend collapse into
-    // one debit, and refunds derive `refund:<key>` from it.
-    const metered = await admin.rpc("credits_spend_metered", {
-      p_user_id: userId,
-      p_feature: feature,
-      p_reason: reason,
-      p_source: opts.source ?? "edge",
-      p_idempotency_key: spendKey,
-      p_metadata: {},
-    });
-    data = metered.data as Record<string, unknown> | null;
-    error = metered.error;
-    usedKey = data?.success === true ? spendKey : undefined;
-  } else {
-    // credits_spend() uses auth.uid() to scope the locked profile row. A
-    // service-role JWT has no athlete sub, so use the verified caller's JWT
-    // through the anon client for the ordinary (subscription-aware) path.
-    const authorization = (req.headers.get("Authorization") ?? "").trim();
-    if (!authorization) {
-      return { success: false, unlimited: false, cost: 0, balance: 0, error: "Not authenticated" };
-    }
-    const client = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: authorization } },
-    });
-    const spend = await client.rpc("credits_spend", {
-      p_feature: feature,
-      p_reason: reason,
-      p_quantity: Math.max(1, opts.quantity ?? 1),
-      p_source: opts.source ?? "edge",
-      // Retry-safe: pass a per-request idempotency key so a retry cannot double-charge.
-      p_idempotency_key: spendKey,
-      p_metadata: {},
-    });
-    data = spend.data as Record<string, unknown> | null;
-    error = spend.error;
-    usedKey = data?.success === true ? spendKey : undefined;
-  }
-  if (error) return { success: false, unlimited: false, cost: 0, balance: 0, error: error.message };
-
-  // The refund system needs to know which charged call this was. Recording a
-  // started job here (rather than in each AI function) means every charged call
-  // is linked to its ledger debit even if a later code path forgets to mark the
-  // outcome — and "started with no outcome" is treated by the refund engine as
-  // unverified, never as failed. Best-effort: bookkeeping cannot fail a charge.
-  if (data?.success === true && usedKey && Number(data?.cost ?? 0) > 0) {
-    await beginServiceJob({
-      supabaseUrl: Deno.env.get("SUPABASE_URL")!,
-      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      userId,
-      feature,
-      chargeKey: usedKey,
-      credits: Number(data?.cost ?? 0),
-      metadata: { source: opts.source ?? "edge" },
-    });
-  }
-
-  return {
-    success: !!data?.success,
-    unlimited: !!data?.unlimited,
-    cost: Number(data?.cost ?? 0),
-    balance: Number(data?.balance ?? 0),
-    error: typeof data?.error === "string" ? data.error : undefined,
-    shortfall: typeof data?.shortfall === "number" ? data.shortfall : undefined,
-    duplicate: data?.duplicate === true,
-    idempotencyKey: usedKey,
-  };
+  // THE CREDIT SYSTEM IS GONE. Vaylo Sports is a single-owner tool: every
+  // feature runs and the model bill goes to the owner's own provider account.
+  // Charging was the reason ad generation failed once the credit tables were
+  // removed — each generate step called credits_spend() against a schema that
+  // no longer holds balances, so it returned "metering_failed" and the image
+  // was never requested. This function stays in place as the single seam every
+  // edge function already calls, so nothing needs a balance, a plan or a top-up
+  // to run, and there is no path left that can block on credits.
+  return { success: true, unlimited: true, cost: 0, balance: 0 };
 }
 
 /** True when the user holds a one-off purchase product (e.g. "injury_management"). */

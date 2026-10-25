@@ -11,6 +11,10 @@ import { isNativeShell } from "@/lib/platform";
 import { promoBonus } from "@/lib/credits";
 import { toast } from "sonner";
 
+function genCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
 export default function Referrals() {
   const { user } = useAuth();
   const [code, setCode] = useState<string>("");
@@ -29,14 +33,9 @@ export default function Referrals() {
       let data = existingCode;
       if (codeReadError) { toast.error(`Couldn't load your referral code: ${codeReadError.message}`); return; }
       if (!data) {
-        const { data: ins, error: insError } = await supabase
-          .rpc("referral_code_issue" as never)
-          .select()
-          .maybeSingle();
-        if (insError) {
-          toast.error(`Couldn't create your referral code: ${insError.message}`);
-          return;
-        }
+        const newCode = genCode();
+        const { data: ins, error: insError } = await supabase.from("referral_codes").insert({ user_id: user.id, code: newCode }).select().maybeSingle();
+        if (insError) { toast.error(`Couldn't create your referral code: ${insError.message}`); return; }
         data = ins;
       }
       setCode(data?.code || "");
@@ -131,7 +130,7 @@ export default function Referrals() {
 
   return (
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-display font-bold flex items-center gap-2 mb-1"><Gift className="h-6 w-6 text-energy" /> Refer & earn</h1>
+      <h1 className="text-2xl font-bold flex items-center gap-2 mb-1"><Gift className="h-6 w-6 text-energy" /> Refer & earn</h1>
       <p className="text-sm text-muted-foreground mb-4">
         Invite a friend: they get {refereeCredits} credits right away. When they make their first real purchase, you
         get {referrerCredits} — and the tier bonuses below as more of your friends join with real accounts.
@@ -199,17 +198,17 @@ export default function Referrals() {
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="p-4 rounded-2xl bg-card border border-border">
           <Users className="h-4 w-4 text-electric-purple mb-2" />
-          <p className="text-2xl font-display font-bold">{referrals.length}</p>
+          <p className="text-2xl font-bold">{referrals.length}</p>
           <p className="text-xs text-muted-foreground">Friends invited</p>
         </div>
         <div className="p-4 rounded-2xl bg-card border border-border">
           <Check className="h-4 w-4 text-primary mb-2" />
-          <p className="text-2xl font-display font-bold">{qualificationLoading ? "—" : qualifying}</p>
+          <p className="text-2xl font-bold">{qualificationLoading ? "—" : qualifying}</p>
           <p className="text-xs text-muted-foreground">Qualifying</p>
         </div>
         <div className="p-4 rounded-2xl bg-card border border-border">
           <Crown className="h-4 w-4 text-energy mb-2" />
-          <p className="text-2xl font-display font-bold">{qualificationLoading ? "—" : qualifying * referrerCredits}</p>
+          <p className="text-2xl font-bold">{qualificationLoading ? "—" : qualifying * referrerCredits}</p>
           <p className="text-xs text-muted-foreground">Credits earned</p>
         </div>
       </div>

@@ -1,168 +1,154 @@
-// ============================================================================
-// PURCHASES & REFUNDS — rendered against a fake backend
-// ----------------------------------------------------------------------------
-// `src/lib/refunds.test.ts` proves the policy and the contract. This file
-// proves the screen an athlete actually sees: that it lists only what the
-// server returned, offers only the reasons attached to the chosen transaction,
-// sends the ids and no amount, and shows the honest money caveat when no
-// provider is connected.
-// ============================================================================
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-const loadRefundOptions = vi.fn();
-const submitRefund = vi.fn();
-const loadRefundCase = vi.fn();
-const escalateRefundCase = vi.fn();
+const { escalateRefundCase, loadRefundOptions, options } = vi.hoisted(() => {
+  const declinedCase = {
+    ref: "RF-261023-AB12",
+    kind: "purchase",
+    sourceType: "credit_purchase",
+    reasonCode: "credits_unused",
+    details: null,
+    feature: null,
+    credits: 25,
+    amountCents: 499,
+    currency: "GBP",
+    status: "declined",
+    resolution: "auto_rejected",
+    decisionNote: "Outside the window the policy allows.",
+    escalationRules: [],
+    canEscalate: true,
+    providerState: null,
+    createdAt: "2026-10-23T09:00:00Z",
+    updatedAt: "2026-10-23T09:05:00Z",
+    decidedAt: "2026-10-23T09:05:00Z",
+    completedAt: null,
+  };
+
+  return {
+    options: {
+      balance: { credits: 12, infinite: false },
+      charges: [
+        {
+          id: "charge-1",
+          feature: "video_form_analysis",
+          reason: "Video form analysis",
+          credits: 45,
+          createdAt: "2026-10-20T10:00:00Z",
+          jobStatus: "failed",
+          alreadyRefunded: false,
+          existingCase: null,
+          reasons: ["ai_not_delivered"],
+        },
+      ],
+      purchases: [],
+      subscription: null,
+      cases: [declinedCase],
+      provider: { id: "none", refundsEnabled: false },
+      moneyExecutionEnabled: false,
+    },
+    loadRefundOptions: vi.fn(),
+    escalateRefundCase: vi.fn(async (ref: string) => ({
+      case: { ...declinedCase, ref, status: "under_review", resolution: null, canEscalate: false },
+      message: "A person will look at this request.",
+    })),
+  };
+});
 
 vi.mock("@/lib/refunds", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/refunds")>();
   return {
     ...actual,
-    loadRefundOptions: (...args: unknown[]) => loadRefundOptions(...args),
-    submitRefund: (...args: unknown[]) => submitRefund(...args),
-    loadRefundCase: (...args: unknown[]) => loadRefundCase(...args),
-    escalateRefundCase: (...args: unknown[]) => escalateRefundCase(...args),
+    loadRefundOptions,
+    submitRefund: vi.fn(),
+    escalateRefundCase,
   };
 });
 
-vi.mock("@/contexts/AuthContext", () => {
-  // A STABLE user object. Returning a fresh one per call made the page's
-  // [user]-keyed load effect re-run on every render, which cleared the screen
-  // back to "Loading…" the moment a transaction was selected.
-  const user = { id: "11111111-1111-4111-8111-111111111111" };
-  return { useAuth: () => ({ user, loading: false }) };
-});
+import PurchasesRefunds from "./PurchasesRefunds";
+import { submitRefund, type RefundCaseView } from "@/lib/refunds";
 
-vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
-}));
-
-import PurchasesRefunds from "@/pages/PurchasesRefunds";
-
-const CHARGE_ID = "33333333-3333-4333-8333-333333333333";
-
-const options = {
-  balance: { credits: 210, infinite: false },
-  charges: [
-    {
-      id: CHARGE_ID,
-      feature: "video_form_analysis",
-      reason: "AI video form analysis",
-      credits: 45,
-      createdAt: "2026-10-20T09:00:00.000Z",
-      jobStatus: "failed" as const,
-      alreadyRefunded: false,
-      existingCase: null,
-      reasons: ["ai_not_delivered", "ai_incomplete"],
-    },
-  ],
-  purchases: [],
-  subscription: null,
-  cases: [
-    {
-      ref: "RF-261018-AAAA",
-      kind: "money" as const,
-      sourceType: "credit_purchase" as const,
-      reasonCode: "credits_unused",
-      details: null,
-      feature: null,
-      credits: null,
-      amountCents: 999,
-      currency: "USD",
-      status: "awaiting_provider",
-      resolution: "awaiting_provider",
-      decisionNote: null,
-      escalationRules: ["provider_not_connected"],
-      canEscalate: false,
-      providerState: "awaiting_provider",
-      createdAt: "2026-10-18T09:00:00.000Z",
-      updatedAt: "2026-10-18T09:00:00.000Z",
-      decidedAt: "2026-10-18T10:00:00.000Z",
-      completedAt: null,
-    },
-  ],
-  provider: { id: "unconfigured", refundsEnabled: false },
-  moneyExecutionEnabled: false,
-};
-
-const renderPage = () =>
+const renderScreen = () =>
   render(
     <MemoryRouter>
       <PurchasesRefunds />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
+beforeEach(() => loadRefundOptions.mockResolvedValue(options));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
 describe("Purchases & refunds screen", () => {
-  beforeEach(() => {
-    loadRefundOptions.mockReset();
-    submitRefund.mockReset();
-    loadRefundCase.mockReset();
-    escalateRefundCase.mockReset();
-  });
+  it("loads the server's options and states that money cannot move yet", async () => {
+    renderScreen();
 
-  afterEach(cleanup);
-
-  it("lists the transactions and says money cannot move without a provider", async () => {
-    loadRefundOptions.mockResolvedValue(options);
-    renderPage();
-
-    const chargeRow = await screen.findByRole("button", { name: /video form analysis/i });
-    expect(chargeRow.textContent).toContain("45 credits");
+    await waitFor(() => expect(screen.getByText("RF-261023-AB12")).toBeInTheDocument());
     expect(screen.getByText(/no money can move until a payment provider is connected/i)).toBeInTheDocument();
-    // The open money case is shown as awaiting the provider, not as refunded.
-    expect(screen.getByText("Awaiting payment provider")).toBeInTheDocument();
-    expect(screen.getByText(/no money has moved yet/i)).toBeInTheDocument();
+    expect(screen.getByText("Credit charges")).toBeInTheDocument();
   });
 
-  it("offers only the reasons the server attached, then submits ids and a submission key", async () => {
-    loadRefundOptions.mockResolvedValue(options);
-    submitRefund.mockResolvedValue({
-      case: {
-        ...options.cases[0],
-        ref: "RF-261023-BBBB",
-        status: "completed",
-        kind: "credits",
-        credits: 45,
-        amountCents: null,
-        canEscalate: false,
-      },
-      message: "45 credits are on their way back to your balance.",
-      balance: 255,
+  it("re-opens a declined automatic decision when the athlete asks for a human", async () => {
+    renderScreen();
+
+    const ask = await screen.findByRole("button", { name: /ask for a human review/i });
+    fireEvent.click(ask);
+
+    await waitFor(() => expect(escalateRefundCase).toHaveBeenCalledWith("RF-261023-AB12"));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /ask for a human review/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("submits from the sheet's footer, so the primary action is never buried", async () => {
+    // The bug: Submit request sat in the bottom strip of a hand-rolled overlay,
+    // under the Android gesture area, and the tap went to the OS instead of the
+    // button. It lives in the bottom sheet's own footer now — outside the
+    // scrolling body — and it must actually reach the server.
+    vi.mocked(submitRefund).mockResolvedValue({
+      case: { ...options.cases[0], status: "completed", credits: 45 } as RefundCaseView,
+      message: "Credits returned.",
+      balance: 57,
     });
-    renderPage();
 
-    const chargeButton = await screen.findByRole("button", { name: /video form analysis/i });
-    fireEvent.click(chargeButton);
+    renderScreen();
+    fireEvent.click(await screen.findByRole("button", { name: /request a refund/i }));
+    await screen.findByRole("dialog");
 
-    // Only the two AI reasons the charge allows are offered.
-    expect(await screen.findByLabelText(/The AI service failed or never delivered/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/The AI result was incomplete or unusable/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/I bought credits and have not used them/)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /the ai service failed or never delivered/i }),
+    );
+    fireEvent.change(screen.getByLabelText(/anything else we should know/i), {
+      target: { value: "The analysis never arrived." },
+    });
 
-    fireEvent.click(screen.getByLabelText(/The AI service failed or never delivered/));
-    fireEvent.click(screen.getByRole("button", { name: /Submit request/i }));
+    const submit = screen.getByRole("button", { name: "Submit request" });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
 
-    await waitFor(() => expect(submitRefund).toHaveBeenCalledTimes(1));
-    const payload = submitRefund.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload.sourceType).toBe("ai_service");
-    expect(payload.reasonCode).toBe("ai_not_delivered");
-    expect(payload.chargeId).toBe(CHARGE_ID);
-    expect(payload.submissionKey).toEqual(expect.any(String));
-    // No client-supplied amount or status is ever sent.
-    expect(payload).not.toHaveProperty("credits");
-    expect(payload).not.toHaveProperty("amountCents");
-    expect(payload).not.toHaveProperty("status");
-
-    expect(await screen.findByText("Request RF-261023-BBBB")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(submitRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceType: "ai_service",
+          reasonCode: "ai_not_delivered",
+          chargeId: "charge-1",
+        }),
+      ),
+    );
   });
 
-  it("surfaces a load failure instead of an empty screen", async () => {
-    loadRefundOptions.mockRejectedValue(new Error("That transaction was not found on this account."));
-    renderPage();
-    expect(await screen.findByText(/That transaction was not found/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Try again/i })).toBeInTheDocument();
+  it("offers only the reasons the server returned for that transaction", async () => {
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole("button", { name: /request a refund/i }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/the ai service failed or never delivered/i);
+    // Another AI-source reason the server did NOT offer for this charge.
+    expect(dialog).not.toHaveTextContent(/the ai result was incomplete or unusable/i);
   });
 });

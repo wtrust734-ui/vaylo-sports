@@ -1,5 +1,4 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import PipelineDashboard from "@/components/pipeline/PipelineDashboard";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { MotionConfig } from "framer-motion";
 import {
@@ -17,11 +16,10 @@ import { guestEntryAvailable } from "@/lib/guestMode";
 import { isFlagOn } from "@/config/featureFlags";
 import { consumeBackPress } from "@/lib/backButton";
 import { dismissKeyboard, installKeyboardFocusScroller } from "@/lib/keyboard";
+import { ensureFxRates } from "@/lib/fxRates";
 import { installDeepLinkHandler } from "@/lib/deepLinks";
 import { ScrollRestoration } from "@/lib/scrollRestoration";
 import { installOfflineQueue } from "@/lib/offlineQueue";
-// Single toast renderer: sonner. The shadcn <Toaster/> and the reducer behind it
-// were removed — src/hooks/use-toast.ts now forwards to sonner.
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -31,18 +29,17 @@ import ScreenFallback from "@/components/ScreenFallback";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import CookieNotice from "@/components/CookieNotice";
 import MilestoneCelebration from "@/components/MilestoneCelebration";
-import PaywallModal from "@/components/PaywallModal";
-import CreditTopUpSheet from "@/components/market/CreditTopUpSheet";
-const Notifications = lazy(() => import("./pages/Notifications"));
+
+
 const ReferralLeaderboard = lazy(() => import("./pages/ReferralLeaderboard"));
 const ChallengeInvite = lazy(() => import("./pages/ChallengeInvite"));
 const DiscordCommunity = lazy(() => import("./pages/DiscordCommunity"));
 const NotificationPrefs = lazy(() => import("./pages/NotificationPrefs"));
-const Referrals = lazy(() => import("./pages/Referrals"));
-const CreatorMarketplace = lazy(() => import("./pages/CreatorMarketplace"));
-const BecomeCreator = lazy(() => import("./pages/BecomeCreator"));
-const CoachStudio = lazy(() => import("./pages/CoachStudio"));
-const CoachSignup = lazy(() => import("./pages/CoachSignup"));
+
+
+
+
+
 // The Ads Studio is a full-screen product surface with its own sidebar/nav
 // shell — it must NOT render inside AppLayout. Lazy like every other route so
 // its weight stays out of the athlete app's entry chunk.
@@ -73,14 +70,13 @@ const Recovery = lazy(() => import("./pages/Recovery"));
 const Market = lazy(() => import("./pages/Market"));
 const FormAnalysis = lazy(() => import("./pages/FormAnalysis"));
 const VideoFormAnalysis = lazy(() => import("./pages/VideoFormAnalysis"));
-const CrossSportAnalysis = lazy(() => import("./pages/CrossSportAnalysis"));
 const Arcade = lazy(() => import("./pages/Arcade"));
 const Events = lazy(() => import("./pages/Events"));
 const Pricing = lazy(() => import("./pages/Pricing"));
-const Subscription = lazy(() => import("./pages/Subscription"));
 const EventPacks = lazy(() => import("./pages/EventPacks"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const Badges = lazy(() => import("./pages/Badges"));
+const TrophyRoom = lazy(() => import("./pages/TrophyRoom"));
 const VPR = lazy(() => import("./pages/VPR"));
 const Train = lazy(() => import("./pages/Train"));
 const Perform = lazy(() => import("./pages/Perform"));
@@ -92,12 +88,10 @@ const Development = lazy(() => import("./pages/Development"));
 const Identity = lazy(() => import("./pages/Identity"));
 const Injury = lazy(() => import("./pages/Injury"));
 
-
 const Learning = lazy(() => import("./pages/Learning"));
 const LearningArticle = lazy(() => import("./pages/LearningArticle"));
 const MetricsHub = lazy(() => import("./pages/MetricsHub"));
 const Compare = lazy(() => import("./pages/Compare"));
-const Avatar = lazy(() => import("./pages/Avatar"));
 const Goals = lazy(() => import("./pages/Goals"));
 const Guardian = lazy(() => import("./pages/Guardian"));
 const StartingAnalysis = lazy(() => import("./pages/StartingAnalysis"));
@@ -116,11 +110,13 @@ const AdminEventPacks = lazy(() => import("./pages/AdminEventPacks"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
 const AdminErrorReports = lazy(() => import("./pages/AdminErrorReports"));
 const AdminRefunds = lazy(() => import("./pages/AdminRefunds"));
-const PurchasesRefunds = lazy(() => import("./pages/PurchasesRefunds"));
+const PipelineDashboard = lazy(() => import("./components/pipeline/PipelineDashboard"));
 const EventPackLanding = lazy(() => import("./pages/EventPackLanding"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const ChallengeDetail = lazy(() => import("./pages/ChallengeDetail"));
-const Collection = lazy(() => import("./pages/Collection"));
+const PurchasesRefunds = lazy(() => import("./pages/PurchasesRefunds"));
+const Streaks = lazy(() => import("./pages/Streaks"));
+const Subscription = lazy(() => import("./pages/Subscription"));
 const AIDev = lazy(() => import("./pages/AIDev"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 // Friends, restored 2026-10-08 with something to do. The page deleted on
@@ -133,6 +129,7 @@ const FriendChat = lazy(() => import("./pages/FriendChat"));
 // without leaving the app, because a right nobody can find is not a right.
 const Legal = lazy(() => import("./pages/Legal"));
 const Safety = lazy(() => import("./pages/Safety"));
+const RedeemCode = lazy(() => import("./components/RedeemCode"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -206,9 +203,6 @@ const AuthGate = () => {
  * `.nav-enter` animation the router path uses — same duration, same curve,
  * opacity only (a transform here would re-anchor every `position: fixed`
  * child inside these screens, which is why no wrapper in this app translates).
- *
- * Keyed by pathname so the fade re-runs on each navigation, exactly like the
- * keyed wrapper inside AppLayout.
  */
 const BareScreen = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
@@ -239,6 +233,14 @@ const NativeBackButton = () => {
   // Replays writes that were made with no signal. Installed here rather than
   // in the queue module so it is tied to the app's lifetime, not the bundle's.
   useEffect(() => installOfflineQueue(), []);
+
+  // Prices are converted with the shared USD table, which is cached for six
+  // hours. This is the one place the app asks for a fresh one: fire-and-forget,
+  // because a rate provider being slow must never delay the first screen. When
+  // it lands, FX_UPDATED_EVENT re-renders every mounted price surface.
+  useEffect(() => {
+    ensureFxRates();
+  }, []);
 
   useEffect(() => {
     // Status bar appearance is set from JS as well as from capacitor.config.ts,
@@ -416,226 +418,229 @@ const App = () => {
         <ScrollRestoration />
         <AuthProvider>
           <SubscriptionProvider>
-            <OfflineBanner />
-            {/* Mounted app-wide rather than inside AppLayout: a material change
-                to the Terms has to reach the athlete wherever they are, and a
-                notice mounted per-screen is one a future screen forgets. It
-                renders nothing for a signed-out visitor or a profile that has
-                already accepted the current version. */}
-            <TermsChangeNotice />
-            {/* App-wide cookie/storage notice — never blocks, versioned, and
-                stored on-device so each origin remembers independently. */}
-            <CookieNotice />
-            {/* Inline skeleton, never the full-screen loader. This boundary is
-                what used to show "Loading your next screen" over the whole
-                app while a route chunk arrived — the interstitial that made
-                ordinary navigation read as a restart. Tab roots are hosted by
-                TabShell and only pay this cost on their first ever visit. */}
-            <Suspense fallback={<ScreenFallback />}>
+          <OfflineBanner />
+          {/* Mounted app-wide rather than inside AppLayout: a material change
+              to the Terms has to reach the athlete wherever they are, and a
+              notice mounted per-screen is one a future screen forgets. It
+              renders nothing for a signed-out visitor or a profile that has
+              already accepted the current version. */}
+          <TermsChangeNotice />
+          {/* App-wide cookie/storage notice — never blocks, versioned, and
+              stored on-device so each origin remembers independently. */}
+          <CookieNotice />
+          {/* Inline skeleton, never the full-screen loader. This boundary is
+              what used to show "Loading your next screen" over the whole
+              app while a route chunk arrived — the interstitial that made
+              ordinary navigation read as a restart. Tab roots are hosted by
+              TabShell and only pay this cost on their first ever visit. */}
+          <Suspense fallback={<ScreenFallback />}>
 
-              <Routes>
-              {/* The sign-in page is a web dead end: on .netlify.app (and every
-                  other preview host) OAuth has no owned domain to redirect back
-                  to, so authRedirectUrl() throws and every button on the page
-                  is inert. AuthProvider signs web visitors in as guests instead,
-                  which lands them here in the app.
+            <Routes>
+            {/* The sign-in page is a web dead end: on .netlify.app (and every
+                other preview host) OAuth has no owned domain to redirect back
+                to, so authRedirectUrl() throws and every button on the page
+                is inert. AuthProvider signs web visitors in as guests instead,
+                which lands them here in the app.
 
-                  The route stays registered and is reached through AuthGate
-                  rather than deleted, because deleting it would 404 the path the
-                  marketing site links to, and because it is the fallback that
-                  keeps the preview reachable when guest entry is unavailable. */}
-              <Route path="/auth" element={<BareScreen><AuthGate /></BareScreen>} />
-              <Route path="/onboarding" element={<BareScreen><Onboarding /></BareScreen>} />
-              {/* Published legal documents, inside the app. Top-level rather
-                  than under AppLayout on purpose: the sign-up screen links to
-                  Terms and Privacy before an account exists, and a session
-                  gate here would bounce that reader back to the sign-in wall. */}
-              <Route path="/legal/:slug" element={<BareScreen><LegalDocument /></BareScreen>} />
-              {/* Public viral surfaces — must render without a session (they
-                  carry the join / signup CTAs). Shared links reach them via the
-                  link-preview function's redirect. */}
-              <Route path="/c/:id" element={<BareScreen><ChallengeInvite /></BareScreen>} />
-              <Route path="/referral-leaderboard" element={<BareScreen><ReferralLeaderboard /></BareScreen>} />
-              <Route path="/discord" element={<BareScreen><DiscordCommunity /></BareScreen>} />
-              {/* Ads Studio — standalone shell below; handles its own auth gate. */}
-              <Route path="/ad-studio" element={<BareScreen><AdsStudio /></BareScreen>} />
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<Index />} />
-                {/* Information-architecture hubs: every tile navigates to an
-                    existing page; these only group destinations. */}
-                <Route path="/train" element={<Train />} />
-                <Route path="/perform" element={<Perform />} />
-                <Route path="/recover" element={<Recover />} />
-                <Route path="/compete" element={<Compete />} />
-                <Route path="/training" element={<Training />} />
-                {/* Life events & availability. Sits beside the plan rather than
-                    inside it: the athlete's availability is a fact about their
-                    life, and it outlives any single plan. */}
-                <Route path="/availability" element={<Availability />} />
-                <Route path="/nutrition" element={<Nutrition />} />
-                <Route path="/form" element={<FormAnalysis />} />
-                <Route path="/form/video" element={<VideoFormAnalysis />} />
-                <Route path="/mental" element={<Mental />} />
-                <Route path="/coach" element={<Coach />} />
-                <Route path="/arcade" element={<Arcade />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/profile/:username" element={<PublicProfile />} />
-                <Route path="/recovery" element={<Recovery />} />
-                <Route path="/market" element={<Market />} />
-                <Route path="/pricing" element={<Pricing />} />
-                <Route path="/subscription" element={<Subscription />} />
-                <Route path="/event-packs" element={<EventPacks />} />
-                <Route path="/packs/:packId" element={<EventPackLanding />} />
-                <Route path="/achievements" element={<Achievements />} />
-                {/* The Trophy Room's other two tabs. Each is its own screen:
-                    Badges are bought, Achievements are earned by training, and
-                    Challenges were always a page of their own. */}
-                <Route path="/badges" element={<Badges />} />
-                <Route path="/vpr" element={<VPR />} />
-                <Route path="/skills" element={<SkillAnalytics />} />
-                <Route path="/tactics" element={<Tactics />} />
-                <Route path="/development" element={<Development />} />
-                <Route path="/identity" element={<Identity />} />
-                <Route path="/injury" element={<Injury />} />
-                {/* Legacy routes — duplicates / removed feature, keep as redirects so bookmarks don't 404 */}
-                <Route path="/trophies" element={<Navigate to="/achievements" replace />} />
-                {/* The workout screen, back as LOG ONLY (2026-10-08).
+                The route stays registered and is reached through AuthGate
+                rather than deleted, because deleting it would 404 the path the
+                marketing site links to, and because it is the fallback that
+                keeps the preview reachable when guest entry is unavailable. */}
+            <Route path="/auth" element={<BareScreen><AuthGate /></BareScreen>} />
+            <Route path="/onboarding" element={<BareScreen><Onboarding /></BareScreen>} />
+            {/* Published legal documents, inside the app. Top-level rather
+                than under AppLayout on purpose: the sign-up screen links to
+                Terms and Privacy before an account exists, and a session
+                gate here would bounce that reader back to the sign-in wall. */}
+            <Route path="/legal/:slug" element={<BareScreen><LegalDocument /></BareScreen>} />
+            {/* Public viral surfaces — must render without a session (they
+                carry the join / signup CTAs). Shared links reach them via the
+                link-preview function's redirect. */}
+            <Route path="/c/:id" element={<BareScreen><ChallengeInvite /></BareScreen>} />
+            <Route path="/referral-leaderboard" element={<BareScreen><ReferralLeaderboard /></BareScreen>} />
+            <Route path="/discord" element={<BareScreen><DiscordCommunity /></BareScreen>} />
+            {/* Ads Studio — standalone shell below; handles its own auth gate. */}
+            <Route path="/ad-studio" element={<BareScreen><AdsStudio /></BareScreen>} />
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Index />} />
+              {/* Information-architecture hubs: every tile navigates to an
+                  existing page; these only group destinations. */}
+              <Route path="/train" element={<Train />} />
+              <Route path="/perform" element={<Perform />} />
+              <Route path="/recover" element={<Recover />} />
+              <Route path="/compete" element={<Compete />} />
+              <Route path="/training" element={<Training />} />
+              {/* Life events & availability. Sits beside the plan rather than
+                  inside it: the athlete's availability is a fact about their
+                  life, and it outlives any single plan. */}
+              <Route path="/availability" element={<Availability />} />
+              <Route path="/nutrition" element={<Nutrition />} />
+              <Route path="/form" element={<FormAnalysis />} />
+              <Route path="/form/video" element={<VideoFormAnalysis />} />
+              <Route path="/mental" element={<Mental />} />
+              <Route path="/coach" element={<Coach />} />
+              <Route path="/arcade" element={<Arcade />} />
+              <Route path="/events" element={<Events />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/:username" element={<PublicProfile />} />
+              <Route path="/recovery" element={<Recovery />} />
+              <Route path="/market" element={<Market />} />
+              {/* Plans & billing. Linked from the sidebar, the paywall, the
+                  Market's Plans/Lifetime sections and the account card — all of
+                  which landed on the 404 because the route was missing. */}
+              <Route path="/subscription" element={<Subscription />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/event-packs" element={<EventPacks />} />
+              <Route path="/packs/:packId" element={<EventPackLanding />} />
+              <Route path="/achievements" element={<Achievements />} />
+              {/* The Trophy Room's other screens. Each is its own page:
+                  Badges are bought, Achievements is the catalogue of what can
+                  be earned, the Trophy Room holds what HAS been earned, and
+                  Challenges were always a page of their own. */}
+              <Route path="/badges" element={<Badges />} />
+              <Route path="/trophies" element={<TrophyRoom />} />
+              <Route path="/vpr" element={<VPR />} />
+              <Route path="/skills" element={<SkillAnalytics />} />
+              <Route path="/tactics" element={<Tactics />} />
+              <Route path="/development" element={<Development />} />
+              <Route path="/identity" element={<Identity />} />
+              <Route path="/injury" element={<Injury />} />
+              {/* Legacy routes — duplicates / removed feature, keep as redirects so bookmarks don't 404 */}
+              {/* The workout screen, back as LOG ONLY (2026-10-08).
+                  
+                  The screen deleted on 2026-10-05 could start a session as well
+                  as record one, and starting one is a promise this build cannot
+                  keep: no location permission is declared, so a live workout had
+                  no distance and no route. It is restored for the half that
+                  works — typing in a session that has already happened — and
+                  nothing in it starts, times or tracks anything. */}
+              <Route path="/workouts" element={<Workouts />} />
+              <Route path="/stats" element={<Navigate to="/metrics" replace />} />
+              <Route path="/load" element={<Navigate to="/metrics" replace />} />
+              {/* Cross-Sport Analysis has no screen in this checkout: the
+                  lazy import named a file that does not exist, which broke the
+                  production bundle outright. Until the screen is restored, the
+                  route redirects to the analytics hub that carries the load
+                  and per-sport readings, so an old link still lands somewhere
+                  real instead of failing to load a chunk. */}
+              <Route path="/cross-sport" element={<Navigate to="/insights" replace />} />
+              <Route path="/competition" element={<Navigate to="/events" replace />} />
+              {/* Removed 2026-10-08: surfaces that were broken, empty or
+                  pointless in a closed test. Redirects rather than 404s, so an
+                  installed app's shortcut or an old shared link still lands
+                  somewhere real: Compete for rankings, Form Analysis for
+                  technique.
 
-                    The screen deleted on 2026-10-05 could start a session as well
-                    as record one, and starting one is a promise this build cannot
-                    keep: no location permission is declared, so a live workout had
-                    no distance and no route. It is restored for the half that
-                    works — typing in a session that has already happened — and
-                    nothing in it starts, times or tracks anything. */}
-                <Route path="/workouts" element={<Workouts />} />
-                <Route path="/stats" element={<Navigate to="/metrics" replace />} />
-                <Route path="/load" element={<Navigate to="/metrics" replace />} />
-                {/* Cross-Sport Analysis is a real screen as of 2026-10-12. It
-                    was a redirect to /training while the unlock it sold had no
-                    page behind it — the price was in the Market and the tab the
-                    athlete had bought never appeared. The route is gated in
-                    ROUTE_UNLOCKS, so it is paid-for and reachable only by an
-                    athlete who owns it or is on Unlimited. */}
-                <Route path="/cross-sport" element={<CrossSportAnalysis />} />
-                <Route path="/competition" element={<Navigate to="/events" replace />} />
-                {/* Removed 2026-10-08: surfaces that were broken, empty or
-                    pointless in a closed test. Redirects rather than 404s, so an
-                    installed app's shortcut or an old shared link still lands
-                    somewhere real: Compete for rankings, Form Analysis for
-                    technique.
+                  /ar-overlay is the clearest case — it draws a camera overlay
+                  and the APK declares no camera permission, so on the only
+                  platform this build ships to it could never have worked. */}
+              <Route path="/feed" element={<Navigate to="/" replace />} />
+              {/* Friends was a redirect home between 2026-10-08's dead-code
+                  pass and this restore. The redirect is replaced rather than
+                  kept, because a redirect to "/" is what made the Goals card
+                  and every shared friend link a dead end. */}
+              <Route path="/friends" element={<Friends />} />
+              <Route path="/friends/:friendId" element={<FriendChat />} />
+              <Route path="/communities" element={<Navigate to="/" replace />} />
+              <Route path="/leaderboard" element={<Navigate to="/compete" replace />} />
+              <Route path="/opponents" element={<Navigate to="/compete" replace />} />
+              <Route path="/ar-overlay" element={<Navigate to="/form" replace />} />
 
-                    /ar-overlay is the clearest case — it draws a camera overlay
-                    and the APK declares no camera permission, so on the only
-                    platform this build ships to it could never have worked. */}
-                <Route path="/feed" element={<Navigate to="/" replace />} />
-                {/* Friends was a redirect home between 2026-10-08's dead-code
-                    pass and this restore. The redirect is replaced rather than
-                    kept, because a redirect to "/" is what made the Goals card
-                    and every shared friend link a dead end. */}
-                <Route path="/friends" element={<Friends />} />
-                <Route path="/friends/:friendId" element={<FriendChat />} />
-                <Route path="/communities" element={<Navigate to="/" replace />} />
-                <Route path="/leaderboard" element={<Navigate to="/compete" replace />} />
-                <Route path="/opponents" element={<Navigate to="/compete" replace />} />
-                <Route path="/ar-overlay" element={<Navigate to="/form" replace />} />
-                
-                {/* Removed: the standalone cross-training tab. Cross-training is
-                    prescribed inside the plan itself from the equipment answered
-                    at setup, so these land on the plan. Same for /routines. */}
-                <Route path="/cross-training" element={<Navigate to="/training" replace />} />
-                <Route path="/learning" element={<Learning />} />
-                <Route path="/learning/:lessonId" element={<LearningArticle />} />
-                <Route path="/metrics" element={<MetricsHub />} />
-                <Route path="/compare" element={<Compare />} />
-                <Route path="/avatar" element={<Avatar />} />
-                <Route path="/goals" element={<Goals />} />
-                {/* Guardian access. One screen for both directions of the link:
-                    an athlete who shares their training with a parent, and that
-                    parent reading the sanitized summary of it. The permissions
-                    themselves are enforced in Postgres, not here. */}
-                <Route path="/guardian" element={<Guardian />} />
-                {/* The Wearables screen is gone: Health Connect lives in a sheet now
-                    (HealthConnectPrompt). Old /health-sync links redirect to Recover
-                    rather than 404, so a stale link or shortcut lands somewhere real. */}
-                <Route
-                  path="/health-sync"
-                  element={
-                    <Navigate to="/recover" replace />
-                  }
-                />
-                {/* "Your Vaylo Starting Analysis". Deliberately NOT behind the
-                    wearableSync flag: the analysis reads whatever training is in
-                    the account, and Health Connect imports land in it too. */}
-                <Route path="/starting-analysis" element={<StartingAnalysis />} />
-                {/* Phase 6: the refined analytics reading, and the "why" behind
-                    every recommendation it shows. Reads any training, so it is
-                    not behind the wearableSync flag either. */}
-                <Route path="/insights" element={<Insights />} />
-                <Route path="/pbs" element={<PBs />} />
-                <Route path="/routines" element={<Navigate to="/training" replace />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/profile/notifications" element={<NotificationPrefs />} />
-                <Route path="/referrals" element={<Referrals />} />
-                {/* Coach marketplace is launch-gated (featureFlags.ts). When off,
-                    every route redirects to the Market so old links never 404.
+              {/* Removed: the standalone cross-training tab. Cross-training is
+                  prescribed inside the plan itself from the equipment answered
+                  at setup, so these land on the plan. Same for /routines. */}
+              <Route path="/cross-training" element={<Navigate to="/training" replace />} />
+              <Route path="/learning" element={<Learning />} />
+              <Route path="/learning/:lessonId" element={<LearningArticle />} />
+              <Route path="/metrics" element={<MetricsHub />} />
+              <Route path="/compare" element={<Compare />} />
+              <Route path="/goals" element={<Goals />} />
+              {/* Guardian access. One screen for both directions of the link:
+                  an athlete who shares their training with a parent, and that
+                  parent reading the sanitized summary of it. The permissions
+                  themselves are enforced in Postgres, not here. */}
+              <Route path="/guardian" element={<Guardian />} />
+              {/* The Wearables screen is gone: Health Connect lives in a sheet now
+                  (HealthConnectPrompt). Old /health-sync links redirect to Recover
+                  rather than 404, so a stale link or shortcut lands somewhere real. */}
+              <Route
+                path="/health-sync"
+                element={
+                  <Navigate to="/recover" replace />
+                }
+              />
+              {/* "Your Vaylo Starting Analysis". Deliberately NOT behind the
+                  wearableSync flag: the analysis reads whatever training is in
+                  the account, and Health Connect imports land in it too. */}
+              <Route path="/starting-analysis" element={<StartingAnalysis />} />
+              {/* Phase 6: the refined analytics reading, and the "why" behind
+                  every recommendation it shows. Reads any training, so it is
+                  not behind the wearableSync flag either. */}
+              <Route path="/insights" element={<Insights />} />
+              <Route path="/pbs" element={<PBs />} />
+              <Route path="/routines" element={<Navigate to="/training" replace />} />
+              <Route path="/notifications" element={<NotificationPrefs />} />
 
-                    Coach studio is the coach's own side — set a price, publish a
-                    plan, deliver what was bought. It is inside the same gate and
-                    is NOT advertised anywhere while the flag is off, which is what
-                    makes "built but hidden" true for the app half of this feature
-                    rather than aspirational. */}
-                {isFlagOn("coachMarketplace") ? (
-                  <>
-                    <Route path="/market/become-creator" element={<BecomeCreator />} />
-                    <Route path="/marketplace" element={<CreatorMarketplace />} />
-                    <Route path="/coach-studio" element={<CoachStudio />} />
-                    {/* The one payment Stripe takes, on the web only. The website's
-                        coach page links here; the Android shell shows where to do
-                        it instead of opening a payment sheet. */}
-                    <Route path="/coach-signup" element={<CoachSignup />} />
-                  </>
-                ) : (
-                  <>
-                    <Route path="/market/become-creator" element={<Navigate to="/market" replace />} />
-                    <Route path="/marketplace" element={<Navigate to="/market" replace />} />
-                    <Route path="/coach-studio" element={<Navigate to="/market" replace />} />
-                    <Route path="/coach-signup" element={<Navigate to="/market" replace />} />
-                  </>
-                )}
-                
-                {/* Admin screens verify the role server-side before rendering
-                    anything (the tables' RLS was already admin-only; this
-                    replaces silent query errors with an explicit no-access
-                    state). */}
-                <Route path="/admin/pricing" element={<RequireAdmin><AdminPricing /></RequireAdmin>} />
-                <Route path="/admin/rewards" element={<RequireAdmin><AdminRewards /></RequireAdmin>} />
-                <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
-                <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
-                <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
-                {/* Reached from the emailed secure link (/admin/refunds?case=RF-…).
-                    RequireAdmin is the visible gate; refund-admin re-checks the
-                    role on every request, so the URL alone grants nothing. */}
-                <Route path="/admin/refunds" element={<RequireAdmin><AdminRefunds /></RequireAdmin>} />
-                <Route path="/settings/purchases" element={<PurchasesRefunds />} />
-                <Route path="/collection" element={<Collection />} />
-                <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
-                <Route path="/pipeline" element={<RequireAdmin><PipelineDashboard /></RequireAdmin>} />
-                <Route path="/settings/delete-account" element={<DeleteAccount />} />
-                <Route path="/legal" element={<Legal />} />
-                <Route path="/safety" element={<Safety />} />
+              {/* Coach marketplace is launch-gated (featureFlags.ts). When off,
+                  every route redirects to the Market so old links never 404.
+
+                  Coach studio is the coach's own side — set a price, publish a
+                  plan, deliver what was bought. It is inside the same gate and
+                  is NOT advertised anywhere while the flag is off, which is what
+                  makes "built but hidden" true for the app half of this feature
+                  rather than aspirational. */}
+              {isFlagOn("coachMarketplace") ? (
+                <>
+                  {/* The one payment Stripe takes, on the web only. The website's
+                      coach page links here; the Android shell shows where to do
+                      it instead of opening a payment sheet. */}
+                </>
+              ) : (
+                <>
+                  <Route path="/market/become-creator" element={<Navigate to="/market" replace />} />
+                  <Route path="/marketplace" element={<Navigate to="/market" replace />} />
+                  <Route path="/coach-studio" element={<Navigate to="/market" replace />} />
+                  <Route path="/coach-signup" element={<Navigate to="/market" replace />} />
+                </>
+              )}
+
+              {/* Admin screens verify the role server-side before rendering
+                  anything (the tables' RLS was already admin-only; this
+                  replaces silent query errors with an explicit no-access
+                  state). */}
+              <Route path="/admin/pricing" element={<RequireAdmin><AdminPricing /></RequireAdmin>} />
+              <Route path="/admin/rewards" element={<RequireAdmin><AdminRewards /></RequireAdmin>} />
+              <Route path="/admin/event-packs" element={<RequireAdmin><AdminEventPacks /></RequireAdmin>} />
+              <Route path="/admin/waitlist" element={<RequireAdmin><AdminWaitlist /></RequireAdmin>} />
+              <Route path="/admin/errors" element={<RequireAdmin><AdminErrorReports /></RequireAdmin>} />
+              {/* Reached from the emailed secure link (/admin/refunds?case=RF-…).
+                  RequireAdmin is the visible gate; refund-admin re-checks the
+                  role on every request, so the URL alone grants nothing. */}
+              <Route path="/admin/refunds" element={<RequireAdmin><AdminRefunds /></RequireAdmin>} />
+              <Route path="/settings/purchases" element={<PurchasesRefunds />} />
+              {/* StreakCard links here; without the route the card opened a 404. */}
+              <Route path="/streaks" element={<Streaks />} />
+              <Route path="/purchases" element={<Navigate to="/settings/purchases" replace />} />
+              {/* Cosmetics were removed from the product. The pages still
+                  exist as source, but no route or navigation entry reaches
+                  them; old links land back on the profile. */}
+              <Route path="/collection" element={<Navigate to="/profile" replace />} />
+              <Route path="/avatar" element={<Navigate to="/profile" replace />} />
+              <Route path="/ai-dev" element={<RequireAdmin><AIDev /></RequireAdmin>} />
+              <Route path="/pipeline" element={<RequireAdmin><PipelineDashboard /></RequireAdmin>} />
+              <Route path="/settings/delete-account" element={<DeleteAccount />} />
+              <Route path="/legal" element={<Legal />} />
+              <Route path="/safety" element={<Safety />} />
 
 
-                <Route path="/challenges" element={<Challenges />} />
-                <Route path="/challenges/:id" element={<ChallengeDetail />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-              </Routes>
+              <Route path="/challenges" element={<Challenges />} />
+              <Route path="/challenges/:id" element={<ChallengeDetail />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+            </Routes>
 
-            </Suspense>
-            <PaywallModal />
-            <CreditTopUpSheet />
-            <MilestoneCelebration />
+          </Suspense>
+          <MilestoneCelebration />
           </SubscriptionProvider>
         </AuthProvider>
       </Router>

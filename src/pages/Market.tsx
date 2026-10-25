@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
-  Zap,  Coins,
+  Zap,
   X,
   Infinity as InfinityIcon,
+  Gift,
+  Flame,
   Clock,
-  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,30 +21,30 @@ import {
   FREE_GRANT_UNAVAILABLE_MESSAGE,
 } from "@/lib/billing";
 import PurchaseConfirmSheet, { type ConfirmablePurchase } from "@/components/market/PurchaseConfirmSheet";
-import { totalCoins, totalCredits } from "@/lib/marketValue";
-import type { CoinBundleConfig } from "@/config/coins";
+import { totalCredits } from "@/lib/marketValue";
 import { freeCreditsActive, CLOSED_TESTING } from "@/config/closedTesting";
-import { formatNumber } from "@/i18n/format";
 import { disclaimerShort } from "@/config/disclaimers";
 import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import {
   loadEconomyConfig,
+  applyOffer,
+  getDoubleCreditsOffer,
   formatLocalPrice,
   trackEconomyEvent,
   type CreditPack,
   type SpecialOffer,
 } from "@/lib/creditEconomy";
 import MarketSectionNav from "@/components/market/MarketSectionNav";
+import { setDisplayCurrency, useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { MARKET_SECTIONS, type MarketSection } from "@/config/marketSections";
 import { isFlagOn } from "@/config/featureFlags";
 import { ageBand } from "@/lib/age";
 import CreditPacksSection from "@/components/market/CreditPacksSection";
-import CoinBundlesSection from "@/components/market/CoinBundlesSection";
 import SubscriptionsSection from "@/components/market/SubscriptionsSection";
 import LifetimeSection from "@/components/market/LifetimeSection";
 import CoachingSection from "@/components/market/CoachingSection";
 import CreditCostsList from "@/components/market/CreditCostsList";
-import UnlocksSection from "@/components/market/UnlocksSection";
+import FamilyPickBanner from "@/components/market/FamilyPickBanner";
 
 /** Shown in place of a purchasing section when the athlete cannot buy. */
 /** Shown to an under-18 account instead of a block. */
@@ -91,6 +92,9 @@ const Market = () => {
     currency: "USD",
     tier_code: "A",
   });
+  // The athlete's explicit choice wins over the country-derived default, and
+  // re-renders immediately when they change it in Profile.
+  const displayCurrency = useDisplayCurrency(region.currency);
   type BasketRow = {
     id: string;
     product_id: string;
@@ -118,50 +122,47 @@ const Market = () => {
           .select("currency")
           .eq("user_id", user.id)
           .maybeSingle();
-        if (settings?.currency) regionValue = { ...regionValue, currency: settings.currency };
+        if (settings?.currency) {
+          regionValue = { ...regionValue, currency: settings.currency };
+          setDisplayCurrency(settings.currency);
+        }
       }
       setRegion(regionValue);
       setLoading(false);
       trackEconomyEvent({ event_type: "view" });
     })();
     if (user) {
-      // Basket rows carry exactly what BasketRow reads below (coins/bonus on
-      // screen come from the coin-bundle event payload, not this table); the
-      // generated types confirm the schema. "*" pulled every column per shop
-      // visit for nothing (audit finding 3.1).
+      // Basket rows carry exactly what BasketRow reads below; the generated
+      // types confirm the schema. "*" pulled every column per shop visit for
+      // nothing (audit finding 3.1).
       supabase.from("basket_items").select("id, product_id, product_type, product_name, price_cents").eq("user_id", user.id).then(({ data }) => setBasket(data || []));
     }
   }, [user]);
 
-  // Coin bundles dispatch through the same unified basket → process-purchase path.
-  // Subscribed once: the handler reads the basket through a ref so it never
-  // closes over a stale copy (re-subscribing on every basket change meant a
-  // burst of bundle events could add the same row twice).
   const basketRef = useRef(basket);
   basketRef.current = basket;
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const b = (e as CustomEvent).detail as { id: string; coins: number; bonus?: number; price_cents: number };
-      if (!b) return;
-      void addToBasket({
-        id: b.id,
-        name: `${b.coins} Coins${b.bonus ? ` + ${b.bonus}` : ""}`,
-        price_cents: b.price_cents,
-        type: "coins",
-        credits: b.coins,
-        bonus: b.bonus ?? 0,
-      });
-      setShowBasket(true);
-    };
-    window.addEventListener("vaylo:add-coin-bundle", handler);
-    return () => window.removeEventListener("vaylo:add-coin-bundle", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+  const doubleOffer = useMemo(() => getDoubleCreditsOffer(offers), [offers]);
+  // Starter offers must be live rows: an expired row is hidden, not shown.
+  const starterOffer = useMemo(
+    () => offers.find((o) => o.offer_type === "starter" && (!o.ends_at || new Date(o.ends_at) > new Date())) ?? null,
+    [offers]
+  );
 
   const enhancedPacks = useMemo(
-    () => packs.map((p) => p),
-    [packs],
+    () => packs.map((p) => (doubleOffer ? applyOffer(p, doubleOffer) : p)),
+    [packs, doubleOffer],
   );
+
+  // The pack the starter offer is built on, resolved once. The row below used
+  // to call `packs.find` four times inside its own markup, which meant four
+  // lookups and four chances for the displayed total to disagree with the
+  // credits actually granted on tap.
+  const starterPack = useMemo(
+    () => (starterOffer ? packs.find((p) => p.id === starterOffer.pack_id) ?? null : null),
+    [packs, starterOffer],
+  );
+  const starterCredits = (starterPack?.credits ?? 0) + (starterPack?.bonus ?? 0);
 
   /** Add to basket — optimistically. */
   const addToBasket = (item: {
@@ -246,18 +247,8 @@ const Market = () => {
     })();
   };
 
-  // One checkout in flight, ever. The server (process-purchase) is the real
-  // duplicate guard — a replayed request returns "This purchase has already
-  // been applied" — but the client must not even send the double: a rapid
-  // second tap used to fire a second purchaseItem call and, at best, show two
-  // receipts for one basket. Backed by the same disabled-button treatment the
-  // confirm sheet already uses.
-  const [checkingOut, setCheckingOut] = useState(false);
-
   const checkout = async () => {
-    if (!user || basket.length === 0 || checkingOut) return;
-    setCheckingOut(true);
-    try {
+    if (!user || basket.length === 0) return;
     // Through the billing seam (src/lib/billing.ts) so store billing can replace
     // web checkout later without touching this page. Same payload as before.
     const result = await purchaseItems(
@@ -317,12 +308,6 @@ const Market = () => {
         ? `+${credits}${bonus > 0 ? ` & ${bonus} bonus` : ""} credits added${wasFree ? " — nothing was charged" : ""}`
         : "Unlocked.",
     });
-    } finally {
-      // Released on EVERY path — success, refusal, cancellation — so a failed
-      // checkout can always be retried, and a retry while one is already in
-      // flight is dropped here rather than sent twice to the server.
-      setCheckingOut(false);
-    }
   };
 
   const basketTotal = basket.reduce((s, b) => s + b.price_cents, 0);
@@ -334,7 +319,7 @@ const Market = () => {
   // or a price column it is long enough to crush the card's layout, which the
   // first pass at this screen proved in the browser.
   const buyPriceLabel = (cents: number) =>
-    freeCreditsActive() ? CLOSED_TESTING.shortLabel : priceLabelFor(formatLocalPrice(cents, region.currency));
+    freeCreditsActive() ? CLOSED_TESTING.shortLabel : priceLabelFor(formatLocalPrice(cents, displayCurrency));
 
   // Section views and confirm-sheet opens are the two funnel steps the existing
   // view/basket/purchase events could not show, so the drop-off per section is
@@ -353,18 +338,6 @@ const Market = () => {
       getsLine: `+${totalCredits(pack)} credits added instantly${pack.bonus > 0 ? ` (${pack.credits} + ${pack.bonus} bonus)` : ""}`,
       priceLabel: buyPriceLabel(pack.price_cents),
       priceCents: pack.price_cents,
-    });
-  };
-
-  const buyCoinBundle = (bundle: CoinBundleConfig) => {
-    trackEconomyEvent({ event_type: "confirm_open", pack_id: bundle.id, metadata: { section: "coins" } });
-    setConfirmItem({
-      productId: bundle.id,
-      productType: "coins",
-      name: bundle.label ? `${bundle.label} — ${formatNumber(bundle.coins)} Coins` : `${formatNumber(bundle.coins)} Coins`,
-      getsLine: `+${formatNumber(totalCoins(bundle))} Coins added instantly${bundle.bonus > 0 ? ` (${formatNumber(bundle.coins)} + ${formatNumber(bundle.bonus)} bonus)` : ""}`,
-      priceLabel: buyPriceLabel(bundle.price_cents),
-      priceCents: bundle.price_cents,
     });
   };
 
@@ -400,7 +373,7 @@ const Market = () => {
                 className="mt-1 text-sm text-muted-foreground"
               >
                 {/* The shop's own blurb must not advertise a section the flag hides: */}
-                Credits, plans{isFlagOn("coachMarketplace") ? " and coaching" : " and coins"} — all in one place.
+                Credits, plans{isFlagOn("coachMarketplace") ? " and coaching" : ""} — all in one place.
               </motion.p>
             </div>
             <div>
@@ -444,12 +417,6 @@ const Market = () => {
               <span className="text-sm font-bold text-primary">{profile?.credits ?? 0}</span>
               <span className="text-xs text-muted-foreground">credits</span>
             </span>
-            <span className="h-4 w-px bg-border" />
-            <span className="inline-flex items-center gap-1.5">
-              <Coins size={16} className="text-energy" />
-              <span className="text-sm font-bold text-energy">{profile?.coins ?? 0}</span>
-              <span className="text-xs text-muted-foreground">Coins</span>
-            </span>
             {profile?.infinite_credits && (
               <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-electric-purple/10 px-2 py-0.5 text-[12px] font-bold text-electric-purple">
                 <InfinityIcon size={10} /> UNLIMITED
@@ -488,10 +455,10 @@ const Market = () => {
                               ? (
                               <>
                                 <span className="text-success font-medium">{CLOSED_TESTING.label}</span> ·
-                                {formatLocalPrice(item.price_cents, region.currency)} after closed testing
+                                {formatLocalPrice(item.price_cents, displayCurrency)} after closed testing
                               </>
                             )
-                              : formatLocalPrice(item.price_cents, region.currency)}
+                              : formatLocalPrice(item.price_cents, displayCurrency)}
                         </p>
                       </div>
                       <motion.button
@@ -512,12 +479,12 @@ const Market = () => {
                     <span className="text-end">
                       <span className="font-display text-lg font-bold text-success">Free</span>
                       <span className="block text-[11px] text-muted-foreground">
-                        {formatLocalPrice(basketTotal, region.currency)} after closed testing
+                        {formatLocalPrice(basketTotal, displayCurrency)} after closed testing
                       </span>
                     </span>
                   ) : (
                     <span className="font-display text-lg font-bold text-foreground">
-                      {formatLocalPrice(basketTotal, region.currency)}
+                      {formatLocalPrice(basketTotal, displayCurrency)}
                     </span>
                   )}
                 </div>
@@ -529,14 +496,9 @@ const Market = () => {
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={checkout}
-                  disabled={checkingOut}
-                  className="w-full rounded-xl bg-primary py-3 font-bold text-primary-foreground disabled:opacity-60"
+                  className="w-full rounded-xl bg-primary py-3 font-bold text-primary-foreground"
                 >
-                  {checkingOut ? (
-                    <span className="inline-flex items-center justify-center gap-2">
-                      <Loader2 size={14} className="animate-spin" /> Processing…
-                    </span>
-                  ) : freeCreditsActive() ? "Add to my account — free" : "Checkout"}
+                  {freeCreditsActive() ? "Add to my account — free" : "Checkout"}
                 </motion.button>
                 {freeCreditsActive() && (
                   <p className="mt-2 text-center text-[11px] text-muted-foreground">
@@ -548,16 +510,59 @@ const Market = () => {
           </motion.div>
         )}</AnimatePresence>
 
+      {/* Live promo — one quiet line, stopped shouting over products */}
+      {isAdult && doubleOffer && section === "packs" && (
+        <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-2xl border border-border bg-card px-4 py-3">
+          <Flame size={16} className="shrink-0 text-energy" />
+          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">{doubleOffer.title}</span> — {doubleOffer.description}
+          </p>
+          <span className="shrink-0 text-[12px] font-bold text-energy">LIVE</span>
+        </div>
+      )}
+
       {/* Section nav — clearer touch targets, better visual hierarchy */}
       <MarketSectionNav active={section} onChange={changeSection} />
       <p className="px-5 pb-4 pt-2 text-xs text-muted-foreground">{activeSection.blurb}</p>
+
+      {/* Starter offer — one quiet row, no purple pill, no shouting */}
+      {isAdult && starterOffer && section === "packs" && (
+        <div className="mb-4 px-5">
+          <motion.button
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={() => addToBasket({
+              id: `offer_${starterOffer.slug}`,
+              name: starterOffer.title,
+              price_cents: starterOffer.price_cents ?? 0,
+              type: "offer",
+              credits: starterCredits,
+              bonus: starterOffer.bonus_flat,
+            })}
+            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-start transition-colors hover:border-primary/40"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Gift size={15} className="text-primary" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{starterOffer.title}</span>
+              <span className="block truncate text-[12px] text-muted-foreground">
+                <Zap size={10} className="mr-1 inline text-primary" />
+                {starterCredits} credits{starterOffer.bonus_flat > 0 ? ` + ${starterOffer.bonus_flat} bonus` : ""} · once per account
+              </span>
+            </span>
+            <span className="shrink-0 text-sm font-bold">{formatLocalPrice(starterOffer.price_cents ?? 0, displayCurrency)}</span>
+          </motion.button>
+        </div>
+      )}
 
       {/* No age block on these sections: purchasing is open to every age, and
           the under-18 case is handled by an informational note inside each section
           (GuardianNote) rather than by hiding the shop. Sponsored brand content is
           still gated to 18+ in the DATABASE, which is the control that actually
           matters for advertising. */}
-      {!isAdult && (section === "unlocks" || section === "coins" || section === "subscriptions" || section === "lifetime" || section === "coaching") && (
+      {!isAdult && (section === "subscriptions" || section === "lifetime" || section === "coaching") && (
         <div className="px-5 pt-4"><GuardianNote /></div>
       )}
 
@@ -576,7 +581,7 @@ const Market = () => {
                   — the economy should never be a mystery. */}
               <CreditPacksSection
                 packs={enhancedPacks}
-                currency={region.currency}
+                currency={displayCurrency}
                 loading={loading}
                 onAdd={addPack}
                 onBuy={buyCreditPack}
@@ -594,18 +599,14 @@ const Market = () => {
               </details>
             </>
           )}
-          {section === "unlocks" && <UnlocksSection />}
-          {section === "coins" && (
-            <CoinBundlesSection currency={region.currency} onBuy={buyCoinBundle} priceLabel={buyPriceLabel} />
-          )}
-          {section === "subscriptions" && <SubscriptionsSection />}
-          {section === "lifetime" && <LifetimeSection />}
+          {section === "subscriptions" && <SubscriptionsSection currency={displayCurrency} />}
+          {section === "lifetime" && <LifetimeSection currency={displayCurrency} />}
           {section === "coaching" && isFlagOn("coachMarketplace") && <CoachingSection />}
         </motion.div>
       </AnimatePresence>
 
       <p className="px-5 pt-6 text-center text-[12px] text-muted-foreground">
-        Prices shown in {region.currency}. Credits unlock premium features across Vaylo Sports.
+        Prices shown in {displayCurrency}. Credits unlock premium features across Vaylo Sports.
       </p>
 
       {/* The two-tap buy for single packs and bundles. The basket remains for

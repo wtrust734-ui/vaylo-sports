@@ -29,7 +29,10 @@ export const SectionHeader = forwardRef<
       ref={ref}
       className={`flex items-baseline justify-between ${pad} ${gap}`}
     >
-      <div>
+      {/* `min-w-0` so a title that needs two lines wraps inside its own column
+          instead of pushing the action pill off the right edge — the fault this
+          row had with long translated titles. */}
+      <div className="min-w-0">
         <h2
           className={`font-display font-semibold tracking-tight leading-snug ${titleSize}`}
         >
@@ -50,7 +53,7 @@ export const SectionHeader = forwardRef<
           type="button"
           onClick={onAction}
           aria-label={actionLabel}
-          className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
         >
           {actionLabel}
           <ChevronRight size={12} aria-hidden />

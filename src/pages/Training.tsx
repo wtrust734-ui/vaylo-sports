@@ -1,2604 +1,2218 @@
-import { getAiLocale } from "@/i18n";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { motion, useInView, AnimatePresence } from "framer-motion";
-import { Dumbbell, TrendingUp, Zap, ChevronRight, Plus, X, Target, Activity, AlertTriangle, Eye, Calendar, Edit3, ChevronDown, ChevronUp, Trash2, SkipForward, PauseCircle, Check, Undo2, Info, WifiOff } from "lucide-react";
-import { updateOrQueue } from "@/lib/offlineQueue";
-import { cacheAgeLabel, cachePlans, cacheReadPlans } from "@/lib/offlineCache";
-import { getRegionCountry, sportDisplayName } from "@/i18n/region";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Eye,
+  Loader2,
+  Plus,
+  Sparkles,
+  Target,
+  Trash2,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { spendCredits, creditCost, spendErrorMessage } from "@/lib/credits";
-import PlanFundingNotice from "@/components/training/PlanFundingNotice";
-import { useSpendWithTopUp } from "@/hooks/useSpendWithTopUp";
-import { edgeErrorMessage } from "@/lib/edgeErrors";
-import { Tables, type Json } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
+import { getAgeCaps } from "@/lib/athleteDossier";
 import { getPrimarySport } from "@/lib/profile";
-import { getAgeCaps, buildClientDossier } from "@/lib/athleteDossier";
-import { LIMITER_QUESTIONS, analyzeLimiterTest, type LimiterAnalysis } from "@/lib/limiterTest";
+import { analyzeLimiterTest, LIMITER_QUESTIONS, recoveryDayOptions, type LimiterAnalysis, type LimiterCategory } from "@/lib/limiterTest";
 import type { MetricRow } from "@/lib/performance";
-import { EQUIPMENT, describeEquipment, normaliseEquipment, type EquipmentId } from "@/config/equipment";
+import {
+  EQUIPMENT,
+  describeEquipment,
+  normaliseEquipment,
+  type EquipmentId,
+} from "@/config/equipment";
 import { DISCLAIMERS } from "@/config/disclaimers";
-import { useAdaptiveSchedule } from "@/hooks/useAdaptiveSchedule";
-import { sessionStatusMeta } from "@/lib/lifeEvents";
-import { useActiveBreak } from "@/hooks/useActiveBreak";
+import { asPlanWeeks, type PlanSessionLike, type PlanWeekLike } from "@/lib/planSchedule";
+import {
+  generatePlanData,
+  planConstraints,
+  type DisabilitySupport,
+  type PlanData,
+  type PlanQuiz,
+} from "@/lib/localPlanBuilder";
+import PlanBuildProgress from "@/components/training/PlanBuildProgress";
 import ActiveBreakBanner from "@/components/ActiveBreakBanner";
-import { breakBriefForGenerator, rebuildPlanForBreak, undoPlanRebuild } from "@/lib/adaptivePlanning";
-import { recordPlanGenerationMs } from "@/lib/planTiming";
-import PlanWaitEstimate from "@/components/training/PlanWaitEstimate";
-import { summarizeInjuryImpact, type InjuryRestriction } from "@/lib/injuryRestrictions";
-import { readRecoveryForPlan, type RecoveryReadResult } from "@/lib/recoveryPlanning";
-import type { AdjustmentDecision } from "@/lib/recoveryAdjust";
-import { explainDecision, explainWeek } from "@/lib/explanations";
-import { WhyBody } from "@/components/insights/WhyDisclosure";
-import PlanGenerationProgress from "@/components/training/PlanGenerationProgress";
-import { loadColumnsFor } from "@/lib/recoveryPlanning";
-import type { ReturnSessionMeta, ReturnWeekMeta } from "@/lib/planSchedule";
-import { flattenPlan } from "@/lib/planSchedule";
-import PlanExportButton from "@/components/training/PlanExportButton";
-import { notifyPlanCreated } from "@/lib/notificationTriggers";
-import { evaluateLogAgainstEvents } from "@/lib/eventTrophies";
-import { recordTimedPb, wallForEvaluation } from "@/lib/pbWall";
-import { triggerPbCelebration } from "@/components/PBCelebration";
-import { awardTrainingSession } from "@/lib/xp";
+import { useActiveBreak } from "@/hooks/useActiveBreak";
+import { PageHeader } from "@/components/layout/PageShell";
 
 type TrainingPlan = Tables<"training_plans">;
+type Screen = "home" | "limiter" | "setup" | "detail";
+type SetupSource = "standard" | "limiter";
 
-// Multi-goal: chips toggle on/off; the DB `goal` column stays a plain string,
-// so selections are comma-joined (generate-plan accepts ≤300 chars).
-const MAX_GOAL_LEN = 300;
-const joinGoals = (arr: string[]): string => {
-  const s = arr.join(", ");
-  return s.length > MAX_GOAL_LEN ? s.slice(0, MAX_GOAL_LEN).trimEnd().replace(/,\s*\S*$/, "") : s;
+const SPORTS = [
+  "Running",
+  "Gym/Weightlifting",
+  "Football",
+  "Basketball",
+  "Swimming",
+  "Cycling",
+  "Tennis",
+  "Rugby",
+  "Boxing",
+  "Athletics",
+  "Triathlon",
+  "CrossFit",
+  "General",
+];
+
+const GOALS = ["Speed", "Strength", "Endurance", "Fat Loss", "Muscle Gain", "Power", "Agility"];
+const LEVELS = ["beginner", "intermediate", "advanced"] as const;
+const DURATIONS = [4, 6, 8, 12];
+const TIME_OF_DAY = ["Morning", "Afternoon", "Evening", "Night"];
+const ENVIRONMENTS = ["Indoor", "Outdoor", "Mixed", "Altitude"];
+const SETUP_STEPS = ["Basics", "Availability", "Preferences", "Anything else?"];
+
+/**
+ * Only access needs a training plan can adapt around are listed here.
+ *
+ * A condition where exercise is contraindicated does not belong in a quiz: it
+ * belongs in a conversation with a clinician, and offering it as an option
+ * would imply the app can safely plan around it.
+ */
+const DISABILITY_OPTIONS: { id: DisabilitySupport; label: string; blurb: string }[] = [
+  { id: "none", label: "No disability or access need", blurb: "Nothing to adapt for." },
+  {
+    id: "mobility",
+    label: "Mobility / limb difference",
+    blurb: "Seated options, supported versions and low-impact conditioning.",
+  },
+  {
+    id: "chronic_pain_fatigue",
+    label: "Chronic pain or fatigue",
+    blurb: "Shorter sessions, more rest and a lower ceiling on intensity.",
+  },
+  {
+    id: "vision",
+    label: "Vision impairment",
+    blurb: "Familiar spaces, guided outdoor work and clear verbal cues.",
+  },
+  {
+    id: "hearing",
+    label: "Hearing impairment",
+    blurb: "Visual coaching cues and demonstrated, not shouted, instructions.",
+  },
+  {
+    id: "neurodivergent",
+    label: "Neurodivergent (e.g. ADHD, autism)",
+    blurb: "Short single-focus blocks and a written finish line.",
+  },
+  { id: "prefer_not_to_say", label: "Prefer not to say", blurb: "Skip the adaptation questions." },
+];
+
+const DISABILITY_LABEL: Record<DisabilitySupport, string> = {
+  none: "No disability or access need",
+  mobility: "Mobility / limb difference",
+  chronic_pain_fatigue: "Chronic pain or fatigue",
+  vision: "Vision impairment",
+  hearing: "Hearing impairment",
+  neurodivergent: "Neurodivergent",
+  prefer_not_to_say: "Prefer not to say",
 };
 
-const sportOptions = ["Running", "Gym/Weightlifting", "Football", "Basketball", "Swimming", "Cycling", "Tennis", "Rugby", "Boxing", "Athletics", "Triathlon", "CrossFit", "General"];
-const goalOptions = ["Speed", "Strength", "Endurance", "Fat Loss", "Muscle Gain", "Power", "Agility"];
-const levelOptions = ["beginner", "intermediate", "advanced"];
-const durationOptions = [4, 6, 8, 12];
+const isLimiterPlan = (plan: { goal?: string | null; title?: string | null }) =>
+  plan.goal?.startsWith("Fix:") || plan.title?.startsWith("Limiter Fix Plan");
 
-// ---------------------------------------------------------------------------
-// Today's read — Phase 3
-// ---------------------------------------------------------------------------
+const FOCUS_GROUPS = [
+  {
+    tier: "Easy",
+    items: ["General Fitness", "Mobility", "Flexibility", "Active Recovery", "Posture", "Core Basics"],
+  },
+  {
+    tier: "Intermediate",
+    items: ["Strength", "Endurance", "Muscle Gain", "Cardio Base", "Balance", "Technique", "Injury Prevention"],
+  },
+  {
+    tier: "Advanced",
+    items: ["Speed", "Power", "Agility", "Explosiveness", "VO2 Max", "Sport-Specific", "Plyometrics"],
+  },
+];
 
-/**
- * How each kind of read is coloured.
- *
- * The tone is the message: green means "your plan stands", amber means "do
- * less", red means "not today", and grey means "I don't know". An athlete
- * reading a colour before they read a sentence is reading it correctly, so the
- * colours are not decoration and none of them is used for a suggestion the
- * rules did not actually make.
- */
-const READ_TONE: Record<AdjustmentDecision["action"], { ring: string; chip: string; icon: typeof Activity }> = {
-  proceed: { ring: "border-success/25 bg-success/[0.06]", chip: "bg-success/10 text-success", icon: Check },
-  preserve: { ring: "border-border bg-muted/30", chip: "bg-muted text-muted-foreground", icon: Check },
-  reduce: { ring: "border-energy/25 bg-energy/[0.06]", chip: "bg-energy/10 text-energy", icon: TrendingUp },
-  swap: { ring: "border-energy/25 bg-energy/[0.06]", chip: "bg-energy/10 text-energy", icon: TrendingUp },
-  move: { ring: "border-energy/25 bg-energy/[0.06]", chip: "bg-energy/10 text-energy", icon: TrendingUp },
-  recover: { ring: "border-info/25 bg-info/[0.06]", chip: "bg-info/10 text-info", icon: Activity },
-  blocked: { ring: "border-destructive/25 bg-destructive/[0.06]", chip: "bg-destructive/10 text-destructive", icon: PauseCircle },
-  insufficient: { ring: "border-border bg-muted/30", chip: "bg-muted text-muted-foreground", icon: Info },
+const LIMITER_LABEL: Record<LimiterCategory, string> = {
+  speed: "Speed",
+  endurance: "Endurance",
+  strength: "Strength",
+  power: "Power",
+  mobility: "Mobility",
+  agility: "Change of direction",
+  technique: "Technique",
+  recovery: "Recovery",
 };
 
-/**
- * Today's read, in the athlete's own numbers.
- *
- * Three rules govern what this shows:
- *
- *   • Every suggestion carries its evidence. The "Why" is not optional detail
- *     behind a tap that nobody finds — it is the same sentence the rules built,
- *     listing only numbers the athlete entered or figures derived from their own
- *     sessions.
- *
- *   • "I don't know" gets real space. When there is nothing logged, the panel
- *     says the specification's sentence and says what would change it, rather
- *     than showing a confident default.
- *
- *   • Nothing here edits the plan. This is a suggestion with a reason, and the
- *     plan stays what the athlete approved — the same contract Phase 2's
- *     rebuild kept, and the reason the rules are deterministic rather than a
- *     prompt.
- */
-/**
- * The one line each decision gets in the collapsed list.
- *
- * "—" is not a label. A session the rules declined to touch says so in words,
- * because a dash next to a session reads as a bug or as a number that failed to
- * load, and neither is what happened.
- */
-const decisionLabel = (decision: AdjustmentDecision): string => {
-  switch (decision.action) {
-    case "blocked":
-      return "Not available";
-    case "insufficient":
-      return "Not enough information";
-    case "preserve":
-    case "proceed":
-      return "As planned";
-    default:
-      return decision.volumePct !== null ? `Keep ${decision.volumePct}%` : "Adjusted";
+/** The focus-area vocabulary the plan builder understands, keyed by limiter. */
+const LIMITER_FOCUS: Record<LimiterCategory, string> = {
+  speed: "Speed",
+  endurance: "Endurance",
+  strength: "Strength",
+  power: "Power",
+  mobility: "Mobility",
+  agility: "Agility",
+  technique: "Technique",
+  recovery: "Active Recovery",
+};
+
+const card = "rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[var(--vaylo-elev-card)]";
+const input =
+  "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-3 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+const chip = (active: boolean) =>
+  `press inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-semibold transition-colors ${
+    active
+      ? "border-primary/60 bg-primary/15 text-primary"
+      : "border-white/[0.08] bg-white/[0.03] text-foreground hover:border-primary/30 hover:bg-white/[0.06]"
+  }`;
+
+const joinGoals = (goals: string[]): string => {
+  const joined = goals.join(", ");
+  return joined.length > 300 ? joined.slice(0, 300).trimEnd().replace(/,\s*\S*$/, "") : joined;
+};
+
+/** `plan_data` is stored as JSON, and older rows wrap the weeks in `{ weeks }`. */
+function readWeeks(data: unknown): PlanWeekLike[] {
+  const direct = asPlanWeeks(data);
+  if (direct.length) return direct;
+  if (data && typeof data === "object") {
+    const wrapped = (data as { weeks?: unknown }).weeks;
+    return asPlanWeeks(wrapped);
   }
-};
+  return [];
+}
 
-const RecoveryTodayRead = ({
-  read,
-  loading,
-  expanded,
-  onToggle,
-}: {
-  read: RecoveryReadResult;
-  loading: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-}) => {
-  const today = read.facts.today;
-  // Phase 6: the week's own recommendation, in the shared shape. Null when the
-  // week is left alone, which is why it is rendered conditionally below.
-  const weekExplanation = explainWeek(read.week);
-  const decisions = read.week.decisions;
-  const todayDecision = decisions.find((d) => d.date === today) ?? null;
-  const thisWeek = decisions.filter((d) => d.date >= today && d.date <= addSixDays(today));
+function exerciseRows(value: unknown): { name: string; sets: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((row): row is Record<string, unknown> => !!row && typeof row === "object")
+    .map((row) => ({
+      name: typeof row.name === "string" ? row.name : "",
+      sets: typeof row.sets === "string" ? row.sets : "",
+    }))
+    .filter((row) => row.name.length > 0);
+}
 
-  const changed = thisWeek.filter(
-    (d) => d.action === "reduce" || d.action === "swap" || d.action === "move" || d.action === "recover",
-  );
-  const blocked = thisWeek.filter((d) => d.action === "blocked");
-  const headlineDecision = todayDecision ?? changed[0] ?? blocked[0] ?? null;
-
-  // A panel with nothing in it is worse than no panel: it reads as "nothing to
-  // report", which is not the same as "we have not looked".
-  if (!headlineDecision) {
-    if (read.week.uncertainty) {
-      return (
-        <div className={`rounded-xl border p-3 ${READ_TONE.insufficient.ring}`}>
-          <div className="flex items-start gap-2">
-            <Info size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold">Today's read</p>
-              <p className="text-[12px] text-muted-foreground mt-1">{read.week.uncertainty}</p>
-              <p className="text-[12px] text-muted-foreground/80 mt-1.5">
-                A recovery check-in and a few logged sessions are all it takes.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  }
-
-  const tone = READ_TONE[headlineDecision.action];
-  const Icon = tone.icon;
-  const label =
-    headlineDecision.action === "blocked"
-      ? "Not a training day"
-      : headlineDecision.action === "insufficient"
-        ? "Today's read"
-        : headlineDecision.action === "preserve"
-          ? "Leave it as it is"
-          : "Today's read";
-
-  return (
-    <div className={`rounded-xl border overflow-hidden ${tone.ring}`}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="w-full text-start p-3 flex items-start gap-2"
-      >
-        <Icon size={14} className="mt-0.5 shrink-0 text-current" />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold">{label}</span>
-            {headlineDecision.volumePct !== null && (
-              <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${tone.chip}`}>
-                keep {headlineDecision.volumePct}%
-              </span>
-            )}
-            {loading && <span className="text-[11px] text-muted-foreground">refreshing…</span>}
-          </span>
-          <span className="block text-[12px] text-muted-foreground mt-1">
-            {/* When the rules declined to act, the reason IS the message. Showing
-                "No recommendation yet" in the collapsed state and the actual
-                sentence behind a tap would mean the athlete learns nothing
-                about whether the app is working until they expand it. */}
-            {headlineDecision.action === "insufficient" && headlineDecision.uncertainty
-              ? headlineDecision.uncertainty
-              : headlineDecision.headline}
-          </span>
-        </span>
-        <ChevronDown size={14} className={`text-muted-foreground shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 space-y-2">
-
-
-          {/* §8: an adjustment computed offline is still useful, but only if the
-              athlete knows it is the last one the app managed to compute rather
-              than a fresh reading. */}
-          {read.fromCache && (
-            <p className="text-[12px] text-energy">
-              Saved from your last check-in — we could not reach your account just now, so nothing here has been recalculated.
-            </p>
-          )}
-
-          {thisWeek.length > 0 && (
-            <div className="space-y-1 pt-1">
-              {thisWeek.map((decision) => (
-                <div key={`${decision.date}-${decision.title}`} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
-                  <span className="min-w-0 truncate">
-                    {formatShortDay(decision.date)} · {decision.title}
-                  </span>
-                  <span className="shrink-0 text-end">{decisionLabel(decision)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {headlineDecision.uncertainty && (
-            <p className="text-[12px] text-muted-foreground italic">{headlineDecision.uncertainty}</p>
-          )}
-
-          {/* The reasons, spelled out, through the shared explanation framework.
-              The strings are the same ones the rules assembled — `explainDecision`
-              is built from this decision's own evidence — so the screen cannot
-              drift from what was decided, and the Training screen, the insights
-              screen and the weekly report now explain the same decision in the
-              same shape. §6's uncertainty sentence is rendered above and only
-              when the rules held back; the framework adds the "what this means"
-              line and the closing honesty about what this screen is. */}
-          {/* ONE explanation, at the level that has something to say.
-
-              The week's reduction comes first when there is one, because it is
-              the recommendation the athlete is being asked to act on and it
-              carries the number the rules averaged. Otherwise the session's own
-              reading is used, which is the case when a hard constraint or a
-              single recovery flag changed one session and left the week alone.
-
-              Rendering both was tried and removed: the week's reasons ARE the
-              union of the changed sessions' reasons, so today's session appears
-              in both lists and every bullet was printed twice. The reasons, the
-              rationale and the closing line all come from the shared framework
-              either way, so the two levels cannot disagree about anything. */}
-          <div className="pt-1">
-            <WhyBody
-              explanation={weekExplanation ?? explainDecision(headlineDecision)}
-              // The week's headline is not on screen anywhere else; the
-              // session's already is, in the row above.
-              showHeadline={!!weekExplanation}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-/** `YYYY-MM-DD` → "Mon 6 Oct", built by hand so it cannot shift by timezone. */
-const formatShortDay = (key: string): string => {
-  const [y, m, d] = key.split("-").map(Number);
-  if (!y || !m || !d) return key;
-  const date = new Date(y, m - 1, d);
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  // `getDay()` is Sunday-first; the plan grid is Monday-first.
-  const weekday = days[(date.getDay() + 6) % 7];
-  return `${weekday} ${date.getDate()} ${months[m - 1]}`;
-};
-
-/** Six days after a `YYYY-MM-DD` key — the end of the plan week containing it. */
-const addSixDays = (key: string): string => {
-  const [y, m, d] = key.split("-").map(Number);
-  const date = new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
-  date.setDate(date.getDate() + 6);
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${mm}-${dd}`;
-};
+function ageFromProfile(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth) return null;
+  const born = new Date(dateOfBirth);
+  if (Number.isNaN(born.getTime())) return null;
+  return Math.floor((Date.now() - born.getTime()) / 31_557_600_000);
+}
 
 const Training = () => {
-  const { user, profile, refreshProfile } = useAuth();
-  const { toast } = useToast();
-  const spendWithTopUp = useSpendWithTopUp();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
-  // Phase 8: where the plan list is rendering from. A network failure serves the
-  // device snapshot (cacheReadPlans) so an offline athlete sees the plans they
-  // have already opened once online — but it has to say so, and say when the
-  // snapshot was taken, so cached data is never presented as live data.
-  // plansLoadFailed means the read failed AND nothing is cached: here a distinct
-  // message is required, as "no plans yet" would be a false statement.
-  const [plansCachedInfo, setPlansCachedInfo] = useState<{ savedAt: number; stale: boolean } | null>(null);
-  const [plansLoadFailed, setPlansLoadFailed] = useState(false);
-  // The break banner on the plans view (audit B1): an active availability
-  // window is visible here, not only on /availability.
-  const activeBreak = useActiveBreak();
-  const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(false);
-  // The wait status: null = no wait in progress, a number = estimate in
-  // seconds. Drives the equal-status plan-generation card that appears
-  // over the whole screen while the AI is writing the plan (the overlay
-  // version at the top of this view, and the inline version on the
-  // planner page from the same state, so the athlete sees the same
-  // progress and the same honest claims in both places).
-  const [planGenerationProgress, setPlanGenerationProgress] =
-    useState<number | null>(null);
-  // The overlay traps the screen, so it must be dismissible: hiding drops to
-  // the inline card rather than cancelling (the request is already in flight
-  // and the plan lands either way). Once hidden we keep the inline card; if
-  // the wait then outlasts its estimate we bring the overlay back so the
-  // athlete is not left staring at a page with no status.
-  const [progressHidden, setProgressHidden] = useState(false);
-  // Whether a plan generation is currently in flight. Separate from the
-  // estimate so the overlay logic can tell a hidden-but-alive wait from
-  // "no wait at all" and bring the overlay back when it is still running
-  // but dragging past its estimate.
-  const [generationActive, setGenerationActive] = useState(false);
-  // Rendered inside every view of this screen (plans, limiter, log, detail):
-  // the request outlives the view it started from, and a fixed overlay that
-  // unmounts mid-wait would silently strand the athlete with no status.
-  // The overlay shows whenever a generation is alive and not hidden. When the
-  // athlete hides it we keep a live reference to the request so the overlay can
-  // be re-shown if the wait then drags past its estimate — leaving the athlete
-  // with a page and no status is the failure this screen exists to avoid.
-  const generationOverlay = generationActive && planGenerationProgress !== null && !progressHidden ? (
-    <PlanGenerationProgress
-      weeks={planGenerationProgress}
-      onHide={() => setProgressHidden(true)}
-    />
-  ) : null;
-  const generationInline =
-    generationActive && planGenerationProgress !== null && progressHidden ? (
-      <div className="px-5 pt-[var(--vaylo-screen-top)]">
-        <PlanGenerationProgress weeks={planGenerationProgress} variant="inline" />
-      </div>
-    ) : null;
-  const [activeView, setActiveView] = useState<"plans" | "limiter" | "log" | "planDetail">("plans");
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
+
+  const [screen, setScreen] = useState<Screen>("home");
   const [selectedPlan, setSelectedPlan] = useState<TrainingPlan | null>(null);
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
-  const [editingSession, setEditingSession] = useState<{ week: number; day: number } | null>(null);
-  const [editSessionTitle, setEditSessionTitle] = useState("");
-  const [editSessionDuration, setEditSessionDuration] = useState("");
-  const toolsRef = useRef(null);
-  const toolsInView = useInView(toolsRef, { once: true, margin: "-50px" });
+  const [expandedWeek, setExpandedWeek] = useState<number | null>(1);
 
-  // The adaptive record for whichever plan is open. Called at the top level
-  // and handed a null plan when none is open, because the plan-detail view is
-  // an early return further down and a hook cannot live inside it.
-  const adaptive = useAdaptiveSchedule(activeView === "planDetail" ? selectedPlan : null);
-
-  // Active injuries, read when a plan is open, so the plan detail can say
-  // which sessions the injury touches. One small read on plan open, not on
-  // every render; the flags themselves are computed in
-  // `src/lib/injuryRestrictions.ts` and rendered as review chips, never
-  // written back into the plan — existing plan data and history stay intact.
-  const [injuriesForFlags, setInjuriesForFlags] = useState<InjuryRestriction[]>([]);
-  useEffect(() => {
-    if (activeView !== "planDetail" || !user) return;
-    let alive = true;
-    supabase
-      .from("injury_logs")
-      .select("id, body_part, severity, status, notes")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        if (alive) setInjuriesForFlags((data ?? []) as unknown as InjuryRestriction[]);
-      }, () => {
-        // Unreadable is the same as none: this read only feeds display flags
-        // and must never block the plan or invent an error state the page
-        // does not otherwise have.
-      });
-    return () => {
-      alive = false;
-    };
-  }, [activeView, selectedPlan?.id, user]);
-
-  // If the athlete leaves the Training screen while a plan is being written, the
-  // request is already in flight on the server and cannot be cancelled from here
-  // — Supabase does not expose request cancellation for functions.invoke. So we
-  // do not abort anything. We only clear the local wait state so an unmounted
-  // component does not hold a stale overlay reference and so a returning athlete
-  // does not see a progress bar for a plan that is already being written.
-  useEffect(() => {
-    if (!generationActive) return;
-    return () => {
-      setGenerationActive(false);
-      setPlanGenerationProgress(null);
-      setProgressHidden(false);
-    };
-  }, [generationActive]);
-
-  // Phase 3: the recovery-aware read for this week. Deliberately read once per
-  // plan and once per recovery log, not per render and not per session — the
-  // pure layer in `recoveryAdjust.ts` does the deciding, so this hook only has
-  // to gather facts. It degrades to `null` rather than an error banner: an
-  // athlete who is offline still gets their plan, just without the read.
-  const [recoveryRead, setRecoveryRead] = useState<RecoveryReadResult | null>(null);
-  const [recoveryReadLoading, setRecoveryReadLoading] = useState(false);
-  const [showRecoveryWhy, setShowRecoveryWhy] = useState(false);
-
-  const planForRead = activeView === "planDetail" ? selectedPlan : null;
-  useEffect(() => {
-    if (!user || !planForRead) {
-      setRecoveryRead(null);
-      return;
-    }
-    let alive = true;
-    setRecoveryReadLoading(true);
-    readRecoveryForPlan({
-      userId: user.id,
-      plan: planForRead,
-      dateOfBirth: profile?.date_of_birth ?? null,
-    })
-      .then((result) => {
-        if (alive) setRecoveryRead(result);
-      })
-      .catch(() => {
-        // The read is enrichment. A plan that cannot show a suggestion is still
-        // a plan, and an error here would be noise the athlete cannot act on.
-        if (alive) setRecoveryRead(null);
-      })
-      .finally(() => {
-        if (alive) setRecoveryReadLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-    // `planForRead` itself is a fresh object on every render, so depending on
-    // it would refetch the read in a loop. Its two identifying fields are the
-    // real dependencies: the plan's id, and the stored weeks the projection
-    // reads (which change when a session is edited or a rebuild lands).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- scoped above
-  }, [user, planForRead?.id, planForRead?.plan_data, profile?.date_of_birth]);
-  const [expandedChange, setExpandedChange] = useState<string | null>(null);
-  const [expandedRebuild, setExpandedRebuild] = useState<string | null>(null);
-  const [undoingRebuild, setUndoingRebuild] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [sport, setSport] = useState(getPrimarySport(profile?.sport));
-  const [goals, setGoals] = useState<string[]>(["Strength"]);
-  const toggleGoal = (g: string) =>
-    setGoals((prev) =>
-      prev.includes(g)
-        ? (prev.length > 1 ? prev.filter((x) => x !== g) : prev) // never leave the athlete with zero goals
-        : [...prev, g],
-    );
-  const [level, setLevel] = useState(profile?.experience_level || "beginner");
-  const [duration, setDuration] = useState(6);
-  const [planAge, setPlanAge] = useState("");
-  // Training-plan quiz (NEW — was previously asked at signup)
-  const [planDaysPerWeek, setPlanDaysPerWeek] = useState<number>(4);
-  const [planHoursPerWeek, setPlanHoursPerWeek] = useState<number>(6);
-  const [planSessionLengthPref, setPlanSessionLengthPref] = useState<"short" | "standard" | "long">("standard");
-  const [planEquipment, setPlanEquipment] = useState<EquipmentId[]>([]);
-  const [planEnvironment, setPlanEnvironment] = useState<string>("Mixed");
-  const [planIntensityPref, setPlanIntensityPref] = useState<"easy" | "balanced" | "hard">("balanced");
-  const [planFocusAreas, setPlanFocusAreas] = useState<string[]>([]);
-  const [planTimeOfDay, setPlanTimeOfDay] = useState<string>("Evening");
-  const [planTargetEvent, setPlanTargetEvent] = useState<string>("");
-  const [planRecoveryDays, setPlanRecoveryDays] = useState<number>(1);
-  const [planQuizStep, setPlanQuizStep] = useState<number>(0); // 0 = basics, 1 = availability, 2 = preferences
-
-
-  // Limiter test state
+  // Limiter test
+  const [limiterStarted, setLimiterStarted] = useState(false);
   const [limiterStep, setLimiterStep] = useState(0);
   const [limiterAnswers, setLimiterAnswers] = useState<Record<string, number>>({});
   const [limiterResult, setLimiterResult] = useState<LimiterAnalysis | null>(null);
-  const [creatingLimiterPlan, setCreatingLimiterPlan] = useState(false);
-  // Logged test data strengthens the analysis; without it the test still runs
-  // on self-ratings (marked as such) — never on invented numbers.
   const [limiterMetrics, setLimiterMetrics] = useState<MetricRow[]>([]);
   const [limiterReadiness, setLimiterReadiness] = useState<{ readiness_score: number | null }[]>([]);
 
+  // Plan setup quiz
+  const [setupSource, setSetupSource] = useState<SetupSource>("standard");
+  const [setupStep, setSetupStep] = useState(0);
+  const [planNotes, setPlanNotes] = useState("");
+  const [disability, setDisability] = useState<DisabilitySupport>("none");
+  const [creating, setCreating] = useState(false);
+  /** Weeks of the plan being built, or null when no build screen is showing. */
+  const [buildWeeks, setBuildWeeks] = useState<number | null>(null);
+  /** The answers the build is using, shown on the build screen as they go in. */
+  const [buildDetails, setBuildDetails] = useState<string[]>([]);
+  // An availability window covering today. This screen is where the athlete
+  // goes to train, so a break has to be visible here too — not only on the
+  // dashboard card and /availability.
+  const activeBreak = useActiveBreak();
+  /** Resolves when the build screen reports 100%, so the reveal waits for it. */
+  const finishBuildRef = useRef<(() => void) | null>(null);
+  const [title, setTitle] = useState("");
+  const [sport, setSport] = useState(getPrimarySport(profile?.sport));
+  const [goals, setGoals] = useState<string[]>(["Strength"]);
+  const [level, setLevel] = useState<string>(profile?.experience_level || "beginner");
+  const [duration, setDuration] = useState(6);
+  const [age, setAge] = useState("");
+  const [daysPerWeek, setDaysPerWeek] = useState(4);
+  const [hoursPerWeek, setHoursPerWeek] = useState(6);
+  const [sessionLength, setSessionLength] = useState<PlanQuiz["sessionLengthPref"]>("standard");
+  const [timeOfDay, setTimeOfDay] = useState("Evening");
+  const [recoveryDays, setRecoveryDays] = useState(1);
+  const [equipment, setEquipment] = useState<EquipmentId[]>([]);
+  const [environment, setEnvironment] = useState("Mixed");
+  const [intensity, setIntensity] = useState<PlanQuiz["intensityPref"]>("balanced");
+  const [focusAreas, setFocusAreas] = useState<string[]>([]);
+  const [targetEvent, setTargetEvent] = useState("");
+
+  const activePlan = useMemo(() => plans.find((plan) => plan.active) ?? null, [plans]);
+  const latestLimiterPlan = useMemo(() => plans.find((plan) => isLimiterPlan(plan)) ?? null, [plans]);
+  const ageNumber = age ? Number.parseInt(age, 10) : null;
+  const ageCaps = ageNumber && Number.isFinite(ageNumber) ? getAgeCaps(ageNumber) : null;
+  const topLimiter = limiterResult?.limiters[0] ?? null;
+
+  const loadPlans = useCallback(async () => {
+    if (!user) return;
+    setLoadingPlans(true);
+    const { data, error } = await supabase
+      .from("training_plans")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) {
+      setLoadError(error.message);
+    } else {
+      setLoadError(null);
+      setPlans((data ?? []) as TrainingPlan[]);
+    }
+    setLoadingPlans(false);
+  }, [user]);
+
   useEffect(() => {
-    if (activeView !== "limiter" || !user) return;
-    let alive = true;
-    Promise.all([
-      supabase.from("performance_metrics").select("metric_type, value, log_date").eq("user_id", user.id).order("log_date", { ascending: false }).limit(40),
-      supabase.from("recovery_logs").select("readiness_score, log_date").eq("user_id", user.id).order("log_date", { ascending: false }).limit(14),
-    ]).then(([m, r]) => {
-      if (!alive) return;
-      setLimiterMetrics((m.data as MetricRow[]) || []);
-      setLimiterReadiness((r.data as { readiness_score: number | null }[]) || []);
-    }).catch(() => { /* self-ratings still work without server data */ });
-    return () => { alive = false; };
-  }, [activeView, user, limiterMetrics, limiterReadiness]);
+    void loadPlans();
+  }, [loadPlans]);
 
-  // Performance log state
-  type PerformanceLog = Tables<"performance_logs">;
-  const [logs, setLogs] = useState<PerformanceLog[]>([]);
-  const [showAddLog, setShowAddLog] = useState(false);
-  const [logTitle, setLogTitle] = useState("");
-  const [logDistance, setLogDistance] = useState("");
-  const [logTime, setLogTime] = useState("");
-  const [logNotes, setLogNotes] = useState("");
-  const [logSport, setLogSport] = useState("Running");
-  const [logType, setLogType] = useState("training");
-  const [logRPE, setLogRPE] = useState("7");
-  const [logFormRating, setLogFormRating] = useState("7");
-  const [logHeartRate, setLogHeartRate] = useState("");
-  const [logCalories, setLogCalories] = useState("");
-
+  // Seed the quiz from the profile once, without overwriting a choice made here.
   useEffect(() => {
     setSport(getPrimarySport(profile?.sport));
     setLevel(profile?.experience_level || "beginner");
-    if (profile?.date_of_birth) {
-      const age = Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000);
-      setPlanAge(String(age));
-    }
-  }, [profile?.experience_level, profile?.sport, profile?.date_of_birth]);
+    const born = ageFromProfile(profile?.date_of_birth);
+    if (born) setAge(String(born));
+    const saved = normaliseEquipment(
+      (profile?.extended_profile as Record<string, unknown> | null)?.equipment,
+    );
+    if (saved.length) setEquipment((current) => (current.length ? current : saved));
+  }, [profile?.sport, profile?.experience_level, profile?.date_of_birth, profile?.extended_profile]);
 
-  useEffect(() => { if (user) { fetchPlans(); fetchLogs(); } }, [user]);
-
-  // Prefill from calendar block ("Create matching plan")
-  const [pendingBlockLink, setPendingBlockLink] = useState<string | null>(null);
+  // Logged tests and readiness sharpen the limiter reading. A missing read is
+  // not an error: the test still works on self-ratings and says so.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("vaylo_plan_prefill");
-      if (!raw) return;
-      const p = JSON.parse(raw);
-      sessionStorage.removeItem("vaylo_plan_prefill");
-      if (p.duration_weeks) setDuration(Number(p.duration_weeks));
-      if (p.targetEvent) setPlanTargetEvent(p.targetEvent);
-      const prefillPhase = p.phase as string | undefined;
-      if (prefillPhase === "Base") setGoals(["Endurance"]);
-      else if (prefillPhase === "Build") setGoals(["Strength"]);
-      else if (prefillPhase === "Peak") setGoals(["Speed"]);
-      else if (prefillPhase === "Taper") setGoals(["Recovery"]);
-      if (p.blockId) setPendingBlockLink(p.blockId);
-      setShowCreate(true);
-      setPlanQuizStep(0);
-      toast({ title: "Prefilled from calendar", description: `Creating a matching ${p.phase} plan.` });
-    } catch { /* ignore */ }
-  }, []);
+    if (screen !== "limiter" || !user) return;
+    let alive = true;
+    Promise.all([
+      supabase
+        .from("performance_metrics")
+        .select("metric_type, value, log_date")
+        .eq("user_id", user.id)
+        .order("log_date", { ascending: false })
+        .limit(40),
+      supabase
+        .from("recovery_logs")
+        .select("readiness_score, log_date")
+        .eq("user_id", user.id)
+        .order("log_date", { ascending: false })
+        .limit(14),
+    ])
+      .then(([metrics, readiness]) => {
+        if (!alive) return;
+        setLimiterMetrics((metrics.data ?? []) as MetricRow[]);
+        setLimiterReadiness((readiness.data ?? []) as { readiness_score: number | null }[]);
+      })
+      .catch(() => {
+        /* self-ratings only */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [screen, user]);
 
-  // Pre-select the equipment answered at signup, so the same question is not
-  // asked twice with a different answer. Only fills an empty selection: if the
-  // athlete has already ticked something here, that is the more recent intent.
-  useEffect(() => {
-    if (planEquipment.length) return;
-    const saved = normaliseEquipment((profile?.extended_profile as Record<string, unknown> | null)?.equipment);
-    if (saved.length) setPlanEquipment(saved);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per profile, not on every tick
-  }, [profile, planEquipment]);
+  const openLimiter = () => {
+    setLimiterStarted(false);
+    setLimiterStep(0);
+    setLimiterAnswers({});
+    setLimiterResult(null);
+    setScreen("limiter");
+  };
 
-  // Seed the availability answers from what the athlete already told the app
-  // at signup (extended_profile.training_days_per_week). The form used to open
-  // on a hardcoded 4 days / 6 hours whatever the athlete had said, so the
-  // plan they bought was written for someone else's week. Only seeds while
-  // the athlete has not touched the fields: a tap here is newer intent than
-  // signup, and re-seeding over it would feel like the app ignoring them.
-  // Hours default from days at ~1h a session when nothing else is known.
-  const availabilityTouched = useRef(false);
-  const [availabilityFromProfile, setAvailabilityFromProfile] = useState(false);
-  useEffect(() => {
-    if (availabilityTouched.current) return;
-    const ext = profile?.extended_profile as Record<string, unknown> | null;
-    const days = Number(ext?.training_days_per_week);
-    if (!Number.isFinite(days) || days < 1 || days > 7) return;
-    setPlanDaysPerWeek(Math.round(days));
-    setPlanHoursPerWeek(Math.round(days * 1));
-    setAvailabilityFromProfile(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per profile, not on every tick
-  }, [profile]);
-
-  const fetchPlans = async () => {
-    if (!user) return;
-    // The plan list reads identity + the seven summary fields consumed below;
-    // `plan_data` (the full multi-week JSON) is intentionally EXCLUDED — it is
-    // by far the heaviest column on the table and is only needed by the plan
-    // detail path, not by every list render. "*" was fetching all of it, for
-    // every plan, on every visit (audit finding 3.1).
-    const { data, error } = await supabase.from("training_plans").select(
-      "id, user_id, title, sport, level, active, week_current, duration_weeks, created_at, description, goal, updated_at, plan_data, plan_adjustments",
-    ).eq("user_id", user.id).order("created_at", { ascending: false });
-    if (!error) {
-      const rows = (data || []) as unknown as TrainingPlan[];
-      setPlans(rows);
-      setPlansCachedInfo(null);
-      setPlansLoadFailed(false);
-      // Offered online, therefore available offline: the snapshot is written on
-      // every successful read. A read-only fallback for the offline detail
-      // view, never a second source of truth — the next online read overwrites it.
-      cachePlans(user.id, rows);
+  const answerLimiter = (score: number) => {
+    const question = LIMITER_QUESTIONS[limiterStep];
+    const next = { ...limiterAnswers, [question.id]: score };
+    setLimiterAnswers(next);
+    if (limiterStep < LIMITER_QUESTIONS.length - 1) {
+      setLimiterStep((step) => step + 1);
       return;
     }
-    // A failed read is not an empty list: without the cached rows below, an
-    // offline athlete would be told they have no plans at all.
-    const cached = cacheReadPlans(user.id);
-    if (cached) {
-      setPlans(cached.data as unknown as TrainingPlan[]);
-      setPlansCachedInfo({ savedAt: cached.savedAt, stale: cached.stale });
+    setLimiterResult(
+      analyzeLimiterTest(
+        next,
+        limiterMetrics,
+        getPrimarySport(profile?.sport) || sport,
+        limiterReadiness,
+      ),
+    );
+  };
+
+  const retakeLimiter = () => {
+    setLimiterStarted(true);
+    setLimiterStep(0);
+    setLimiterAnswers({});
+    setLimiterResult(null);
+  };
+
+  const openSetup = (source: SetupSource) => {
+    setSetupSource(source);
+    setSetupStep(0);
+    setPlanNotes("");
+    setDisability("none");
+    setTargetEvent("");
+    if (source === "limiter" && limiterResult) {
+      const labels = limiterResult.limiters.map((limiter) => LIMITER_LABEL[limiter.name]);
+      setTitle(`Limiter Fix Plan — ${labels[0] ?? "Training"}`);
+      setDuration(4);
+      setGoals(["Strength"]);
+      setFocusAreas([
+        ...new Set(limiterResult.limiters.map((limiter) => LIMITER_FOCUS[limiter.name])),
+      ]);
     } else {
-      setPlans([]);
-      setPlansCachedInfo(null);
+      setTitle("");
+      setDuration(6);
+      setFocusAreas([]);
     }
-    setPlansLoadFailed(true);
+    setScreen("setup");
   };
 
-  // When connectivity returns, refresh the plan list from the server now rather
-  // than on the athlete's next visit, so cached readings get replaced as soon
-  // as there is something newer to replace them with.
-  useEffect(() => {
-    if (!user) return;
-    const online = () => { void fetchPlans(); };
-    window.addEventListener("online", online);
-    return () => window.removeEventListener("online", online);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPlans closes over the current user id only
-  }, [user]);
+  const leaveSetup = () => {
+    if (setupStep > 0) {
+      setSetupStep((step) => step - 1);
+      return;
+    }
+    setScreen(setupSource === "limiter" ? "limiter" : "home");
+  };
 
-  const deletePlan = async (planId: string) => {
-    if (!user) return;
-    const { error } = await supabase.from("training_plans").delete().eq("id", planId).eq("user_id", user.id);
-    if (error) { toast({ title: "Couldn't delete plan", description: error.message, variant: "destructive" }); return; }
-    // Keep the offline snapshot honest too: the deleted plan must not reappear
-    // after a restart offline, silently resurrecting an athlete's deletion.
-    setPlans((prev) => {
-      const next = prev.filter((p) => p.id !== planId);
-      cachePlans(user.id, next);
-      return next;
+  const toggleEquipment = (id: EquipmentId) => {
+    if (id === "none") {
+      setEquipment((current) => (current.includes("none") ? [] : ["none"]));
+      return;
+    }
+    setEquipment((current) => {
+      const withoutNone = current.filter((item) => item !== "none");
+      return withoutNone.includes(id)
+        ? withoutNone.filter((item) => item !== id)
+        : [...withoutNone, id];
     });
-    toast({ title: "Plan deleted" });
   };
 
-  const fetchLogs = async () => {
-    if (!user) return;
-    // Column list mirrors the exact fields the log table renders (audit 3.1).
-    const { data } = await supabase.from("performance_logs").select(
-      "id, user_id, log_type, log_date, title, sport, distance_km, pace_per_km, time_seconds, heart_rate_avg, calories_burned, form_rating, perceived_exertion, notes, created_at, session_load",
-    ).eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
-    setLogs(data || []);
+  const toggleFocus = (area: string) => {
+    setFocusAreas((current) =>
+      current.includes(area) ? current.filter((item) => item !== area) : [...current, area],
+    );
   };
 
-  const getAge = () => {
-    if (planAge) return parseInt(planAge);
-    if (!profile?.date_of_birth) return null;
-    return Math.floor((Date.now() - new Date(profile.date_of_birth).getTime()) / 31557600000);
+  const toggleGoal = (goal: string) => {
+    setGoals((current) =>
+      current.includes(goal)
+        ? current.length > 1
+          ? current.filter((item) => item !== goal)
+          : current
+        : [...current, goal],
+    );
   };
 
   const createPlan = async () => {
-    // One generation at a time — ever. The overlay covers the screen, but the
-    // overlay renders a frame AFTER this handler begins, so a fast double-tap
-    // slipped past it before it existed and charged for two identical plans.
-    // The two-spending-states guard here is the one that owns correctness; the
-    // disabled button and the overlay are presentation.
-    if (!user || !profile || loading || generationActive) return;
-    const age = getAge();
-    if (!age) { toast({ title: "Age required", description: "Enter your age or set DOB in Profile.", variant: "destructive" }); return; }
-    // Multi-goal: keep every selected goal in one comma-joined string for the
-    // DB column and the generate-plan payload.
-    const goal = joinGoals(goals);
-    if (!goal) { toast({ title: "Pick at least one goal", variant: "destructive" }); return; }
-    const caps = getAgeCaps(age);
-    // Clamp availability to age-safe caps before spending/asking AI
-    const requestedDays = planDaysPerWeek;
-    const clampedDays = Math.min(requestedDays, caps.maxSessionsPerWeek, Math.max(1, 7 - caps.minRestDays));
-    if (clampedDays < requestedDays) {
-      toast({ title: `Capped to ${clampedDays} days/week`, description: `Age ${age} safety cap: max ${caps.maxSessionsPerWeek} sessions/week with ≥${caps.minRestDays} rest days.`, variant: "default" });
+    if (!user || creating) return;
+    const parsedAge = age ? Number.parseInt(age, 10) : ageNumber;
+    if (!parsedAge || !Number.isFinite(parsedAge)) {
+      toast.error("Enter your age — the plan's loads are capped by it.");
+      return;
     }
-    const cappedHours = Math.min(planHoursPerWeek, (clampedDays * caps.maxMinutesPerSession) / 60);
-
-    setLoading(true);
-    // Keep the generation alive if the athlete leaves this screen or the app.
-    // The request is already in flight by the time the overlay is shown, so
-    // what matters here is that React unmounting the overlay does not drop the
-    // promise, and that a backgrounded tab is not frozen by the browser. We
-    // also track that a generation is active so the overlay can reappear if the
-    // athlete hid it and the wait then drags past its estimate.
-    const guard = { current: true };
-    // The AI writes the whole plan in parallel chunks. The athlete should know
-    // how long it will take and what has happened so far, so the wait is not a
-    // black box — that is what `PlanGenerationProgress` displays, and it is
-    // mounted over the whole screen so nothing else can be tapped while it is
-    // up. It shows elapsed seconds against the usual wait and never a fake
-    // countdown, and past 1.5× its estimate it admits the plan is taking
-    // longer than usual. Set it here so the interval starts on the first
-    // frame — this is the window where a second tap is most likely, and the
-    // screen already has to be covered to keep one request in flight.
-    setPlanGenerationProgress(duration);
-    setProgressHidden(false);
-    setGenerationActive(true);
-    // When the request was issued — the measurement point the recorded
-    // estimate is calibrated from. The other endpoints of the raw wait look
-    // like timing too and are not: the fetch of the dossier and the brief is
-    // the athlete's own device work, lagging on bad networks, and the save
-    // happens after the plan is already written. What the provider spent is
-    // the round trip between this point and the server's definitive answer.
-    const generationStartedAt = Date.now();
-    try {
-      // The generate-plan function verifies auth, throttles and charges
-      // training_plan_week credits server-side (with auto-refund on failure).
-      const dossier = await buildClientDossier().catch(() => null);
-      // Phase 2: what the athlete's own availability says. A plan created the
-      // week after a break must not be written as if they were never away.
-      // Best-effort — a failed read generates exactly the plan it did before.
-      const brief = await breakBriefForGenerator({ userId: user.id, age }).catch(() => null);
-      const quiz = {
-        daysPerWeek: clampedDays,
-        hoursPerWeek: cappedHours,
-        sessionLengthPref: planSessionLengthPref,
-        equipment: planEquipment,
-        environment: planEnvironment,
-        intensityPref: age !== null && age < 16 && planIntensityPref === "hard" ? "balanced" as const : planIntensityPref,
-        focusAreas: planFocusAreas,
-        timeOfDay: planTimeOfDay,
-        targetEvent: planTargetEvent,
-        recoveryDays: Math.max(planRecoveryDays, caps.minRestDays),
-        ageCaps: caps,
-      };
-      let planData: PlanData | null = null;
-      let chargeError: string | null = null;
-      let serverError: string | null = null;
-      try {
-        const { data: aiData, error: aiErr } = await supabase.functions.invoke("generate-plan", {
-          body: {
-            sport, goal, level, duration_weeks: duration, age, quiz, userLocale: getAiLocale(),
-            // Prompt 9: the selected country, so the generator writes the
-            // plan in the athlete's regional terminology and units. The
-            // server expands the ISO code itself — nothing prompt-authored
-            // is sent.
-            userRegion: getRegionCountry(),
-            pbs: dossier?.pbs ?? null,
-            dossier: dossier ? { pbs_text: dossier.pbs_text, outcomeGoals: dossier.outcomeGoals, injuries: dossier.injuries } : null,
-            // The generator is told about breaks; it is not asked to do the
-            // arithmetic for them. See `src/lib/adaptivePlanning.ts`.
-            breaks: brief?.breaks ?? [],
-            returns: brief?.returns ?? [],
-          },
-        });
-        if (aiErr) {
-          chargeError = await edgeErrorMessage(aiErr);
-        } else if (aiData?.plan_data && Array.isArray(aiData.plan_data) && aiData.plan_data.length > 0) {
-          planData = aiData.plan_data;
-        }
-        // Read the cost/balance server told us about, so the profile refresh
-        // below reflects a successful charge exactly once — not on a plan that
-        // was generated but then lost on save.
-        if (aiData?.cost) {
-          try {
-            await refreshProfile();
-          } catch {
-            serverError = "Could not refresh your account after the plan was created.";
-          }
-        }
-        // If the AI returned a cost but did not return plan data, the server
-        // spent credits and delivered nothing usable. The server owns the
-        // refund for that case, but the client must not pretend the plan was
-        // created. Surface the server's own words so the athlete knows what
-        // happened and what to expect.
-        if (!planData) {
-          const serverMsg = (aiData as { error?: string } | null)?.error ?? null;
-          if (serverMsg) {
-            chargeError = serverMsg;
-          } else if (aiData?.cost) {
-            chargeError = "The plan could not be created. If you were charged, the server refunds failed attempts automatically — if your credits do not come back within a few minutes, contact support from Profile.";
-          }
-        }
-      } catch (invokeErr) {
-        // FunctionsHttpError (a 4xx/5xx reply) already lands in the branch
-        // above with aiErr set. This branch is for transport/structural
-        // failures: a network drop, a cancelled request, or a bad error shape
-        // that edgeErrorMessage cannot read. In all of those cases the server
-        // is the one that charged and the server is the one that refunds, so
-        // a client-side failure is not something this screen can fix — it just
-        // needs to tell the athlete honestly and let them know where to go.
-        chargeError = await edgeErrorMessage(invokeErr);
-        if (!chargeError || chargeError === "Something went wrong. Please try again.") {
-          chargeError = "The plan could not be reached. Your credits were charged by the server and, if anything failed there, the server will refund them automatically. If your credits do not come back within a few minutes, contact support.";
-        }
-      }
-      // Measured before anything branch-specific runs, on failure AND on
-      // success though only successes calibrate: a fast refusal (a 402, a
-      // throttle) is round-trip noise, and pretending refusals were the cost
-      // of generation would teach the estimate to promise a wait that real
-      // work never takes. See `src/lib/planTiming.ts`.
-      recordPlanGenerationMs({
-        kind: "training",
-        weeks: duration,
-        ms: Date.now() - generationStartedAt,
-        outcome: planData ? "ok" : "failed",
-      });
-      if (chargeError || !planData) {
-        const reason = chargeError
-          ? chargeError
-          : "The AI did not return a plan. If you were charged, the server refunds failed attempts automatically — if your credits do not come back within a few minutes, contact support from Profile.";
-        if (guard.current) {
-          setPlanGenerationProgress(null);
-          setGenerationActive(false);
-          setLoading(false);
-        }
-        toast({ title: "Plan not created", description: reason, variant: "destructive" });
-        return;
-      }
-
-      // The finished plan is already in hand. Saving it is a normal database
-      // write, but it can still fail, and a failed write is the one case where
-      // the athlete paid and does not have the plan in the app. Retry once,
-      // deterministically — a flaky insert is far more likely than a
-      // deterministic failure — and never tell the athlete to recreate the plan,
-      // because that would charge a second time for the same work.
-      const planRow = {
-        user_id: user.id, title: title.trim() || `${goals.join(" + ")} ${sport} Plan`, sport, goal, level, duration_weeks: duration,
-        description: `${duration}-week ${goals.join(" + ").toLowerCase()} plan for ${sport.toLowerCase()} (age ${age}) · ${planDaysPerWeek}d/wk · ${planHoursPerWeek}h/wk · ${planIntensityPref} intensity${planTargetEvent ? ` · targeting ${planTargetEvent}` : ""}`,
-        plan_data: planData as unknown as Json,
-      };
-      let inserted: { id: string } | null = null;
-      let insertError: { message: string } | null = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        const saved = await supabase.from("training_plans").insert(planRow).select("id").single();
-        if (saved.error) {
-          insertError = saved.error as { message: string } | null;
-          continue;
-        }
-        if (saved.data) { inserted = saved.data; break; }
-      }
-      if (!inserted) {
-        // Deterministic failure path: the plan was written and paid for but is
-        // not in the database. A recreation would charge a second time, so the
-        // athlete is told not to — and where to get the credits back, since the
-        // client cannot refund a charge itself. This return sits before the
-        // success toast below, so the screen can never show "Plan Created!"
-        // for a plan that was not saved.
-        if (guard.current) {
-          setPlanGenerationProgress(null);
-          setGenerationActive(false);
-          setLoading(false);
-        }
-        toast({
-          title: "Your plan was written but could not be saved",
-          description:
-            "Please do not create it again — that would charge you a second time. " +
-            "Contact support from Profile and we will restore your plan or your credits.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // A plan created days after a break *is* a return from that break, so the
-      // same rebuild that runs when a break is added runs here too: the athlete
-      // never gets a "week 1 at full load" plan the week after a month off.
-      // Best-effort — the plan exists and works without it.
-      let rebuiltForBreak = false;
-      if (brief?.returnEvent) {
-        const rebuilt = await rebuildPlanForBreak({
-          userId: user.id,
-          plan: {
-            id: inserted.id,
-            created_at: new Date().toISOString(),
-            plan_data: planData as unknown as Json,
-            plan_adjustments: [],
-          },
-          event: brief.returnEvent,
-          age,
-        }).catch(() => null);
-        rebuiltForBreak = !!rebuilt?.outcome?.adjustment;
-      }
-
-      // Periodisation calendar removed — no block linking.
-
-      // The wait is over: clear the overlay from the same execution path that
-      // set it. If the screen was abandoned partway through this branch is not
-      // reached and the overlay stays until the request lands or the component
-      // unmounts — at which point the useEffect below clears it.
-      if (guard.current) {
-        setPlanGenerationProgress(null);
-        setGenerationActive(false);
-        setProgressHidden(false);
-      }
-
-      // The plan-created moment: inbox row + device ping + arming the next 7
-      // morning briefings from this plan's own week template. Run it BEFORE the
-      // success toast so a slow trigger cannot push the toast off the top of the
-      // screen, and surface any failure so the athlete is not left thinking the
-      // plan was created when its first notification never landed.
-      let notifyError: string | null = null;
-      try {
-        await notifyPlanCreated(user.id, {
-          id: inserted.id,
-          title: title.trim() || `${goals.join(" + ")} ${sport} Plan`,
-          sport,
-          week_current: 1,
-          duration_weeks: duration,
-          plan_data: planData,
-        });
-      } catch (nerr) {
-        notifyError = await edgeErrorMessage(nerr) ?? "Could not send the plan-created notification.";
-      }
-
-      await refreshProfile().catch(() => {});
-      const baseDescription = rebuiltForBreak
-        ? "You're coming back from a break, so the first weeks are a rebuild rather than a return to your old workload."
-        : undefined;
-      const finalDescription = notifyError && baseDescription
-        ? `${notifyError} ${baseDescription}`
-        : notifyError ?? baseDescription;
-      toast({
-        title: "Plan Created! 🎯",
-        description: finalDescription,
-      });
-
-      if (guard.current) {
-        setShowCreate(false);
-        setTitle("");
-        setPlanQuizStep(0);
-        fetchPlans();
-      }
-    } catch (error) {
-      if (guard.current) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        if (planGenerationProgress !== null) {
-          setPlanGenerationProgress(null);
-          setGenerationActive(false);
-          setLoading(false);
-        }
-      }
-    } finally {
-      if (guard.current) setLoading(false);
-    }
-  };
-
-  type PlanSession = {
-    day: number;
-    dayName?: string;
-    title: string;
-    type: string;
-    duration_minutes: number;
-    description?: string;
-    exercises?: { name: string; sets: string }[];
-    warmup?: { name: string; sets: string }[];
-    cooldown?: { name: string; sets: string }[];
-    isRest?: boolean;
-    isRecovery?: boolean;
-    skipped?: boolean;
-    originalTitle?: string;
-    originalExercises?: { name: string; sets: string }[];
-    /** Written by the return-from-break rebuild. See `@/lib/planSchedule`. */
-    returnFromBreak?: ReturnSessionMeta;
-    /** Marked by the rebuild so the plan knows which sessions carry the week. */
-    key?: boolean;
-    [key: string]: unknown;
-  };
-
-  type PlanWeek = {
-    week: number;
-    sessions: PlanSession[];
-    isDeload?: boolean;
-    isHoliday?: boolean;
-    redistributedFrom?: number;
-    extraNote?: string;
-    /** Present only on a week the return-from-break rebuild re-cut. */
-    returnFromBreak?: ReturnWeekMeta;
-    [key: string]: unknown;
-  };
-
-  type PlanData = PlanWeek[];
-
-  type PlanQuiz = {
-    daysPerWeek: number; hoursPerWeek: number; sessionLengthPref: "short" | "standard" | "long";
-    equipment: string[]; environment: string; intensityPref: "easy" | "balanced" | "hard";
-    focusAreas: string[]; timeOfDay: string; targetEvent: string; recoveryDays: number;
-  };
-
-  const generatePlanData = (sport: string, goal: string, level: string, weeks: number, age: number | null, quiz?: PlanQuiz) => {
-    const isYouth = age !== null && age < 18;
-    const isSenior = age !== null && age > 50;
-    // Use quiz-provided days-per-week when available; fall back to legacy heuristic
-    const fallbackSessions = isYouth ? Math.min(level === "beginner" ? 3 : 4, 5)
-      : isSenior ? Math.min(level === "beginner" ? 3 : 4, 5)
-      : level === "beginner" ? 4 : level === "intermediate" ? 5 : 6;
-    const sessionsPerWeek = quiz?.daysPerWeek ? Math.max(1, Math.min(7, quiz.daysPerWeek)) : fallbackSessions;
-    // Target avg session length (minutes) derived from hours/week ÷ days/week
-    const avgSessionMin = quiz?.hoursPerWeek
-      ? Math.max(15, Math.min(150, Math.round((quiz.hoursPerWeek * 60) / sessionsPerWeek)))
-      : 45;
-    const intensityScale = quiz?.intensityPref === "hard" ? 1.15 : quiz?.intensityPref === "easy" ? 0.8 : 1;
-    const lengthScale = quiz?.sessionLengthPref === "long" ? 1.2 : quiz?.sessionLengthPref === "short" ? 0.75 : 1;
-    const weeklyPlan = [];
-    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-    
-    // Build a structured week with rest days
-    const buildWeekSessions = (weekNum: number, isDeload: boolean) => {
-      const sessions = [];
-      const intensityMod = isYouth ? 0.7 : isSenior ? 0.75 : 1;
-      
-      // Define session types for each day (7 days)
-      const weekTemplate = getWeekTemplate(sport, goal, level, sessionsPerWeek, isYouth, isSenior);
-      
-      for (let d = 0; d < 7; d++) {
-        const template = weekTemplate[d];
-        if (template.type === "rest") {
-          sessions.push({
-            day: d + 1, dayName: dayNames[d], title: "Rest Day", type: "rest",
-            duration_minutes: 0, description: "Full rest. Focus on sleep, nutrition, and mental recovery.",
-            exercises: [
-              { name: "Light stretching or yoga", sets: "10-15 min (optional)" },
-              { name: "Foam rolling", sets: "5-10 min if needed" },
-              { name: "Target sleep", sets: "8-9 hours tonight" },
-              { name: "Hydration", sets: "3L+ throughout the day" },
-            ],
-            skipped: false, isRest: true,
-          });
-        } else if (template.type === "recovery") {
-          sessions.push({
-            day: d + 1, dayName: dayNames[d], title: "Active Recovery", type: "recovery",
-            duration_minutes: Math.round(25 * intensityMod),
-            description: "Low-intensity movement to promote blood flow and recovery. Keep heart rate in Zone 1.",
-            exercises: getRecoveryExercises(sport),
-            skipped: false, isRecovery: true,
-          });
-        } else {
-          // Use quiz-driven avg duration when provided, else legacy curve
-          const baseDuration = quiz?.hoursPerWeek
-            ? Math.round(avgSessionMin * (isDeload ? 0.7 : 1) * lengthScale * intensityScale * intensityMod)
-            : Math.round((isDeload ? 25 : 35) * intensityMod + (weekNum * 1.5) + (d * 2));
-          const dur = Math.max(15, Math.min(180, baseDuration));
-          sessions.push({
-            day: d + 1, dayName: dayNames[d], title: isDeload ? `${template.title} (Deload)` : template.title,
-            type: template.type,
-            duration_minutes: dur,
-            description: `Week ${weekNum}, ${dayNames[d]} — ${template.title} for ${goal.toLowerCase()} in ${sport}${isDeload ? " (reduced volume — 60% intensity)" : ""}${isYouth ? " [Under-18 limits: lighter loads]" : ""}${isSenior ? " [Senior-adapted: joint-friendly]" : ""}${quiz?.environment ? ` · ${quiz.environment}` : ""}${quiz?.equipment?.length ? ` · equipment: ${quiz.equipment.slice(0, 2).join(", ")}` : ""}`,
-
-            warmup: getWarmupForType(template.type, sport),
-            exercises: getExercisesForType(template.title, sport, level, weekNum, isYouth, isDeload),
-            cooldown: getCooldownForType(template.type, sport),
-            skipped: false,
-          });
-        }
-      }
-      return sessions;
+    const caps = getAgeCaps(parsedAge);
+    const effectiveDays = Math.min(daysPerWeek, caps.maxSessionsPerWeek, 7 - caps.minRestDays);
+    const effectiveRecovery = Math.max(recoveryDays, caps.minRestDays);
+    const effectiveHours = Math.min(
+      hoursPerWeek,
+      (effectiveDays * caps.maxMinutesPerSession) / 60,
+    );
+    const quiz: PlanQuiz = {
+      daysPerWeek: effectiveDays,
+      hoursPerWeek: Math.max(1, Math.round(effectiveHours * 2) / 2),
+      sessionLengthPref: sessionLength,
+      equipment,
+      environment,
+      intensityPref: parsedAge < 16 && intensity === "hard" ? "balanced" : intensity,
+      focusAreas,
+      timeOfDay,
+      targetEvent: targetEvent.trim(),
+      recoveryDays: effectiveRecovery,
+      notes: planNotes.trim(),
+      disability,
     };
+    const constraints = planConstraints(quiz);
+    const notesForDescription = planNotes.trim().replace(/\s+/g, " ").slice(0, 220);
+    const adaptationLine = [
+      notesForDescription
+        ? `Your notes are part of this plan: "${notesForDescription}${planNotes.trim().length > 220 ? "…" : ""}".`
+        : "",
+      disability !== "none" && disability !== "prefer_not_to_say"
+        ? `Adapted for: ${DISABILITY_LABEL[disability]}.`
+        : "",
+      constraints.cues.length ? `${constraints.cues.length} adaptation${constraints.cues.length === 1 ? "" : "s"} applied to every session.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const limiterGoal =
+      setupSource === "limiter" && limiterResult
+        ? limiterResult.limiters.map((limiter) => LIMITER_LABEL[limiter.name]).join(", ")
+        : null;
+    const goal = limiterGoal ? `Fix: ${limiterGoal}` : joinGoals(goals);
+    const generationGoal = limiterGoal ?? goal;
+    const sportName = sport || getPrimarySport(profile?.sport);
+    const planTitle =
+      title.trim() ||
+      (setupSource === "limiter" && topLimiter
+        ? `Limiter Fix Plan — ${LIMITER_LABEL[topLimiter.name]}`
+        : `${goals.join(" + ")} ${sportName} Plan`);
 
-    for (let w = 1; w <= weeks; w++) {
-      const isDeload = w % 4 === 0;
-      weeklyPlan.push({ week: w, sessions: buildWeekSessions(w, isDeload), isDeload, isHoliday: false });
-    }
-    return weeklyPlan;
-  };
-
-  const getWeekTemplate = (sport: string, goal: string, level: string, sessionsPerWeek: number, isYouth: boolean, isSenior: boolean) => {
-    // Returns 7 days template with training + rest
-    type DayTemplate = { title: string; type: string };
-    const template: DayTemplate[] = [];
-    
-    if (sport === "Running" || sport === "Athletics") {
-      if (sessionsPerWeek >= 5) {
-        template.push({ title: "Speed Work", type: "speed" });
-        template.push({ title: "Strength Training", type: "strength" });
-        template.push({ title: "Tempo Run", type: "sport_specific" });
-        template.push({ title: "Active Recovery", type: "recovery" });
-        template.push({ title: "Interval Training", type: "intervals" });
-        template.push({ title: "Long Run", type: "endurance" });
-        template.push({ title: "Rest Day", type: "rest" });
-      } else {
-        template.push({ title: "Sport-Specific", type: "sport_specific" });
-        template.push({ title: "Rest Day", type: "rest" });
-        template.push({ title: "Strength Training", type: "strength" });
-        template.push({ title: "Active Recovery", type: "recovery" });
-        template.push({ title: "Speed Work", type: "speed" });
-        template.push({ title: "Cross-Training", type: "cross_training" });
-        template.push({ title: "Rest Day", type: "rest" });
-      }
-    } else if (sport === "Gym/Weightlifting") {
-      if (sessionsPerWeek >= 5) {
-        template.push({ title: "Upper Body Push", type: "upper_push" });
-        template.push({ title: "Lower Body", type: "lower" });
-        template.push({ title: "Upper Body Pull", type: "upper_pull" });
-        template.push({ title: "Active Recovery", type: "recovery" });
-        template.push({ title: "Full Body Power", type: "power" });
-        template.push({ title: "Accessory & Core", type: "accessory" });
-        template.push({ title: "Rest Day", type: "rest" });
-      } else {
-        template.push({ title: "Upper Body", type: "upper" });
-        template.push({ title: "Rest Day", type: "rest" });
-        template.push({ title: "Lower Body", type: "lower" });
-        template.push({ title: "Active Recovery", type: "recovery" });
-        template.push({ title: "Full Body", type: "full_body" });
-        template.push({ title: "Rest Day", type: "rest" });
-        template.push({ title: "Rest Day", type: "rest" });
-      }
-    } else if (sport === "Cycling") {
-      template.push({ title: "Endurance Ride", type: "endurance" });
-      template.push({ title: "Strength Training", type: "strength" });
-      template.push({ title: "Interval Training", type: "intervals" });
-      template.push({ title: "Active Recovery", type: "recovery" });
-      template.push({ title: "Tempo Ride", type: "sport_specific" });
-      template.push({ title: "Long Ride", type: "endurance" });
-      template.push({ title: "Rest Day", type: "rest" });
-    } else if (sport === "Swimming") {
-      template.push({ title: "Technique Swim", type: "sport_specific" });
-      template.push({ title: "Dryland Strength", type: "strength" });
-      template.push({ title: "Interval Swim", type: "intervals" });
-      template.push({ title: "Active Recovery", type: "recovery" });
-      template.push({ title: "Endurance Swim", type: "endurance" });
-      template.push({ title: "Cross-Training", type: "cross_training" });
-      template.push({ title: "Rest Day", type: "rest" });
-    } else {
-      // Football, Basketball, Rugby, Tennis, Boxing, etc.
-      template.push({ title: "Sport-Specific Drills", type: "sport_specific" });
-      template.push({ title: "Strength & Power", type: "strength" });
-      template.push({ title: "Speed & Agility", type: "speed" });
-      template.push({ title: "Active Recovery", type: "recovery" });
-      template.push({ title: "Conditioning", type: "conditioning" });
-      template.push(sessionsPerWeek >= 5 ? { title: "Match Simulation", type: "sport_specific" } : { title: "Rest Day", type: "rest" });
-      template.push({ title: "Rest Day", type: "rest" });
-    }
-    
-    return template;
-  };
-
-  const getWarmupForType = (type: string, sport: string) => {
-    if (type === "strength" || type === "upper_push" || type === "upper_pull" || type === "lower" || type === "upper" || type === "full_body" || type === "power" || type === "accessory") {
-      return [
-        { name: "Light rowing or cycling", sets: "3 min · easy pace, get blood flowing" },
-        { name: "Arm circles (forward & back)", sets: "15 each direction" },
-        { name: "Band pull-aparts", sets: "2x15 · light resistance, slow tempo" },
-        { name: "Cat-cow stretches", sets: "10 reps · breathe deeply each rep" },
-        { name: "Bodyweight squats", sets: "15 reps · pause at bottom 2 sec" },
-        { name: "Inchworms", sets: "6 reps · walk hands out, hold plank 3 sec" },
-        { name: "Warm-up sets of first exercise", sets: "2x8 @ 40-50% working weight" },
-      ];
-    }
-    if (type === "speed" || type === "intervals" || type === "sport_specific" || type === "conditioning") {
-      return [
-        { name: "Light jog", sets: "4 min · conversational pace" },
-        { name: "Leg swings (front & side)", sets: "12 each leg, each direction" },
-        { name: "A-skips", sets: "2x20m · drive knee, dorsiflex ankle" },
-        { name: "B-skips", sets: "2x20m · extend and paw ground" },
-        { name: "High knees", sets: "2x15m · quick turnover, stay tall" },
-        { name: "Butt kicks", sets: "2x15m · heel to glute" },
-        { name: "Walking lunges with rotation", sets: "8 each leg · twist toward front leg" },
-        { name: "Strides", sets: "3x50m @ 70% · smooth acceleration" },
-      ];
-    }
-    if (type === "endurance") {
-      return [
-        { name: "Walk to easy jog", sets: "5 min · gradually increase pace" },
-        { name: "Dynamic leg swings", sets: "10 each direction" },
-        { name: "Ankle circles", sets: "10 each direction" },
-        { name: "Gentle high knees", sets: "15 sec" },
-        { name: "Deep breathing", sets: "1 min · box breathing 4-4-4-4" },
-      ];
-    }
-    return [
-      { name: "Light movement (jog/walk)", sets: "3 min" },
-      { name: "Dynamic stretching", sets: "5 min · full body" },
-      { name: "Joint circles", sets: "10 each joint" },
-    ];
-  };
-
-  const getCooldownForType = (type: string, sport: string) => {
-    if (type === "strength" || type === "upper_push" || type === "upper_pull" || type === "lower" || type === "upper" || type === "full_body" || type === "power" || type === "accessory") {
-      return [
-        { name: "Light walking", sets: "2 min · slow pace, let HR come down" },
-        { name: "Chest doorway stretch", sets: "30s each side · gentle pull" },
-        { name: "Standing quad stretch", sets: "30s each leg · hold wall for balance" },
-        { name: "Seated hamstring stretch", sets: "30s each leg · reach for toes" },
-        { name: "Child's pose", sets: "45s · sink hips, reach arms forward" },
-        { name: "Cross-body shoulder stretch", sets: "20s each arm" },
-        { name: "Deep breathing", sets: "1 min · 4-count inhale, 6-count exhale" },
-      ];
-    }
-    return [
-      { name: "Easy walk/jog", sets: "3 min · gradually slow down" },
-      { name: "Standing quad stretch", sets: "30s each leg" },
-      { name: "Hamstring stretch", sets: "30s each leg" },
-      { name: "Hip flexor stretch", sets: "30s each side" },
-      { name: "Calf stretch", sets: "30s each leg" },
-      { name: "Pigeon stretch", sets: "30s each side" },
-      { name: "Foam rolling (if available)", sets: "5 min · quads, hamstrings, calves, IT band" },
-      { name: "Deep breathing", sets: "1 min · box breathing 4-4-4-4" },
-    ];
-  };
-
-  const getRecoveryExercises = (sport: string) => [
-    { name: "Easy walk or light swim", sets: "15 min · Zone 1 HR, should feel effortless" },
-    { name: "Foam rolling (full body)", sets: "10 min · 30-45s per muscle group, focus tight areas" },
-    { name: "Yoga flow (Sun Salutation A)", sets: "3 rounds · slow, controlled breathing" },
-    { name: "Hip 90/90 stretches", sets: "45s each side · gently rock into stretch" },
-    { name: "Cat-cow + Thread the needle", sets: "10 reps each · follow breath" },
-    { name: "Couch stretch (hip flexors)", sets: "60s each side · lean into stretch gently" },
-    { name: "Supine spinal twist", sets: "30s each side" },
-    { name: "Deep breathing (box breathing)", sets: "3 min · 4-4-4-4 pattern" },
-  ];
-
-  const getExercisesForType = (type: string, sport: string, level: string, week: number, isYouth: boolean, isDeload: boolean = false) => {
-    const s = isDeload ? 3 : level === "beginner" ? 3 : level === "intermediate" ? 4 : 5;
-    const r = isYouth ? 8 : isDeload ? 8 : level === "beginner" ? 8 : level === "intermediate" ? 10 : 12;
-    const reps = `${s}x${r}`;
-    const heavyReps = `${s}x${Math.max(r - 4, 3)}`;
-    const wk = Math.min(week, 12);
-    const restSec = level === "beginner" ? "90s" : level === "intermediate" ? "75s" : "60s";
-    const rpe = isDeload ? 5 : 6 + Math.min(wk, 4);
-    const deloadNote = isDeload ? " (DELOAD: reduce weight 40%)" : "";
-
-    if (type === "Strength Training" || type === "Strength & Power") return [
-      { name: "Back Squat", sets: `${reps} @ RPE ${rpe} · ${restSec} rest${deloadNote} — feet shoulder-width, brace core, break parallel, drive through heels` },
-      { name: "Romanian Deadlift (RDL)", sets: `${reps} @ RPE ${Math.max(rpe - 1, 5)} · ${restSec} rest — hip hinge, soft knees, feel hamstring stretch, bar close to legs` },
-      { name: "Bench Press", sets: `${reps} @ RPE ${rpe} · ${restSec} rest — retract scapulae, feet flat, control descent 2-3 sec, pause at chest` },
-      { name: "Bent-Over Barbell Row", sets: `${reps} @ RPE ${Math.max(rpe - 1, 5)} · ${restSec} rest — 45° torso angle, pull to lower chest, squeeze lats 1 sec` },
-      { name: "Overhead Press (Standing)", sets: `${s}x${r - 2} @ RPE ${rpe} · ${restSec} rest — brace core+glutes, slight arc, full lockout overhead` },
-      { name: "Weighted Pull-ups (or Lat Pulldown)", sets: `${heavyReps} · 90s rest — full hang, chin over bar, controlled descent 3 sec` },
-      { name: "Barbell Hip Thrust", sets: `${s}x${r} · ${restSec} rest — shoulders on bench, full lockout, squeeze glutes 2 sec at top` },
-      { name: "Plank + Side Plank", sets: `3x45s each (plank, left, right) · 30s rest between — neutral spine, brace hard` },
-    ];
-
-    if (type === "Upper Body Push") return [
-      { name: "Bench Press", sets: `${s}x${r} @ RPE ${rpe} · ${restSec} rest${deloadNote} — retract scapulae, arch slightly, control 3 sec eccentric` },
-      { name: "Incline Dumbbell Press (30°)", sets: `${s}x${r} · ${restSec} rest — squeeze at top, lower to chest level, 2 sec pause` },
-      { name: "Standing Overhead Press", sets: `${s}x${r - 2} @ RPE ${rpe} · ${restSec} rest — strict form, no leg drive, full lockout` },
-      { name: "Dumbbell Lateral Raises", sets: `3x15 · 45s rest — slight lean, pinky up, control the weight down 3 sec` },
-      { name: "Tricep Dips (weighted if able)", sets: `${s}x${r} · 60s rest — lean slightly forward, full range of motion` },
-      { name: "Cable Flyes", sets: `3x12 · 45s rest — slight bend in elbows, squeeze chest at centre` },
-      { name: "Face Pulls", sets: `3x15 · 45s rest — pull to forehead, external rotate, squeeze 2 sec` },
-    ];
-
-    if (type === "Upper Body Pull") return [
-      { name: "Weighted Pull-ups (or Lat Pulldown)", sets: `${s}x${r - 2} · 90s rest${deloadNote} — full dead hang, pull to chest, 3 sec negative` },
-      { name: "Barbell Bent-Over Row", sets: `${s}x${r} @ RPE ${rpe} · ${restSec} rest — 45° angle, pull to navel, squeeze 1 sec` },
-      { name: "Seated Cable Row", sets: `${s}x${r} · 60s rest — pull to lower chest, squeeze shoulder blades together` },
-      { name: "Dumbbell Rear Delt Flyes", sets: `3x15 · 45s rest — chest on bench, squeeze rear delts 2 sec` },
-      { name: "Barbell Curl", sets: `3x${r} · 60s rest — no swinging, full range, 2 sec eccentric` },
-      { name: "Hammer Curls", sets: `3x12 · 45s rest — neutral grip, control throughout` },
-      { name: "Face Pulls", sets: `3x15 · 45s rest — high cable, external rotate at end` },
-    ];
-
-    if (type === "Lower Body") return [
-      { name: "Back Squat", sets: `${s}x${r} @ RPE ${rpe} · ${restSec} rest${deloadNote} — brace core, knees track toes, break parallel, 2 sec pause at bottom` },
-      { name: "Romanian Deadlift", sets: `${s}x${r} @ RPE ${Math.max(rpe - 1, 5)} · ${restSec} rest — hip hinge, bar close, feel hamstring stretch at bottom` },
-      { name: "Bulgarian Split Squat", sets: `3x10 each leg · 60s rest — rear foot on bench, torso upright, full depth` },
-      { name: "Leg Press", sets: `${s}x${r} · ${restSec} rest — feet shoulder-width, don't lock out, controlled eccentric 3 sec` },
-      { name: "Leg Curl (lying or seated)", sets: `3x12 · 45s rest — squeeze at peak, 3 sec eccentric` },
-      { name: "Calf Raises (standing)", sets: `4x15 · 45s rest — full stretch at bottom, pause at top 2 sec` },
-      { name: "Weighted Plank", sets: `3x45s · 30s rest — plate on back, brace hard, neutral spine` },
-    ];
-
-    if (type === "Upper Body") return [
-      { name: "Bench Press", sets: `${s}x${r} @ RPE ${rpe} · ${restSec} rest — retract scapulae, 3 sec descent, pause at chest` },
-      { name: "Barbell Row", sets: `${s}x${r} @ RPE ${Math.max(rpe - 1, 5)} · ${restSec} rest — 45° angle, pull to navel` },
-      { name: "Overhead Press", sets: `${s}x${r - 2} · ${restSec} rest — strict, no leg drive` },
-      { name: "Pull-ups/Lat Pulldown", sets: `${s}x${r - 2} · 90s rest — full range, control negative` },
-      { name: "Lateral Raises", sets: `3x15 · 45s rest — controlled, slight lean forward` },
-      { name: "Tricep Pushdowns", sets: `3x12 · 45s rest — elbows pinned, full extension` },
-      { name: "Barbell Curl", sets: `3x12 · 45s rest — strict form, no swing` },
-    ];
-
-    if (type === "Full Body" || type === "Full Body Power") return [
-      { name: "Power Clean (or Hang Clean)", sets: `${s}x${Math.max(r - 5, 3)} @ RPE ${rpe} · 2 min rest${deloadNote} — explosive hip extension, catch in front squat position` },
-      { name: "Front Squat", sets: `${s}x${r - 2} · 90s rest — elbows high, brace hard, break parallel` },
-      { name: "Push Press", sets: `${s}x${r - 2} · 90s rest — quarter dip, explosive press, use legs to drive` },
-      { name: "Pendlay Row", sets: `${s}x${r} · 75s rest — dead stop each rep, explosive pull to sternum` },
-      { name: "Dumbbell Walking Lunges", sets: `3x12 each leg · 60s rest — long stride, knee tracks toe, upright torso` },
-      { name: "Plank to Push-up", sets: `3x10 · 45s rest — plank position, press up one hand at a time, alternate lead hand` },
-    ];
-
-    if (type === "Accessory & Core") return [
-      { name: "Dumbbell Lateral Raises", sets: `4x15 · 45s rest — slight lean, control the negative 3 sec` },
-      { name: "Cable Face Pulls", sets: `4x15 · 45s rest — pull to forehead, external rotate, squeeze 2 sec` },
-      { name: "Incline Dumbbell Curl", sets: `3x12 · 45s rest — full stretch at bottom, squeeze at top` },
-      { name: "Overhead Tricep Extension (cable)", sets: `3x12 · 45s rest — full stretch, lock out at bottom` },
-      { name: "Hanging Leg Raises", sets: `4x12 · 45s rest — control the swing, curl pelvis up` },
-      { name: "Cable Woodchops", sets: `3x12 each side · 45s rest — rotate through core, arms stay straight` },
-      { name: "Ab Wheel Rollouts (or Plank)", sets: `3x10 · 45s rest — brace core, don't let hips sag` },
-      { name: "Farmer's Walk", sets: `3x40m · 60s rest — heavy dumbbells/kettlebells, upright posture, squeeze grip` },
-    ];
-
-    if (type === "Speed Work" || type === "Speed & Agility") {
-      if (sport === "Running" || sport === "Athletics") return [
-        { name: "200m Repeats", sets: `${3 + Math.min(wk, 3)}x200m @ 85-90% effort · 2-3 min walk/jog recovery — focus on relaxed speed, pumping arms, driving knees` },
-        { name: "Flying 30m Sprints", sets: `4x30m @ 95% · full walking recovery (2-3 min) — build-up run 20m then sprint 30m, stay relaxed` },
-        { name: "Hill Sprints", sets: `${4 + Math.min(wk, 4)}x60m steep hill · jog down recovery — short, choppy steps, drive arms hard, lean into hill` },
-        { name: "Wicket Runs", sets: `4x40m · walk back recovery — set mini-hurdles at stride length, focus on turnover speed and dorsiflexion` },
-        { name: "Acceleration Drills (3-point start)", sets: `5x20m · 90s rest — powerful push-off, low drive phase, pump arms, gradual rise` },
-      ];
-      if (sport === "Football" || sport === "Basketball" || sport === "Rugby") return [
-        { name: "T-Test Agility Drill", sets: `5 reps · 90s rest — sprint forward 10m, shuffle left 5m, shuffle right 10m, shuffle left 5m, backpedal 10m` },
-        { name: "5-10-5 Pro Shuttle", sets: `6 reps · 90s rest — sprint 5yd, plant & turn 180°, sprint 10yd, plant & turn, sprint 5yd` },
-        { name: "Cone Weave Sprints", sets: `4x30m · 60s rest — weave through 8 cones, stay low, push off outside foot` },
-        { name: "Reaction Sprints", sets: `6x10m · full rest — partner calls direction, explode and sprint` },
-        { name: "Sprint Intervals", sets: `8x30m · 90s rest — max effort, walk back to start` },
-      ];
-      return [
-        { name: `${sport}-specific speed drills`, sets: `${20 + wk * 2} min total · match intensity intervals with full recovery` },
-        { name: "Agility ladder", sets: `3x through full pattern · 30s rest between — in-in-out-out, ickey shuffle, 2-in/2-out` },
-        { name: "Reaction sprints", sets: `6x10m · full rest — visual or auditory cue, explosive first step` },
-      ];
-    }
-
-    if (type === "Tempo Run") return [
-      { name: "Tempo Run", sets: `${20 + wk * 2} min @ lactate threshold pace (comfortably hard — can speak in 3-4 word phrases) — steady effort, don't speed up mid-run` },
-      { name: "Strides after tempo", sets: `4x100m @ 80% · walk back — smooth, tall, relaxed` },
-    ];
-
-    if (type === "Interval Training") {
-      if (sport === "Running" || sport === "Athletics") return [
-        { name: "400m Repeats", sets: `${4 + Math.min(wk, 4)}x400m @ 90-95% · 90s-2 min jog recovery — hold consistent pace, don't start too fast` },
-        { name: "200m at Race Pace", sets: `3x200m @ race pace · full recovery — practice target pace, feel the rhythm` },
-      ];
-      if (sport === "Cycling") return [
-        { name: "4 min On / 3 min Off Intervals", sets: `${4 + Math.min(wk, 3)} sets @ 105-110% FTP · recover at 50% FTP — seated, smooth pedal stroke` },
-        { name: "30/30 Intervals", sets: `10x(30s hard / 30s easy) · high cadence, explosive power` },
-      ];
-      if (sport === "Swimming") return [
-        { name: "100m Repeats", sets: `${6 + Math.min(wk, 4)}x100m @ threshold pace · 15-20s rest — focus on stroke count, smooth catch` },
-        { name: "50m Sprint Intervals", sets: `4x50m @ race pace · 30s rest — explosive off the wall, strong kick` },
-      ];
-      return [
-        { name: "High-intensity interval training", sets: `${20 + wk} min — 30s work / 30s rest × 10-15 rounds, max effort each interval` },
-      ];
-    }
-
-    if (type === "Long Run") return [
-      { name: "Long Run", sets: `${40 + wk * 3} min @ Zone 2 (easy conversational pace — you should be able to hold a full conversation)` },
-      { name: "Negative split last 10 min", sets: "Increase pace slightly — feel strong, don't sprint, just pick it up" },
-    ];
-
-    if (type === "Endurance Ride" || (type === "Long Ride" && sport === "Cycling")) return [
-      { name: "Endurance Ride", sets: `${50 + wk * 3} min · Zone 2-3 — steady cadence 80-90 RPM, stay aero, focus on smooth pedalling` },
-      { name: "Cadence Drills (last 15 min)", sets: `3x3 min @ 100+ RPM · 2 min easy — spin faster, not harder` },
-    ];
-
-    if (type === "Conditioning") return [
-      { name: "Shuttle Runs", sets: `6x20m · 60s rest — touch line, turn, sprint back, all out effort` },
-      { name: "Burpee to Broad Jump", sets: `4x8 · 75s rest — chest to floor, explosive jump forward` },
-      { name: "Medicine Ball Slams", sets: `3x12 · 45s rest — overhead, slam hard, catch on bounce, repeat fast` },
-      { name: "Battle Ropes", sets: `4x30s · 45s rest — alternating waves, full amplitude, stay low` },
-      { name: "Box Jumps", sets: `3x8 · 60s rest — step down (don't jump), explosive drive, land soft` },
-    ];
-
-    if (type === "Cross-Training") return [
-      { name: sport === "Running" ? "Swimming (easy technique)" : "Easy Run", sets: `${25 + wk} min · Zone 2 heart rate — cross-training improves aerobic base without impact stress` },
-      { name: sport === "Cycling" ? "Rowing" : "Cycling (steady)", sets: `${20 + wk} min · conversational pace — low impact, maintain cadence` },
-      { name: "Core Circuit", sets: `3 rounds: 30s plank, 15 sit-ups, 10 back extensions, 20 bicycle crunches · 60s rest between rounds — no rushing, quality reps` },
-    ];
-
-    if (type === "Sport-Specific Drills" || type === "Sport-Specific" || type === "Match Simulation") {
-      if (sport === "Running" || sport === "Athletics") return [
-        { name: "Easy Run (Zone 2)", sets: `${25 + wk * 2} min · conversational pace — nasal breathing if possible, 180+ cadence` },
-        { name: "Strides", sets: `${4 + Math.min(wk, 4)}x100m @ 80% · walk back — smooth, tall, relaxed form` },
-        { name: "Drills (A-skip, B-skip, high knees)", sets: "2x30m each drill — focus on technique, not speed" },
-      ];
-      if (sport === "Gym/Weightlifting") return [
-        { name: "Clean & Jerk", sets: `${s}x${Math.max(r - 5, 2)} @ RPE ${rpe} · 2 min rest — explosive hip drive, fast elbows, catch in front rack, drive press overhead` },
-        { name: "Snatch", sets: `${s}x${Math.max(r - 5, 2)} @ RPE ${rpe} · 2 min rest — wide grip, pull close, fast turnover, catch overhead with locked arms` },
-        { name: "Front Squat", sets: `${reps} · 90s rest — high elbows, brace core, break parallel` },
-        { name: "Pendlay Row", sets: `${reps} · 75s rest — dead stop each rep, explosive pull to sternum` },
-      ];
-      if (sport === "Swimming") return [
-        { name: "Warm-up swim", sets: "400m easy mixed stroke — loosen up, focus on body position" },
-        { name: "Main set", sets: `${4 + Math.min(wk, 4)}x100m @ threshold · 20s rest — hold stroke count, smooth catch and pull` },
-        { name: "Kick set", sets: "4x50m with board · 15s rest — kick from hips, pointed toes, steady rhythm" },
-        { name: "Cool-down", sets: "200m easy — choice of stroke, relax" },
-      ];
-      if (sport === "Cycling") return [
-        { name: "Endurance Ride", sets: `${40 + wk * 3} min · Zone 2-3 — steady cadence 80-90 RPM` },
-        { name: "Cadence Drills", sets: "4x3 min @ 100+ RPM · 2 min easy spin — focus on smooth circular pedalling" },
-        { name: "Seated Climbs", sets: `3x5 min @ threshold · 3 min recovery — stay seated, gear up, grind` },
-      ];
-      if (sport === "Football" || sport === "Basketball" || sport === "Rugby") return [
-        { name: "Agility Ladder Drills", sets: "3x full pattern · 45s rest — quick feet, stay low, eyes up, precise footwork" },
-        { name: "Cone Drills (T-test, 5-10-5)", sets: `${4 + Math.min(wk, 3)} reps · 60s rest — plant hard, push off outside foot, stay low through turns` },
-        { name: "Small-Sided Game Simulation", sets: `${15 + wk} min — match intensity with short recovery, replicate game scenarios` },
-        { name: "Sprint Intervals", sets: `6x30m · 90s rest — max effort, replicate game-speed bursts` },
-      ];
-      return [
-        { name: `${sport} skill practice`, sets: `${25 + wk * 2} min · focused technique — deliberate practice, quality over quantity` },
-        { name: "Sport-specific conditioning", sets: `${15 + wk} min · match intensity intervals — replicate competition demands` },
-      ];
-    }
-
-    if (type === "Technique Swim" || type === "Dryland Strength" || type === "Endurance Swim") {
-      if (type === "Technique Swim") return [
-        { name: "Catch-up drill", sets: "4x50m · 15s rest — one arm completes full stroke before other starts" },
-        { name: "Fingertip drag drill", sets: "4x50m · 15s rest — drag fingertips along surface, high elbow recovery" },
-        { name: "Kick on side drill", sets: "4x25m each side · 10s rest — one arm extended, body rotated" },
-        { name: "Build swims", sets: "4x100m · 20s rest — start easy, finish at race pace" },
-      ];
-      if (type === "Dryland Strength") return [
-        { name: "Push-ups", sets: `${s}x15 · 45s rest — chest to floor, full lockout` },
-        { name: "Lat Pulldowns", sets: `${s}x${r} · 60s rest — wide grip, pull to upper chest` },
-        { name: "Tricep Dips", sets: `${s}x${r} · 60s rest — full depth, controlled` },
-        { name: "Plank", sets: "3x45s · 30s rest — core tight, flat back" },
-        { name: "Russian Twists", sets: "3x20 · 30s rest — feet elevated, medicine ball" },
-      ];
-      return [
-        { name: "Endurance Swim", sets: `${wk * 50 + 800}m continuous · Zone 2 — steady stroke, breathe every 3 strokes` },
-        { name: "Pull buoy set", sets: "4x100m · 15s rest — focus on upper body catch and pull" },
-      ];
-    }
-
-    return [{ name: `${sport} ${type} Training`, sets: `${30 + week * 2} min · sport-specific work at moderate intensity` }];
-  };
-
-  // Edit plan session
-  const saveSessionEdit = async () => {
-    if (!selectedPlan || !editingSession) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const weekIdx = planData.findIndex((w) => w.week === editingSession.week);
-    if (weekIdx === -1) return;
-    const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === editingSession.day);
-    if (sessionIdx === -1) return;
-    if (editSessionTitle) planData[weekIdx].sessions[sessionIdx].title = editSessionTitle;
-    if (editSessionDuration) {
-      const mins = parseInt(editSessionDuration, 10);
-      // Session duration is bounded to the same 15–180 window the builder uses.
-      if (!Number.isFinite(mins) || mins < 5 || mins > 300) {
-        toast({ title: "Duration must be 5–300 minutes", variant: "destructive" });
-        return;
-      }
-      planData[weekIdx].sessions[sessionIdx].duration_minutes = mins;
-    }
-    // Offline-edits go to the device queue instead of failing: the athlete gets
-    // their change now, and the queue replays it (with the pre-edit row as the
-    // conflict baseline) when connectivity returns. A server refusal is still
-    // surfaced — only the network is allowed to queue.
-    const before = selectedPlan.plan_data;
-    const result = await updateOrQueue(
-      "training_plans",
-      selectedPlan.id,
-      { plan_data: planData },
-      { base: { plan_data: before } },
+    setCreating(true);
+    // The build screen is a promise the reveal waits on. The plan is assembled
+    // and saved while it runs; the counter only decides when the athlete sees
+    // the result, never whether the work happens.
+    setBuildDetails(
+      [
+        `${effectiveDays} training day${effectiveDays === 1 ? "" : "s"} a week`,
+        `${effectiveRecovery} full rest day${effectiveRecovery === 1 ? "" : "s"}`,
+        equipment.length ? describeEquipment(equipment) : "Bodyweight and open space",
+        planNotes.trim() ? "Your notes applied to every session" : "",
+        disability !== "none" && disability !== "prefer_not_to_say"
+          ? `Adapted: ${DISABILITY_LABEL[disability]}`
+          : "",
+        focusAreas.length ? `Focus: ${focusAreas.slice(0, 3).join(", ")}` : "",
+      ].filter(Boolean),
     );
-    if (!result.ok) {
-      const message = result.error instanceof Error ? result.error.message : "Please try again.";
-      toast({ title: "Couldn't save the session", description: message, variant: "destructive" });
-      return;
-    }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
-    setPlans((prev) => {
-      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
-      if (user) cachePlans(user.id, next);
-      return next;
+    setBuildWeeks(duration);
+    const buildScreenFinished = new Promise<void>((resolve) => {
+      finishBuildRef.current = resolve;
     });
-    if (result.queued) {
-      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
-    } else {
-      toast({ title: "Session updated! ✏️" });
-    }
-    setEditingSession(null);
-  };
-
-  const toggleWeekHoliday = async (weekNum: number) => {
-    if (!selectedPlan) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const weekIdx = planData.findIndex((w) => w.week === weekNum);
-    if (weekIdx === -1) return;
-    const wasHoliday = planData[weekIdx].isHoliday;
-    planData[weekIdx].isHoliday = !wasHoliday;
-    
-    // If marking as holiday, redistribute sessions to next non-holiday week
-    if (!wasHoliday) {
-      const holidaySessions = planData[weekIdx].sessions.filter((s) => !s.isRest && !s.isRecovery);
-      // Find next non-holiday week
-      const nextWeekIdx = planData.findIndex((w, i) => i > weekIdx && !w.isHoliday);
-      if (nextWeekIdx !== -1 && holidaySessions.length > 0) {
-        // Add key sessions to next week as extra work
-        planData[nextWeekIdx].redistributedFrom = weekNum;
-        planData[nextWeekIdx].extraNote = `Includes redistributed work from Week ${weekNum} (holiday)`;
-      }
-      // Replace sessions with light recovery for holiday
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
-        if (s.isRest) return s;
-        return {
-          ...s, title: "Holiday — Light Movement (optional)", type: "holiday",
-          duration_minutes: 15, description: "Holiday week. Optional light activity — walk, swim, stretch. Enjoy your break!",
-          exercises: [
-            { name: "Light walk or swim", sets: "15-20 min · completely easy" },
-            { name: "Stretching", sets: "10 min · focus on tight areas" },
-            { name: "Stay hydrated", sets: "3L+ water" },
-          ],
-          originalTitle: s.title, originalExercises: s.exercises,
-        };
-      });
-    } else {
-      // Restore original sessions
-      planData[weekIdx].sessions = planData[weekIdx].sessions.map((s) => {
-        if (s.originalTitle) {
-          return { ...s, title: s.originalTitle, exercises: s.originalExercises, type: s.originalTitle.toLowerCase().replace(/[^a-z]/g, "_"), duration_minutes: 40, description: `Restored session` };
-        }
-        return s;
-      });
-    }
-    
-    // Scoped and queued like saveSessionEdit: the row is addressed by its id,
-    // and a network failure queues the edit for replay rather than losing it.
-    const before = selectedPlan.plan_data;
-    const result = await updateOrQueue(
-      "training_plans",
-      selectedPlan.id,
-      { plan_data: planData },
-      { base: { plan_data: before } },
-    );
-    if (!result.ok) {
-      const message = result.error instanceof Error ? result.error.message : "Please try again.";
-      toast({ title: "Couldn't update your week", description: message, variant: "destructive" });
-      return;
-    }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
-    setPlans((prev) => {
-      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
-      if (user) cachePlans(user.id, next);
-      return next;
-    });
-    if (result.queued) {
-      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
-    } else {
-      toast({ title: !wasHoliday ? "Week marked as holiday 🏖️ — sessions redistributed to next week" : "Holiday removed — sessions restored" });
-    }
-  };
-
-  /**
-   * Undo a rebuild.
-   *
-   * The sessions that were replaced are restored from the rebuild's own record
-   * rather than recomputed, so this works even though the athlete has been
-   * looking at — and possibly editing — the rebuilt week in the meantime. Only
-   * the most recent rebuild can be reversed: each one scaled what the one
-   * before it left behind, so undoing an older one underneath a newer one would
-   * restore numbers that were never true.
-   */
-  const undoRebuild = async (recordId: string) => {
-    if (!selectedPlan) return;
-    setUndoingRebuild(recordId);
-    const result = await undoPlanRebuild({ plan: selectedPlan, recordId });
-    setUndoingRebuild(null);
-    if (!result.ok) {
-      toast({ title: "Couldn't undo that", description: result.error, variant: "destructive" });
-      return;
-    }
-    setSelectedPlan({
-      ...selectedPlan,
-      plan_data: result.plan_data as Json,
-      plan_adjustments: result.plan_adjustments as unknown as Json,
-    });
-    toast({
-      title: "Rebuild undone",
-      description: "Those weeks are back to how they were before your break.",
-    });
-  };
-
-  const skipSession = async (weekNum: number, dayNum: number) => {
-    if (!selectedPlan) return;
-    const planData = JSON.parse(JSON.stringify(selectedPlan.plan_data)) as PlanData;
-    const weekIdx = planData.findIndex((w) => w.week === weekNum);
-    if (weekIdx === -1) return;
-    const sessionIdx = planData[weekIdx].sessions.findIndex((s) => s.day === dayNum);
-    if (sessionIdx === -1) return;
-    planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
-    // Scoped and queued like saveSessionEdit (only network failures queue;
-    // server refusals still revert local state and say why).
-    const before = selectedPlan.plan_data;
-    const result = await updateOrQueue(
-      "training_plans",
-      selectedPlan.id,
-      { plan_data: planData },
-      { base: { plan_data: before } },
-    );
-    if (!result.ok) {
-      // Put the local state back so the UI can't disagree with the database.
-      planData[weekIdx].sessions[sessionIdx].skipped = !planData[weekIdx].sessions[sessionIdx].skipped;
-      const message = result.error instanceof Error ? result.error.message : "Please try again.";
-      toast({ title: "Couldn't update the session", description: message, variant: "destructive" });
-      return;
-    }
-    setSelectedPlan({ ...selectedPlan, plan_data: planData as unknown as Json });
-    setPlans((prev) => {
-      const next = prev.map((p) => (p.id === selectedPlan.id ? { ...p, plan_data: planData as unknown as Json } : p));
-      if (user) cachePlans(user.id, next);
-      return next;
-    });
-    if (result.queued) {
-      toast({ title: "Saved on this device", description: "It will sync to your account when you're back online." });
-    }
-  };
-
-  // Limiter test
-  const answerLimiterQuestion = (score: number) => {
-    const q = LIMITER_QUESTIONS[limiterStep];
-    const newAnswers = { ...limiterAnswers, [q.id]: score };
-    setLimiterAnswers(newAnswers);
-    if (limiterStep < LIMITER_QUESTIONS.length - 1) {
-      setLimiterStep(limiterStep + 1);
-    } else {
-      // Sport-weighted analysis over answered categories only — unanswered
-      // questions are skipped, never defaulted to a fake mid-point.
-      setLimiterResult(analyzeLimiterTest(newAnswers, limiterMetrics, getPrimarySport(profile?.sport) || sport, limiterReadiness));
-    }
-  };
-
-  const createLimiterPlan = async () => {
-    if (!user || !profile || !limiterResult || limiterResult.limiters.length === 0) return;
-    const age = getAge();
-    if (!age) { toast({ title: "Age required", description: "Set your DOB in Profile first.", variant: "destructive" }); return; }
-    const LIMITER_WEEKS = 4;
-
-    setCreatingLimiterPlan(true);
+    let savedPlan: TrainingPlan | null = null;
+    let failure: string | null = null;
     try {
-      // Insufficient credits now open the global top-up sheet and retry the
-      // spend automatically after a successful purchase.
-      const spend = await spendWithTopUp("limiter_fix_plan", { reason: `Limiter Fix Plan (${LIMITER_WEEKS} weeks)` });
-      if (!spend.success) { setCreatingLimiterPlan(false); if (spend.dismissedTopUp) toast({ title: "Not enough credits", description: spendErrorMessage("limiter_fix_plan", spend), variant: "destructive" }); return; }
-      // Generate plan focused on weakest areas
-      const weakAreas = limiterResult.limiters.map(l => l.name);
-      const planGoal = `Fix: ${weakAreas.slice(0, 3).join(", ")}`;
-      const planData = generatePlanData(sport, planGoal, level, 4, age);
-      
-      const { error: insertError } = await supabase.from("training_plans").insert({
-        user_id: user.id, title: "Limiter Fix Plan", sport, goal: planGoal, level, duration_weeks: 4,
-        description: `4-week plan targeting: ${weakAreas.join(", ")}. ${limiterResult.confidence}`,
-        plan_data: planData,
-      });
-      if (insertError) throw insertError;
-      
-      await refreshProfile();
-      toast({ title: "Limiter Fix Plan Created! 🎯", description: "Check your training plans." });
-      setActiveView("plans");
-      setLimiterResult(null);
-      setLimiterStep(0);
-      setLimiterAnswers({});
-      fetchPlans();
-    } catch (err) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-    setCreatingLimiterPlan(false);
-  };
-
-  // Performance log
-  const addLog = async () => {
-    if (!user) return;
-    const distKm = logDistance ? parseFloat(logDistance) : null;
-    const parts = logTime.split(":").map(Number);
-    let totalSec = 0;
-    if (parts.length === 3) totalSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
-    else if (parts.length === 2) totalSec = parts[0] * 60 + parts[1];
-    const pace = distKm && totalSec ? `${Math.floor((totalSec / distKm) / 60)}:${(Math.round((totalSec / distKm) % 60)).toString().padStart(2, "0")} /km` : null;
-    const { data: insertedLog, error } = await supabase.from("performance_logs").insert({
-      user_id: user.id, title: logTitle || `${logType} - ${logSport}`, distance_km: distKm,
-      time_seconds: totalSec || null, pace_per_km: pace, notes: logNotes || null, sport: logSport, log_type: logType,
-      perceived_exertion: parseInt(logRPE) || null, form_rating: parseInt(logFormRating) || null,
-      heart_rate_avg: logHeartRate ? parseInt(logHeartRate) : null, calories_burned: logCalories ? parseInt(logCalories) : null,
-      // Phase 3: the load, priced at the moment the session is logged, so the
-      // number and the session it describes are always written together. The
-      // duration the athlete actually recorded is what feeds it, not the plan's
-      // — the plan says what was intended and this is what happened.
-      ...loadColumnsFor({
-        sport: logSport,
-        durationMinutes: totalSec ? Math.round(totalSec / 60) : null,
-        rpe: parseInt(logRPE) || null,
-        distanceKm: distKm,
-      }),
-    }).select("id").single();
-    if (error || !insertedLog) { toast({ title: "Couldn't save your log", description: error?.message ?? "Unknown error", variant: "destructive" }); return; }
-    // The saved log row is the proof of a session: XP is requested with the
-    // log id, the server verifies the row (and its daily cap / idempotency).
-    const newLogId = (insertedLog as { id: string }).id;
-    void awardTrainingSession(newLogId);
-    setShowAddLog(false); setLogTitle(""); setLogDistance(""); setLogTime(""); setLogNotes(""); setLogHeartRate(""); setLogCalories("");
-
-    // Trophy claim + PB detection run AFTER the log row is confirmed saved, so
-    // a failed save claims nothing and grants nothing. The server RPC is
-    // authoritative for what was granted (idempotent per user+reward); what we
-    // render is what it returns, never a client-side guess.
-    let trophies: { reward_id: string; tier: string; name: string }[] = [];
-    if (totalSec > 0) {
-      const { data: claim } = await supabase.rpc("claim_event_trophies", { p_log_id: insertedLog.id });
-      // The RPC returns jsonb ({ ok, event, trophies }); narrow through the
-      // shape the migration documents rather than trusting Json's union.
-      trophies = ((claim as { trophies?: { reward_id: string; tier: string; name: string }[] } | null)?.trophies ?? []) as { reward_id: string; tier: string; name: string }[];
-    }
-    // Local PB wall updates in the same flow, against the pre-record snapshot,
-    // so the PBs page and this celebration agree on what a PB is.
-    let isPb = false;
-    let eventLabel: string | null = null;
-    let previousSeconds: number | null = null;
-    if (totalSec > 0 && distKm) {
-      const preview = evaluateLogAgainstEvents(
-        { sport: logSport, log_type: logType, distance_km: distKm, time_seconds: totalSec },
-        wallForEvaluation(),
+      const planData: PlanData = generatePlanData(
+        sportName,
+        generationGoal,
+        level,
+        duration,
+        parsedAge,
+        quiz,
       );
-      eventLabel = preview.event?.label ?? null;
-      previousSeconds = preview.previous_seconds;
-      if (preview.event) {
-        const recorded = recordTimedPb(preview.event.label, totalSec);
-        isPb = recorded.isPb;
-        previousSeconds = recorded.previousSeconds;
+      const confidence = limiterResult?.confidence.replace(/[.\s]+$/, "") ?? "";
+      const description =
+        setupSource === "limiter" && limiterResult
+          ? `${duration}-week plan targeting ${limiterResult.limiters
+              .map((limiter) => LIMITER_LABEL[limiter.name].toLowerCase())
+              .join(", ")}. Built from your Limiter Test — ${confidence.toLowerCase()} — with ${effectiveDays} sessions and ${effectiveRecovery} recovery day${effectiveRecovery === 1 ? "" : "s"} a week.${adaptationLine ? ` ${adaptationLine}` : ""}`
+          : `${duration}-week ${goals.join(" + ").toLowerCase()} plan for ${sportName.toLowerCase()} · ${effectiveDays}d/wk · ${quiz.hoursPerWeek}h/wk · ${intensity} intensity${focusAreas.length ? ` · focus: ${focusAreas.join(", ")}` : ""} · trains in the ${timeOfDay.toLowerCase()}${quiz.targetEvent ? ` · targeting ${quiz.targetEvent}` : ""}.${adaptationLine ? ` ${adaptationLine}` : ""}`;
+
+      // Only one plan can drive the dashboard and the daily card. Deactivate
+      // first, then insert as active, so there is never a moment with two.
+      const { error: deactivateError } = await supabase
+        .from("training_plans")
+        .update({ active: false })
+        .eq("user_id", user.id)
+        .eq("active", true);
+      if (deactivateError) throw deactivateError;
+
+      const planRow = {
+        user_id: user.id,
+        title: planTitle,
+        sport: sportName,
+        goal,
+        level,
+        duration_weeks: duration,
+        description,
+        plan_data: planData as unknown as Json,
+        active: true,
+      };
+      // Two attempts: the plan is already assembled in memory, so a retry costs
+      // a moment and a lost insert costs the athlete the plan they just built.
+      // A second attempt never regenerates anything — same row, same data.
+      let saved: TrainingPlan | null = null;
+      let insertMessage: string | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const { data: inserted, error: insertError } = await supabase
+          .from("training_plans")
+          .insert(planRow)
+          .select("*")
+          .single();
+        if (!insertError && inserted) {
+          saved = inserted as TrainingPlan;
+          break;
+        }
+        insertMessage = insertError?.message ?? null;
       }
+      if (!saved) {
+        // The build is gone, so say so plainly and say what NOT to do: creating
+        // the plan again would replace it a second time rather than recover
+        // this one. Nothing was charged — training plans are built on device.
+        throw new Error(
+          "Your plan was written but could not be saved. Do not create it again — doing it a second time replaces this one rather than recovering it. Nothing was charged. Contact support from Profile if this keeps happening." +
+            (insertMessage ? ` (${insertMessage})` : ""),
+        );
+      }
+
+      savedPlan = saved;
+    } catch (error) {
+      failure = error instanceof Error ? error.message : "Could not create the plan.";
+      // Nothing was built, so there is nothing to reveal: end the build screen
+      // now instead of making the athlete watch a 10–20s counter for an error
+      // that is already known. The counter paces the reveal, it never delays a
+      // failure report.
+      finishBuildRef.current?.();
     }
-    fetchLogs();
-    toast({ title: "Log saved! 📝" });
-    if (isPb || trophies.length > 0) {
-      triggerPbCelebration({
-        eventLabel: eventLabel ?? trophies[0]?.name ?? logSport,
-        timeSeconds: totalSec,
-        isPb,
-        previousSeconds,
-        trophies,
-      });
+
+    // Reveal only after the counter has shown 100% — this is what makes the
+    // build feel crafted rather than instant, without delaying the save.
+    await buildScreenFinished;
+    finishBuildRef.current = null;
+    setBuildWeeks(null);
+    setBuildDetails([]);
+    setCreating(false);
+
+    if (failure) {
+      toast.error(failure);
+      return;
+    }
+    if (!savedPlan) {
+      toast.error("The plan was created but could not be opened.");
+      return;
+    }
+
+    const plan = savedPlan;
+    setPlans((current) => [plan, ...current.map((row) => ({ ...row, active: false }))]);
+    setSelectedPlan(plan);
+    setExpandedWeek(1);
+    setScreen("detail");
+    toast.success(
+      setupSource === "limiter" ? "Limiter plan created — opening it now." : "Plan created.",
+    );
+    if (effectiveDays < daysPerWeek) {
+      toast.message(`Capped at ${effectiveDays} days a week for your age band.`);
     }
   };
 
-  const chipClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${active ? "bg-primary/15 border-primary text-primary shadow-glow" : "bg-card border-border text-foreground hover:border-primary/30"}`;
-  const inputClass = "w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-300";
-
-  // === LIMITER TEST VIEW ===
-  if (activeView === "limiter") return (
-    <div className="min-h-screen bg-background">
-      {generationOverlay}
-      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
-        <motion.button onClick={() => { setActiveView("plans"); setLimiterStep(0); setLimiterAnswers({}); setLimiterResult(null); }} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
-        <h1 className="text-xl font-display font-bold">Limiter Test</h1>
-      </div>
-      <div className="px-5">
-        {!limiterResult ? (
-          <motion.div key={limiterStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-            <div className="flex gap-1 mb-2">
-              {LIMITER_QUESTIONS.map((_, i) => (
-                <div key={i} className={`flex-1 h-1 rounded-full ${i <= limiterStep ? "bg-primary" : "bg-muted"}`} />
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">{limiterStep + 1} of {LIMITER_QUESTIONS.length}</p>
-            <h3 className="font-display font-bold text-lg">{LIMITER_QUESTIONS[limiterStep].question}</h3>
-            <p className="text-xs text-muted-foreground">Rate yourself 1 (very weak) to 10 (excellent)</p>
-            <div className="grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                <motion.button key={n} onClick={() => answerLimiterQuestion(n)} whileTap={{ scale: 0.9 }}
-                  className={`py-3 rounded-xl text-sm font-bold border transition-all ${limiterAnswers[LIMITER_QUESTIONS[limiterStep].id] === n ? "bg-primary/20 border-primary text-primary" : "bg-card border-border text-foreground hover:border-primary/30"}`}>{n}</motion.button>
-              ))}
-            </div>
-            {limiterMetrics.length > 0 && (
-              <p className="text-[12px] text-success flex items-center gap-1.5"><Check size={12} /> {limiterMetrics.length} logged test{limiterMetrics.length === 1 ? "" : "s"} will sharpen this analysis.</p>
-            )}
-          </motion.div>
-        ) : (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-            <div className="bg-gradient-card border border-primary/20 rounded-2xl p-5 shadow-card text-center">
-              <AlertTriangle size={32} className="mx-auto text-primary mb-3" />
-              <h3 className="font-display font-bold text-lg">Your Limiters</h3>
-              <p className="text-sm text-muted-foreground mt-1">{limiterResult.limiters.length === 0 ? "No significant limiters found! You're well-rounded." : "Areas to improve, ranked by how much they hold your sport back"}</p>
-              <p className="text-[12px] text-muted-foreground mt-2 px-2">{limiterResult.confidence}</p>
-              {/* The score comes from self-ratings, not a measurement, and the
-                  fix plan is the largest single AI output in the app. Both
-                  facts belong on the card that sells it. */}
-              <p className="text-[11px] leading-relaxed text-muted-foreground mt-3 px-2">
-                {DISCLAIMERS.aiEstimate.short} A plan built from this is a starting point, not a diagnosis.
-              </p>
-            </div>
-            {limiterResult.limiters.map((l, i) => (
-              <motion.div key={l.name} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
-                className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold capitalize">{l.name}</span>
-                  <span className={`text-sm font-display font-bold ${l.score <= 4 ? "text-destructive" : l.score <= 6 ? "text-energy" : "text-primary"}`}>{l.score}/10</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${l.score * 10}%` }} transition={{ delay: 0.3 + i * 0.1, duration: 0.6 }}
-                    className={`h-full rounded-full ${l.score <= 4 ? "bg-destructive" : l.score <= 6 ? "bg-energy" : "bg-primary"}`} />
-                </div>
-                <p className="text-[12px] text-muted-foreground mt-2">
-                  {l.evidence === "logged metric + self-rating" ? "📊 Backed by your logged test data + self-rating" : "🗣️ Self-rating only — log a test for objective data"}
-                </p>
-              </motion.div>
-            ))}
-            {limiterResult.limiters.length > 0 && (
-              <motion.button onClick={createLimiterPlan} disabled={creatingLimiterPlan}
-                whileTap={{ scale: 0.98 }} className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow mt-4 disabled:opacity-50">
-                {creatingLimiterPlan ? "Creating Plan..." : `Build a plan targeting these limiters (${creditCost("limiter_fix_plan")} credits · 4 weeks)`}
-              </motion.button>
-            )}
-            <button onClick={() => { setLimiterStep(0); setLimiterAnswers({}); setLimiterResult(null); setActiveView("plans"); }} className="w-full text-sm text-muted-foreground underline text-center">Back to Training</button>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
-
-  // === PERFORMANCE LOG VIEW ===
-  if (activeView === "log") return (
-    <div className="min-h-screen bg-background">
-      {generationOverlay}
-      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
-        <motion.button onClick={() => setActiveView("plans")} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
-        <h1 className="text-xl font-display font-bold">Performance Log</h1>
-      </div>
-      <div className="px-5">
-        {!showAddLog ? (
-          <motion.button onClick={() => setShowAddLog(true)} whileTap={{ scale: 0.98 }} className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow mb-5 flex items-center justify-center gap-2"><Plus size={18} /> Log Performance</motion.button>
-        ) : (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-2xl p-4 space-y-3 mb-5">
-            <input type="text" placeholder="Title (optional)" value={logTitle} onChange={e => setLogTitle(e.target.value)} className={inputClass} />
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Log Type</label>
-              <div className="flex gap-1.5 flex-wrap">
-                {["training", "race", "time_trial", "test", "friendly", "interval", "tempo", "long_run"].map(t => (
-                  <button key={t} onClick={() => setLogType(t)} className={`capitalize ${chipClass(logType === t)}`}>{t.replace("_", " ")}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Sport</label>
-              <div className="flex flex-wrap gap-1.5">
-                {["Running", "Cycling", "Swimming", "Gym", "Football", "CrossFit", "Other"].map(s => (
-                  <button key={s} onClick={() => setLogSport(s)} className={chipClass(logSport === s)}>{s}</button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="number" step="0.01" placeholder="Distance (km)" value={logDistance} onChange={e => setLogDistance(e.target.value)} className={inputClass} />
-              <input type="text" placeholder="Time (MM:SS)" value={logTime} onChange={e => setLogTime(e.target.value)} className={inputClass} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="number" placeholder="Avg HR (bpm)" value={logHeartRate} onChange={e => setLogHeartRate(e.target.value)} className={inputClass} />
-              <input type="number" placeholder="Calories burned" value={logCalories} onChange={e => setLogCalories(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Perceived Exertion (RPE 1-10)</label>
-              <input type="range" min={1} max={10} value={logRPE} onChange={e => setLogRPE(e.target.value)} className="w-full accent-primary" />
-              <div className="flex justify-between text-[12px] text-muted-foreground"><span>Easy</span><span className="font-bold text-primary">{logRPE}</span><span>Max</span></div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Form Rating (1-10)</label>
-              <input type="range" min={1} max={10} value={logFormRating} onChange={e => setLogFormRating(e.target.value)} className="w-full accent-primary" />
-              <div className="flex justify-between text-[12px] text-muted-foreground"><span>Poor</span><span className="font-bold text-primary">{logFormRating}</span><span>Perfect</span></div>
-            </div>
-            <textarea placeholder="Notes..." value={logNotes} onChange={e => setLogNotes(e.target.value)} rows={2} className={inputClass + " resize-none"} />
-            <div className="flex gap-2">
-              <button onClick={() => setShowAddLog(false)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground">Cancel</button>
-              <motion.button onClick={addLog} whileTap={{ scale: 0.98 }} className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow">Save</motion.button>
-            </div>
-          </motion.div>
-        )}
-        <div className="space-y-3 mb-8">
-          {logs.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No logs yet.</p>}
-          {logs.map((log, i) => (
-            <motion.div key={log.id} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-              className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm">{log.title || "Training"}</h4>
-                <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">{log.log_type?.replace("_", " ")}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {log.sport && `${log.sport} · `}
-                {log.distance_km && `${Number(log.distance_km)} km`}
-                {log.pace_per_km && ` · ${log.pace_per_km}`}
-                {log.time_seconds && ` · ${Math.floor(log.time_seconds / 60)}:${(log.time_seconds % 60).toString().padStart(2, "0")}`}
-              </p>
-              <div className="flex gap-3 mt-1">
-                {log.perceived_exertion && <span className="text-[12px] text-muted-foreground">RPE: {log.perceived_exertion}/10</span>}
-                {log.form_rating && <span className="text-[12px] text-muted-foreground">Form: {log.form_rating}/10</span>}
-                {log.heart_rate_avg && <span className="text-[12px] text-muted-foreground">{log.heart_rate_avg} bpm</span>}
-                {log.calories_burned && <span className="text-[12px] text-muted-foreground">{log.calories_burned} kcal</span>}
-              </div>
-              {log.notes && <p className="text-xs text-muted-foreground mt-1">{log.notes}</p>}
-              <p className="text-[12px] text-muted-foreground mt-1">{new Date(log.created_at).toLocaleDateString()}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  // === PLAN DETAIL VIEW ===
-  if (activeView === "planDetail" && selectedPlan) {
-    const planData = selectedPlan.plan_data as PlanData | null;
-    // What the athlete's active injuries say about THIS plan. Computed, not
-    // written back: the plan stays byte-identical, the completed-week history
-    // stays untouched, and everything the flags claim is rendered as a chip
-    // next to the thing it is about.
-    const injuryReport = summarizeInjuryImpact(injuriesForFlags, Array.isArray(planData) ? planData : []);
-    const injurySessionFlags = new Map<string, { chip: string; reason: string; adapting: boolean }>();
-    const injuryWeekCounts = new Map<number, number>();
-    for (const a of injuryReport.affected) {
-      if (a.verdict.action === "none") continue;
-      injurySessionFlags.set(`${a.week}:${a.day}`, { chip: a.verdict.chip, reason: a.verdict.reason, adapting: a.verdict.action === "adapt" });
-      injuryWeekCounts.set(a.week, (injuryWeekCounts.get(a.week) ?? 0) + 1);
+  const activatePlan = async (plan: TrainingPlan) => {
+    if (!user || activating || plan.active) return;
+    setActivating(true);
+    try {
+      await supabase
+        .from("training_plans")
+        .update({ active: false })
+        .eq("user_id", user.id)
+        .eq("active", true);
+      const { error } = await supabase
+        .from("training_plans")
+        .update({ active: true })
+        .eq("id", plan.id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setPlans((current) =>
+        current.map((row) => ({ ...row, active: row.id === plan.id })),
+      );
+      if (selectedPlan?.id === plan.id) setSelectedPlan({ ...selectedPlan, active: true });
+      toast.success("This plan is now active.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not activate the plan.");
+    } finally {
+      setActivating(false);
     }
-    return (
-      <div className="min-h-screen bg-background">
-      {generationOverlay}
-        <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4 flex items-center gap-3">
-          <motion.button onClick={() => { setActiveView("plans"); setSelectedPlan(null); setExpandedWeek(null); }} whileTap={{ scale: 0.9 }} className="text-muted-foreground"><ChevronRight size={20} className="rotate-180" /></motion.button>
-          <h1 className="text-lg font-display font-bold flex-1">{selectedPlan.title}</h1>
-        </div>
-        <div className="px-5 mb-3">
-          <p className="text-sm text-muted-foreground">{selectedPlan.sport} · {selectedPlan.level} · Week {selectedPlan.week_current}/{selectedPlan.duration_weeks}</p>
-          {adaptive.adjustments.length > 0 && (
-            <span className="inline-flex items-center gap-1 mt-1.5 text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
-              <TrendingUp size={11} /> Rebuilt for a break
-            </span>
-          )}
-          <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(selectedPlan.week_current / selectedPlan.duration_weeks) * 100}%` }} className="h-full bg-primary rounded-full" />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <button onClick={() => setExpandedWeek(-1)}
-              className="text-[12px] font-semibold bg-primary/10 text-primary px-3 py-1.5 rounded-lg">
-              Expand all weeks
-            </button>
-            <button onClick={() => setExpandedWeek(null)}
-              className="text-[12px] font-semibold bg-muted text-muted-foreground px-3 py-1.5 rounded-lg">
-              Collapse all
-            </button>
-            {/* Export: the athlete can take the plan to their calendar or head
-                unit. `${planData}` is the already-loaded plan; flattenPlan dates
-                weeks against today. */}
-            <div className="ms-auto">
-              <PlanExportButton
-                sessions={flattenPlan(selectedPlan)}
-                planTitle={selectedPlan.title ?? "Training plan"}
-              />
-            </div>
-          </div>
-        </div>
+  };
 
-        {/* An injury recorded after this plan was written. Said first, because
-            it changes what the athlete is about to do today: the flagged
-            sessions are visible in place below, the plan data itself is not
-            rewritten behind their back, and the banner is the honest summary —
-            what is affected and what to do about it. */}
-        {injuryReport.injuries.length > 0 && (
-          <div className="px-5 mb-4">
-            <div className="rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle size={14} className="text-destructive mt-0.5 shrink-0" />
-                <div className="min-w-0 text-[12px] leading-relaxed text-muted-foreground">
-                  <span className="block text-xs font-semibold text-foreground">
-                    Active injuries affect {injuryReport.affected.length} session{injuryReport.affected.length === 1 ? "" : "s"} in this plan
-                    {injuryReport.injuries.map((i) => ` · ${i.bodyPart}`).join("")}
-                  </span>
-                  {injuryReport.affected.length > 0 ? (
-                    <>
-                      Flagged sessions are marked below — reduce them as the chip says, or get them cleared by a professional. Anything marked <em>Review</em> should not be pushed through.
-                      <br />
-                      Plans you generate from now on are written around your active injuries automatically.
-                    </>
-                  ) : (
-                    <>Your injuries are recorded, but nothing in this plan matches their affected areas — enough to train around, not enough to rewrite.</>
-                  )}
+  const deletePlan = async (plan: TrainingPlan) => {
+    setConfirmDelete(null);
+    const { error } = await supabase
+      .from("training_plans")
+      .delete()
+      .eq("id", plan.id)
+      .eq("user_id", user?.id ?? "");
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPlans((current) => current.filter((row) => row.id !== plan.id));
+    if (selectedPlan?.id === plan.id) {
+      setSelectedPlan(null);
+      setScreen("home");
+    }
+    toast.success("Plan deleted.");
+  };
+
+  const openPlan = (plan: TrainingPlan) => {
+    setSelectedPlan(plan);
+    const weeks = readWeeks(plan.plan_data);
+    const current = weeks.find((week) => week.week === plan.week_current) ?? weeks[0];
+    setExpandedWeek(current?.week ?? 1);
+    setScreen("detail");
+  };
+
+  // One header, shared with every other screen. Training used to draw its own
+  // eyebrow/title pair at a different size, so moving from the Train hub into
+  // the plan list changed the title size and the column by a few pixels.
+  const header = (eyebrow: string, heading: string, subtitle?: string) => (
+    <PageHeader eyebrow={eyebrow} icon={Dumbbell} title={heading} subtitle={subtitle} />
+  );
+
+  const backButton = (onClick: () => void, label: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="press mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-muted-foreground"
+    >
+      <ChevronLeft size={18} aria-hidden /> {label}
+    </button>
+  );
+
+  // ------------------------------------------------------------- limiter ---
+  if (screen === "limiter") {
+    const question = LIMITER_QUESTIONS[limiterStep];
+    const answered = limiterAnswers[question?.id] ?? null;
+    const total = LIMITER_QUESTIONS.length;
+    return (
+      <div className="min-h-screen pb-28">
+        <div className="mx-auto w-full max-w-2xl px-5 pt-[var(--vaylo-screen-top)] sm:px-6">
+          {backButton(() => setScreen("home"), "Training")}
+          {header("Limiter Test", "Find the one thing to work on")}
+
+          {!limiterStarted && !limiterResult ? (
+            <div className="space-y-4">
+              <div className={`${card} p-5`}>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+                  <Target size={20} className="text-primary" aria-hidden />
+                </span>
+                <h2 className="mt-4 font-display text-lg font-bold">Eight honest ratings</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  Rate how reliably you can do each part of your sport. The test ranks the
+                  areas by how much they hold your sport back — not by which one sounds worst.
+                </p>
+                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                  <li className="flex gap-2">
+                    <Check size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                    Takes about two minutes.
+                  </li>
+                  <li className="flex gap-2">
+                    <Check size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                    Logged speed, strength, endurance and recovery tests sharpen the result.
+                  </li>
+                  <li className="flex gap-2">
+                    <Check size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                    At the end you can build a plan around the result.
+                  </li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setLimiterStarted(true)}
+                  className="press mt-5 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+                >
+                  Start the test <ChevronRight size={16} aria-hidden />
+                </button>
+              </div>
+              <p className="px-1 text-[12px] leading-relaxed text-muted-foreground">
+                A limiter here is a training priority, not a diagnosis. Sharp or persistent pain
+                needs a physiotherapist or doctor, not a plan from an app.
+              </p>
+            </div>
+          ) : limiterResult ? (
+            <div className="space-y-4">
+              <div className={`${card} p-5`}>
+                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-primary">
+                  Your limiter
+                </p>
+                <h2 className="mt-1 font-display text-2xl font-bold">
+                  {topLimiter ? LIMITER_LABEL[topLimiter.name] : "No clear limiter"}
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  {topLimiter
+                    ? `${LIMITER_LABEL[topLimiter.name]} is ranked first for ${sport && sport !== "General" ? sport : "your sport"}. Work on it before adding more volume elsewhere.`
+                    : "Nothing stood out enough to call a limiter. That is a good result — keep training across the board."}
+                </p>
+                <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+                  {limiterResult.confidence}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openSetup("limiter")}
+                    className="press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+                  >
+                    <Sparkles size={16} aria-hidden /> Create a plan to fix this
+                  </button>
+                  <button
+                    type="button"
+                    onClick={retakeLimiter}
+                    className="press min-h-[48px] rounded-xl border border-white/[0.08] px-4 text-sm font-semibold text-muted-foreground"
+                  >
+                    Retake
+                  </button>
                 </div>
               </div>
+
+              <div className="space-y-2.5">
+                {limiterResult.limiters.map((limiter) => (
+                  <div key={limiter.name} className={`${card} p-4`}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm font-semibold">{LIMITER_LABEL[limiter.name]}</p>
+                      <p className="shrink-0 text-sm font-bold tabular-nums">
+                        {limiter.score.toFixed(1)}
+                        <span className="text-muted-foreground">/10</span>
+                      </p>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                      <div
+                        className={`h-full rounded-full ${
+                          limiter.score <= 4
+                            ? "bg-destructive"
+                            : limiter.score <= 6
+                              ? "bg-energy"
+                              : "bg-primary"
+                        }`}
+                        style={{ width: `${Math.max(3, Math.min(100, limiter.score * 10))}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[12px] text-muted-foreground">
+                      {limiter.evidence === "self-rating only"
+                        ? "Self-rating only — log a test for objective evidence."
+                        : "Backed by your logged test data and self-rating."}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* A rebuild is the biggest thing that can happen to a plan, so it is
-            said first, in the athlete's own numbers, with a way out. Collapsed
-            to one sentence — the detail and the undo are one tap away rather
-            than in the athlete's face every time they open their plan. */}
-        {adaptive.adjustments.length > 0 && (
-          <div className="px-5 mb-4">
-            {adaptive.adjustments.map((record, index) => {
-              const open = expandedRebuild === record.id;
-              const isLatest = index === adaptive.adjustments.length - 1;
-              return (
-                <div key={record.id} className="rounded-xl border border-primary/25 bg-primary/[0.06] mb-2 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedRebuild(open ? null : record.id)}
-                    aria-expanded={open}
-                    className="w-full text-start p-3 flex items-start gap-2"
-                  >
-                    <TrendingUp size={14} className="text-primary mt-0.5 shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold">{record.headline}</span>
-                      <span className="block text-[12px] text-muted-foreground mt-0.5">{record.explanation}</span>
-                    </span>
-                    <ChevronDown size={14} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-                  </button>
-                  {open && (
-                    <div className="px-3 pb-3 space-y-1">
-                      {record.steps.map((step) => (
-                        <div key={step.week} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
-                          <span className="min-w-0 truncate">
-                            Week {step.week}{step.back === 1 ? " · back" : ` · week ${step.back} back`}
-                          </span>
-                          <span className="shrink-0 text-end">
-                            {step.volumePct}% volume · up to {step.intensityPct}% intensity
-                            {step.dropped > 0 ? ` · ${step.dropped} dropped` : ""}
-                          </span>
-                        </div>
-                      ))}
-                      {/* No separate medical line here: the explanation above
-                          already ends with it, and the same sentence twice is
-                          how a screen starts to look like a disclaimer. The
-                          field stays on the record for anything that should not
-                          have to parse prose to find it. */}
-                      {isLatest ? (
-                        <button
-                          type="button"
-                          onClick={() => void undoRebuild(record.id)}
-                          disabled={undoingRebuild === record.id}
-                          className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-primary disabled:opacity-50"
-                        >
-                          <Undo2 size={12} />
-                          {undoingRebuild === record.id ? "Undoing…" : "Undo this rebuild"}
-                        </button>
-                      ) : (
-                        <p className="text-[12px] text-muted-foreground pt-1">
-                          Undo the more recent rebuild first — this one is underneath it.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Phase 3: today's read. Placed after the rebuild panel and before
-            "what changed" because it answers a different question — not "why is
-            this different from what you were given" but "given what your body
-            has told me this week, what should today be". Always shown, even
-            when the answer is "nothing to change" or "I don't know": a
-            recommendation that appears only when it has something to say reads
-            as nagging, and one that hides its inputs reads as magic. */}
-        {recoveryRead && planData && (
-          <div className="px-5 mb-4">
-            <RecoveryTodayRead
-              read={recoveryRead}
-              loading={recoveryReadLoading}
-              expanded={showRecoveryWhy}
-              onToggle={() => setShowRecoveryWhy((open) => !open)}
-            />
-          </div>
-        )}
-
-        {/* "What changed?" — the honest answer to why part of this plan is not
-            there. Collapsed to one sentence, with the sessions behind it on
-            tap, so the calendar stays a calendar rather than a report. */}
-        {(adaptive.changes.length > 0 || adaptive.error) && (
-          <div className="px-5 mb-4">
-            {adaptive.changes.map((change) => {
-              const open = expandedChange === change.event.id;
-              return (
-                <div key={change.event.id} className="rounded-xl border border-info/25 bg-info/[0.06] mb-2 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedChange(open ? null : change.event.id)}
-                    aria-expanded={open}
-                    className="w-full text-start p-3 flex items-start gap-2"
-                  >
-                    <Calendar size={14} className="text-info mt-0.5 shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold">What changed</span>
-                      <span className="block text-[12px] text-muted-foreground mt-0.5">{change.explanation}</span>
-                    </span>
-                    <ChevronDown size={14} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-                  </button>
-                  {open && (
-                    <div className="px-3 pb-3 space-y-1">
-                      {change.sessions.map((s) => (
-                        <div key={`${s.scheduled_date}-${s.title}`} className="flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
-                          <span className="min-w-0 truncate">
-                            {new Date(`${s.scheduled_date}T00:00:00`).toLocaleDateString()} · {s.title}
-                            {s.important && <span className="text-info"> · key session</span>}
-                          </span>
-                          <span className="shrink-0">{sessionStatusMeta(s.status).label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {adaptive.error && (
-              <p className="text-[12px] text-destructive">Couldn't load what changed: {adaptive.error}</p>
-            )}
-          </div>
-        )}
-
-        <div className="px-5 space-y-3 mb-8">
-          {planData?.map((week) => (
-            <div key={week.week} className={`bg-card border rounded-xl overflow-hidden ${week.week === selectedPlan.week_current ? "border-primary/30" : week.isHoliday ? "border-energy/30" : "border-border"}`}>
-              <button onClick={() => setExpandedWeek(expandedWeek === week.week ? null : week.week)}
-                className="w-full flex items-center justify-between p-4">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-display font-bold text-sm">Week {week.week}{week.isDeload ? " (Deload)" : ""}</h4>
-                  {week.week === selectedPlan.week_current && <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Current</span>}
-                  {week.isHoliday && <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">🏖️ Holiday</span>}
-                  {/* The week-level tag: this week is not what the generator
-                      wrote, and the athlete can see that from the outside. */}
-                  {week.returnFromBreak && (
-                    <span
-                      title={week.extraNote}
-                      className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold"
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-1" aria-hidden>
+                {LIMITER_QUESTIONS.map((item, index) => (
+                  <span
+                    key={item.id}
+                    className={`h-1 flex-1 rounded-full ${
+                      index <= limiterStep ? "bg-primary" : "bg-white/[0.08]"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Question {limiterStep + 1} of {total}
+              </p>
+              <div className={`${card} p-5`}>
+                <h2 className="font-display text-lg font-bold leading-snug">{question.question}</h2>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Rate yourself 1 (very weak) to 10 (excellent).
+                </p>
+                <div className="mt-4 grid grid-cols-5 gap-2">
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map((score) => (
+                    <button
+                      key={score}
+                      type="button"
+                      aria-label={`Rate ${score} out of 10`}
+                      aria-pressed={answered === score}
+                      onClick={() => answerLimiter(score)}
+                      className={`press flex h-12 items-center justify-center rounded-xl border text-sm font-bold tabular-nums transition-colors ${
+                        answered === score
+                          ? "border-primary bg-primary/20 text-primary"
+                          : "border-white/[0.08] bg-white/[0.03] text-foreground hover:border-primary/40"
+                      }`}
                     >
-                      Rebuilt · {week.returnFromBreak.volumePct}%
-                    </span>
-                  )}
-                  {week.extraNote && !week.returnFromBreak && <span className="text-[12px] bg-accent/10 text-accent-foreground px-2 py-0.5 rounded-full">+Extra</span>}
-                  {(injuryWeekCounts.get(week.week) ?? 0) > 0 && (
-                    <span className="text-[12px] bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-semibold">
-                      Injury · {injuryWeekCounts.get(week.week)} session{(injuryWeekCounts.get(week.week) ?? 0) === 1 ? "" : "s"} to review
-                    </span>
-                  )}
+                      {score}
+                    </button>
+                  ))}
                 </div>
-                <motion.div animate={{ rotate: (expandedWeek === week.week || expandedWeek === -1) ? 180 : 0 }}><ChevronDown size={16} className="text-muted-foreground" /></motion.div>
-              </button>
-              <AnimatePresence>
-                {(expandedWeek === week.week || expandedWeek === -1) && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="px-4 pb-4">
-                    {week.extraNote && <p className="text-[12px] text-accent-foreground bg-accent/5 rounded-lg px-2 py-1 mb-2">{week.extraNote}</p>}
-                    <div className="flex gap-2 mb-3">
-                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => toggleWeekHoliday(week.week)}
-                        className="text-[12px] bg-energy/10 text-energy px-3 py-1 rounded-lg font-semibold">
-                        {week.isHoliday ? "Remove Holiday" : "🏖️ Mark Holiday"}
-                      </motion.button>
-                    </div>
-                    <div className="space-y-2">
-                      {week.sessions?.map((session, si) => (
-                        <div key={si} className={`rounded-lg ${session.skipped ? "opacity-40" : ""} ${adaptive.statusFor(week.week, session.day) === "cancelled_due_to_availability" ? "opacity-70 ring-1 ring-info/30" : ""} ${session.isRest ? "bg-muted/20 border border-dashed border-border" : session.isRecovery ? "bg-accent/5 border border-accent/10" : "bg-muted/50 border border-border"} overflow-hidden`}>
-                          {editingSession?.week === week.week && editingSession?.day === session.day ? (
-                            <div className="p-3 space-y-2">
-                              <input value={editSessionTitle} onChange={e => setEditSessionTitle(e.target.value)} className={inputClass} placeholder="Session title" />
-                              <input value={editSessionDuration} onChange={e => setEditSessionDuration(e.target.value)} type="number" className={inputClass} placeholder="Duration (min)" />
-                              <div className="flex gap-2">
-                                <button onClick={() => setEditingSession(null)} className="text-xs text-muted-foreground">Cancel</button>
-                                <motion.button onClick={saveSessionEdit} whileTap={{ scale: 0.95 }} className="text-xs text-primary font-semibold">Save</motion.button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center justify-between px-3 py-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[12px] text-muted-foreground font-medium">{session.dayName || `Day ${session.day}`}</span>
-                                    {session.isRest && <span className="text-[12px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">REST</span>}
-                                    {session.isRecovery && <span className="text-[12px] bg-accent/10 px-1.5 py-0.5 rounded text-accent-foreground">RECOVERY</span>}
-                                    {/* A session the rebuild touched, marked as such —
-                                        otherwise a shortened session looks like the
-                                        generator simply wrote a shorter one. */}
-                                    {session.returnFromBreak && (
-                                      <span
-                                        title={
-                                          session.returnFromBreak.dropped
-                                            ? `${session.returnFromBreak.originalTitle ?? "This session"} was dropped for the rebuild — nothing was moved to another day.`
-                                            : `Shortened from ${session.returnFromBreak.originalDuration ?? "?"} min while you rebuild.`
-                                        }
-                                        className={
-                                          session.returnFromBreak.dropped
-                                            ? "text-[12px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground"
-                                            : "text-[12px] bg-primary/10 text-primary px-1.5 py-0.5 rounded"
-                                        }
-                                      >
-                                        {session.returnFromBreak.dropped
-                                          ? "DROPPED"
-                                          : `REBUILD · ${session.returnFromBreak.intensityPct}%`}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className={`text-xs font-semibold ${session.skipped ? "line-through" : ""}`}>{session.title}</span>
-                                  {session.duration_minutes > 0 && <span className="text-[12px] text-muted-foreground ml-2">{session.duration_minutes} min</span>}
-                                  {/* The status chip. Simple first, and the "What changed?"
-                                      panel above carries the reason — progressive
-                                      disclosure, per the design brief. */}
-                                  {adaptive.statusFor(week.week, session.day) !== "planned" && (
-                                    <span
-                                      title={sessionStatusMeta(adaptive.statusFor(week.week, session.day)).detail}
-                                      className="inline-block mt-1 text-[12px] bg-info/10 text-info px-1.5 py-0.5 rounded"
-                                    >
-                                      {sessionStatusMeta(adaptive.statusFor(week.week, session.day)).label}
-                                    </span>
-                                  )}
-                                  {/* The injury flag, in place, with the reason on
-                                      hover/tap. "Adapt" chips are instructions the
-                                      athlete applies (reduce the dose); "Review"
-                                      chips mean the session should not be pushed
-                                      through — have it cleared first. The plan row
-                                      itself is not rewritten: what the athlete
-                                      actually did is their record, not the app's. */}
-                                  {injurySessionFlags.get(`${week.week}:${session.day}`) && (
-                                    <span
-                                      title={injurySessionFlags.get(`${week.week}:${session.day}`)!.reason}
-                                      className={`inline-block mt-1 text-[12px] px-1.5 py-0.5 rounded ${
-                                        injurySessionFlags.get(`${week.week}:${session.day}`)!.adapting
-                                          ? "bg-energy/10 text-energy"
-                                          : "bg-destructive/10 text-destructive"
-                                      }`}
-                                    >
-                                      {injurySessionFlags.get(`${week.week}:${session.day}`)!.chip}
-                                    </span>
-                                  )}
-                                </div>
-                                {!session.isRest && (
-                                  <div className="flex items-center gap-1">
-                                    <button onClick={() => { setEditingSession({ week: week.week, day: session.day }); setEditSessionTitle(session.title); setEditSessionDuration(String(session.duration_minutes)); }}
-                                      className="p-1 text-muted-foreground hover:text-primary"><Edit3 size={12} /></button>
-                                    <button onClick={() => skipSession(week.week, session.day)}
-                                      className="p-1 text-muted-foreground hover:text-energy"><SkipForward size={12} /></button>
-                                  </div>
-                                )}
-                              </div>
-                              {session.description && <p className="text-[12px] text-muted-foreground px-3 pb-1">{session.description}</p>}
-                              {/* Warmup */}
-                              {session.warmup && !session.skipped && (
-                                <div className="px-3 pb-1">
-                                  <p className="text-[12px] font-semibold text-energy uppercase tracking-wider mb-0.5">Warm-up</p>
-                                  {session.warmup.map((ex, ei) => (
-                                    <div key={ei} className="flex justify-between text-[12px] text-muted-foreground py-0.5">
-                                      <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Main exercises */}
-                              {session.exercises && !session.skipped && (
-                                <div className="px-3 pb-1">
-                                  {!session.isRest && !session.isRecovery && <p className="text-[12px] font-semibold text-primary uppercase tracking-wider mb-0.5">Main Session</p>}
-                                  {session.exercises.map((ex, ei) => (
-                                    <div key={ei} className="flex justify-between text-[12px] py-0.5">
-                                      <span className="font-medium text-foreground">{ex.name}</span>
-                                      <span className="text-muted-foreground text-right ml-2 flex-shrink-0 max-w-[50%]">{ex.sets}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Cooldown */}
-                              {session.cooldown && !session.skipped && (
-                                <div className="px-3 pb-2">
-                                  <p className="text-[12px] font-semibold text-info uppercase tracking-wider mb-0.5">Cool-down</p>
-                                  {session.cooldown.map((ex, ei) => (
-                                    <div key={ei} className="flex justify-between text-[12px] text-muted-foreground py-0.5">
-                                      <span>{ex.name}</span><span className="text-right ml-2 flex-shrink-0">{ex.sets}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
+                  {limiterMetrics.length > 0
+                    ? `${limiterMetrics.length} logged test${limiterMetrics.length === 1 ? "" : "s"} will sharpen this reading.`
+                    : "No logged tests yet — this reading will be based on your self-ratings and say so."}
+                </p>
+              </div>
+              {limiterStep > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setLimiterStep((step) => Math.max(0, step - 1))}
+                  className="press inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-muted-foreground"
+                >
+                  <ChevronLeft size={16} aria-hidden /> Previous question
+                </button>
+              ) : null}
             </div>
-          ))}
+          )}
         </div>
       </div>
     );
   }
 
-  // === MAIN PLANS VIEW ===
-  const hasNoPlans = plans.length === 0;
+  // --------------------------------------------------------------- setup ---
+  if (screen === "setup" && setupSource === "limiter" && limiterResult) {
+    const steps = ["age", "days", "recovery", "equipment", "notes", "summary"] as const;
+    const step = steps[Math.min(setupStep, steps.length - 1)];
+    const stepIndex = steps.indexOf(step);
+    const lastStep = step === "summary";
+    const canContinue = step !== "age" || (ageNumber !== null && ageNumber >= 13);
+    const plannedDays = ageCaps
+      ? Math.min(daysPerWeek, ageCaps.maxSessionsPerWeek, 7 - ageCaps.minRestDays)
+      : daysPerWeek;
+    // A week has seven days: whatever is not a training day is a rest day, so
+    // the rest answer can never exceed what is left. Without this, choosing six
+    // training days still offered "None / 1 / 2 / 3 full rest" — answers that
+    // add up to more than a week. When exactly one day is left, one is the only
+    // honest option (the day is not training, so it is rest).
+    const maxRecoveryDays = Math.max(0, 7 - plannedDays);
+    const recoveryOptions = recoveryDayOptions(plannedDays);
+    const plannedRecovery = Math.min(
+      maxRecoveryDays,
+      ageCaps ? Math.max(recoveryDays, ageCaps.minRestDays) : recoveryDays,
+    );
+    const constraints = planConstraints({
+      daysPerWeek: plannedDays,
+      hoursPerWeek,
+      sessionLengthPref: sessionLength,
+      equipment,
+      environment,
+      intensityPref: intensity,
+      focusAreas,
+      timeOfDay,
+      targetEvent,
+      recoveryDays: plannedRecovery,
+      notes: planNotes,
+      disability,
+    });
+    const targetLabel = limiterResult.limiters
+      .map((limiter) => LIMITER_LABEL[limiter.name])
+      .join(", ");
 
-  return (
-    <div className="min-h-screen bg-background">
-      {generationOverlay}
-      {generationInline}
-      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-4">
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-display font-bold">Training</motion.h1>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm text-muted-foreground mt-1">Build your body. Sharpen your edge.</motion.p>
-      </div>
+    return (
+      <div className="min-h-screen pb-28">
+        {buildWeeks !== null ? (
+          <PlanBuildProgress
+            weeks={buildWeeks}
+            details={buildDetails}
+            onComplete={() => finishBuildRef.current?.()}
+          />
+        ) : null}
+        <div className="mx-auto w-full max-w-2xl px-5 pt-[var(--vaylo-screen-top)] sm:px-6">
+          {backButton(
+            () => (stepIndex === 0 ? setScreen("limiter") : setSetupStep((current) => Math.max(0, current - 1))),
+            stepIndex === 0 ? "Limiter result" : "Previous question",
+          )}
+          {header(
+            "Limiter plan",
+            "Build the plan that fixes it",
+            "Six quick questions. They decide the sessions — the limiter decides the focus.",
+          )}
 
-      {activeBreak && (
-        <div className="mx-5 mb-5">
-          <ActiveBreakBanner event={activeBreak} />
-        </div>
-      )}
-
-      {/* Offline fallback notice: the list below is the device snapshot, not
-          live data. Saying when it was taken is what keeps a cached list from
-          reading as current — the sync state machine refuses to claim freshness
-          it cannot prove, and neither may this screen. */}
-      {plansCachedInfo && (
-        <div className="mx-5 mb-4 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-[12px]">
-          <WifiOff size={14} className="mt-0.5 shrink-0 text-warning" />
-          <span>
-            Offline — showing the plans saved on this device ({cacheAgeLabel(Date.now() - plansCachedInfo.savedAt)}).
-            {plansCachedInfo.stale && " They may have changed on your other devices."}{" They'll refresh when you reconnect."}
-          </span>
-        </div>
-      )}
-      {plansLoadFailed && !plansCachedInfo && (
-        <div className="mx-5 mb-4 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-[12px]">
-          <WifiOff size={14} className="mt-0.5 shrink-0 text-destructive" />
-          <span>
-            Couldn't load your plans, and nothing is saved on this device yet.
-            Connect once while online and your plans will stay available offline.
-          </span>
-        </div>
-      )}
-
-      {plans.some((p) => p.active) && <PlanFundingNotice />}
-
-      {hasNoPlans && !plansLoadFailed && !showCreate && (
-        <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="mx-5 mb-5 bg-gradient-card border border-primary/30 rounded-2xl p-5 shadow-card text-center">
-          <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}><Dumbbell size={32} className="mx-auto text-primary mb-3" /></motion.div>
-          <h3 className="font-display font-bold text-lg">No training plan yet</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first personalised plan to get started.</p>
-          <motion.button onClick={() => setShowCreate(true)} whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.02 }}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
-            <Plus size={18} /> Create Training Plan
-          </motion.button>
-        </motion.div>
-      )}
-
-      {plans.filter(p => p.active).map(plan => (
-        <motion.div key={plan.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-          className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-4 shadow-card hover:border-primary/20 transition-colors duration-500">
-          <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" /><span className="text-[12px] font-semibold uppercase tracking-wider text-primary">Active Plan</span></div>
-          <h3 className="font-display font-bold text-lg">{plan.title}</h3>
-          <p className="text-sm text-muted-foreground mt-1">Week {plan.week_current} of {plan.duration_weeks} · {plan.sport} · {plan.level}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Includes strength, plyometrics & cross-training</p>
-          <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(plan.week_current / plan.duration_weeks) * 100}%` }} transition={{ delay: 0.3, duration: 0.8 }} className="h-full bg-primary rounded-full" />
+          <div className="mb-4 rounded-xl border border-primary/25 bg-primary/[0.06] px-3.5 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+              Fixing your limiter
+            </p>
+            <p className="mt-1 text-sm font-semibold">{targetLabel}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              {limiterResult.confidence}
+            </p>
           </div>
-          {/* The "Start workout" CTA used to open the workout logger, which is
-              gone. This card is the plan summary; opening the plan is the only
-              action it still owns, so the eye button now fills the row. */}
-          <div className="flex gap-2 mt-4">
-            <motion.button onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }} whileTap={{ scale: 0.98 }}
-              className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow">
-              <Eye size={18} /> Open plan
-            </motion.button>
-          </div>
-        </motion.div>
-      ))}
 
-      {showCreate && (
-        <motion.div initial={{ opacity: 0, y: 15, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="mx-5 mb-5 bg-gradient-card border border-border rounded-2xl p-4 shadow-card space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="font-display font-bold">Create Plan</h3>
-            <button onClick={() => { setShowCreate(false); setPlanQuizStep(0); }} className="text-muted-foreground"><X size={18} /></button>
-          </div>
-          {/* Progress dots */}
-          <div className="flex gap-1">
-            {[0, 1, 2].map(i => (
-              <div key={i} className={`flex-1 h-1 rounded-full ${i <= planQuizStep ? "bg-primary" : "bg-muted"}`} />
+          <div className="mb-4 flex gap-1" aria-hidden>
+            {steps.map((item, index) => (
+              <span
+                key={item}
+                className={`h-1 flex-1 rounded-full ${index <= stepIndex ? "bg-primary" : "bg-white/[0.08]"}`}
+              />
             ))}
           </div>
-          <p className="text-[12px] text-muted-foreground">Step {planQuizStep + 1} of 3 · {["Basics", "Availability", "Preferences"][planQuizStep]}</p>
+          <p className="mb-4 text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {step === "summary"
+              ? `Review · ${steps.length - 1} questions answered`
+              : `Question ${stepIndex + 1} of ${steps.length - 1}`}
+          </p>
 
-          {planQuizStep === 0 && (
-            <div className="space-y-3">
-              <input type="text" placeholder="Plan name (optional)" value={title} onChange={e => setTitle(e.target.value)} maxLength={100} className={inputClass} />
+          <div className={`${card} p-5`}>
+            {step === "age" ? (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Your Age *</label>
-                <input type="number" placeholder="Age (required for safe training)" value={planAge} onChange={e => setPlanAge(e.target.value)} className={inputClass} />
-                <p className="text-[12px] text-muted-foreground mt-1">Training load is adapted for your age group.</p>
+                <h2 className="font-display text-xl font-bold leading-snug">What age are you?</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  Age sets the ceiling on sessions, load and rest. It is applied automatically — you
+                  do not have to police it.
+                </p>
+                <label htmlFor="limiter-plan-age" className="mt-4 block text-xs font-semibold text-muted-foreground">
+                  Age
+                </label>
+                <input
+                  id="limiter-plan-age"
+                  type="number"
+                  inputMode="numeric"
+                  min={13}
+                  max={100}
+                  placeholder="e.g. 24"
+                  value={age}
+                  onChange={(event) => setAge(event.target.value)}
+                  className={`${input} mt-1.5`}
+                />
+                <p className={`mt-2 text-[12px] leading-relaxed ${ageNumber !== null && ageNumber < 13 ? "text-destructive" : "text-muted-foreground"}`}>
+                  {ageNumber !== null && ageNumber < 13
+                    ? "A training plan needs an age of 13 or older. If that is not right, a parent or clinician should help choose what comes next."
+                    : ageCaps
+                      ? `At ${ageNumber}, this plan is capped at ${ageCaps.maxSessionsPerWeek} sessions a week with at least ${ageCaps.minRestDays} full rest day${ageCaps.minRestDays === 1 ? "" : "s"}.`
+                      : "Loads and session counts are capped by age."}
+                </p>
               </div>
-              {/* Canonical names are stored and compared; the label is regional, so a US athlete sees "Soccer" while the app keeps "Football" everywhere else. */}
-              <div><label className="text-xs text-muted-foreground mb-1 block">Sport</label><div className="flex flex-wrap gap-1.5">{sportOptions.map(s => (<button key={s} onClick={() => setSport(s)} className={chipClass(sport === s)}>{sportDisplayName(s)}</button>))}</div></div>
+            ) : null}
+
+            {step === "days" ? (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Goals <span className="text-muted-foreground/70">(pick all that apply)</span></label>
-                <div className="flex flex-wrap gap-1.5">
-                  {goalOptions.map(g => (
-                    <button key={g} type="button" onClick={() => toggleGoal(g)}
-                      className={chipClass(goals.includes(g))}>
-                      {goals.includes(g) && <Check size={12} className="inline mr-1 -mt-0.5" />}{g}
+                <h2 className="font-display text-xl font-bold leading-snug">How many days a week are you free?</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  Pick the number you can actually keep. A plan you can finish beats a perfect one
+                  you cannot.
+                </p>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  {[2, 3, 4, 5, 6, 7].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      aria-pressed={daysPerWeek === days}
+                      onClick={() => {
+                        setDaysPerWeek(days);
+                        // Keep the rest answer inside the week when the training
+                        // answer grows. Six days leaves one, so a stale 2 or 3
+                        // becomes 1 immediately rather than at submit time.
+                        const effective = ageCaps
+                          ? Math.min(days, ageCaps.maxSessionsPerWeek, 7 - ageCaps.minRestDays)
+                          : days;
+                        const maxRest = Math.max(0, 7 - effective);
+                        setRecoveryDays((current) =>
+                          maxRest === 1 ? 1 : Math.min(current, maxRest),
+                        );
+                      }}
+                      className={`${chip(daysPerWeek === days)} min-h-[56px] text-base`}
+                    >
+                      {days}
                     </button>
                   ))}
                 </div>
-                <p className="text-[12px] text-muted-foreground mt-1">{goals.length} goal{goals.length === 1 ? "" : "s"} selected — the plan will blend all of them.</p>
-              </div>
-              <div><label className="text-xs text-muted-foreground mb-1 block">Level</label><div className="flex gap-1.5">{levelOptions.map(l => (<button key={l} onClick={() => setLevel(l)} className={`flex-1 capitalize ${chipClass(level === l)}`}>{l}</button>))}</div></div>
-              <div><label className="text-xs text-muted-foreground mb-1 block">Plan length</label><div className="flex gap-1.5">{durationOptions.map(d => (<button key={d} onClick={() => setDuration(d)} className={`flex-1 ${chipClass(duration === d)}`}>{d}w</button>))}</div></div>
-            </div>
-          )}
-
-          {planQuizStep === 1 && (
-            <div className="space-y-3">
-              {availabilityFromProfile && (
-                <p className="rounded-xl border border-primary/25 bg-primary/[0.06] px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
-                  Prefilled from the availability you gave at signup — change it here and the plan is written for the new numbers.
+                <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                  {ageCaps && plannedDays < daysPerWeek
+                    ? `Your age band caps this at ${plannedDays} training days. The plan will use ${plannedDays}.`
+                    : "Rest days are programmed around the days you choose."}
                 </p>
-              )}
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Days per week you can train</label>
-                <div className="flex gap-1.5 flex-wrap">{[2,3,4,5,6,7].map(n => (
-                  <button key={n} onClick={() => { availabilityTouched.current = true; setAvailabilityFromProfile(false); setPlanDaysPerWeek(n); }} className={`flex-1 ${chipClass(planDaysPerWeek === n)}`}>{n}</button>
-                ))}</div>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Total hours per week</label>
-                <input type="number" min={1} max={30} step={0.5} value={planHoursPerWeek} onChange={e => { availabilityTouched.current = true; setAvailabilityFromProfile(false); setPlanHoursPerWeek(parseFloat(e.target.value) || 0); }} className={inputClass} />
-                <p className="text-[12px] text-muted-foreground mt-1">Sessions will average ~{Math.round((planHoursPerWeek * 60) / Math.max(1, planDaysPerWeek))} min.</p>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Preferred session length</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {([["short","Short"],["standard","Standard"],["long","Long"]] as const).map(([v,l]) => (
-                    <button key={v} onClick={() => setPlanSessionLengthPref(v)} className={chipClass(planSessionLengthPref === v)}>{l}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Best time of day to train</label>
-                {/* "Afternoon" in an 11px font needs ~70px, which is exactly the
-                    cell width four-across gives at 320px — so the label clipped
-                    on the narrowest phones. Two-up below `sm`. */}
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                  {["Morning","Afternoon","Evening","Night"].map(t => (
-                    <button key={t} onClick={() => setPlanTimeOfDay(t)} className={`text-[12px] ${chipClass(planTimeOfDay === t)}`}>{t}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Dedicated full rest days per week</label>
-                <div className="flex gap-1.5">{[0,1,2,3].map(n => (
-                  <button key={n} onClick={() => setPlanRecoveryDays(n)} className={`flex-1 ${chipClass(planRecoveryDays === n)}`}>{n}</button>
-                ))}</div>
-              </div>
-            </div>
-          )}
+            ) : null}
 
-          {planQuizStep === 2 && (
-            <div className="space-y-3">
+            {step === "recovery" ? (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Intensity preference</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {([["easy","Easy"],["balanced","Balanced"],["hard","Hard"]] as const).map(([v,l]) => (
-                    <button key={v} onClick={() => setPlanIntensityPref(v)} className={chipClass(planIntensityPref === v)}>{l}</button>
+                <h2 className="font-display text-xl font-bold leading-snug">How many full recovery days can you take?</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  Full rest means no training. Training days plus full rest days cannot add up to
+                  more than seven — the plan will never drop below your age band's minimum, and the
+                  remaining days are recovery.
+                </p>
+                <div className={`mt-5 grid gap-2 ${recoveryOptions.length > 3 ? "grid-cols-4" : recoveryOptions.length === 3 ? "grid-cols-3" : recoveryOptions.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {recoveryOptions.map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      aria-pressed={plannedRecovery === days}
+                      onClick={() => setRecoveryDays(days)}
+                      className={`${chip(plannedRecovery === days)} min-h-[56px]`}
+                    >
+                      {days === 0 ? "None" : days}
+                    </button>
                   ))}
                 </div>
+                <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                  {maxRecoveryDays === 0
+                    ? "All seven days are training days, so there is no full rest day left in the week."
+                    : `You have ${plannedDays} training day${plannedDays === 1 ? "" : "s"}, so at most ${maxRecoveryDays} full rest day${maxRecoveryDays === 1 ? "" : "s"} fit in the week.`}
+                </p>
+                {ageCaps && plannedRecovery > recoveryDays ? (
+                  <p className="mt-3 text-[12px] leading-relaxed text-energy">
+                    Your age band requires at least {plannedRecovery} full rest day{plannedRecovery === 1 ? "" : "s"} — that is what the plan will use.
+                  </p>
+                ) : null}
               </div>
+            ) : null}
+
+            {step === "equipment" ? (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Equipment available</label>
-                {/* The catalogue (src/config/equipment.ts) rather than free-form
-                    labels: the ids are what generate-plan turns into an
-                    instruction, and a label the model cannot map to a real
-                    facility is how a plan prescribes a pool to somebody with
-                    no pool. "Nothing yet" is exclusive. */}
-                <div className="space-y-2">
-                  {(["Gym", "Endurance", "Field", "Minimal"] as const).map(group => (
-                    <div key={group}>
-                      <p className="text-[12px] uppercase tracking-widest text-muted-foreground/70 mb-1">{group}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {EQUIPMENT.filter(e => e.group === group).map(e => {
-                          const selected = planEquipment.includes(e.id);
-                          return (
+                <h2 className="font-display text-xl font-bold leading-snug">What equipment do you have?</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  Pick everything you can reach. Leave it empty and the plan uses bodyweight and open
+                  space only.
+                </p>
+                <div className="mt-4 space-y-3">
+                  {(["Gym", "Endurance", "Field", "Minimal"] as const).map((group) => {
+                    const items = EQUIPMENT.filter((item) => item.group === group);
+                    if (!items.length) return null;
+                    return (
+                      <div key={group}>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          {group}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {items.map((item) => (
                             <button
-                              key={e.id}
+                              key={item.id}
                               type="button"
-                              aria-pressed={selected}
-                              onClick={() => {
-                                if (e.id === "none") {
-                                  setPlanEquipment(selected ? [] : ["none"]);
-                                } else {
-                                  const withoutNone = planEquipment.filter(id => id !== "none");
-                                  setPlanEquipment(selected ? withoutNone.filter(id => id !== e.id) : [...withoutNone, e.id]);
-                                }
-                              }}
-                              className={`text-[12px] ${chipClass(selected)}`}
-                            >{e.label}</button>
-                          );
-                        })}
+                              aria-pressed={equipment.includes(item.id)}
+                              onClick={() => toggleEquipment(item.id)}
+                              className={chip(equipment.includes(item.id))}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <p className="text-[12px] text-muted-foreground mt-1">
-                  {planEquipment.length
-                    ? `Your plan will use: ${describeEquipment(planEquipment)}.`
-                    : "Nothing selected — the plan will be bodyweight and space only."}
+                <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                  {equipment.length
+                    ? `Your plan will use: ${describeEquipment(equipment)}.`
+                    : "Nothing selected — the plan will use bodyweight and open space only."}
                 </p>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Training environment</label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {["Indoor","Outdoor","Mixed","Altitude"].map(e => (
-                    <button key={e} onClick={() => setPlanEnvironment(e)} className={`text-[12px] ${chipClass(planEnvironment === e)}`}>{e}</button>
-                  ))}
+            ) : null}
+
+            {step === "notes" ? (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="font-display text-xl font-bold leading-snug">Anything else we should know?</h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    Injuries, a physical job, a holiday coming up, only 30 minutes on weekdays —
+                    anything that changes what you can do. It is kept with this plan and applied to
+                    the sessions.
+                  </p>
+                  <label htmlFor="limiter-plan-notes" className="mt-4 block text-xs font-semibold text-muted-foreground">
+                    Your notes <span className="font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    id="limiter-plan-notes"
+                    value={planNotes}
+                    maxLength={500}
+                    rows={4}
+                    placeholder="e.g. left knee gets sore on downhill runs; I only have 30 minutes on weekdays"
+                    onChange={(event) => setPlanNotes(event.target.value)}
+                    className={`${input} mt-1.5 min-h-[110px] resize-y leading-relaxed`}
+                  />
+                  <p className="mt-1 text-right text-[11px] text-muted-foreground">
+                    {planNotes.length}/500
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Do you have a disability or access need we should adapt for?
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                    These are all conditions a training plan can work around. If a clinician has told
+                    you not to exercise, do not start this plan.
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {DISABILITY_OPTIONS.map((option) => {
+                      const active = disability === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setDisability(option.id)}
+                          className={`press flex min-h-[56px] w-full items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
+                            active
+                              ? "border-primary/60 bg-primary/15"
+                              : "border-white/[0.08] bg-white/[0.03]"
+                          }`}
+                        >
+                          <span
+                            aria-hidden
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              active ? "border-primary bg-primary text-primary-foreground" : "border-white/25"
+                            }`}
+                          >
+                            {active ? <Check size={10} /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold">{option.label}</span>
+                            <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                              {option.blurb}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+            ) : null}
+
+            {step === "summary" ? (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Focus areas <span className="text-muted-foreground/70">(easy → advanced)</span></label>
-                <div className="space-y-2">
+                <h2 className="font-display text-xl font-bold leading-snug">Ready to build it</h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  {duration} weeks, {plannedDays} training day{plannedDays === 1 ? "" : "s"} and{" "}
+                  {plannedRecovery} full recovery day{plannedRecovery === 1 ? "" : "s"} a week, built
+                  around {targetLabel.toLowerCase()}.
+                </p>
+                <dl className="mt-4 space-y-2 text-sm">
                   {[
-                    { tier: "Easy", color: "text-success", items: ["General Fitness","Mobility","Flexibility","Active Recovery","Fat Loss","Posture","Core Basics","Walking Base"] },
-                    { tier: "Intermediate", color: "text-primary", items: ["Strength","Endurance","Muscle Gain","Cardio Base","Balance","Technique","Injury Prevention","Cross-Training"] },
-                    { tier: "Advanced", color: "text-energy", items: ["Speed","Power","Explosiveness","Agility","VO2 Max","Anaerobic Threshold","Sport-Specific","Reactive Strength","Plyometrics","Peak Performance","Mental Toughness","Race Prep"] },
-                  ].map(group => (
-                    <div key={group.tier}>
-                      <p className={`text-[12px] uppercase tracking-widest font-semibold mb-1 ${group.color}`}>{group.tier}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {group.items.map(f => (
-                          <button key={f} type="button" onClick={() => setPlanFocusAreas(planFocusAreas.includes(f) ? planFocusAreas.filter(x=>x!==f) : [...planFocusAreas, f])}
-                            className={`text-[12px] ${chipClass(planFocusAreas.includes(f))}`}>{f}</button>
-                        ))}
-                      </div>
+                    ["Limiter", targetLabel],
+                    ["Age", ageNumber !== null ? String(ageNumber) : "Not set"],
+                    ["Training days", `${plannedDays} a week`],
+                    ["Full recovery", `${plannedRecovery} a week`],
+                    ["Equipment", equipment.length ? describeEquipment(equipment) : "Bodyweight / open space"],
+                    ["Your notes", planNotes.trim() || "None"],
+                    ["Access need", DISABILITY_LABEL[disability]],
+                  ].map(([label, value]) => (
+                    // Label above value on a phone, side by side from `sm` up:
+                    // a fixed 112px label column left ~110px for a value like
+                    // "speed, strength, endurance", which broke mid-word on a
+                    // 320px screen instead of reading as a sentence.
+                    <div key={label} className="flex flex-col gap-0.5 border-b border-white/[0.06] pb-2 last:border-0 sm:flex-row sm:gap-3">
+                      <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:w-28 sm:text-[12px] sm:font-normal sm:normal-case sm:tracking-normal">{label}</dt>
+                      <dd className="min-w-0 flex-1 break-words text-[13px] font-medium">{value}</dd>
                     </div>
                   ))}
-                </div>
+                </dl>
+                {constraints.cues.length ? (
+                  <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.05] px-3.5 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+                      Adaptations applied
+                    </p>
+                    <ul className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                      {constraints.cues.map((cue) => (
+                        <li key={cue} className="flex gap-2">
+                          <Check size={13} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                          <span>{cue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  {DISCLAIMERS.healthRisk.full}
+                </p>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Target event / race (optional)</label>
-                <input type="text" placeholder="e.g. Marathon in 8 weeks" value={planTargetEvent} onChange={e => setPlanTargetEvent(e.target.value)} maxLength={100} className={inputClass} />
-              </div>
-              <p className="text-xs text-muted-foreground">Cost: {creditCost("training_plan_week", duration)} credits ({duration} weeks × {creditCost("training_plan_week")} credits/week).</p>
-              {/* Training loads and intensity targets are what this screen
-                  produces, and getting them wrong is how somebody gets hurt,
-                  so the health line belongs here and not only on a legal page. */}
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {DISCLAIMERS.healthRisk.full}
-              </p>
-              {planAge && parseInt(planAge) < 16 && <p className="text-xs text-energy flex items-center gap-1"><AlertTriangle size={12} /> Under-18 safety limits applied (lighter loads, more mobility).</p>}
-              {planAge && parseInt(planAge) > 50 && <p className="text-xs text-energy flex items-center gap-1"><AlertTriangle size={12} /> Senior-adapted plan (balance, joint-friendly).</p>}
-            </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            {stepIndex > 0 ? (
+              <button
+                type="button"
+                onClick={() => setSetupStep((current) => Math.max(0, current - 1))}
+                className="press min-h-[48px] rounded-xl border border-white/[0.08] px-4 text-sm font-semibold text-muted-foreground"
+              >
+                Back
+              </button>
+            ) : null}
+            {lastStep ? (
+              <button
+                type="button"
+                onClick={() => void createPlan()}
+                disabled={creating || !ageNumber || ageNumber < 13}
+                className="press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" aria-hidden /> Creating…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} aria-hidden /> Create my plan
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSetupStep((current) => current + 1)}
+                disabled={!canContinue}
+                className="press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+              >
+                Next question <ChevronRight size={16} aria-hidden />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === "setup") {
+    const canContinue = setupStep > 0 || (ageNumber !== null && ageNumber >= 13);
+    const lastStep = setupStep === 3;
+    return (
+      <div className="min-h-screen pb-28">
+        {buildWeeks !== null ? (
+          <PlanBuildProgress
+            weeks={buildWeeks}
+            details={buildDetails}
+            onComplete={() => finishBuildRef.current?.()}
+          />
+        ) : null}
+        <div className="mx-auto w-full max-w-2xl px-5 pt-[var(--vaylo-screen-top)] sm:px-6">
+          {backButton(leaveSetup, setupSource === "limiter" ? "Limiter result" : "Training")}
+          {header(
+            setupSource === "limiter" ? "Limiter plan" : "New plan",
+            setupSource === "limiter" ? "Build the plan that fixes it" : "Build your plan",
           )}
 
-          <div className="flex gap-2 pt-1">
-            {planQuizStep > 0 && (
-              <button onClick={() => setPlanQuizStep(s => s - 1)} className="px-4 py-2.5 rounded-xl border border-border text-sm text-muted-foreground">Back</button>
-            )}
-            {planQuizStep < 2 ? (
-              <motion.button onClick={() => setPlanQuizStep(s => s + 1)} disabled={planQuizStep === 0 && !planAge} whileTap={{ scale: 0.98 }}
-                className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl disabled:opacity-50 shadow-glow">
-                Next <ChevronRight size={16} />
-              </motion.button>
-            ) : (
-              <motion.button onClick={createPlan} disabled={loading || !planAge} whileTap={{ scale: 0.98 }}
-                className="flex-1 flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl disabled:opacity-50 shadow-glow">
-                <Zap size={16} /> {loading ? "Creating..." : `Create Plan (${creditCost("training_plan_week", duration)} credits)`}
-              </motion.button>
-            )}
-          </div>
-          {/* The estimate the wait screen will run on, shown while the ask can
-              still be un-asked: plan creation is a tens-of-seconds wait, and
-              the athlete should start it knowing that. Same estimate the
-              progress screen settles on, same honest labeling — on a device
-              with history it says "usually", without one "estimated". */}
-          <PlanWaitEstimate kind="training" weeks={duration} />
-        </motion.div>
-      )}
-
-
-
-      {!hasNoPlans && (
-        <div className="px-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-muted-foreground">Your Plans</h3>
-            <button onClick={() => setShowCreate(true)} className="text-xs text-primary font-semibold flex items-center gap-1"><Plus size={14} /> New</button>
-          </div>
-          <div className="space-y-3 mb-6">
-            {plans.map((plan, i) => (
-              <motion.div key={plan.id} initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
-                className="bg-card border border-border rounded-xl p-4 hover:border-primary/20 transition-colors duration-300">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => { setSelectedPlan(plan); setActiveView("planDetail"); setExpandedWeek(plan.week_current); }}>
-                    <div className="p-2 rounded-lg bg-primary/10"><Dumbbell size={18} className="text-primary" /></div>
-                    <div><h4 className="font-semibold text-sm">{plan.title}</h4><p className="text-xs text-muted-foreground">{plan.duration_weeks}w · {plan.sport} · {plan.level}</p></div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {plan.active ? <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">Active</span> : null}
-                    <motion.button onClick={(e) => { e.stopPropagation(); deletePlan(plan.id); }} whileTap={{ scale: 0.9 }}
-                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></motion.button>
-                  </div>
-                </div>
-              </motion.div>
+          <div className="mb-4 flex gap-1" aria-hidden>
+            {SETUP_STEPS.map((label, index) => (
+              <span
+                key={label}
+                className={`h-1 flex-1 rounded-full ${index <= setupStep ? "bg-primary" : "bg-white/[0.08]"}`}
+              />
             ))}
           </div>
-        </div>
-      )}
+          <p className="mb-4 text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Step {setupStep + 1} of {SETUP_STEPS.length} · {SETUP_STEPS[setupStep]}
+          </p>
 
-      <div ref={toolsRef} className="px-5">
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3">Performance Tools</h3>
-        <div className="space-y-3 mb-8">
-          {[
-            { icon: Activity, label: "Performance Log", desc: "Track sessions, RPE, form & progress", view: "log" as const },
-            { icon: Target, label: "Limiter Test", desc: "Find your weakest areas & get a fix plan", view: "limiter" as const },
-          ].map((tool, i) => (
-            <motion.div key={tool.label} initial={{ opacity: 0, x: -20 }} animate={toolsInView ? { opacity: 1, x: 0 } : {}}
-              transition={{ delay: i * 0.08, duration: 0.4 }}
-              whileHover={{ x: 4 }} whileTap={{ scale: 0.97 }}
-              onClick={() => setActiveView(tool.view)}
-              className="bg-card border border-border rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/20 transition-colors duration-300">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10"><tool.icon size={18} className="text-primary" /></div>
-                <div><h4 className="font-semibold text-sm">{tool.label}</h4><p className="text-xs text-muted-foreground">{tool.desc}</p></div>
+          {setupSource === "limiter" && limiterResult ? (
+            <p className="mb-4 rounded-xl border border-primary/25 bg-primary/[0.06] px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
+              Targeting{" "}
+              <strong className="text-foreground">
+                {limiterResult.limiters
+                  .map((limiter) => LIMITER_LABEL[limiter.name])
+                  .join(", ")}
+              </strong>
+              . These answers decide the sessions — not the test result alone.
+            </p>
+          ) : null}
+
+          <div className={`${card} p-4 sm:p-5`}>
+            {setupStep === 0 ? (
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="plan-title" className="text-xs font-semibold text-muted-foreground">
+                    Plan name
+                  </label>
+                  <input
+                    id="plan-title"
+                    type="text"
+                    value={title}
+                    maxLength={100}
+                    placeholder="Optional"
+                    onChange={(event) => setTitle(event.target.value)}
+                    className={`${input} mt-1.5`}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="plan-age" className="text-xs font-semibold text-muted-foreground">
+                    Your age *
+                  </label>
+                  <input
+                    id="plan-age"
+                    type="number"
+                    inputMode="numeric"
+                    min={13}
+                    max={100}
+                    placeholder="Age"
+                    value={age}
+                    onChange={(event) => setAge(event.target.value)}
+                    className={`${input} mt-1.5`}
+                  />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                    {ageCaps
+                      ? `At ${ageNumber}, this plan is capped at ${ageCaps.maxSessionsPerWeek} sessions a week with at least ${ageCaps.minRestDays} full rest day${ageCaps.minRestDays === 1 ? "" : "s"}.`
+                      : "Loads and session counts are capped by age."}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Sport</p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {SPORTS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={sport === option}
+                        onClick={() => setSport(option)}
+                        className={chip(sport === option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Goals <span className="font-normal">(pick all that apply)</span>
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {GOALS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={goals.includes(option)}
+                        onClick={() => toggleGoal(option)}
+                        className={chip(goals.includes(option))}
+                      >
+                        {goals.includes(option) ? <Check size={13} aria-hidden /> : null}
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Level</p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-2">
+                    {LEVELS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={level === option}
+                        onClick={() => setLevel(option)}
+                        className={`${chip(level === option)} capitalize`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Plan length</p>
+                  <div className="mt-1.5 grid grid-cols-4 gap-2">
+                    {DURATIONS.map((weeks) => (
+                      <button
+                        key={weeks}
+                        type="button"
+                        aria-pressed={duration === weeks}
+                        onClick={() => setDuration(weeks)}
+                        className={chip(duration === weeks)}
+                      >
+                        {weeks}w
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <ChevronRight size={16} className="text-muted-foreground" />
-            </motion.div>
-          ))}
+            ) : null}
+
+            {setupStep === 1 ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Days a week you can train
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1.5 min-[360px]:grid-cols-6">
+                    {[2, 3, 4, 5, 6, 7].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        aria-pressed={daysPerWeek === days}
+                        onClick={() => setDaysPerWeek(days)}
+                        className={`${chip(daysPerWeek === days)} px-1`}
+                      >
+                        {days}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="plan-hours" className="text-xs font-semibold text-muted-foreground">
+                    Hours a week
+                  </label>
+                  <input
+                    id="plan-hours"
+                    type="number"
+                    inputMode="decimal"
+                    min={1}
+                    max={30}
+                    step={0.5}
+                    value={hoursPerWeek}
+                    onChange={(event) => setHoursPerWeek(Number.parseFloat(event.target.value) || 0)}
+                    className={`${input} mt-1.5`}
+                  />
+                  <p className="mt-1.5 text-[12px] text-muted-foreground">
+                    Sessions will average about{" "}
+                    {Math.round((hoursPerWeek * 60) / Math.max(1, daysPerWeek))} minutes.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Session length</p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-2">
+                    {(["short", "standard", "long"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={sessionLength === option}
+                        onClick={() => setSessionLength(option)}
+                        className={`${chip(sessionLength === option)} capitalize`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Best time to train</p>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {TIME_OF_DAY.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={timeOfDay === option}
+                        onClick={() => setTimeOfDay(option)}
+                        className={chip(timeOfDay === option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Full recovery days a week
+                  </p>
+                  <div className="mt-1.5 grid grid-cols-4 gap-2">
+                    {[0, 1, 2, 3].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        aria-pressed={recoveryDays === days}
+                        onClick={() => setRecoveryDays(days)}
+                        className={chip(recoveryDays === days)}
+                      >
+                        {days === 0 ? "None" : days}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                    The most you can build in. Under-18 and older age bands get a higher minimum
+                    rest, applied automatically.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {setupStep === 2 ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Intensity</p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-2">
+                    {(["easy", "balanced", "hard"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={intensity === option}
+                        onClick={() => setIntensity(option)}
+                        className={`${chip(intensity === option)} capitalize`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Equipment you have</p>
+                  <div className="mt-2 space-y-3">
+                    {(["Gym", "Endurance", "Field", "Minimal"] as const).map((group) => {
+                      const items = EQUIPMENT.filter((item) => item.group === group);
+                      if (!items.length) return null;
+                      return (
+                        <div key={group}>
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                            {group}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {items.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                aria-pressed={equipment.includes(item.id)}
+                                onClick={() => toggleEquipment(item.id)}
+                                className={chip(equipment.includes(item.id))}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                    {equipment.length
+                      ? `Your plan will use: ${describeEquipment(equipment)}.`
+                      : "Nothing selected — the plan will use bodyweight and open space only."}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Environment</p>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {ENVIRONMENTS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={environment === option}
+                        onClick={() => setEnvironment(option)}
+                        className={chip(environment === option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">Focus areas</p>
+                  <div className="mt-2 space-y-2.5">
+                    {FOCUS_GROUPS.map((group) => (
+                      <div key={group.tier}>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          {group.tier}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {group.items.map((area) => (
+                            <button
+                              key={area}
+                              type="button"
+                              aria-pressed={focusAreas.includes(area)}
+                              onClick={() => toggleFocus(area)}
+                              className={chip(focusAreas.includes(area))}
+                            >
+                              {area}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="plan-event" className="text-xs font-semibold text-muted-foreground">
+                    Target event <span className="font-normal">(optional)</span>
+                  </label>
+                  <input
+                    id="plan-event"
+                    type="text"
+                    value={targetEvent}
+                    maxLength={100}
+                    placeholder="e.g. Half marathon in 8 weeks"
+                    onChange={(event) => setTargetEvent(event.target.value)}
+                    className={`${input} mt-1.5`}
+                  />
+                </div>
+
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {DISCLAIMERS.healthRisk.full}
+                </p>
+                {ageNumber !== null && ageNumber < 18 ? (
+                  <p className="flex items-start gap-1.5 text-xs text-energy">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+                    Under-18 limits applied: lighter loads, more mobility, more rest.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {setupStep === 3 ? (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="font-display text-lg font-bold leading-snug">
+                    Anything else we should know?
+                  </h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    Injuries, a physical job, a holiday coming up, only 30 minutes on weekdays —
+                    anything that changes what you can do. It is kept with this plan and applied to
+                    the sessions.
+                  </p>
+                  <label htmlFor="plan-notes" className="mt-4 block text-xs font-semibold text-muted-foreground">
+                    Your notes <span className="font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    id="plan-notes"
+                    value={planNotes}
+                    maxLength={500}
+                    rows={4}
+                    placeholder="e.g. left knee gets sore on downhill runs; I only have 30 minutes on weekdays"
+                    onChange={(event) => setPlanNotes(event.target.value)}
+                    className={`${input} mt-1.5 min-h-[110px] resize-y leading-relaxed`}
+                  />
+                  <p className="mt-1 text-right text-[11px] text-muted-foreground">
+                    {planNotes.length}/500
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Do you have a disability or access need we should adapt for?
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                    These are all conditions a training plan can work around. If a clinician has told
+                    you not to exercise, do not start this plan.
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {DISABILITY_OPTIONS.map((option) => {
+                      const active = disability === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setDisability(option.id)}
+                          className={`press flex min-h-[56px] w-full items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
+                            active
+                              ? "border-primary/60 bg-primary/15"
+                              : "border-white/[0.08] bg-white/[0.03]"
+                          }`}
+                        >
+                          <span
+                            aria-hidden
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              active ? "border-primary bg-primary text-primary-foreground" : "border-white/25"
+                            }`}
+                          >
+                            {active ? <Check size={10} /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold">{option.label}</span>
+                            <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                              {option.blurb}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                    {DISCLAIMERS.healthRisk.full}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex gap-2">
+              {setupStep > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSetupStep((step) => step - 1)}
+                  className="press min-h-[48px] rounded-xl border border-white/[0.08] px-4 text-sm font-semibold text-muted-foreground"
+                >
+                  Back
+                </button>
+              ) : null}
+              {lastStep ? (
+                <button
+                  type="button"
+                  onClick={() => void createPlan()}
+                  disabled={creating || !ageNumber || ageNumber < 13}
+                  className="press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+                >
+                  {creating ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" aria-hidden /> Creating…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} aria-hidden /> Create plan
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSetupStep((step) => step + 1)}
+                  disabled={!canContinue}
+                  className="press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+                >
+                  Next <ChevronRight size={16} aria-hidden />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------- detail ---
+  if (screen === "detail" && selectedPlan) {
+    const weeks = readWeeks(selectedPlan.plan_data);
+    return (
+      <div className="min-h-screen pb-28">
+        <div className="mx-auto w-full max-w-3xl px-5 pt-[var(--vaylo-screen-top)] sm:px-6">
+          {backButton(() => setScreen("home"), "Training")}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold uppercase tracking-widest text-primary">
+                {selectedPlan.active ? "Active plan" : "Plan"}
+              </p>
+              <h1 className="mt-1 font-display text-2xl font-bold leading-tight">
+                {selectedPlan.title}
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Week {selectedPlan.week_current} of {selectedPlan.duration_weeks} ·{" "}
+                {selectedPlan.sport} · {selectedPlan.level}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {!selectedPlan.active ? (
+                <button
+                  type="button"
+                  onClick={() => void activatePlan(selectedPlan)}
+                  disabled={activating}
+                  className="press inline-flex min-h-[44px] items-center rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary disabled:opacity-50"
+                >
+                  {activating ? "Activating…" : "Make active"}
+                </button>
+              ) : (
+                <span className="inline-flex min-h-[44px] items-center rounded-xl border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary">
+                  Active
+                </span>
+              )}
+            </div>
+          </div>
+
+          {selectedPlan.description ? (
+            <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
+              {selectedPlan.description}
+            </p>
+          ) : null}
+
+          {weeks.length === 0 ? (
+            <div className={`${card} mt-4 p-5 text-sm text-muted-foreground`}>
+              This plan has no weeks stored yet. Create a new plan to replace it.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {weeks.map((week) => {
+                const open = expandedWeek === week.week;
+                return (
+                  <div key={week.week} className={card}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedWeek(open ? null : week.week)}
+                      aria-expanded={open}
+                      className="press flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                    >
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-display text-sm font-bold">Week {week.week}</span>
+                          {week.isDeload ? (
+                            <span className="rounded-full bg-energy/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-energy">
+                              Deload
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {week.sessions.filter((s) => !s.isRest && !s.isRecovery).length} sessions ·{" "}
+                          {week.sessions.filter((s) => s.isRest).length} rest
+                          {week.sessions.some((s) => s.isRecovery)
+                            ? ` · ${week.sessions.filter((s) => s.isRecovery).length} active recovery`
+                            : ""}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={18}
+                        className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+                        aria-hidden
+                      />
+                    </button>
+                    {open ? (
+                      <div className="space-y-2 px-3 pb-3 sm:px-4">
+                        {week.sessions.map((session) => (
+                          <SessionCard
+                            key={`${week.week}-${session.day}`}
+                            session={session}
+                            highlight={week.week === selectedPlan.week_current}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => openSetup("standard")}
+              className="press inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/[0.08] px-3.5 text-xs font-semibold text-muted-foreground"
+            >
+              <Plus size={14} aria-hidden /> New plan
+            </button>
+            {confirmDelete === selectedPlan.id ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void deletePlan(selectedPlan)}
+                  className="press inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-destructive/40 px-3.5 text-xs font-semibold text-destructive"
+                >
+                  Delete permanently
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(null)}
+                  className="press inline-flex min-h-[44px] items-center rounded-xl border border-white/[0.08] px-3.5 text-xs font-semibold text-muted-foreground"
+                >
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(selectedPlan.id)}
+                className="press inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/[0.08] px-3.5 text-xs font-semibold text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 size={14} aria-hidden /> Delete plan
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------- home ---
+  return (
+    <div className="min-h-screen pb-28">
+      <div className="mx-auto w-full max-w-3xl px-5 pt-[var(--vaylo-screen-top)] sm:px-6">
+        <button
+          type="button"
+          onClick={() => {
+            if (location.key !== "default") navigate(-1);
+            else navigate("/");
+          }}
+          aria-label={location.key !== "default" ? "Go back" : "Go to the home screen"}
+          className="press mb-2 inline-flex min-h-[44px] items-center gap-1 text-[15px] font-medium text-primary"
+        >
+          <ChevronLeft size={20} aria-hidden /> Back
+        </button>
+        {header(
+          "Training",
+          "Build the plan around your limiter",
+          "Log what you do in Workouts. Plan what comes next here.",
+        )}
+
+        {loadError ? (
+          <p className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-[13px] text-destructive">
+            Could not load your plans: {loadError}
+          </p>
+        ) : null}
+
+        {activeBreak ? (
+          <div className="mb-4">
+            <ActiveBreakBanner event={activeBreak} />
+          </div>
+        ) : null}
+
+        {activePlan ? (
+          <div className="mb-4 rounded-2xl border border-primary/25 bg-gradient-card p-5 shadow-card">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
+              <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-primary">
+                {isLimiterPlan(activePlan) ? "Your limiter plan" : "Active plan"}
+              </p>
+            </div>
+            <h2 className="mt-2 font-display text-xl font-bold">{activePlan.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Week {activePlan.week_current} of {activePlan.duration_weeks} · {activePlan.sport} ·{" "}
+              {activePlan.level}
+            </p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{
+                  width: `${Math.max(
+                    2,
+                    Math.min(
+                      100,
+                      (activePlan.week_current / Math.max(1, activePlan.duration_weeks)) * 100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => openPlan(activePlan)}
+              className="press mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+            >
+              <Eye size={16} aria-hidden /> {isLimiterPlan(activePlan) ? "Open limiter plan" : "Open plan"}
+            </button>
+          </div>
+        ) : (
+          <div className={`${card} mb-4 p-5 text-center`}>
+            <Dumbbell size={28} className="mx-auto text-primary" aria-hidden />
+            <h2 className="mt-3 font-display text-lg font-bold">No training plan yet</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+              Build one from your sport, availability and equipment — or start with the Limiter
+              Test and build the plan around the thing that is actually holding you back.
+            </p>
+            <button
+              type="button"
+              onClick={() => openSetup("standard")}
+              className="press mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+            >
+              <Plus size={16} aria-hidden /> Create a plan
+            </button>
+          </div>
+        )}
+
+        {latestLimiterPlan && !latestLimiterPlan.active ? (
+          <button
+            type="button"
+            onClick={() => openPlan(latestLimiterPlan)}
+            className={`${card} press mb-4 flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-primary/25`}
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+              <Target size={19} className="text-primary" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+                Your limiter plan
+              </span>
+              <span className="mt-0.5 block truncate text-sm font-semibold">
+                {latestLimiterPlan.title}
+              </span>
+              <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                Week {latestLimiterPlan.week_current} of {latestLimiterPlan.duration_weeks} · open it
+                to keep going
+              </span>
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-muted-foreground" aria-hidden />
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={openLimiter}
+          className={`${card} press mb-5 flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-primary/25`}
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+            <Target size={19} className="text-primary" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Limiter Test</span>
+            <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">
+              Eight ratings. One priority. Then a plan built to fix it.
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-muted-foreground" aria-hidden />
+        </button>
+
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+            Your plans
+          </h2>
+          <button
+            type="button"
+            onClick={() => openSetup("standard")}
+            className="press inline-flex min-h-[44px] items-center gap-1 text-xs font-semibold text-primary"
+          >
+            <Plus size={14} aria-hidden /> New
+          </button>
+        </div>
+
+        {loadingPlans ? (
+          <div className={`${card} mt-2 flex items-center gap-2 p-4 text-xs text-muted-foreground`}>
+            <Loader2 size={14} className="animate-spin" aria-hidden /> Loading plans…
+          </div>
+        ) : plans.length === 0 ? (
+          <div className={`${card} mt-2 p-4 text-sm text-muted-foreground`}>
+            Nothing here yet. Create a plan or take the Limiter Test.
+          </div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {plans.map((plan) => (
+              <div key={plan.id} className={`${card} flex items-center gap-2 p-2 pl-3`}>
+                <button
+                  type="button"
+                  onClick={() => openPlan(plan)}
+                  className="press flex min-h-[56px] min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04]">
+                    {isLimiterPlan(plan) ? (
+                      <Target size={16} className="text-primary" aria-hidden />
+                    ) : (
+                      <Dumbbell size={16} className="text-primary" aria-hidden />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-semibold">{plan.title}</span>
+                      {isLimiterPlan(plan) ? (
+                        <span className="shrink-0 rounded-full bg-energy/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-energy">
+                          Limiter
+                        </span>
+                      ) : null}
+                      {plan.active ? (
+                        <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Active
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                      {plan.duration_weeks}w · {plan.sport} · {plan.level}
+                    </span>
+                  </span>
+                </button>
+                {confirmDelete === plan.id ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void deletePlan(plan)}
+                      className="press flex min-h-[44px] items-center rounded-xl border border-destructive/40 px-2.5 text-[11px] font-semibold text-destructive"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(null)}
+                      className="press flex min-h-[44px] items-center rounded-xl border border-white/[0.08] px-2.5 text-[11px] font-semibold text-muted-foreground"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${plan.title}`}
+                    onClick={() => setConfirmDelete(plan.id)}
+                    className="press flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 size={15} aria-hidden />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => navigate("/workouts")}
+          className="press mt-5 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-white/[0.08] text-xs font-semibold text-muted-foreground"
+        >
+          <Dumbbell size={14} aria-hidden /> Log a finished session in Workouts
+        </button>
       </div>
     </div>
   );
 };
+
+/** One session inside the plan detail view. */
+function SessionCard({
+  session,
+  highlight,
+}: {
+  session: PlanSessionLike;
+  highlight: boolean;
+}) {
+  const warmup = exerciseRows(session.warmup);
+  const main = exerciseRows(session.exercises);
+  const cooldown = exerciseRows(session.cooldown);
+  const resting = session.isRest || session.isRecovery;
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        resting
+          ? "border-white/[0.05] bg-white/[0.015]"
+          : highlight
+            ? "border-primary/20 bg-primary/[0.045]"
+            : "border-white/[0.06] bg-white/[0.025]"
+      }`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground/70">
+          {session.dayName ?? `Day ${session.day}`}
+        </p>
+        <p className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+          {session.duration_minutes ? `${session.duration_minutes} min` : resting ? "Rest" : ""}
+        </p>
+      </div>
+      <p className="mt-0.5 text-sm font-semibold leading-snug">{session.title}</p>
+      {session.description ? (
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+          {session.description}
+        </p>
+      ) : null}
+
+      {Array.isArray(session.adaptations) && session.adaptations.length > 0 ? (
+        <details className="mt-2 rounded-lg border border-primary/15 bg-primary/[0.04] px-2.5 py-2">
+          <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+            Adapted for you
+          </summary>
+          <ul className="mt-1.5 space-y-1 text-[11.5px] leading-relaxed text-muted-foreground">
+            {session.adaptations.map((cue: string) => (
+              <li key={cue} className="flex gap-1.5">
+                <Check size={12} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                <span>{cue}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      {/* The set description has no `flex-1 basis-40`. That made every long
+          set description wrap INSIDE a 160px-wide column, so its second line
+          started under the middle of the row instead of under its own first
+          word — the training tab's text-in-the-wrong-place bug. Left to wrap
+          naturally, it falls to a new line aligned with the exercise name. */}
+      {main.length > 0 ? (
+        <div className="mt-2.5 space-y-1">
+          {main.map((row, index) => (
+            <div key={`${row.name}-${index}`} className="flex flex-wrap gap-x-2 text-[12.5px]">
+              <span className="font-medium text-foreground">{row.name}</span>
+              {row.sets ? (
+                <span className="min-w-0 text-muted-foreground">{row.sets}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {warmup.length > 0 ? (
+        <details className="mt-2.5">
+          <summary className="cursor-pointer py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+            Warm-up ({warmup.length})
+          </summary>
+          <div className="mt-1.5 space-y-1">
+            {warmup.map((row, index) => (
+              <div key={`${row.name}-${index}`} className="flex flex-wrap gap-x-2 text-[12px]">
+                <span className="text-muted-foreground">{row.name}</span>
+                {row.sets ? <span className="text-muted-foreground/70">{row.sets}</span> : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {cooldown.length > 0 ? (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-info">
+            Cool-down ({cooldown.length})
+          </summary>
+          <div className="mt-1.5 space-y-1">
+            {cooldown.map((row, index) => (
+              <div key={`${row.name}-${index}`} className="flex flex-wrap gap-x-2 text-[12px]">
+                <span className="text-muted-foreground">{row.name}</span>
+                {row.sets ? <span className="text-muted-foreground/70">{row.sets}</span> : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
 
 export default Training;

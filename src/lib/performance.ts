@@ -76,8 +76,15 @@ export function getSportWeights(sport: string, position?: string): Record<keyof 
 // Uses calibrated reference ranges per metric type. The curve is intentionally
 // steep so a perfect 100 requires elite-level numbers, not just "above good".
 const METRIC_RANGES: Record<string, { good: number; elite: number; worldClass?: number; lowerIsBetter?: boolean }> = {
-  sprint_40m: { good: 6.5, elite: 4.8, worldClass: 4.3, lowerIsBetter: true },
-  sprint_100m: { good: 14, elite: 10.5, worldClass: 9.6, lowerIsBetter: true },
+  // 4.64 s is Usain Bolt's 40 m split in the 9.58 s world record (10 m 1.85,
+  // 20 m 2.87, 30 m 3.78, 40 m 4.64). The old worldClass of 4.3 s was faster
+  // than any human has ever run, so the speed index could never reach 100 and
+  // an athlete who matched the world record was scored 93 — "elite", not
+  // "world class". The reference is now the actual record: matching it is 100.
+  sprint_40m: { good: 6.5, elite: 4.8, worldClass: 4.64, lowerIsBetter: true },
+  // 9.58 s is the same record. 9.6 was close enough to be harmless, but the
+  // two sprint references should describe the same standard.
+  sprint_100m: { good: 14, elite: 10.5, worldClass: 9.58, lowerIsBetter: true },
   vertical_jump: { good: 40, elite: 75, worldClass: 100 },
   broad_jump: { good: 200, elite: 320, worldClass: 380 },
   beep_test: { good: 8, elite: 14, worldClass: 17 },
@@ -160,10 +167,34 @@ export function calculateVPR(metrics: MetricRow[], sport: string, position?: str
     0,
   );
 
-  // Data-completeness cap: a perfect 100 requires data in all 6 buckets.
-  // 1 bucket → 70, 2 → 80, 3 → 88, 4 → 94, 5 → 98, 6 → 100.
-  const completenessCap = [0, 70, 80, 88, 94, 98, 100][Math.min(6, presentKeys.length)];
-  scores.overall_vpr = Math.min(completenessCap, Math.round(weighted));
+  // A world-class domain is not just another bucket.
+  //
+  // The overall is an average of the domains that have data, and an average is
+  // exactly the measure that cannot see a world record: an athlete who matched
+  // Usain Bolt's 40 m split had a maxed speed index, and the composite diluted
+  // it with five ordinary buckets down to 97 — the screen said "very good"
+  // about a performance at the limit of human ability. 90 is where the index
+  // enters the world-class band, so the strongest bucket's distance into that
+  // band counts half again: a 100 lifts the composite by 5 points, a 94 by 2.
+  // The completeness cap below still applies, so one maxed test cannot buy a
+  // 99 profile on its own.
+  const peak = Math.max(0, ...presentKeys.map((k) => scores[k]));
+  const peakLift = peak > 90 ? (peak - 90) * 0.5 : 0;
+  const blended = weighted + peakLift;
+
+  // Data-completeness cap. A complete profile (all six buckets) still tops out
+  // at 99 unless EVERY bucket is maxed: 100 is reserved for a genuinely perfect
+  // six-domain profile, not for a good average that rounds up.
+  //
+  // Five buckets → 99, not 98. A world-record sprint is a maxed speed index,
+  // and an athlete who is at that level in five domains should not be held one
+  // point below the ceiling by a sixth bucket they have not tested yet. 100
+  // still requires all six, so the ceiling stays hard.
+  // 1 bucket → 70, 2 → 80, 3 → 88, 4 → 94, 5 → 99, 6 → 99.
+  const completeCap = [0, 70, 80, 88, 94, 99, 99][Math.min(6, presentKeys.length)];
+  const perfect = presentKeys.length === 6 && presentKeys.every((k) => scores[k] === 100);
+  const cap = perfect ? 100 : completeCap;
+  scores.overall_vpr = Math.min(cap, Math.round(blended));
   return scores;
 }
 

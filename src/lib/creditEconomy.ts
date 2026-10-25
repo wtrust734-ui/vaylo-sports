@@ -4,6 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { getUsdRate } from "@/lib/fxRates";
 import { isOfferLive } from "@/lib/offerWindow";
 
 export type CreditPack = {
@@ -54,41 +55,52 @@ export const DEFAULT_FEATURE_COSTS: Record<FeatureCostKey, number> = FEATURE_COS
 
 
 // --- Currency catalog (display only — IAP store handles actual charge) ---
-const CURRENCY_INFO: Record<string, { symbol: string; rate: number }> = {
-  USD: { symbol: "$",   rate: 1 },
-  GBP: { symbol: "£",   rate: 0.79 },
-  EUR: { symbol: "€",   rate: 0.92 },
-  CAD: { symbol: "C$",  rate: 1.36 },
-  AUD: { symbol: "A$",  rate: 1.52 },
-  NZD: { symbol: "NZ$", rate: 1.64 },
-  CHF: { symbol: "CHF ",rate: 0.88 },
-  NOK: { symbol: "kr ", rate: 10.8 },
-  DKK: { symbol: "kr ", rate: 6.9 },
-  SEK: { symbol: "kr ", rate: 10.5 },
-  PLN: { symbol: "zł ", rate: 3.95 },
-  CZK: { symbol: "Kč ", rate: 23 },
-  JPY: { symbol: "¥",   rate: 152 },
-  KRW: { symbol: "₩",   rate: 1340 },
-  BRL: { symbol: "R$",  rate: 5.1 },
-  MXN: { symbol: "MX$", rate: 17.5 },
-  TRY: { symbol: "₺",   rate: 32 },
-  ZAR: { symbol: "R",   rate: 18.5 },
-  THB: { symbol: "฿",   rate: 36 },
-  MYR: { symbol: "RM",  rate: 4.7 },
-  IDR: { symbol: "Rp ", rate: 15800 },
-  COP: { symbol: "COL$", rate: 4000 },
-  INR: { symbol: "₹",   rate: 83 },
-  PKR: { symbol: "₨",   rate: 278 },
-  BDT: { symbol: "৳",   rate: 110 },
-  NGN: { symbol: "₦",   rate: 1500 },
-  KES: { symbol: "KSh", rate: 130 },
-  EGP: { symbol: "E£",  rate: 48 },
-  VND: { symbol: "₫",   rate: 25000 },
-  PHP: { symbol: "₱",   rate: 56 },
+//
+// Symbols live here; RATES do not. The rate was a hand-typed constant per
+// currency and went stale the day it was written (GBP was 0.79 when the real
+// rate was 0.748, so every price read ~5% high and the athlete saw a different
+// number wherever else they looked). `getUsdRate` reads one shared table that
+// is refreshed daily and cached — see src/lib/fxRates.ts. This file keeps only
+// what a feed cannot give us: the glyph and the allowlist of currencies the app
+// is willing to display.
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  GBP: "£",
+  EUR: "€",
+  CAD: "C$",
+  AUD: "A$",
+  NZD: "NZ$",
+  CHF: "CHF ",
+  NOK: "kr ",
+  DKK: "kr ",
+  SEK: "kr ",
+  PLN: "zł ",
+  CZK: "Kč ",
+  JPY: "¥",
+  KRW: "₩",
+  BRL: "R$",
+  MXN: "MX$",
+  TRY: "₺",
+  ZAR: "R",
+  THB: "฿",
+  MYR: "RM",
+  IDR: "Rp ",
+  COP: "COL$",
+  INR: "₹",
+  PKR: "₨",
+  BDT: "৳",
+  NGN: "₦",
+  KES: "KSh",
+  EGP: "E£",
+  VND: "₫",
+  PHP: "₱",
 };
 
+const SUPPORTED_CURRENCIES = new Set(Object.keys(CURRENCY_SYMBOLS));
+
 export function getCurrencyInfo(currency: string) {
-  return CURRENCY_INFO[currency] || CURRENCY_INFO.USD;
+  const code = SUPPORTED_CURRENCIES.has(currency) ? currency : "USD";
+  return { symbol: CURRENCY_SYMBOLS[code], rate: getUsdRate(code) };
 }
 
 // Legacy shim — older callers passed country codes
@@ -124,7 +136,7 @@ export async function detectRegion(): Promise<{ country: string; currency: strin
 }
 
 export function formatLocalPrice(priceCents: number, currencyOrCountry: string): string {
-  const currency = CURRENCY_INFO[currencyOrCountry] ? currencyOrCountry : "USD";
+  const currency = SUPPORTED_CURRENCIES.has(currencyOrCountry) ? currencyOrCountry : "USD";
   const info = getCurrencyInfo(currency);
   const localAmount = (priceCents / 100) * info.rate;
   const display = info.rate >= 50

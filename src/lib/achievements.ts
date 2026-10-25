@@ -168,6 +168,33 @@ export const builtInAchievements = [
   { id: "beat_rival", title: "Rival Beaten", desc: "Finish ahead of a rival", icon: "target", check: (d: AchievementStats) => d.rivalBeats >= 1 },
   { id: "nutrition_plan", title: "Diet Planner", desc: "Create a nutrition plan", icon: "flame", check: (d: AchievementStats) => d.nutritionPlans >= 1 },
   { id: "3_nutrition", title: "Nutrition Pro", desc: "3 nutrition plans", icon: "crown", check: (d: AchievementStats) => d.nutritionPlans >= 3 },
+  // ── 2026-10-25: the early rungs ──────────────────────────────────────────
+  // The catalogue jumped from "first" straight to 10 or 25 of most things, so
+  // an athlete's second and third session earned nothing at all. These are the
+  // missing first-week goals: every one is reachable, every one has a counter
+  // that `useAchievementStats` already loads, and none repeats an existing id.
+  { id: "2_workouts", title: "First Block", desc: "Complete 2 workouts", icon: "dumbbell", check: (d: AchievementStats) => d.workouts >= 2 },
+  { id: "3_workouts", title: "Settling In", desc: "Complete 3 workouts", icon: "flame", check: (d: AchievementStats) => d.workouts >= 3 },
+  { id: "40_workouts", title: "Forty Club", desc: "Complete 40 workouts", icon: "star", check: (d: AchievementStats) => d.workouts >= 40 },
+  { id: "2_day_streak", title: "Back To Back", desc: "2-day workout streak", icon: "flame", check: (d: AchievementStats) => d.streak >= 2 },
+  { id: "2_checkins", title: "Listening", desc: "Log 2 recovery check-ins", icon: "heart", check: (d: AchievementStats) => d.checkins >= 2 },
+  { id: "5_checkins", title: "Check-In Habit", desc: "Log 5 recovery check-ins", icon: "heart", check: (d: AchievementStats) => d.checkins >= 5 },
+  { id: "2_green", title: "Two Green Days", desc: "2 green zone days", icon: "zap", check: (d: AchievementStats) => d.greenDays >= 2 },
+  { id: "2_events", title: "Double Header", desc: "Create 2 events", icon: "target", check: (d: AchievementStats) => d.events >= 2 },
+  { id: "2_rivals", title: "Rival Pair", desc: "Track 2 rivals", icon: "target", check: (d: AchievementStats) => d.rivals >= 2 },
+  { id: "2_plans", title: "Routine Builder", desc: "Create 2 training plans", icon: "dumbbell", check: (d: AchievementStats) => d.plans >= 2 },
+  { id: "2_friends", title: "Training Partner", desc: "Have 2 friends", icon: "star", check: (d: AchievementStats) => d.friends >= 2 },
+  { id: "5_meals", title: "Five Meals", desc: "Log 5 meals", icon: "flame", check: (d: AchievementStats) => d.meals >= 5 },
+  { id: "10_meals", title: "Ten Plates", desc: "Log 10 meals", icon: "flame", check: (d: AchievementStats) => d.meals >= 10 },
+  { id: "5_water", title: "Water Habit", desc: "Log water 5 times", icon: "droplets", check: (d: AchievementStats) => d.water >= 5 },
+  { id: "5_coach", title: "Coach Curious", desc: "5 coach messages", icon: "brain", check: (d: AchievementStats) => d.coachMsgs >= 5 },
+  { id: "5_mental", title: "Mental Habit", desc: "5 mental check-ins", icon: "brain", check: (d: AchievementStats) => d.mentalCheckins >= 5 },
+  { id: "2_reviews", title: "Second Look", desc: "2 post-event reviews", icon: "award", check: (d: AchievementStats) => d.reviews >= 2 },
+  { id: "5_reviews", title: "Review Habit", desc: "5 post-event reviews", icon: "award", check: (d: AchievementStats) => d.reviews >= 5 },
+  { id: "2_results", title: "Result Repeat", desc: "Log 2 event results", icon: "medal", check: (d: AchievementStats) => d.results >= 2 },
+  { id: "10_hrv", title: "HRV Habit", desc: "Log HRV 10 times", icon: "heart", check: (d: AchievementStats) => d.hrvLogs >= 10 },
+  { id: "2_nutrition", title: "Second Plan", desc: "2 nutrition plans", icon: "flame", check: (d: AchievementStats) => d.nutritionPlans >= 2 },
+  { id: "2_challenges", title: "Two Challenges", desc: "Complete 2 challenges", icon: "trophy", check: (d: AchievementStats) => d.completedChallenges >= 2 },
 ];
 
 

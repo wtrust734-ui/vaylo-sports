@@ -31,10 +31,17 @@
 
   html, body { width: 1200px; height: 630px; overflow: hidden; }
 
+  @font-face {
+    font-family: "Archivo";
+    font-style: normal;
+    font-weight: 400 800;
+    src: url(fonts/archivo-latin.woff2) format("woff2");
+  }
+
   body {
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background: #05070f;
-    color: #eef2f9;
+    font: 16px/1.5 "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #07080c;
+    color: #f4f6f9;
     position: relative;
     -webkit-font-smoothing: antialiased;
   }
@@ -63,7 +70,7 @@
   .rule {
     width: 64px;
     height: 3px;
-    background: #5aa2ff;
+    background: #7ea8ff;
     border-radius: 999px;
     margin: 42px 0 30px;
   }
@@ -75,7 +82,7 @@
     font-weight: 800;
     max-width: 950px;
   }
-  h1 em { font-style: normal; color: #8fc4ff; font-weight: 800; }
+  h1 em { font-style: normal; color: #a8c8ff; font-weight: 800; }
 
   .facts {
     margin-top: auto;
@@ -85,8 +92,8 @@
     font-size: 25px;
     color: #a9b6cc;
   }
-  .facts b { color: #eef2f9; font-weight: 650; }
-  .dot { width: 5px; height: 5px; border-radius: 999px; background: #5aa2ff; flex: none; }
+  .facts b { color: #f4f6f9; font-weight: 650; }
+  .dot { width: 5px; height: 5px; border-radius: 999px; background: #7ea8ff; flex: none; }
 </style>
 </head>
 <body>
@@ -99,14 +106,14 @@
 
     <div class="rule"></div>
 
-    <h1>A training log that tells you what your <em>own numbers</em> mean.</h1>
+    <h1>Your training,<br />read back <em>to you</em>.</h1>
 
     <div class="facts">
       <span><b>Every sport</b></span>
       <span class="dot"></span>
       <span><b>No ad SDK</b></span>
       <span class="dot"></span>
-      <span>Android &mdash; not yet on the Play Store</span>
+      <span>Android &mdash; launching 2027</span>
     </div>
   </div>
 </body>

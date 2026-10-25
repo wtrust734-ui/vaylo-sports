@@ -311,9 +311,13 @@ describe("Health Connect — disconnect", () => {
     expect(p).toMatch(/This cannot be undone/);
   });
 
-  it("revoked permissions stop syncing and flip consent off", () => {
+  it("revoked permissions stop syncing, flip consent off and record the disconnect", () => {
     const s = read(SYNC);
-    expect(s).toMatch(/writeConsent\(userId, false, HEALTH_PERMISSIONS_VERSION\);\s*\n\s*await saveConnectionToServer\(userId, false\)/);
+    // The fourth argument is `disconnected`. Without it a revoke performed
+    // outside the app is indistinguishable from "never connected here", and the
+    // next status check is free to adopt the account row and call the device
+    // connected again — the loop this test now guards.
+    expect(s).toMatch(/writeConsent\(userId, false, HEALTH_PERMISSIONS_VERSION, true\);\s*\n\s*await saveConnectionToServer\(userId, false\)/);
   });
 
   it("the bridge never logs health payloads", () => {

@@ -40,8 +40,8 @@ export default function HomeView({ onNavigate }: { onNavigate: (v: StudioView) =
       <section>
         <h2 className="text-2xl font-semibold tracking-tight">Start with a sentence</h2>
         <p className="mt-1 text-sm text-white/60">
-          Type what you want in the Creative Assistant, or pick a workflow below. Nothing is generated
-          without a cost quote and your approval.
+          Type what you want in the Creative Assistant, or pick a workflow below. Describe it in a
+          sentence and it gets built.
         </p>
         <button
           onClick={() => onNavigate("chat")}

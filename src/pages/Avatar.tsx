@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import AvatarCharacter, { type AvatarLoadout } from "@/components/avatar/AvatarCharacter";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
-import CoinQuickBuySheet from "@/components/market/CoinQuickBuySheet";
 import RewardBoxesPanel from "@/components/cosmetics/RewardBoxesPanel";
 import { FIRST_PURCHASE_BUNDLE } from "@/config/coins";
 import {
@@ -43,9 +42,6 @@ const Avatar = () => {
 
   // Shortfall top-up — set when the athlete cannot afford what they picked.
   const [topUp, setTopUp] = useState<{ gap: number; itemName?: string } | null>(null);
-  // Direct coin buying, right here — pick a bundle, confirm, done. No basket,
-  // no detour through the Market.
-  const [quickBuy, setQuickBuy] = useState(false);
   const [firstBundleAvailable, setFirstBundleAvailable] = useState(false);
 
   // The one-time first-purchase bundle is only offered while it is unused.
@@ -292,10 +288,6 @@ const Avatar = () => {
               <Coins size={14} className="text-energy" />
               <span className="text-sm font-display font-bold tabular-nums text-white">{formatNumber(coins)}</span>
             </div>
-            <button onClick={() => setQuickBuy(true)}
-              className="text-[12px] uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-primary/25 backdrop-blur text-primary-foreground font-bold border border-primary/40 active:scale-95">
-              Buy Coins
-            </button>
           </div>
 
           {/* Bottom hint + name */}
@@ -572,11 +564,6 @@ const Avatar = () => {
         onClose={() => setTopUp(null)}
         gap={topUp?.gap ?? 0}
         itemName={topUp?.itemName}
-        firstPurchaseAvailable={firstBundleAvailable}
-      />
-      <CoinQuickBuySheet
-        open={quickBuy}
-        onClose={() => setQuickBuy(false)}
         firstPurchaseAvailable={firstBundleAvailable}
       />
     </div>

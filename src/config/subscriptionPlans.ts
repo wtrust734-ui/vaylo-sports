@@ -10,6 +10,8 @@
 // subscription_plans. No other file needs to change.
 // ============================================================================
 
+import { formatLocalPrice, getCurrencyInfo } from "@/lib/creditEconomy";
+
 export type BillingPeriod = "month" | "year" | "lifetime";
 
 /** The only entitlement types in the new system. */
@@ -47,8 +49,15 @@ export type PlanDefinition = {
 
 export const CURRENCY = { code: "GBP", symbol: "£" } as const;
 
-export const formatPence = (pence: number) =>
-  `${CURRENCY.symbol}${(pence / 100).toFixed(2)}`;
+/**
+ * The plan catalogue is priced in GBP pence. Display still follows the
+ * athlete's chosen currency: convert the GBP amount to its USD-equivalent
+ * first, then let the shared formatter apply that currency's rate and symbol.
+ * Leaving this as a fixed `£` is why changing the Profile currency to USD or
+ * EUR left plan prices looking unchanged.
+ */
+export const formatPence = (pence: number, currency: string = CURRENCY.code) =>
+  formatLocalPrice(pence / getCurrencyInfo("GBP").rate, currency);
 
 export const PERIOD_LABEL: Record<BillingPeriod, string> = {
   month: "Monthly",

@@ -18,8 +18,8 @@
 //      Session/User object (anonymous, no email) held in React state only. The
 //      session gate opens, the header says "Guest", and nothing is sent
 //      anywhere. It is NOT written into supabase-js's own storage — the real
-//      client in this build points at a reserved `.invalid` hostname and is
-//      expected to fail every call.
+//      client in this build points at a reserved `.invalid` hostname in clone
+//      builds.
 //
 //   3. Free purchases. Every purchase in the app funnels through
 //      `purchaseItems()` in lib/billing.ts; in demo mode that call grants the
@@ -108,7 +108,7 @@ export function demoGuestSession(): Session {
       is_anonymous: true,
       iat: now,
       exp,
-    }),
+    })
   );
   const access_token = `${header}.${payload}.local-demo`;
 

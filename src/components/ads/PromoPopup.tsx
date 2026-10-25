@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { claimCreditReward, creditCost } from "@/lib/credits";
 import { useAuth } from "@/contexts/AuthContext";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { X, Crown, Brain, ScanLine, Star, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { UNLIMITED_PLAN, formatPence } from "@/config/subscriptionPlans";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 // Prices come from the source of truth, not literals: subscriptionPlans.ts is
 // the single catalogue (the DB row wins at runtime, this config is the
@@ -21,7 +22,8 @@ const promos = [
     icon: Crown,
     title: "Unlimited credits",
     desc: "Every feature, no balance to watch. Best value when you train daily.",
-    price: proMonthly ? `${formatPence(proMonthly.price_pence)}/month` : "see the Market",
+    // Filled at render time so the price follows the selected currency.
+    price: "",
     color: "text-energy",
     bg: "bg-energy/10",
   },
@@ -64,34 +66,13 @@ const WINBACK_DISMISS_KEY = "vaylo_winback_dismissed_until";
 const PROMO_DISMISS_KEY = "vaylo_promo_dismissed_until";
 const PROMO_SNOOZE_MS = 7 * 86400_000;
 
-/**
- * True while a consent/legal surface (the cookie notice, or the terms
- * re-acceptance banner) is on screen. A sales card must never share the screen
- * with one: it draws over the same bottom band, and interrupting a consent or
- * legal notice with a sales offer is exactly the pressure the advertising
- * policy disclaims. The promo waits until the notice is gone instead.
- */
-const consentNoticeVisible = (): boolean => {
-  if (typeof document === "undefined") return false;
-  const notice = document.querySelector('[role="region"][aria-label="Cookies and stored preferences"]');
-  if (notice && !(notice as HTMLElement).hidden) return true;
-  // The terms banner publishes its height as --vaylo-notice-lift and removes
-  // the property when it leaves, so its presence is readable without reaching
-  // into its component.
-  const lift = getComputedStyle(document.documentElement).getPropertyValue("--vaylo-notice-lift").trim();
-  return lift !== "" && lift !== "0px";
-};
-
 const PromoPopup = () => {
   const { hasUnlimitedCredits, entitlements } = useSubscription();
   const { user } = useAuth();
   const [claimingWinback, setClaimingWinback] = useState(false);
-  // Respect the OS "reduce motion" setting: the card slides up only when the
-  // athlete has not asked for calmer interfaces. A sales surface is where
-  // restraint matters most.
-  const reducedMotion = useReducedMotion();
   const isPremium = hasUnlimitedCredits;
   const navigate = useNavigate();
+  const currency = useDisplayCurrency();
   const [show, setShow] = useState(false);
   const [promoIndex, setPromoIndex] = useState(0);
   const [mode, setMode] = useState<"promo" | "winback">("promo");
@@ -117,28 +98,8 @@ const PromoPopup = () => {
     if (isPremium) return;
     // Win-back fires sooner (45s) than standard promo (10 min)
     const delay = isLapsed ? 45 * 1000 : 10 * 60 * 1000;
-    let cancelled = false;
-    let retry: number | undefined;
-    const timeout = window.setTimeout(() => {
-      if (cancelled) return;
-      if (consentNoticeVisible()) {
-        // A consent or legal notice is up. Retry quietly every 30s rather than
-        // stacking a sales card on top of it.
-        retry = window.setInterval(() => {
-          if (consentNoticeVisible()) return;
-          window.clearInterval(retry);
-          retry = undefined;
-          if (!cancelled) showPromo();
-        }, 30_000);
-        return;
-      }
-      showPromo();
-    }, delay);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-      if (retry !== undefined) window.clearInterval(retry);
-    };
+    const timeout = setTimeout(showPromo, delay);
+    return () => clearTimeout(timeout);
   }, [showPromo, isPremium, isLapsed]);
 
   const dismiss = useCallback(() => {
@@ -161,115 +122,96 @@ const PromoPopup = () => {
 
   if (!show || isPremium) return null;
 
-  // Non-blocking by design: no overlay, no dimming, no full-screen tap
-  // catcher. The card floats above the tab bar in a slot the app's content
-  // already reserves (main's bottom padding) and the page underneath stays
-  // usable the whole time. Dismiss paths: the X, the ghost button, Escape.
-  const slideY = reducedMotion ? 0 : 24;
-
   if (mode === "winback") {
     return (
       <AnimatePresence>
-        <motion.div
-          key="winback-card"
-          initial={{ opacity: 0, y: slideY }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: slideY }}
-          transition={{ duration: reducedMotion ? 0.12 : 0.25, ease: "easeOut" }}
-          role="dialog"
-          aria-label="Comeback offer"
-          className="fixed inset-x-4 bottom-[calc(var(--vaylo-inset-bottom)+5.5rem)] z-[44] mx-auto max-w-sm"
-        >
-          <div className="relative rounded-2xl border border-electric-purple/40 bg-card/95 p-4 shadow-electric backdrop-blur">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={dismiss}
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-6">
+          <motion.div initial={{ scale: 0.85, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 30 }}
+            transition={{ type: "spring", stiffness: 260, damping: 26 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-electric-purple/40 rounded-2xl p-6 max-w-sm w-full shadow-electric relative">
             <button
               type="button"
               onClick={dismiss}
               aria-label="Close"
-              className="press absolute top-3 right-3 -m-3.5 p-3.5 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute top-4 right-4 -m-3.5 p-3.5 text-muted-foreground hover:text-foreground transition-colors"
             >
               <X size={18} aria-hidden />
             </button>
-            <div className="flex items-start gap-3 pr-7">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-electric-purple/30 bg-electric-purple/15">
-                <Heart size={20} className="text-electric-purple" aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <h3 className="font-display font-bold text-base leading-tight">We miss you</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
-                  Your <span className="font-semibold capitalize text-foreground">{entitlements.plan_label}</span> plan ended. Resume it and keep your training moving.
-                </p>
-              </div>
+            <motion.div
+              initial={{ scale: 0.85 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              className="w-16 h-16 rounded-2xl bg-electric-purple/15 border border-electric-purple/30 flex items-center justify-center mx-auto mb-4">
+              <Heart size={30} className="text-electric-purple" />
+            </motion.div>
+            <h3 className="font-display font-bold text-xl text-center mb-1">We miss you</h3>
+            <p className="text-sm text-muted-foreground text-center mb-4">
+              Your <span className="text-foreground font-semibold capitalize">{entitlements.plan_label}</span> plan ended.
+              Come back and pick up right where you left off.
+            </p>
+            <div className="bg-gradient-to-r from-electric-purple/15 to-primary/15 border border-electric-purple/30 rounded-xl px-3 py-2.5 mb-4 text-center">
+              <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Comeback offer</p>
+              <p className="text-sm text-muted-foreground">Resume your plan and keep your training moving.</p>
             </div>
-            <div className="mt-2.5 rounded-xl border border-electric-purple/30 bg-electric-purple/[0.07] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Comeback offer</p>
-              <p className="text-xs text-muted-foreground">Credits added when you claim below.</p>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <motion.button onClick={async () => {
-                if (!user || claimingWinback) return;
-                setClaimingWinback(true);
-                const result = await claimCreditReward("winback", { idempotencyKey: `winback:${user.id}` });
-                setClaimingWinback(false);
-                if (!result.success) { toast.error(result.error || "The comeback reward is unavailable right now."); return; }
-                toast.success(result.granted > 0 ? `${result.granted} comeback credits added` : "Welcome back");
-                setShow(false);
-              }} disabled={!user || claimingWinback} whileTap={{ scale: 0.98 }}
-                className="flex-1 bg-gradient-to-r from-electric-purple to-primary text-primary-foreground font-semibold py-2.5 rounded-xl text-sm">
-                {claimingWinback ? "Applying…" : "Claim reward"}
-              </motion.button>
-              <button onClick={dismiss} className="rounded-xl py-2.5 text-sm text-muted-foreground">
-                Maybe later
-              </button>
-            </div>
-          </div>
+            <motion.button onClick={async () => {
+              if (!user || claimingWinback) return;
+              setClaimingWinback(true);
+              const result = await claimCreditReward("winback", { idempotencyKey: `winback:${user.id}` });
+              setClaimingWinback(false);
+              if (!result.success) { toast.error(result.error || "The comeback reward is unavailable right now."); return; }
+              toast.success(result.granted > 0 ? `${result.granted} comeback credits added` : "Welcome back");
+              setShow(false);
+            }} disabled={!user || claimingWinback} whileTap={{ scale: 0.98 }}
+              className="w-full bg-gradient-to-r from-electric-purple to-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow mb-2">
+              {claimingWinback ? "Applying…" : "Claim comeback reward"}
+            </motion.button>
+            <button onClick={dismiss} className="w-full text-sm text-muted-foreground text-center py-2">
+              Maybe later
+            </button>
+          </motion.div>
         </motion.div>
       </AnimatePresence>
     );
   }
 
   const promo = promos[promoIndex];
+  const promoPrice =
+    promo.id === "pro" && proMonthly
+      ? `${formatPence(proMonthly.price_pence, currency)}/month`
+      : promo.price;
 
   return (
     <AnimatePresence>
-      <motion.div
-        key="promo-card"
-        initial={{ opacity: 0, y: slideY }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: slideY }}
-        transition={{ duration: reducedMotion ? 0.12 : 0.25, ease: "easeOut" }}
-        role="dialog"
-        aria-label={`${promo.title} — offer`}
-        className="fixed inset-x-4 bottom-[calc(var(--vaylo-inset-bottom)+5.5rem)] z-[44] mx-auto max-w-sm"
-      >
-        <div className="relative rounded-2xl border border-border bg-card/95 p-4 shadow-lg backdrop-blur">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={dismiss}
+        className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center px-6">
+        <motion.div initial={{ scale: 0.85, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 30 }}
+          transition={{ type: "spring", stiffness: 260, damping: 26 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full shadow-electric relative">
           <button
             type="button"
             onClick={dismiss}
             aria-label="Close"
-            className="press absolute top-3 right-3 -m-3.5 p-3.5 text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute top-4 right-4 -m-3.5 p-3.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={18} aria-hidden />
           </button>
-          <div className="flex items-start gap-3 pr-7">
-            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${promo.bg}`}>
-              <promo.icon size={20} className={promo.color} aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h3 className="font-display font-bold text-base leading-tight">{promo.title}</h3>
-              <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{promo.desc}</p>
-            </div>
+          <div className={`w-14 h-14 rounded-2xl ${promo.bg} flex items-center justify-center mx-auto mb-4`}>
+            <promo.icon size={28} className={promo.color} />
           </div>
-          <p className="mt-2.5 text-sm font-display font-bold text-primary">{promo.price}</p>
-          <div className="mt-3 flex gap-2">
-            <motion.button onClick={() => { setShow(false); navigate("/market"); }} whileTap={{ scale: 0.98 }}
-              className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl text-sm">
-              View in Market
-            </motion.button>
-            <button onClick={dismiss} className="rounded-xl py-2.5 text-sm text-muted-foreground">
-              No thanks
-            </button>
-          </div>
-        </div>
+          <h3 className="font-display font-bold text-xl text-center mb-1">{promo.title}</h3>
+          <p className="text-sm text-muted-foreground text-center mb-4">{promo.desc}</p>
+          <p className="text-center font-display font-bold text-lg text-primary mb-4">{promoPrice}</p>
+          <motion.button onClick={() => { setShow(false); navigate("/market"); }} whileTap={{ scale: 0.98 }}
+            className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow mb-2">
+            View in Market
+          </motion.button>
+          <button onClick={dismiss} className="w-full text-sm text-muted-foreground text-center py-2">No thanks</button>
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   );

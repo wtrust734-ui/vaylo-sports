@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb, Trophy, Medal, Flag } from "lucide-react";
+import { Gauge, Activity, Target, TrendingUp, Fingerprint, Crosshair, Scale, Lightbulb, Trophy, Award, Medal, Flag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { HubPage } from "@/components/layout/HubPage";
 import { useHubGroups } from "@/hooks/useHubPersonalization";
@@ -31,7 +31,13 @@ const Perform = () => {
       // suggestions and sponsored challenges.
       title: t("hub.perform.groupTrophyRoom"),
       links: [
-        { icon: Trophy, label: t("hub.perform.achievements"), description: t("hub.perform.achievementsDesc"), path: "/achievements", feature: "perform.achievements" },
+        // Two different ideas, two tiles: the Trophy Room is what the account
+        // holds, Achievements is the 100+ catalogue that says what would earn
+        // the next one. A single "Achievements" tile used to stand for both,
+        // which is why opening it landed on an earned-only shelf with no view
+        // of what was left to do.
+        { icon: Trophy, label: t("hub.perform.trophies"), description: t("hub.perform.trophiesDesc"), path: "/trophies", feature: "perform.achievements" },
+        { icon: Award, label: t("hub.perform.achievements"), description: t("hub.perform.achievementsDesc"), path: "/achievements", feature: "perform.achievements" },
         { icon: Medal, label: t("hub.perform.badges"), description: t("hub.perform.badgesDesc"), path: "/badges", feature: "perform.achievements" },
         { icon: Flag, label: t("hub.perform.challenges"), description: t("hub.perform.challengesDesc"), path: "/challenges", feature: "perform.challenges" },
       ],

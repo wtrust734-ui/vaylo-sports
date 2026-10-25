@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Competitions &amp; Promotion Terms — full text | Vaylo Sports</title>
 <meta name="description" content="How challenges, leaderboards and referral promotions work, and what a reward actually is." />
-<meta name="theme-color" content="#05070f" />
+<meta name="theme-color" content="#07080c" />
 <meta name="color-scheme" content="dark light" />
 
 
@@ -25,10 +25,26 @@
 <meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
 <link rel="icon" href="/assets/logo.png" type="image/png" />
 <link rel="apple-touch-icon" href="/assets/logo.png" />
-<link rel="stylesheet" href="/assets/theme.css?v=52935e8d" />
+<!-- The one webfont, preloaded. Without the preload it is discovered only
+     after the stylesheet has parsed, which is exactly the half-second in which
+     the headline renders in the fallback and then reflows. crossorigin is
+     required on a font request even when it is same-origin. -->
+<link
+  rel="preload"
+  href="/assets/fonts/archivo-latin.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+<link rel="stylesheet" href="/assets/theme.css?v=v43707ad2" />
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com"}</script>
 </head>
 <body>
+  <!-- Reading progress. Decorative, hidden from the accessibility tree, and
+       driven by one transform in site.js rather than by a width change. -->
+  <div class="scroll-progress" aria-hidden="true">
+    <span data-scroll-progress></span>
+  </div>
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="site-header">
@@ -70,6 +86,10 @@
           <a href="/about/">About</a>
           <a href="/contact/">Contact</a>
       </nav>
+
+      <a class="nav-cta" href="/waitlist/">
+        Join the waiting list
+      </a>
     </div>
 
     <div class="mobile-nav" id="mobile-nav" hidden>
@@ -429,7 +449,7 @@
      scripts execute in document order before DOMContentLoaded — so with the
      reverse order, site.js ran first, found no config, and disabled every form
      on the site with "not available yet". -->
-<script src="/assets/config.js?v=e5e20b96" defer></script>
-<script src="/assets/site.js?v=f67590ac" defer></script>
+<script src="/assets/config.js?v=ve5e20b96" defer></script>
+<script src="/assets/site.js?v=va0e72686" defer></script>
 </body>
 </html>

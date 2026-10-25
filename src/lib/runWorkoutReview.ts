@@ -16,10 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getAiLocale } from "@/i18n";
 import { getLocalPBs } from "@/lib/athleteDossier";
 import { buildWorkoutReviewDigest, type WorkoutReviewPlanWeek } from "@/lib/workoutReview";
-import { creditCost } from "@/lib/credits";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
-import { shortfallFromEdgeError } from "@/lib/shortfall";
-import { requestCreditTopUp } from "@/lib/topUpStore";
 
 export type WorkoutReviewResult =
   | { kind: "ready" | "unreadable"; data: unknown; charged?: number }
@@ -111,8 +108,8 @@ export async function runWorkoutReview({
     return { kind: "empty", reason: "Log a few finished sessions first — analysing nothing would be invented." };
   }
 
-  const cost = creditCost("training_insight", 1);
-  const outcome = await onCharge?.(cost);
+  // ECONOMY REMOVED — every feature is free.
+  const outcome = await onCharge?.(0);
 
   const { data, error } = await supabase.functions.invoke("ai-analyze", {
     body: {
@@ -131,20 +128,8 @@ export async function runWorkoutReview({
 
   if (error) {
     const message = await edgeErrorMessage(error);
-    const status = (error as { context?: { status?: number } })?.context?.status ?? 0;
-    if (status === 402) {
-      const sf = await shortfallFromEdgeError(error);
-      if (sf) {
-        const topUp = await requestCreditTopUp({
-          shortfall: sf.shortfall,
-          reasonLabel: "Analyse my workouts",
-        });
-        if (topUp.purchased) {
-          return runWorkoutReview({ user, profile, planWeek, weekCurrent, durationWeeks, onCharge });
-        }
-        return { kind: "error", message: topUp.dismissed ? "Cancelled — add credits to analyse your workouts." : "" };
-      }
-    }
+    // ECONOMY REMOVED — there is no balance to top up. A 402 from an older
+    // deployment is an ordinary failure here, not a prompt to buy anything.
     return { kind: "error", message };
   }
 

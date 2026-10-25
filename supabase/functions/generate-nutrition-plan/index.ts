@@ -35,8 +35,19 @@ import { coachVoiceDirective } from "../_shared/coachVoice.ts";
 
 /** Longest plan this will write. Past this the weeks are a spreadsheet, not a plan. */
 const MAX_WEEKS = 12;
-/** Weeks per model call. Two, the same shape as the training plan's chunks. */
-const CHUNK_WEEKS = 2;
+/**
+ * Weeks per model call. ONE week per call, matching the training plan's own
+ * chunking for plans up to twelve weeks.
+ *
+ * Every chunk is requested in parallel, so the athlete waits for the slowest
+ * call — not for the sum. Halving the weeks inside a call halves the tokens the
+ * provider has to write before it can answer, which is the dominant term in
+ * that wait: a four-week plan is four small calls in flight instead of two
+ * larger ones. The trade is a slightly larger prompt overhead per call (the
+ * system prompt is repeated), which is cheap compared with a shorter wall
+ * clock on every plan the athlete creates.
+ */
+const CHUNK_WEEKS = 1;
 const MAX_NOTES = 400;
 
 const GOALS = ["cut", "maintain", "bulk"] as const;

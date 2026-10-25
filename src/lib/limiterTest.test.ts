@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITER_QUESTIONS, analyzeLimiterTest, type LimiterAnswer } from "./limiterTest";
+import { LIMITER_QUESTIONS, analyzeLimiterTest, recoveryDayOptions, type LimiterAnswer } from "./limiterTest";
 import type { MetricRow } from "./performance";
 
 const allAnswers = (ratings: Record<string, number>): LimiterAnswer => {
@@ -12,6 +12,30 @@ const metric = (metric_type: string, value: number): MetricRow => ({
   metric_type,
   value,
   log_date: "2026-09-28",
+});
+
+describe("recoveryDayOptions", () => {
+  it("offers exactly one full rest day when six training days are chosen", () => {
+    // Reported: choosing 6 free days then left "None / 1 / 2 / 3 full rest" to
+    // answer, which can total nine days in a seven-day week.
+    expect(recoveryDayOptions(6)).toEqual([1]);
+  });
+
+  it("never offers more rest days than the week has left", () => {
+    for (let trainingDays = 0; trainingDays <= 7; trainingDays += 1) {
+      const options = recoveryDayOptions(trainingDays);
+      for (const rest of options) {
+        expect(rest, `${trainingDays} training + ${rest} rest`).toBeLessThanOrEqual(7 - trainingDays);
+        expect(trainingDays + rest, `${trainingDays} + ${rest}`).toBeLessThanOrEqual(7);
+      }
+    }
+  });
+
+  it("keeps the usual answers when the week has room", () => {
+    expect(recoveryDayOptions(5)).toEqual([0, 1, 2]);
+    expect(recoveryDayOptions(2)).toEqual([0, 1, 2, 3]);
+    expect(recoveryDayOptions(7)).toEqual([0]);
+  });
 });
 
 describe("analyzeLimiterTest", () => {

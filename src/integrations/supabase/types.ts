@@ -5369,6 +5369,7 @@ export type Database = {
       economy_value: { Args: { p_key: string }; Returns: Json }
       equip_cosmetic: { Args: { p_reward_id: string }; Returns: Json }
       find_user_by_friend_code: { Args: { p_code: string }; Returns: string }
+      redeem_friend_code: { Args: { p_code: string }; Returns: { ok: boolean; error?: string; infinite_credits?: boolean } }
       get_my_entitlements: { Args: never; Returns: Json }
       grant_coach_credits: {
         Args: { p_pack_id: string; p_reference: string; p_user: string }

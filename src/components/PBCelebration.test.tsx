@@ -16,8 +16,9 @@
 //   * trophies earned show their tier medals;
 //   * the card carries a Share action (the user's ask: log a PB, get a card,
 //     share it);
-//   * the source pin: Training.tsx still fires the trigger after the server
-//     trophy claim, so the wiring cannot silently drop again.
+//   * the source pin: Workouts.tsx still evaluates a logged distance against
+//     the event ladder and fires the trigger when it is a PB, so the wiring
+//     cannot silently drop again.
 // ============================================================================
 
 import { readFileSync } from "node:fs";
@@ -81,15 +82,15 @@ describe("PB celebration card", () => {
 });
 
 describe("the save-flow wiring that fires it", () => {
-  it("Training.tsx triggers the celebration after claiming event trophies", () => {
+  it("Workouts.tsx evaluates a logged distance and fires the celebration on a PB", () => {
     const src = readFileSync(
-      path.resolve(__dirname, "../pages/Training.tsx"),
+      path.resolve(__dirname, "../pages/Workouts.tsx"),
       "utf8",
     );
-    // The trigger must sit in the log-save flow, after the server claim, and
-    // only fire when there is something to celebrate.
+    // The trigger sits in the log-save flow, after the insert, and only fires
+    // when the logged distance/time beats the athlete's wall.
+    expect(src).toMatch(/evaluateLogAgainstEvents/);
     expect(src).toMatch(/triggerPbCelebration\(\{/);
-    expect(src).toMatch(/claim_event_trophies/);
-    expect(src).toMatch(/if \(isPb \|\| trophies\.length > 0\)/);
+    expect(src).toMatch(/evaluation\.isPb/);
   });
 });

@@ -291,9 +291,14 @@ const DailyTrainingCard = () => {
             <p className="text-xs text-muted-foreground mb-3">{session.description}</p>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 mb-3 space-y-1">
               <p className="text-[12px] font-semibold">Today's recovery session ({session.duration_minutes} min):</p>
+              {/* The bullet is its own column and the dose is content-sized: with
+                  the bullet inside the name string, a name long enough to wrap
+                  continued UNDER the dot instead of under its own first word. */}
               {session.exercises?.map((ex, i) => (
-                <div key={i} className="flex justify-between text-[12px] text-muted-foreground py-0.5">
-                  <span>• {ex.name}</span><span>{ex.sets}</span>
+                <div key={i} className="flex items-start gap-2 py-0.5 text-[12px] text-muted-foreground">
+                  <span aria-hidden className="shrink-0 text-primary">•</span>
+                  <span className="min-w-0 flex-1">{ex.name}</span>
+                  <span className="shrink-0 ps-2 text-right font-medium">{ex.sets}</span>
                 </div>
               ))}
             </div>
@@ -323,8 +328,9 @@ const DailyTrainingCard = () => {
                 {showWarmup && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
                     {session.warmup.map((ex, i) => (
-                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
-                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
+                      <div key={i} className="flex items-start justify-between gap-2 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
+                        <span className="min-w-0 flex-1">{ex.name}</span>
+                        <span className="shrink-0 text-right font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>
@@ -381,8 +387,9 @@ const DailyTrainingCard = () => {
                 {showCooldown && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-1.5 space-y-1 pl-1">
                     {session.cooldown.map((ex, i) => (
-                      <div key={i} className="flex justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
-                        <span>{ex.name}</span><span className="text-right ml-2 shrink-0 font-medium">{ex.sets}</span>
+                      <div key={i} className="flex items-start justify-between gap-2 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
+                        <span className="min-w-0 flex-1">{ex.name}</span>
+                        <span className="shrink-0 text-right font-medium">{ex.sets}</span>
                       </div>
                     ))}
                   </motion.div>

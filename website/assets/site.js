@@ -625,13 +625,240 @@
     });
   }
 
-  /* --------------------------------------------------------------- init -- */
+  /* ---------------------------------------------------- reading progress -- */
+
+  /**
+   * The 2px progress line under the header, and the header's lifted state.
+   *
+   * Both are driven by one scroll listener that does no work itself: it sets a
+   * flag, and a requestAnimationFrame callback reads layout once per frame.
+   * Reading scrollHeight inside a scroll handler is what makes a long page
+   * stutter on a mid-range phone, and this page is long.
+   *
+   * The bar moves by `transform: scaleX()` rather than by width, so it is
+   * composited instead of triggering layout on every frame.
+   */
+  function initScrollProgress() {
+    var bar = document.querySelector("[data-scroll-progress]");
+    var header = document.querySelector(".site-header");
+    if (!bar && !header) return;
+
+    var ticking = false;
+
+    function update() {
+      ticking = false;
+      var doc = document.documentElement;
+      var max = doc.scrollHeight - window.innerHeight;
+      var y = window.scrollY || doc.scrollTop || 0;
+      var progress = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
+      if (bar) bar.style.setProperty("--progress", progress.toFixed(4));
+      if (header) header.classList.toggle("scrolled", y > 8);
+    }
+
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    update();
+  }
+
+  /* ------------------------------------------------------------ counters -- */
+
+  /**
+   * Count the four hero numbers up once, when they first come into view.
+   *
+   * The markup already contains the final value, so this is decoration over a
+   * correct page: with scripting blocked, or reduced motion requested, the
+   * numbers are simply there. `data-count` is what the animation reads, and the
+   * text is restored to it on the last frame so a rounding error can never
+   * leave "1,999" on screen.
+   */
+  function initCounters() {
+    var nodes = document.querySelectorAll("[data-count]");
+    if (!nodes.length) return;
+
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || !("IntersectionObserver" in window)) return;
+
+    var observer = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          observer.unobserve(entries[i].target);
+          countUp(entries[i].target);
+        }
+      },
+      { threshold: 0.4 }
+    );
+
+    for (var i = 0; i < nodes.length; i++) observer.observe(nodes[i]);
+
+    function countUp(node) {
+      var target = parseInt(node.getAttribute("data-count"), 10);
+      if (!isFinite(target)) return;
+      var suffix = node.getAttribute("data-suffix") || "";
+      var duration = 900;
+      var start = null;
+
+      function frame(now) {
+        if (start === null) start = now;
+        var t = Math.min(1, (now - start) / duration);
+        // Ease-out cubic: fast enough to feel responsive, slow enough to read.
+        var eased = 1 - Math.pow(1 - t, 3);
+        node.textContent = Math.round(target * eased) + suffix;
+        if (t < 1) window.requestAnimationFrame(frame);
+        else node.textContent = target + suffix;
+      }
+
+      window.requestAnimationFrame(frame);
+    }
+  }
+
+  /* -------------------------------------------------------------- reveals -- */
+
+  /**
+   * Fade sections in as they are reached.
+   *
+   * The elements are visible in the stylesheet — there is no `opacity: 0`
+   * resting state — so this only ever adds an entrance, never withholds
+   * content. With scripting off, or with reduced motion asked for, the page is
+   * simply there, which is the correct failure mode for decoration.
+   *
+   * One observer for the whole page, unobserving each element after its one
+   * animation. `.reveal` is added by the generator to every section and card it
+   * emits, so nothing has to be marked by hand.
+   */
+  function initReveal() {
+    if (!("IntersectionObserver" in window)) return;
+
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+
+    var items = document.querySelectorAll(".reveal");
+    if (!items.length) return;
+
+    var observer = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          entries[i].target.classList.add("in");
+          observer.unobserve(entries[i].target);
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.06 }
+    );
+
+    for (var i = 0; i < items.length; i++) observer.observe(items[i]);
+  }
+
+  /**
+   * Fill the story timeline's rail when the timeline comes into view.
+   *
+   * Decoration, so it fails open: if there is no IntersectionObserver the rail
+   * is simply already full (see the reduced-motion rule in theme.css, which is
+   * the same end state).
+   */
+  function initTimeline() {
+    var timelines = document.querySelectorAll(".timeline");
+    if (!timelines.length) return;
+
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || !("IntersectionObserver" in window)) {
+      for (var j = 0; j < timelines.length; j++) timelines[j].classList.add("is-in");
+      return;
+    }
+
+    var observer = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          entries[i].target.classList.add("is-in");
+          observer.unobserve(entries[i].target);
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    for (var i = 0; i < timelines.length; i++) observer.observe(timelines[i]);
+  }
+
+
+
+  /* Backgrounds for the sections that sit on the main canvas. Each page
+     picks one gradient; same mid-tone, different tilt, so the page reads as
+     one surface rather than a stack of differently-tinted panels. Faint enough
+     that the hairline borders and the text outrank it. See the token comment
+     at the top of site.js. */
+  var PAGE_GRADIENTS = {
+    about:       ["#0a0d14", "#111824", "#0a1017"],
+    features:    ["#0a0d14", "#0e1626", "#0a0f18"],
+    safety:      ["#0c1018", "#0b1015", "#11141d"],
+    legal:       ["#0a0d14", "#0f1420", "#0a0f18"],
+    irl:         ["#0a0d14", "#111722", "#0a0f17"],
+    changeOlder: ["#0a0d14", "#0e1520", "#0a0f17"],
+  };
+
+  var gradientQueue = 0;
+  var suppressGradientWrite = false;
+
+  function pageGradient(ids) {
+    var id = (ids instanceof Array ? ids : [ids]).find(function (id) {
+      return document.getElementById(id);
+    });
+    if (!id) return null;
+    var stops = PAGE_GRADIENTS[id];
+    if (!stops) return null;
+    return "linear-gradient(160deg, " + stops[0] + " 0%, " + stops[1] + " 62%, " + stops[2] + " 100%)";
+  }
+
+  function setPageGradient(panelId) {
+    var gradient = pageGradient(panelId);
+    if (!gradient) return;
+    document.documentElement.style.setProperty("--bg-gradient", gradient);
+  }
+
+  function initBackgrounds() {
+    if (!window.matchMedia || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      var gradient = pageGradient(["about", "features", "safety", "legal", "irl", "change-older"]);
+      if (gradient) document.documentElement.style.setProperty("--bg-gradient", gradient);
+      return;
+    }
+    var order = ["about", "features", "safety", "legal", "irl", "change-older"];
+    var visibleId = null;
+    var io = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          var candidate = entries[i].target.id;
+          if (order.indexOf(candidate) === -1) continue;
+          if (candidate === visibleId) continue;
+          visibleId = candidate;
+          setPageGradient(candidate);
+        }
+      },
+      { rootMargin: "-45% 0px -45% 0px", threshold: 0 }
+    );
+    for (var j = 0; j < order.length; j++) {
+      var el = document.getElementById(order[j]);
+      if (el) io.observe(el);
+    }
+    setPageGradient(visibleId || order[0]);
+  }
 
   function init() {
     initNav();
     initForms();
     initQuiz();
     initCookieNotice();
+    initScrollProgress();
+    initCounters();
+    initReveal();
+    initTimeline();
+    initBackgrounds();
   }
 
   if (document.readyState === "loading") {

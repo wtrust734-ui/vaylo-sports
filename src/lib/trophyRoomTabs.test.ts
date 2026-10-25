@@ -1,6 +1,9 @@
 // ============================================================================
-// THE TROPHY ROOM IS THREE SCREENS
+// THE TROPHY ROOM IS FOUR SCREENS
 // ----------------------------------------------------------------------------
+// Achievements (the catalogue), the Trophy Room (what is actually on the
+// account), Badges (bought) and Challenges (joined). Four routes, four files.
+//
 // Asserted on the source rather than on a render, because the thing being
 // prevented is structural: a section creeping back into another section's page.
 // The failure this guards against is not a visual one — it is Achievements
@@ -27,18 +30,33 @@ const code = (path: string) =>
 const ACHIEVEMENTS = "src/pages/Achievements.tsx";
 const BADGES = "src/pages/Badges.tsx";
 const CHALLENGES = "src/pages/Challenges.tsx";
+const TROPHY = "src/pages/TrophyRoom.tsx";
 const APP = "src/App.tsx";
 const PERFORM = "src/pages/Perform.tsx";
 
-describe("the Trophy Room's three tabs", () => {
+describe("the Trophy Room's four screens", () => {
   it("routes each one to its own screen", () => {
     const app = code(APP);
     expect(app).toContain('path="/achievements"');
+    expect(app).toContain('path="/trophies"');
     expect(app).toContain('path="/badges"');
     expect(app).toContain('path="/challenges"');
     // Each route is its own page component, not one page with a parameter.
     expect(app).toMatch(/import\("\.\/pages\/Badges"\)/);
     expect(app).toMatch(/import\("\.\/pages\/Achievements"\)/);
+    expect(app).toMatch(/import\("\.\/pages\/TrophyRoom"\)/);
+  });
+
+  it("keeps the catalogue and the trophy case as separate screens", () => {
+    // Achievements is the full list (locked rows included); the Trophy Room is
+    // only what the account holds, medals and badges together.
+    const achievements = code(ACHIEVEMENTS);
+    expect(achievements).toContain("achievementShelf");
+    // The catalogue filters across the whole shelf, so it can show locked rows.
+    expect(achievements).toContain('"Locked"');
+
+    const trophy = code(TROPHY);
+    expect(trophy).toContain("earnedIds.has");
   });
 
   it("keeps badges off the achievements screen and achievements off the badge screen", () => {
@@ -61,8 +79,8 @@ describe("the Trophy Room's three tabs", () => {
     expect(code(CHALLENGES)).toContain("StandingChallenges");
   });
 
-  it("has no section switcher on any of the three", () => {
-    for (const page of [ACHIEVEMENTS, BADGES]) {
+  it("has no section switcher on any of them", () => {
+    for (const page of [ACHIEVEMENTS, BADGES, TROPHY]) {
       const source = code(page);
       // No in-page tab bar, and no hand-off to a sibling section: each screen
       // links to nothing but itself.

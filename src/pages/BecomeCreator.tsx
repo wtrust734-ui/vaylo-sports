@@ -38,7 +38,7 @@ export default function BecomeCreator() {
         <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-electric-purple to-energy flex items-center justify-center mb-4">
           <Sparkles className="h-7 w-7 text-white" />
         </div>
-        <h1 className="text-2xl font-display font-bold mb-1">Become a creator</h1>
+        <h1 className="text-2xl font-bold mb-1">Become a creator</h1>
         <p className="text-sm text-muted-foreground mb-6">Sell programs, meal plans, and 1-on-1 sessions. You keep 80% — Vaylo Sports's fee is 20%.</p>
 
         <div className="space-y-3 mb-6">

@@ -1,20 +1,19 @@
 // ============================================================================
-// PLAN DELIVERY WIRING — a charged plan that does not save is money lost
+// PLAN DELIVERY WIRING — a plan that does not save is work lost
 // ----------------------------------------------------------------------------
-// `generate-plan` charges before it writes a word, and the client is what stores
-// the finished plan. That split has one bad window: the function returns a plan
-// the athlete has paid for, and the insert into `training_plans` fails — leaving
-// a charge with nothing behind it. This is the failure the athlete reported
-// ("it took my credits and did not give me a plan"), so the contract is pinned
-// here across both files rather than trusted to review.
+// A training plan is built on the device now, so nothing is charged for it; the
+// same is not true of the nutrition plan below, which is still written by a
+// charged provider call. In BOTH cases the plan exists in memory before it hits
+// the database, and the insert is the one step that can lose it.
 //
-// Three things must hold:
+// Three things must hold for each:
 //   1. the insert is attempted more than once, because the plan is in memory and
 //      the failure is usually transient;
 //   2. when it still fails, the athlete is told NOT to create the plan again —
-//      which would charge a second time — and is pointed at support;
+//      for nutrition that would charge a second time, for training it would
+//      replace the plan rather than recover it — and is pointed at support;
 //   3. that message comes before any success toast, so the screen can never show
-//      "Plan Created!" for a plan that is not in the database.
+//      a success for a plan that is not in the database.
 // ============================================================================
 
 import { readFileSync } from "node:fs";
@@ -52,7 +51,10 @@ describe("a plan the athlete paid for is either saved or reported", () => {
 
   it("never reaches the success toast when the save failed", () => {
     const failureBranch = training.indexOf("Your plan was written but could not be saved");
-    const successToast = training.indexOf('title: "Plan Created!');
+    // The success toast is the one after the plan has been opened; it prints a
+    // different sentence for a limiter plan, which is why the anchor is the
+    // `setupSource` branch rather than a single title string.
+    const successToast = training.indexOf("Limiter plan created — opening it now.");
 
     expect(failureBranch).toBeGreaterThan(-1);
     expect(successToast).toBeGreaterThan(failureBranch);

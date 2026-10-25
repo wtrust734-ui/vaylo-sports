@@ -1,5 +1,6 @@
 import { lsGet, lsSet } from "./localStore";
 import { localDateKey } from "./dates";
+import { sameEventMetric } from "./eventTrophies";
 
 // ============================================================================
 // PB WALL STORE — the same localStorage wall the PBs page renders
@@ -37,8 +38,17 @@ export const wallForEvaluation = (): { metric: string; value: number }[] =>
 export const recordTimedPb = (metric: string, seconds: number): { isPb: boolean; previousSeconds: number | null } => {
   const wall = readWall();
   const today = localDateKey();
-  const existing = wall.find((p) => p.metric.toLowerCase() === metric.toLowerCase());
-  const previous = existing && typeof existing.value === "number" && existing.value > 0 ? existing.value : null;
+  // "Running · 5K" and a hand-typed "5K" are the same event. Keep the fastest
+  // matching record (not merely the first) so a duplicate label cannot make a
+  // slower time look like a personal best.
+  const matches = wall.filter(
+    (p) => sameEventMetric(p.metric, metric) && typeof p.value === "number" && p.value > 0,
+  );
+  const existing = matches.reduce<PbEntry | null>(
+    (best, p) => (best === null || p.value < best.value ? p : best),
+    null,
+  );
+  const previous = existing?.value ?? null;
   if (previous !== null && seconds >= previous) return { isPb: false, previousSeconds: previous };
 
   if (existing) {

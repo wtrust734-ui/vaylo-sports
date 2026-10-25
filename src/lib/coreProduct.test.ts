@@ -105,7 +105,11 @@ describe("local day keys (no UTC drift)", () => {
 describe("metricToIndex (0–100, piecewise good/elite/worldClass)", () => {
   it.each([
     // [type, value, expected]
-    ["sprint_40m", 4.4, 98], // between elite 4.8 and worldClass 4.3 → 90 + 0.8·10
+    // 4.64 is Bolt's 40 m split in the 9.58 WR — matching the world record has
+    // to be a maxed index. The old 4.3 target was faster than any human.
+    ["sprint_40m", 4.64, 100],
+    ["sprint_40m", 4.4, 100], // faster than the record is still 100, never over
+    ["sprint_40m", 4.72, 95], // between elite 4.8 and worldClass 4.64
     ["sprint_40m", 4.8, 90], // at elite boundary
     ["sprint_40m", 6.5, 60], // at good boundary
     ["sprint_40m", 13, 0], // far beyond good → floor 0
@@ -162,6 +166,43 @@ describe("calculateVPR", () => {
     );
     const vpr = calculateVPR(rows, "Football");
     expect(vpr.overall_vpr).toBeGreaterThanOrEqual(90);
+  });
+
+  it("does not average a world-record sprint down into 'very good'", () => {
+    // Reported: entering 4.64 s for the 40 m — Usain Bolt's split in the 9.58 s
+    // world record — produced an overall VPR of 97. The speed index was maxed,
+    // but the composite averaged it with four ordinary buckets. A maxed domain
+    // has to lift the whole profile, or the number is telling an athlete at the
+    // limit of human performance that they are merely very good.
+    const rows: MetricRow[] = [
+      { metric_type: "sprint_40m", value: 4.64, log_date: "2026-09-01" }, // speed 100
+      { metric_type: "squat", value: 200, log_date: "2026-09-01" }, // power 90
+      { metric_type: "vo2_max", value: 70, log_date: "2026-09-01" }, // endurance 90
+      { metric_type: "passing_accuracy", value: 95, log_date: "2026-09-01" }, // skill 90
+      { metric_type: "reaction_time", value: 180, log_date: "2026-09-01" }, // reaction 90
+    ];
+    const vpr = calculateVPR(rows, "Sprinting");
+    expect(vpr.speed_index).toBe(100);
+    expect(vpr.overall_vpr).toBeGreaterThan(97);
+    // Still below the ceiling: five buckets is not a complete profile.
+    expect(vpr.overall_vpr).toBeLessThanOrEqual(99);
+  });
+
+  it("keeps a complete but imperfect profile below 100", () => {
+    const rows: MetricRow[] = [
+      // One bucket short of its world-class line: speed indexes ~96, not 100.
+      { metric_type: "sprint_100m", value: 10.0, log_date: "2026-09-01" },
+      { metric_type: "squat", value: 300, log_date: "2026-09-01" },
+      { metric_type: "vo2_max", value: 90, log_date: "2026-09-01" },
+      { metric_type: "passing_accuracy", value: 99, log_date: "2026-09-01" },
+      { metric_type: "reaction_time", value: 120, log_date: "2026-09-01" },
+      { metric_type: "passing_accuracy", value: 99, log_date: "2026-09-02" },
+      { metric_type: "passing_accuracy", value: 99, log_date: "2026-09-03" },
+    ];
+    const vpr = calculateVPR(rows, "Football");
+    // Six buckets are present, so the completeness cap is 99 — and 100 is
+    // reserved for every one of those buckets being maxed.
+    expect(vpr.overall_vpr).toBeLessThan(100);
   });
 
   it("sport weights always sum to 1", () => {

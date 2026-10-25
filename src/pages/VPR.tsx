@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { formatShortDate } from "@/i18n/format";
+import { PageHeader, PageShell } from "@/components/layout/PageShell";
 
 const METRIC_OPTIONS = [
   { v: "sprint_40m", l: "40m sprint (s)" },
@@ -102,19 +103,22 @@ const VPRPage = () => {
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <div className="min-h-screen bg-background px-5 pt-[var(--vaylo-screen-top)] pb-28 max-w-5xl mx-auto space-y-6">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-widest"><Activity size={14} /> Vaylo Sports Performance Rating</div>
-        <h1 className="text-2xl font-display font-bold mt-2">VPR {vpr.overall_vpr}</h1>
-        {archetype ? (
-          <p className="text-muted-foreground mt-1">{archetype.name} — {archetype.description}</p>
-        ) : (
-          <p className="text-muted-foreground mt-1">
-            Archetype: <span className="font-semibold text-foreground">not set yet</span> — log at least {ARCHETYPE_MIN_METRICS} metrics across {ARCHETYPE_MIN_BUCKETS}+ areas.{' '}
-            <span className="text-xs">({readiness.total}/{ARCHETYPE_MIN_METRICS} logged · {readiness.filledBuckets}/{ARCHETYPE_MIN_BUCKETS} areas filled)</span>
-          </p>
-        )}
-      </motion.div>
+    <PageShell width="wide" className="space-y-6">
+      <PageHeader
+        eyebrow="Vaylo Sports Performance Rating"
+        icon={Activity}
+        title={`VPR ${vpr.overall_vpr}`}
+        subtitle={
+          archetype ? (
+            <>{archetype.name} — {archetype.description}</>
+          ) : (
+            <>
+              Archetype: <span className="font-semibold text-foreground">not set yet</span> — log at least {ARCHETYPE_MIN_METRICS} metrics across {ARCHETYPE_MIN_BUCKETS}+ areas.{' '}
+              <span className="text-xs">({readiness.total}/{ARCHETYPE_MIN_METRICS} logged · {readiness.filledBuckets}/{ARCHETYPE_MIN_BUCKETS} areas filled)</span>
+            </>
+          )
+        }
+      />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="rounded-2xl border border-border bg-card shadow-card p-6 overflow-hidden relative">
@@ -198,8 +202,11 @@ const VPRPage = () => {
         </div>
       </motion.div>
 
+      <p className="text-xs text-muted-foreground text-center">
+        100 needs a perfect six-area profile — every index maxed, not an average that rounds up.
+      </p>
       <p className="text-xs text-muted-foreground text-center">Sport: {sport}{position && ` · ${position}`} · Weighted by sport profile</p>
-    </div>
+    </PageShell>
   );
 };
 

@@ -82,6 +82,8 @@ export interface PlanSessionLike {
   warmup?: unknown;
   exercises?: unknown;
   cooldown?: unknown;
+  /** Plain-language changes the plan builder applied for the athlete's notes/access needs. */
+  adaptations?: string[];
   /**
    * Key-workout flag, written by Phase 2 onto every session of a rebuilt week.
    *

@@ -122,7 +122,10 @@ describe("the page canvas", () => {
   });
 
   it("sets a font stack, so the page never falls back to Times", () => {
-    expect(CSS).toMatch(/--font\s*:\s*system-ui/);
+    // The display face is Archivo, self-hosted and preloaded by site/layout.mjs;
+    // the system stack stays behind it so a failed font request still renders
+    // in a sans-serif rather than Times. Either form satisfies the guard.
+    expect(CSS).toMatch(/--font\s*:\s*("Archivo",\s*)?system-ui/);
     expect(CSS).toMatch(/body\s*\{[^}]*font\s*:/);
   });
 

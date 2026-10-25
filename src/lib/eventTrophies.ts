@@ -149,6 +149,26 @@ export interface LogPbInput {
 }
 
 /** The evaluated result for one log. */
+/**
+ * Are two PB labels the same event?
+ *
+ * The wall holds labels from two places: the event ladder writes
+ * "Running · 5K", while a hand-typed PB is usually just "5K". Exact matching
+ * made those look like separate records, so a 5K logged in Workouts could
+ * "beat" a faster 5K the athlete had typed on /pbs. A bare event name matches
+ * the suffix of a sport-prefixed one; two different sports do not.
+ */
+export function sameEventMetric(a: string, b: string): boolean {
+  const left = a.trim().toLowerCase();
+  const right = b.trim().toLowerCase();
+  if (left === right) return true;
+  const parts = (value: string) => value.split("·").map((part) => part.trim()).filter(Boolean);
+  const aParts = parts(left);
+  const bParts = parts(right);
+  if (aParts.length >= 2 && bParts.length >= 2) return false;
+  return aParts[aParts.length - 1] === bParts[bParts.length - 1];
+}
+
 export interface PbEvaluation {
   event: { id: string; label: string; sport: string } | null;
   /** True when this time beats every stored PB for the same event. */
@@ -161,8 +181,9 @@ export interface PbEvaluation {
 
 /**
  * The local PB store stores ONE entry per event label (metric string), with
- * value in SECONDS and unit "". PBs page renders value+unit; seconds + "" keeps
- * the wall honest for timed events, and formatRaceTime renders mm:ss elsewhere.
+ * value in SECONDS and unit "". The /pbs wall formats it through
+ * formatPbValue (a distance label is read as a time), and the automatic
+ * celebration uses formatRaceTime for the same seconds.
  */
 export function evaluateLogAgainstEvents(
   log: LogPbInput,
@@ -173,8 +194,9 @@ export function evaluateLogAgainstEvents(
     return { event: null, isPb: false, previous_seconds: null, tier: null, rewardIds: [] };
   }
   const metric = event.label;
-  const previous = existingPbs.find((p) => p.metric === metric);
-  const previousSeconds = previous && previous.value > 0 ? previous.value : null;
+  const previousSeconds = existingPbs
+    .filter((p) => sameEventMetric(p.metric, metric) && p.value > 0)
+    .reduce<number | null>((best, p) => (best === null || p.value < best ? p.value : best), null);
   const isPb = previousSeconds === null || log.time_seconds < previousSeconds;
 
   // Trophies follow the TIME, not the PB flag: any session fast enough for a

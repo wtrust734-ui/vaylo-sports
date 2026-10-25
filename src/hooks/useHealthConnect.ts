@@ -14,9 +14,11 @@ import {
   bridgeOpenSettings,
 } from "@/lib/health/bridge";
 import {
+  clearImportedFlag,
   connectHealthConnect,
   disconnectHealthConnect,
   fetchServerSyncState,
+  hasImportedData,
   readLocalState,
   resolveHealthStatus,
   runHealthSync,
@@ -48,6 +50,10 @@ export interface UseHealthConnect {
   disconnecting: boolean;
   /** Erases the workouts and samples imported from Health Connect. Separate from disconnecting. */
   deleteImported: () => Promise<boolean>;
+  /** True once this account has imported Health Connect rows. Survives a
+   *  disconnect, so "Delete imported data" stays reachable after it —
+   *  disconnecting deliberately keeps what was imported. */
+  hasImported: boolean;
   deleting: boolean;
   managePermissions: () => Promise<void>;
   clearError: () => void;
@@ -68,6 +74,7 @@ export function useHealthConnect(): UseHealthConnect {
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [hasImported, setHasImported] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -83,6 +90,7 @@ export function useHealthConnect(): UseHealthConnect {
       const resolved = await resolveHealthStatus(user.id, availability.supported);
       setStatus(resolved.status);
       setConsentOutdated(resolved.consentOutdated);
+      setHasImported(hasImportedData(user.id));
       const local = readLocalState(user.id);
       const server = await fetchServerSyncState(user.id);
       setSyncState({
@@ -145,12 +153,21 @@ export function useHealthConnect(): UseHealthConnect {
   const disconnect = useCallback(async () => {
     if (!user || disconnecting) return;
     setDisconnecting(true);
+    setError(null);
     try {
-      // Revocation of the upstream Health Connect grants is not possible from
-      // the app — the athlete manages those in Health Connect itself (the
-      // Manage button). This stops Vaylo reading: consent cleared locally and
-      // on the server, cursor reset, so no further sync runs.
+      // This now revokes the Android grant itself (VayloHealthConnect.disconnect)
+      // before clearing local/server consent. Clearing the flag alone left the
+      // system grant alive, which is why the sheet snapped back to "connected".
       await disconnectHealthConnect(user.id);
+      await refresh();
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Couldn't disconnect Health Connect. Try again from the Health Connect app.",
+      );
+      // Re-read so the UI shows the grant that is still live rather than a
+      // stale "connected" or "not connected" label.
       await refresh();
     } finally {
       setDisconnecting(false);
@@ -162,29 +179,54 @@ export function useHealthConnect(): UseHealthConnect {
     setDeleting(true);
     setError(null);
     try {
-      // Erase the rows Vaylo imported for this athlete. Each table is scoped
-      // to the signed-in user, so this can never touch another account.
-      for (const table of ["health_workouts", "health_samples"] as const) {
-        const { error: deleteError } = await supabase
-          .from(table)
-          .delete()
-          .eq("user_id", user.id);
-        if (deleteError) throw new Error(deleteError.message);
-      }
-      // Reset the sync cursor so the next connect starts clean.
-      const { error: resetError } = await supabase.from("health_sync_state").upsert({
-        user_id: user.id,
-        connected: false,
-        last_sync_at: null,
-        last_incremental_cursor: null,
-        synced_workout_count: 0,
-      });
+      // Erase every row Vaylo imported for this athlete. Each delete is
+      // scoped to the signed-in user, so this can never touch another account.
+      // Samples first (they reference a workout), then the staged workouts,
+      // then any workout-log rows mirrored from Health Connect. A failure is
+      // reported instead of being swallowed: "Delete imported data" that
+      // leaves rows behind is worse than an honest error.
+      const samplesDelete = await supabase
+        .from("health_samples")
+        .delete()
+        .eq("user_id", user.id);
+      if (samplesDelete.error) throw new Error(samplesDelete.error.message);
+
+      const workoutsDelete = await supabase
+        .from("health_workouts")
+        .delete()
+        .eq("user_id", user.id);
+      if (workoutsDelete.error) throw new Error(workoutsDelete.error.message);
+
+      // Mirrored log rows exist only for sources that ran the import runner;
+      // Health Connect currently stages into health_workouts, but a row with
+      // this source must still be erased if a mirror ever wrote one.
+      const mirroredDelete = await supabase
+        .from("workouts")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("source", "health_connect");
+      if (mirroredDelete.error) throw new Error(mirroredDelete.error.message);
+
+      // Remove the bookkeeping row entirely, rather than keeping a row that
+      // still says how many workouts were imported. The next connect creates a
+      // clean one; a deleted row cannot make a fresh device think there is
+      // still a connection.
+      const { error: resetError } = await supabase
+        .from("health_sync_state")
+        .delete()
+        .eq("user_id", user.id);
       if (resetError) throw new Error(resetError.message);
       try {
         localStorage.removeItem(`vaylo:hc:state:${user.id}`);
+        // Consent stays with the live grant; deleting imported data is not a
+        // disconnect. It is cleared only if the grant itself is gone.
       } catch {
         /* private mode: nothing stored to clear */
       }
+      // The rows are gone, so the "imported data remains" memory has to go with
+      // them or the delete control would stay on screen for nothing.
+      clearImportedFlag(user.id);
+      setHasImported(false);
       await refresh();
       return true;
     } catch (e) {
@@ -215,6 +257,7 @@ export function useHealthConnect(): UseHealthConnect {
     disconnecting,
     deleteImported,
     deleting,
+    hasImported,
     managePermissions,
     clearError: () => setError(null),
   };

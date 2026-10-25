@@ -185,8 +185,11 @@ describe("database contract — the migration enforces security and the amounts"
 
 describe("integration — rewards are wired to activities that actually work", () => {
   it("a logged training session calls the award with the log id", () => {
-    const training = read("/src/pages/Training.tsx");
-    expect(training).toMatch(/const newLogId = \(insertedLog[\s\S]*?awardTrainingSession\(newLogId\)/);
+    // Sessions are logged from the Workouts screen (the Training hub links to
+    // it), so that is where the award has to fire — against the id the insert
+    // returned, not a client-generated one.
+    const workouts = read("/src/pages/Workouts.tsx");
+    expect(workouts).toMatch(/const newLogId = \(insertedLog[\s\S]*?awardTrainingSession\(newLogId\)/);
   });
 
   it("a completed lesson and a passing assessment both call the award", () => {

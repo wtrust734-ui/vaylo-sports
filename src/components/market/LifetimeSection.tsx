@@ -8,7 +8,7 @@ import { SUBSCRIPTION_PLANS, formatPence } from "@/config/subscriptionPlans";
  * Permanent purchases only: lifetime versions of the two plans plus Event Packs.
  * Event Pack contents are untouched — this only links to the existing tab.
  */
-export default function LifetimeSection() {
+export default function LifetimeSection({ currency = "GBP" }: { currency?: string }) {
   const navigate = useNavigate();
 
   const lifetimePlans = SUBSCRIPTION_PLANS.map((plan) => ({
@@ -44,7 +44,7 @@ export default function LifetimeSection() {
               </div>
               <div className="shrink-0 text-right">
                 <p className="font-display text-2xl font-bold text-foreground">
-                  {formatPence(option!.price_pence)}
+                  {formatPence(option!.price_pence, currency)}
                 </p>
                 <p className="text-[12px] text-muted-foreground">one payment</p>
               </div>

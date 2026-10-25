@@ -11,10 +11,8 @@ import {
   SectionHeader,
   Metric,
   Delta,
-  Chip,
-  IconBadge,
-  SlideAction,
 } from "@/components/ui/section";
+import { PageHeader } from "@/components/layout/PageShell";
 import DailyTrainingCard from "@/components/dashboard/DailyTrainingCard";
 import { usePersonalization } from "@/hooks/usePersonalization";
 import { supabase } from "@/integrations/supabase/client";
@@ -133,9 +131,19 @@ const Insights = () => {
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-glow border border-white/10 mt-0.5">
             <ins.icon size={16} className="text-primary-foreground" aria-hidden />
           </span>
-          <span className="min-w-0 flex-1">
-            <p className="min-w-0 flex-1 text-[13.5px] leading-snug">{ins.text}</p>
-            <SlideAction path={ins.path} onClick={() => navigate(ins.path)}>{ins.cta}</SlideAction>
+          <span className="min-w-0 flex-1 text-start">
+            <p className="text-[13.5px] leading-snug">{ins.text}</p>
+            {/* Decorative, not a control: the whole row is already a <button>,
+                and a button inside a button is invalid DOM — React warns and a
+                screen reader announces two targets for one action. The pill
+                keeps the affordance; the tap target is the row. */}
+            <span
+              aria-hidden
+              className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[12px] font-bold text-primary"
+            >
+              {ins.cta}
+              <ChevronRight size={12} aria-hidden />
+            </span>
           </span>
         </motion.button>
       ))}
@@ -154,17 +162,13 @@ const Index = () => {
 
   return (
     <div className="min-h-screen pb-28">
-      <header className="px-5 pt-[var(--vaylo-screen-top)] pb-[var(--vaylo-title-gap)]">
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_hsla(142_76%_36%_/_0.8)]" />
-            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{greeting}</p>
-          </div>
-          <h1 className="mt-3 text-[28px] sm:text-[32px] font-display font-bold tracking-tight leading-none">
-            <span className="text-white">{name}</span>
-            <span className="ml-1 text-[28px] sm:text-[32px] font-display text-primary">.</span>
-          </h1>
-        </motion.div>
+      {/* The greeting is the Home tab's eyebrow and the athlete's name is its
+          title — the same PageHeader every other tab and every list screen
+          uses, rather than a fourth header size with its own tracking and its
+          own trailing space. The only difference left between tabs is the
+          words. */}
+      <header className="px-5 pt-[var(--vaylo-screen-top)]">
+        <PageHeader eyebrow={greeting} icon={Sparkles} title={name} />
       </header>
 
       <section className="px-5 pb-5 sm:pb-6" aria-label="Your performance">
@@ -219,7 +223,7 @@ const ReadinessStrip = () => {
   if (sys.readiness == null) {
     return (
       <button type="button" onClick={() => navigate("/recovery")} className="press flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4 text-start hover:bg-white/[0.06] transition-colors">
-        <div>
+        <div className="min-w-0 flex-1 pe-3 text-start">
           <p className="text-sm font-bold">{t("dashboard.noCheckInToday")}</p>
           <p className="text-xs leading-relaxed text-muted-foreground">{t("dashboard.noCheckInTodayDesc")}</p>
         </div>
@@ -247,13 +251,21 @@ const ReadinessStrip = () => {
       : t("dashboard.prioritiseRecovery");
 
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4">
-      <Metric
-        label={statement}
-        value={sys.readiness}
-        hint={<Delta value={sys.readinessDelta} unit={t("dashboard.firstCheckIn")} />}
-      />
-      <span className="rounded-xl border border-white/[0.06] bg-white/[0.06] px-3 py-2 text-xs font-bold text-foreground" aria-hidden>
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4">
+      {/* `min-w-0 flex-1`: the readiness statement is a whole sentence and the
+          pill beside it is content-sized, so without a floor the sentence used
+          to run under the pill instead of wrapping beside it. */}
+      <div className="min-w-0 flex-1">
+        <Metric
+          label={statement}
+          value={sys.readiness}
+          hint={<Delta value={sys.readinessDelta} unit={t("dashboard.firstCheckIn")} />}
+        />
+      </div>
+      <span
+        className="shrink-0 whitespace-nowrap rounded-xl border border-white/[0.06] bg-white/[0.06] px-3 py-2 text-xs font-bold text-foreground"
+        aria-hidden
+      >
         {t("dashboard.details")}
       </span>
     </div>
@@ -273,11 +285,11 @@ const DailyExtras = () => {
     <div className="space-y-2.5">
       {visibleRows.map((r) => (
         <button key={r.path} type="button" onClick={() => navigate(r.path)} className="press flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[var(--vaylo-elev-card)] px-4 py-4 text-start hover:bg-white/[0.06] hover:border-white/[0.10] transition-colors">
-          <span>
+          <span className="min-w-0 flex-1 pe-3 text-start">
             <span className="block text-sm font-semibold">{r.label}</span>
             <span className="block text-xs leading-relaxed text-muted-foreground">{r.desc}</span>
           </span>
-          <ChevronRight size={16} className="text-muted-foreground rtl-flip shrink-0" />
+          <ChevronRight size={16} className="shrink-0 text-muted-foreground rtl-flip" />
         </button>
       ))}
       <p className="px-1 pt-1 text-center text-[12px] leading-relaxed text-muted-foreground">{t("dashboard.extrasNote")}</p>

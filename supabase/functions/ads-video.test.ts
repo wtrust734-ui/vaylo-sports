@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStoryboardPrompt, buildScenePrompt, buildImageToVideoPrompt, validateCaptionSpecs, BRAND_NEGATIVE_PROMPT } from "./_shared/videoPrompt.ts";
+import { buildStoryboardPrompt, buildScenePrompt, buildImageToVideoPrompt, buildScriptPrompt, hookProblem, validateCaptionSpecs, BRAND_NEGATIVE_PROMPT } from "./_shared/videoPrompt.ts";
 import { estimateVideoCost, StoryboardScene, VideoConcept, CaptionSpec, videoConceptToPlan } from "./_shared/videoAd.ts";
 
 const BRAND_CONCEPT: VideoConcept = {
@@ -123,6 +123,33 @@ describe("videoPrompt", () => {
     expect(problems.some((p) => p.includes("negative start"))).toBe(true);
     expect(problems.some((p) => p.includes("exceeds the advert's"))).toBe(true);
     expect(problems.some((p) => p.includes("longer than 12 words"))).toBe(true);
+  });
+});
+
+describe("concept writing contract", () => {
+  const brand = { name: "Vaylo Sports", slogan: "Train smarter.", positioning: "premium sports tech" };
+
+  it("asks the writer for the hook, core message, structure and scene beats", () => {
+    const prompt = buildScriptPrompt(BRAND_CONCEPT, brand, "create a video ad");
+    const parsed = JSON.parse(prompt);
+    expect(parsed.outputShape.hook).toMatch(/opening line/i);
+    expect(parsed.outputShape.coreMessage).toBeTruthy();
+    expect(parsed.outputShape.narrativeStructure).toBeTruthy();
+    expect(parsed.outputShape.sceneSequence).toBeTruthy();
+    expect(parsed.request).toBe("create a video ad");
+    expect(parsed.constraints.join(" ")).toMatch(/never copy it/i);
+  });
+
+  it("rejects a hook that is really the request or an instruction", () => {
+    expect(hookProblem("create a video ad", "create a video ad")).toMatch(/instruction/i);
+    expect(hookProblem("Create a video ad", "")).toMatch(/instruction/i);
+    expect(hookProblem("", "create a video ad")).toMatch(/no hook/i);
+    expect(hookProblem("video ad", "")).toMatch(/format|short/i);
+  });
+
+  it("accepts a specific opening line of ad copy", () => {
+    expect(hookProblem("You train hard. Your data doesn't.", "create a video ad")).toBeNull();
+    expect(hookProblem("Most athletes track everything except the next session", "")).toBeNull();
   });
 });
 

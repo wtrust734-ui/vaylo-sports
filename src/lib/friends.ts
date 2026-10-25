@@ -277,6 +277,38 @@ function makeCode(length = 8): string {
  * conflict do nothing` makes a code that arrives from a signup trigger later
  * harmless, and a collision on `code` returns no row, so the caller can retry.
  */
+/**
+ * Redeem a friend code. The person who typed the code receives infinite credits;
+ * the code holder is the gift giver and receives nothing. The code must belong
+ * to another account and this account must not already have infinite credits.
+ */
+export async function redeemFriendCode(code: string): Promise<{ ok: boolean; error?: string; infinite_credits?: boolean }> {
+  const trimmed = code.trim();
+  if (trimmed.length < 4) {
+    return { ok: false, error: "Invalid or missing code." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "redeem_friend_code" as never,
+    { p_code: trimmed } as never,
+  );
+  if (error) return { ok: false, error: error.message };
+
+  const result = data as { ok?: boolean; error?: string; infinite_credits?: boolean } | null;
+  if (!result || !result.ok) {
+    return { ok: false, error: result?.error ?? "Redemption failed." };
+  }
+  return { ok: true, infinite_credits: result.infinite_credits ?? false };
+}
+
+/**
+ * This athlete's own code, creating one if the account has never had one.
+ *
+ * No trigger creates these — `friend_codes` has sat empty since the table was
+ * added, which is why "add a friend by code" could never have worked. `on
+ * conflict do nothing` makes a code that arrives from a signup trigger later
+ * harmless, and a collision on `code` returns no row, so the caller can retry.
+ */
 export async function ensureMyFriendCode(userId: string): Promise<string | null> {
   const { data: existing, error: readError } = await supabase
     .from("friend_codes")

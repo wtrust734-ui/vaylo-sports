@@ -8,6 +8,10 @@ import { loadColumnsFor } from "@/lib/recoveryPlanning";
 import { creditCost } from "@/lib/credits";
 import { runWorkoutReview, type WorkoutReviewResult } from "@/lib/runWorkoutReview";
 import { formatDate } from "@/i18n/format";
+import { evaluateLogAgainstEvents } from "@/lib/eventTrophies";
+import { recordTimedPb, wallForEvaluation } from "@/lib/pbWall";
+import { triggerPbCelebration } from "@/components/PBCelebration";
+import { awardTrainingSession } from "@/lib/xp";
 
 // ============================================================================
 // WORKOUTS — the log, and only the log
@@ -71,6 +75,17 @@ const SESSION_TYPES = [
 ] as const;
 
 type SessionType = (typeof SESSION_TYPES)[number];
+
+/**
+ * The trophy ladder names sports the way the events do ("Running"), while this
+ * logger stores the short session type ("run"). Only the three distance sports
+ * can match a timed event; the others are deliberately absent.
+ */
+const TROPHY_SPORT: Partial<Record<SessionType, string>> = {
+  run: "Running",
+  cycle: "Cycling",
+  swim: "Swimming",
+};
 
 /** Display names. Short enough to read on a phone, and none of them is "Other". */
 const TYPE_LABELS: Record<SessionType, string> = {
@@ -288,27 +303,57 @@ const Workouts = () => {
     const trimmed = notes.trim();
     setSaving(true);
     try {
-      const { error } = await supabase.from("workouts").insert({
-        user_id: user.id,
-        title: `${TYPE_LABELS[type]} session`,
-        type,
-        // The load is priced from the sport, so this has to be the same value
-        // the recovery read prices against — the type the athlete chose.
-        sport: type,
-        ...loadColumnsFor({ sport: type, durationMinutes: minutes, distanceKm: km }),
-        started_at: new Date(Date.now() - minutes * 60_000).toISOString(),
-        completed_at: new Date().toISOString(),
-        duration_minutes: minutes,
-        distance_km: km,
-        calories_burned: kcal,
-        completed: true,
-        notes: trimmed || null,
-      });
+      const { data: insertedLog, error } = await supabase.from("workouts").insert({
+          user_id: user.id,
+          title: `${TYPE_LABELS[type]} session`,
+          type,
+          // The load is priced from the sport, so this has to be the same value
+          // the recovery read prices against — the type the athlete chose.
+          sport: type,
+          ...loadColumnsFor({ sport: type, durationMinutes: minutes, distanceKm: km }),
+          started_at: new Date(Date.now() - minutes * 60_000).toISOString(),
+          completed_at: new Date().toISOString(),
+          duration_minutes: minutes,
+          distance_km: km,
+          calories_burned: kcal,
+          completed: true,
+          notes: trimmed || null,
+        }).select("id").single();
       if (error) {
         toast.error(error.message);
         return;
       }
       toast.success("Session logged.");
+
+      // XP is awarded against the row that was actually written, so a retry or
+      // a duplicate cannot award twice (the function is idempotent per log id).
+      // Progression is a side effect of logging, never a reason the log fails.
+      const newLogId = (insertedLog as { id?: string } | null)?.id;
+      if (newLogId) void awardTrainingSession(newLogId);
+
+      // A logged distance + duration can BE a personal best. Evaluate it against
+      // the same event ladder the trophy case uses, then write the wall and show
+      // the shareable card. This is the automatic half of "card when you get a
+      // PB"; the /pbs page handles the same moment typed in by hand.
+      const trophySport = TROPHY_SPORT[type];
+      if (trophySport && km && km > 0) {
+        const timeSeconds = Math.round(minutes * 60);
+        const evaluation = evaluateLogAgainstEvents(
+          { sport: trophySport, log_type: type, distance_km: km, time_seconds: timeSeconds },
+          wallForEvaluation(),
+        );
+        if (evaluation.event && evaluation.isPb) {
+          recordTimedPb(evaluation.event.label, timeSeconds);
+          triggerPbCelebration({
+            eventLabel: evaluation.event.label,
+            timeSeconds,
+            isPb: true,
+            previousSeconds: evaluation.previous_seconds,
+            trophies: [],
+          });
+        }
+      }
+
       setDuration("");
       setDistance("");
       setCalories("");

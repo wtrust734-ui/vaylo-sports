@@ -357,7 +357,7 @@ export default function VideoAdsView({
     try {
       const q = await quoteShot({ conceptId: concept?.conceptId ?? "", shot: row.scene.shot, placement: "reels" });
       if (pipelineRunRef.current !== runId) return false;
-      noteStep(stepId, `The server quoted this shot at ~$${(q.estimatedCostUsd ?? 0).toFixed(2)} — paying it and generating straight away, no approval pause`);
+      noteStep(stepId, `The server estimated this shot at ~$${(q.estimatedCostUsd ?? 0).toFixed(2)} — generating it now`);
       const s = await startShot(q);
       if (pipelineRunRef.current !== runId) return false;
       work[index] = { ...work[index], state: "generating", shotId: s.shotId, operationId: s.operationId, error: null };
@@ -374,13 +374,13 @@ export default function VideoAdsView({
 
   // ------------------------------------------------------------ render
   const doRender = async (runId: number, work: ShotRow[], narration: string | null, c: VideoConceptResult): Promise<boolean> => {
-    beginStep("render", "Render the finished ad — 1 credit to dispatch");
+    beginStep("render", "Render the finished ad");
     try {
       const assetPaths: Record<string, string> = {};
       for (const s of work) if (s.videoUri) assetPaths[String(s.scene.shot)] = s.videoUri;
       const notReady = work.filter((s) => !s.videoUri).length;
       if (notReady > 0) {
-        const msg = `${notReady} shot${notReady === 1 ? "" : "s"} still has no clip — the server refuses a render without them; nothing was charged for that refusal.`;
+        const msg = `${notReady} shot${notReady === 1 ? "" : "s"} still has no clip — the server refuses a render without them.`;
         failStep("render", msg);
         setError(msg);
         return false;
@@ -586,7 +586,7 @@ export default function VideoAdsView({
           </div>
 
           <p className="text-[10px] text-white/40">
-            One click runs the whole build with no approval pauses: concept (free) → narration (billed per character) → shots (each quoted and paid immediately) → render (dispatch, then the ads editor reports progress live). Every line below tells you what the server actually said.
+            One click runs the whole build with no approval pauses: concept → narration → shots → render (the ads editor reports progress live). Every line below tells you what the server actually said.
           </p>
           <div className="flex items-center gap-3">
             <button

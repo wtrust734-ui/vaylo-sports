@@ -124,6 +124,55 @@ class HealthConnectPlugin : Plugin() {
         )
     }
 
+    /**
+     * Revoke every Health Connect permission this app holds.
+     *
+     * Disconnecting in Vaylo used to clear only Vaylo's own consent flag. The
+     * Health Connect grant stayed live, so Health Connect still reported Vaylo
+     * as connected and the next check silently put the account back into the
+     * connected state. `revokeAllPermissions()` is the only API that actually
+     * withdraws the grant, and it is deliberately called here, from a user
+     * action, never as part of a background check.
+     */
+    @PluginMethod
+    fun disconnect(call: PluginCall) {
+        if (status() != HealthConnectClient.SDK_AVAILABLE) {
+            call.reject("unavailable")
+            return
+        }
+        hcScope.launch {
+            try {
+                val controller = client().permissionController
+                controller.revokeAllPermissions()
+                val remaining = controller.getGrantedPermissions()
+                // "revoked" used to be reported unconditionally, so a revocation
+                // that did not take effect (the grant can survive a failed
+                // transaction) told JS the disconnect had happened. JS then
+                // kept the truthful state — still connected — and the button
+                // looked broken. Report the outcome that was observed.
+                if (remaining.isNotEmpty()) {
+                    android.util.Log.w(
+                        "VayloHealth",
+                        "disconnect incomplete: ${remaining.size} permission(s) remain",
+                    )
+                    call.reject("revoke_incomplete")
+                    return@launch
+                }
+                call.resolve(
+                    JSObject().apply {
+                        put("revoked", true)
+                        put("granted", jsArray(remaining))
+                        put("missing", jsArray(HealthPermissions.READ_PERMISSIONS - remaining))
+                    }
+                )
+            } catch (e: Exception) {
+                // Never log health values; the failure class is enough.
+                android.util.Log.w("VayloHealth", "disconnect failed: ${e.javaClass.simpleName}")
+                call.reject("revoke_failed")
+            }
+        }
+    }
+
     /** Deep-link into Health Connect's app permissions page (manage/revoke). */
     @PluginMethod
     fun openHealthConnectSettings(call: PluginCall) {

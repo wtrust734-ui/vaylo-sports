@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // Every call maps to a server endpoint that owns its own auth, validation and
 // cost gate:
-//   concept    → Gemini writes script + storyboard (no Veo spend)
+//   concept    → OpenAI writes the hook, script and storyboard (no shot spend)
 //   start      → ONE Veo shot; always quotes first (confirm:false), spends only
 //                when the caller re-sends confirm:true with the same shape
 //   poll       → operation state; a failed shot is retained for retry
@@ -54,6 +54,8 @@ export interface VideoConceptResult {
     hook: string;
     message: string;
     script: string;
+    narrativeStructure?: string;
+    sceneSequence?: string;
     callToAction: string;
     durationSeconds: number;
   };

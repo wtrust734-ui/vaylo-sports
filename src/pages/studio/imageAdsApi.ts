@@ -10,6 +10,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { edgeErrorMessage } from "@/lib/edgeErrors";
+import { renderComposedAd } from "@/lib/adCompose";
 
 async function call(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await supabase.functions.invoke("ads-image", { body });
@@ -121,9 +122,44 @@ export async function composeAd(
   projectId: string,
   artifactId: string,
   text?: { headline?: string; supportingCopy?: string; cta?: string },
-): Promise<{ projectId: string; jobId: string; artifactId: string; placementId: string }> {
-  const data = await call({ action: "compose", projectId, artifactId, ...(text ?? {}) });
-  return data as unknown as { projectId: string; jobId: string; artifactId: string; placementId: string };
+): Promise<{ projectId: string; artifactId: string; placementId: string }> {
+  // Compose in the browser. The server-side compose step needs a hosted FFmpeg
+  // worker, and none is provisioned on this deployment, so it always answered
+  // "composition worker is not configured". A still ad is background + type,
+  // which canvas draws exactly; `store_composed` then owns validation, storage
+  // and lineage, so the pixel work moving client-side costs no trust.
+  const status = await imageProjectStatus(projectId);
+  const background = status.artifacts.find((a) => a.id === artifactId);
+  if (!background) throw new Error("the background artifact is not in this project");
+  if (!background.downloadUrl) throw new Error("the background has no downloadable image — regenerate it and retry");
+
+  const concept =
+    status.concepts.find((c) => c.id === background.conceptId) ??
+    status.concepts.find((c) => c.status === "selected") ??
+    null;
+  const headline = text?.headline?.trim() || concept?.payload.headline || "";
+  const supportingCopy = text?.supportingCopy?.trim() ?? concept?.payload.supportingCopy;
+  const cta = text?.cta?.trim() || concept?.payload.cta || "";
+
+  const pngBase64 = await renderComposedAd({
+    imageUrl: background.downloadUrl,
+    width: background.width,
+    height: background.height,
+    headline,
+    supportingCopy,
+    cta,
+  });
+
+  const data = await call({
+    action: "store_composed",
+    projectId,
+    artifactId,
+    headline,
+    supportingCopy: supportingCopy || undefined,
+    cta,
+    pngBase64,
+  });
+  return data as unknown as { projectId: string; artifactId: string; placementId: string };
 }
 
 export async function imageProjectStatus(projectId: string): Promise<ProjectStatus> {

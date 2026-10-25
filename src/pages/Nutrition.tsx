@@ -23,10 +23,10 @@ import {
   type NutritionIntake,
 } from "@/lib/nutritionTargets";
 import { newNutritionPlanRequestId, parseGeneratedPlan } from "@/lib/nutritionPlan";
-import { capturePhoto, pickPhoto, hasNativeCamera } from "@/lib/camera";
+import { capturePhoto, pickPhoto } from "@/lib/camera";
+import { calorieRangeLabel, parseCalorieScan, type CalorieScanResult } from "@/lib/calorieScan";
 import { normalizeMealImage, MealImageError } from "@/lib/mealImage";
 import { isNative } from "@/lib/platform";
-import { recordPlanGenerationMs } from "@/lib/planTiming";
 import { hapticImpact } from "@/lib/haptics";
 import type { Json, Tables } from "@/integrations/supabase/types";
 
@@ -124,7 +124,9 @@ const Nutrition = () => {
   // `serving` and `confidence` used to be dropped on the floor — the model
   // returns them, and the confidence in particular is the honest answer to
   // "how much should I trust this number".
-  const [scanResult, setScanResult] = useState<{ name?: string; calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number; serving?: string; confidence?: "low" | "medium" | "high"; description?: string; verdict?: "fuel" | "light" | "treat"; verdict_reason?: string } | null>(null);
+  const [scanResult, setScanResult] = useState<CalorieScanResult | null>(null);
+  /** Optional portion note sent with the photo, e.g. "large plate, two cups of rice". */
+  const [scanNote, setScanNote] = useState("");
   // The values as the athlete will log them. Prefilled from the estimate the
   // moment it lands, but editable: a photo cannot weigh the plate, so the
   // person who cooked it gets the last word before anything is logged.
@@ -135,6 +137,11 @@ const Nutrition = () => {
   // delete fired two DELETEs and a double reload.
   const [deleting, setDeleting] = useState(false);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
+
+  /** Drop the photo when the scan closes, is logged or is abandoned. The
+   *  preview is a data URL now, so this is only a state reset — there is no
+   *  object URL to revoke and nothing left allocated in the session. */
+  const clearScanPreview = () => setScanPreview(null);
   // The AI food review: a reading of the week's log against the training. Not
   // stored anywhere — it is a reading of a moment, like the scan result, and
   // saving it would turn a comment into a record the athlete has to keep true.
@@ -423,115 +430,90 @@ const Nutrition = () => {
   };
 
   // AI Calorie Scan with image
-  // Heavy scan in progress is also the re-entrance guard: a second invoke
-  // while the first is on the wire means two charges for one photo. The ref
-  // holds across renders, where state alone can read stale inside one tick.
-  const scanningRef = useRef(false);
   /** Shared by the web file input and the native camera. */
   const runScan = async (base64: string) => {
-    if (scanningRef.current) return; // one scan at a time — never a double charge
-    if (!base64 || !base64.startsWith("data:image/")) return;
     // Nutrition is a standard tab: every scan is charged per use. The server
     // charges the credits and refunds on failure — nothing is charged or
     // validated from the client.
-    scanningRef.current = true;
     setScanning(true);
     setScanResult(null);
     setScanEdits(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-analyze", {
-        body: { type: "calorie_scan", image_base64: base64, userLocale: getAiLocale(), pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })) },
+        body: {
+          type: "calorie_scan",
+          image_base64: base64,
+          // Optional, and treated as data by the server: "large plate", "two
+          // scoops", "skimmed milk not whole". It sharpens the portion without
+          // asking the athlete to weigh anything.
+          prompt: scanNote.trim().slice(0, 500),
+          userLocale: getAiLocale(),
+          pbs: getLocalPBs().slice(0, 20).map((p) => ({ metric: p.metric, value: p.value, unit: p.unit, date: p.date })),
+        },
       });
       if (error) throw new Error(await edgeErrorMessage(error));
       const payload = (data ?? {}) as { result?: string; cost?: number; balance?: number | null };
-      let parsed: NonNullable<typeof scanResult>;
+      let parsed: unknown = null;
       try {
         parsed = JSON.parse(payload.result ?? "");
       } catch {
-        parsed = null as unknown as NonNullable<typeof scanResult>;
+        parsed = null;
       }
       // The old code invented a meal here (300 kcal, 15g protein…) when the
       // answer could not be read — a confident-looking lie logged as food.
       // An unreadable answer is a failed scan: the server has already refunded
       // the charge, and the athlete retries with the photo still on screen.
-      const num = (v: unknown): number | undefined => {
-        const n = Number(v);
-        return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : undefined;
-      };
-      const calories = num(parsed?.calories);
-      if (!parsed || typeof parsed !== "object" || calories === undefined) {
+      const clean = parseCalorieScan(parsed);
+      if (!clean) {
         throw new Error("The scan came back unreadable — nothing was logged and the cost was refunded. Try a clearer, closer photo.");
       }
-      const clean: NonNullable<typeof scanResult> = {
-        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 80) : "Scanned meal",
-        description: typeof parsed.description === "string" ? parsed.description.slice(0, 400) : undefined,
-        calories,
-        protein: num(parsed.protein),
-        carbs: num(parsed.carbs),
-        fat: num(parsed.fat),
-        fiber: num((parsed as { fiber?: unknown }).fiber),
-        serving: typeof (parsed as { serving?: unknown }).serving === "string"
-          ? ((parsed as { serving?: string }).serving ?? "").slice(0, 60) || undefined
-          : undefined,
-        confidence: (parsed as { confidence?: unknown }).confidence === "high" || (parsed as { confidence?: unknown }).confidence === "low"
-          ? (parsed as { confidence?: "low" | "high" }).confidence
-          : "medium",
-        verdict: parsed.verdict === "fuel" || parsed.verdict === "light" || parsed.verdict === "treat" ? parsed.verdict : undefined,
-        verdict_reason: typeof parsed.verdict_reason === "string" ? parsed.verdict_reason.slice(0, 200) : undefined,
-      };
       setScanResult(clean);
       setScanEdits({
         name: clean.name,
         calories: String(clean.calories),
-        protein: clean.protein !== undefined ? String(clean.protein) : "",
-        carbs: clean.carbs !== undefined ? String(clean.carbs) : "",
-        fat: clean.fat !== undefined ? String(clean.fat) : "",
+        protein: String(clean.protein),
+        carbs: String(clean.carbs),
+        fat: String(clean.fat),
       });
       toast({ title: "Scan complete! 📸", description: payload.cost ? `${payload.cost} credits used.` : "Included with Unlimited." });
       await refreshProfile();
     } catch (err) {
       toast({ title: "Scan failed", description: (err as Error).message, variant: "destructive" });
     } finally {
-      scanningRef.current = false;
       setScanning(false);
     }
   };
 
-  // The preview and the stored photo are one string here: every preview in this
-  // panel is a data URL (the normalised scan photo, the native camera shot,
-  // the picked library photo), so clearing it frees a string and nothing else.
-  const clearScanPreview = () => setScanPreview(null);
-
-  // Guard against a double-tap creating two meal rows. The server has no
-  // uniqueness key for two inserts of the same meal seconds apart.
-  const loggingScanRef = useRef(false);
-
   const handleScanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = ""; // reset FIRST — a same-file re-pick must fire change again
     if (!file || !user || !profile) return;
     // Backstop: the panel cannot open for an under-18, but the input is also
     // unreachable by other means only if this holds.
     if (!canScanCalories) {
+      e.target.value = "";
       toast({ title: "Age restriction", description: CALORIE_SCAN_REFUSAL, variant: "destructive" });
       return;
     }
-    // A data URL, not a blob URL: the preview survives a refresh-free tab switch
-    // and there is no object URL to revoke on the clear path (below) or on an
-    // unmount the effect below no longer controls.
     try {
-      const base64 = await normalizeMealImage(file);
-      setScanPreview(base64);
-      await runScan(base64); // scanning ref guards re-entry inside runScan
+      // One pass over the file: validate, downscale and re-encode to the JPEG
+      // data URL the server reads. The same string is the preview, so there is
+      // no object URL to create or forget, and a 12MP phone photo can never be
+      // sent at full size (which failed in the relay before the model saw it).
+      const dataUrl = await normalizeMealImage(file);
+      setScanPreview(dataUrl);
+      await runScan(dataUrl);
     } catch (err) {
-      // A recoverable failure keeps whatever preview was there before:
-      // nothing local is cleared, the athlete just tries the other button.
-      if (err instanceof MealImageError) {
-        toast({ title: err.useCamera ? "Camera needed for that photo" : "Couldn't use that photo", description: err.message, variant: "destructive" });
-        if (err.useCamera) onScanPhoto();
-      } else {
-        toast({ title: "Couldn't read that photo", description: (err as Error).message, variant: "destructive" });
-      }
+      const message =
+        err instanceof MealImageError
+          ? err.message
+          : "Couldn't read that photo. Try a different one, or use Take Photo.";
+      toast({
+        title: err instanceof MealImageError && err.useCamera ? "Use Take Photo instead" : "Couldn't read that photo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      e.target.value = "";
     }
   };
 
@@ -552,6 +534,7 @@ const Nutrition = () => {
     hapticImpact("medium");
     await runScan(shot.base64);
   };
+
   /**
    * Native "choose from my photos". Same age gate and same scan path as the
    * camera route: the picker is reachable on its own, so the check cannot live
@@ -570,33 +553,27 @@ const Nutrition = () => {
     await runScan(picked.base64);
   };
 
-  /** The photo-taking route, used by the Take Photo button and offered when a photo arrived in a format the browser could not decode. */
   const onScanPhoto = () => {
-    if (!scanningRef.current) {
-      if (isNative() && hasNativeCamera()) void scanFromCamera();
-      else fileInputRef.current?.click();
-    }
+    if (isNative()) void scanFromCamera();
+    else fileInputRef.current?.click();
   };
 
   /** Upload / choose an existing photo — the camera is never opened from here. */
   const onScanUpload = () => {
-    if (!scanningRef.current) {
-      if (isNative()) void scanFromLibrary();
-      else galleryInputRef.current?.click();
-    }
+    if (isNative()) void scanFromLibrary();
+    else galleryInputRef.current?.click();
   };
 
   const addScanResult = async () => {
-    if (!user || !scanResult || loggingScanRef.current) return;
-    loggingScanRef.current = true;
+    if (!user || !scanResult) return;
     // What is logged is what the athlete sees in the fields above — the
     // estimate prefilled them, but a correction here is what lands in the log.
     const edits = scanEdits ?? {
       name: scanResult.name || "Scanned meal",
-      calories: scanResult.calories !== undefined ? String(scanResult.calories) : "",
-      protein: scanResult.protein !== undefined ? String(scanResult.protein) : "",
-      carbs: scanResult.carbs !== undefined ? String(scanResult.carbs) : "",
-      fat: scanResult.fat !== undefined ? String(scanResult.fat) : "",
+      calories: String(scanResult.calories),
+      protein: String(scanResult.protein),
+      carbs: String(scanResult.carbs),
+      fat: String(scanResult.fat),
     };
     const toNum = (v: string): number | null => {
       const n = Number(v);
@@ -607,9 +584,8 @@ const Nutrition = () => {
       protein_g: toNum(edits.protein), carbs_g: toNum(edits.carbs), fat_g: toNum(edits.fat),
       meal_type: "meal", log_date: today,
     });
-    loggingScanRef.current = false;
     if (error) { toast({ title: "Couldn't save the scanned meal", description: error.message, variant: "destructive" }); return; }
-    setScanResult(null); setScanEdits(null); setShowScan(false);
+    setScanResult(null); setScanEdits(null); setShowScan(false); setScanNote("");
     clearScanPreview();
     setNutriTab("today");
     fetchMeals();
@@ -659,10 +635,7 @@ const Nutrition = () => {
   };
 
   const submitPlan = async (draft: PlanDraft) => {
-    if (!user || !profile || writingPlan) return;
-    // The writingPlan guard: a double-tap on Write my plan must not leave two
-    // paid generations in flight. The wait overlay covers the screen, but the
-    // guard runs before the first frame where that overlay exists.
+    if (!user || !profile) return;
     // One check, shared with every other entry point (see dietPlanRefusalReason).
     //
     // This used to allow an UNKNOWN date of birth through: `age !== null &&
@@ -683,22 +656,36 @@ const Nutrition = () => {
     setPlanWaitWeeks(weeks);
 
     try {
-      const { error: intakeError } = await supabase.from("user_settings").upsert({
-        user_id: user.id,
-        dietary_pattern: intake.dietaryPattern,
-        food_dislikes: intake.foodDislikes.trim().slice(0, 300) || null,
-        meals_per_day: intake.mealsPerDay,
-        training_days_per_week: intake.trainingDaysPerWeek,
-        typical_session_minutes: intake.sessionMinutes,
-        activity_level: intake.activityLevel,
-        sex: intake.sex,
-      }, { onConflict: "user_id" });
-      if (intakeError) console.warn("nutrition intake not saved:", intakeError.message);
+      // Started, not awaited: the upsert stores the athlete's preferences, and
+      // the plan request does not read them back (the same answers go in
+      // `notes`). Running it alongside the call removes a whole settings round
+      // trip from the wait before the first token is written, which is the part
+      // of plan creation the athlete actually sits through. Failures are still
+      // logged, and it is awaited at the end so the write has settled before
+      // the screen says the plan is ready.
+      const intakeSaved = Promise.resolve(
+        supabase.from("user_settings").upsert(
+          {
+            user_id: user.id,
+            dietary_pattern: intake.dietaryPattern,
+            food_dislikes: intake.foodDislikes.trim().slice(0, 300) || null,
+            meals_per_day: intake.mealsPerDay,
+            training_days_per_week: intake.trainingDaysPerWeek,
+            typical_session_minutes: intake.sessionMinutes,
+            activity_level: intake.activityLevel,
+            sex: intake.sex,
+          },
+          { onConflict: "user_id" },
+        ),
+      )
+        .then(({ error }) => {
+          if (error) console.warn("nutrition intake not saved:", error.message);
+        })
+        .catch((cause: unknown) => {
+          console.warn("nutrition intake not saved:", (cause as Error)?.message ?? cause);
+        });
 
       const projected = targetsForRequest(targets);
-      // The measured endpoint is the provider round trip, not the intake save
-      // or the app's target arithmetic that precede it.
-      const generationStartedAt = Date.now();
       const { data, error } = await supabase.functions.invoke("generate-nutrition-plan", {
         body: {
           // The function validates this spelling, lowercase.
@@ -737,14 +724,6 @@ const Nutrition = () => {
 
       const payload = (data ?? {}) as { plan?: unknown; cost?: number };
       const parsed = parseGeneratedPlan(payload.plan);
-      // Measured before any branch-specific handling, on failure and success
-      // alike (only successes calibrate — see src/lib/planTiming.ts).
-      recordPlanGenerationMs({
-        kind: "nutrition",
-        weeks,
-        ms: Date.now() - generationStartedAt,
-        outcome: parsed.plan ? "ok" : "failed",
-      });
       if (!parsed.plan) {
         // Charged but unreadable. The server refunds a failed call; an answer we
         // cannot read is reported here rather than stored as an empty plan.
@@ -783,7 +762,13 @@ const Nutrition = () => {
         return;
       }
 
-      await refreshProfile();
+      // Settled by now (the plan took seconds), so this costs nothing.
+      await intakeSaved;
+      // Not awaited: the plan is already written and saved, so waiting on the
+      // profile refresh kept the full-screen progress overlay up for one more
+      // round trip after the work was done. The credits badge catches up on its
+      // own re-render.
+      void refreshProfile();
       fetchPlans();
       setShowCreatePlan(false);
       toast({
@@ -881,8 +866,8 @@ const Nutrition = () => {
           ) : (
             <>
               <div className="flex items-baseline gap-1 mb-2">
-                <span className="text-2xl font-display font-bold">{waterMl}ml</span>
-                <span className="text-sm text-muted-foreground">/ {waterGoal}ml</span>
+                <span className="text-2xl font-display font-bold tabular-nums">{waterMl} ml</span>
+                <span className="text-sm text-muted-foreground tabular-nums">/ {waterGoal} ml</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden mb-3">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min((waterMl / waterGoal) * 100, 100)}%` }} transition={{ duration: 0.8 }} className="h-full bg-electric rounded-full" />
@@ -891,7 +876,7 @@ const Nutrition = () => {
                 {waterQuickAmounts.map(amt => (
                   <motion.button key={amt} whileTap={{ scale: 0.9 }} onClick={() => setAddAmount(String(amt))}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${addAmount === String(amt) ? "bg-electric-purple/15 border-electric-purple text-electric-purple" : "bg-card border-border text-foreground"}`}>
-                    {amt}ml
+                    {amt} ml
                   </motion.button>
                 ))}
               </div>
@@ -909,8 +894,11 @@ const Nutrition = () => {
             {[{ label: "Cal", value: totalCalories, unit: "kcal" }, { label: "Protein", value: totalProtein, unit: "g" }, { label: "Carbs", value: totalCarbs, unit: "g" }, { label: "Fat", value: totalFat, unit: "g" }].map((m, i) => (
               <motion.div key={m.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
                 className="bg-card border border-border rounded-xl p-2.5 text-center">
-                <span className="text-[12px] text-muted-foreground">{m.label}</span>
-                <p className="text-sm font-display font-bold">{Math.round(m.value)}<span className="text-[12px] text-muted-foreground">{m.unit}</span></p>
+                <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">{m.label}</span>
+                <p className="mt-0.5 font-display text-sm font-bold tabular-nums">
+                  {Math.round(m.value)}
+                  <span className="ml-0.5 text-[11px] font-normal text-muted-foreground">{m.unit}</span>
+                </p>
               </motion.div>
             ))}
           </div>
@@ -1066,10 +1054,22 @@ const Nutrition = () => {
             tab bar), so there is no separate collapsed state to discover. */}
         {showScan && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-electric-purple/20 rounded-2xl p-4 space-y-3 mb-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanEdits(null); clearScanPreview(); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
+            <div className="flex items-center justify-between"><h3 className="font-display font-bold text-sm">📸 Scan food</h3><button onClick={() => { setShowScan(false); setScanResult(null); setScanEdits(null); setScanNote(""); clearScanPreview(); }} className="text-muted-foreground" aria-label="Close scan"><X size={16} aria-hidden /></button></div>
             <p className="text-xs text-muted-foreground">
               <span className="font-semibold text-foreground">1.</span> Photograph the plate · <span className="font-semibold text-foreground">2.</span> check the estimate · <span className="font-semibold text-foreground">3.</span> log it. Each scan costs {creditCost("calorie_scan")} credits; a failed scan is refunded automatically.
             </p>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+                Portion note (optional)
+              </span>
+              <input
+                value={scanNote}
+                maxLength={500}
+                onChange={(event) => setScanNote(event.target.value)}
+                placeholder="e.g. large dinner plate, two cups of rice, whole milk"
+                className={inputClass}
+              />
+            </label>
             {/* Camera: `capture` asks the device for the camera. */}
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanImage} className="hidden" />
             {/* Upload: no `capture`, so this is the gallery / file picker. */}
@@ -1092,18 +1092,12 @@ const Nutrition = () => {
               <div className="flex gap-2">
                 <motion.button onClick={onScanPhoto} whileTap={{ scale: 0.98 }}
                   className="flex-1 bg-gradient-primary text-primary-foreground font-semibold py-2.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
-                  <Camera size={16} /> {scanPreview ? "Replace photo" : "Take Photo"}
+                  <Camera size={16} /> Take Photo
                 </motion.button>
                 <motion.button onClick={onScanUpload} whileTap={{ scale: 0.98 }}
                   className="bg-card border border-border px-4 py-2.5 rounded-xl flex items-center gap-2 hover:border-electric-purple/20">
                   <Upload size={16} /> {isNative() ? "Choose Photo" : "Upload"}
                 </motion.button>
-                {scanPreview && (
-                  <button onClick={clearScanPreview} aria-label="Remove selected photo"
-                    className="bg-card border border-border px-3 rounded-xl flex items-center text-muted-foreground hover:text-destructive hover:border-destructive/40 text-sm">
-                    <X size={16} />
-                  </button>
-                )}
               </div>
             )}
 
@@ -1126,6 +1120,46 @@ const Nutrition = () => {
                 {(scanResult.serving !== undefined || scanResult.fiber !== undefined) && (
                   <p className="text-[11px] text-muted-foreground mb-2">
                     {[scanResult.serving ? `Portion ~${scanResult.serving}` : null, scanResult.fiber !== undefined ? `Fibre ${scanResult.fiber}g` : null].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                <p className="mb-2 text-[11px] font-semibold text-muted-foreground">
+                  Estimate: {calorieRangeLabel(scanResult)} · {" "}
+                  {scanResult.protein}g P · {scanResult.carbs}g C · {scanResult.fat}g F
+                </p>
+                {scanResult.items.length > 0 && (
+                  <details className="mb-2 rounded-lg border border-border/60 bg-background/30 px-2.5 py-2">
+                    <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      What this estimate is made of ({scanResult.items.length})
+                    </summary>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {scanResult.items.map((item, index) => (
+                        <li key={`${item.name}-${index}`} className="flex items-start justify-between gap-3 text-[11.5px]">
+                          <span className="min-w-0">
+                            <span className="block text-foreground">{item.name}</span>
+                            {(item.grams !== null || item.reference) && (
+                              <span className="block text-[10.5px] leading-relaxed text-muted-foreground">
+                                {[
+                                  item.grams !== null ? `${item.grams}g` : null,
+                                  item.kcalPer100g !== null ? `${item.kcalPer100g} kcal/100g` : null,
+                                  item.reference,
+                                ].filter(Boolean).join(" · ")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">{item.calories} kcal</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {scanResult.portion_basis && (
+                      <p className="mt-2 border-t border-border/50 pt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                        Portion basis: {scanResult.portion_basis}
+                      </p>
+                    )}
+                  </details>
+                )}
+                {scanResult.uncertainty && (
+                  <p className="mb-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                    {scanResult.uncertainty}
                   </p>
                 )}
                 {scanResult.verdict && (

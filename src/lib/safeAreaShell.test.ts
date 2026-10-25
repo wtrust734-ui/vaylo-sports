@@ -336,7 +336,6 @@ describe("safe-area insets", () => {
 /** Page chrome that deliberately floats above the bar rather than under it. */
 const BOTTOM_BARS = [
   "src/components/ads/CreditWarning.tsx",
-  "src/pages/EventPacks.tsx",
   "src/pages/Coach.tsx",
 ];
 
@@ -405,8 +404,21 @@ describe("floating tab bar clearance", () => {
   });
 
   it("keeps bottom sheets and their primary actions above the home indicator", () => {
+    // Sheets that use the shared primitive inherit the inset from it — its
+    // footer (and its body when there is no footer) applies the token once, for
+    // every caller. A screen that hand-rolls a sheet still has to carry the
+    // token itself, which is what the per-caller loop below enforces.
+    const shared = read("src/components/ui/bottom-sheet.tsx");
+    expect(shared, "the shared sheet lost its home-indicator inset").toContain(
+      "var(--vaylo-inset-bottom)",
+    );
     for (const p of BOTTOM_SHEETS) {
-      expect(read(p), p).toContain("var(--vaylo-inset-bottom)");
+      const source = read(p);
+      const usesSharedSheet = source.includes("<BottomSheet");
+      expect(
+        usesSharedSheet || source.includes("var(--vaylo-inset-bottom)"),
+        `${p} neither uses the shared sheet nor insets its own`,
+      ).toBe(true);
     }
   });
 

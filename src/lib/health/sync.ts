@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   bridgeCheckPermissions,
   bridgeRequestPermissions,
+  bridgeRevokePermissions,
   bridgeSyncPull,
 } from "./bridge";
 import { HEALTH_PERMISSIONS_VERSION } from "./permissions";
@@ -89,6 +90,41 @@ export function permissionOutcome(input: unknown): PermissionOutcome {
 
 const STATE_KEY = (userId: string) => `vaylo:hc:state:${userId}`;
 const CONSENT_KEY = (userId: string) => `vaylo:hc:consent:${userId}`;
+const IMPORTED_KEY = (userId: string) => `vaylo:hc:imported:${userId}`;
+
+/**
+ * "This account has Health Connect rows in Vaylo" — a fact that has to outlive
+ * a disconnect.
+ *
+ * Disconnecting deliberately keeps what was already imported, but the sync
+ * state that used to imply "there is data here" is cleared by the same action,
+ * so the Delete imported data control disappeared at exactly the moment it was
+ * still needed. This flag is that memory, and nothing else: it is set by a
+ * successful import, cleared only by deleting, and carries no health value.
+ */
+export function hasImportedData(userId: string): boolean {
+  try {
+    return localStorage.getItem(IMPORTED_KEY(userId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markImported(userId: string) {
+  try {
+    localStorage.setItem(IMPORTED_KEY(userId), "1");
+  } catch {
+    /* private mode: the control is missing, nothing else changes */
+  }
+}
+
+export function clearImportedFlag(userId: string) {
+  try {
+    localStorage.removeItem(IMPORTED_KEY(userId));
+  } catch {
+    /* private mode */
+  }
+}
 
 /** The sync axis, persisted on health_sync_state and mirrored locally. */
 export type HealthSyncStatus = "idle" | "in_progress" | "succeeded" | "failed";
@@ -151,20 +187,52 @@ async function persistServerSyncStatus(
   }
 }
 
-/** Consent: has the athlete explicitly connected, and to which catalog version. */
-export function readConsent(userId: string): { connected: boolean; version: number } {
+/**
+ * Consent: has the athlete explicitly connected, to which catalog version — and
+ * has this device explicitly disconnected.
+ *
+ * `disconnected` is the third state the old two-valued flag could not express.
+ * "connected: false" meant both "never connected here" and "just withdrew
+ * consent", so the status resolver could not tell them apart and treated a
+ * freshly disconnected device the same way as a new one: it consulted the
+ * account row, found the row its own disconnect had not yet corrected (or a
+ * native grant the revoke had not cleared), and answered "connected" again —
+ * which is why Disconnect was still on screen after disconnecting.
+ */
+export type StoredConsent = {
+  connected: boolean;
+  version: number;
+  disconnected?: boolean;
+};
+
+export function readConsent(userId: string): StoredConsent {
   try {
     const raw = localStorage.getItem(CONSENT_KEY(userId));
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<StoredConsent>;
+      return {
+        connected: parsed.connected === true,
+        version: typeof parsed.version === "number" ? parsed.version : 0,
+        disconnected: parsed.disconnected === true,
+      };
+    }
   } catch {
     /* fall through */
   }
-  return { connected: false, version: 0 };
+  return { connected: false, version: 0, disconnected: false };
 }
 
-function writeConsent(userId: string, connected: boolean, version: number) {
+function writeConsent(
+  userId: string,
+  connected: boolean,
+  version: number,
+  disconnected = false,
+) {
   try {
-    localStorage.setItem(CONSENT_KEY(userId), JSON.stringify({ connected, version }));
+    localStorage.setItem(
+      CONSENT_KEY(userId),
+      JSON.stringify({ connected, version, disconnected }),
+    );
   } catch {
     /* non-fatal */
   }
@@ -191,7 +259,20 @@ export async function saveConnectionToServer(userId: string, connected: boolean)
  * either way; the server row is refreshed by the next connect.
  */
 export async function disconnectHealthConnect(userId: string): Promise<void> {
-  writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION);
+  // Withdraw the Android grant itself first. Clearing only Vaylo's flag left
+  // Health Connect still listing Vaylo as connected, so the very next status
+  // check resolved back to "connected" and the button looked broken. If the
+  // native revocation fails we keep the local consent so the UI can show the
+  // truth and offer the Health Connect settings route instead of lying.
+  const revoked = await bridgeRevokePermissions();
+  if (!revoked) {
+    throw new Error(
+      "Could not withdraw Health Connect permissions. Open Health Connect → Apps → Vaylo Sports → Permissions and remove them there.",
+    );
+  }
+  // `disconnected: true` is what stops the very next status read from putting
+  // this device back into "connected". See readConsent.
+  writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION, true);
   try {
     localStorage.removeItem(STATE_KEY(userId));
   } catch {
@@ -212,6 +293,24 @@ export async function disconnectHealthConnect(userId: string): Promise<void> {
       });
   } catch {
     // Local state is already cleared, which is the side that gates syncing.
+  }
+  try {
+    // The unified wearables screen reads health_connections first. A stale
+    // "connected" row there would keep Health Connect listed as linked after
+    // the native grant and the legacy row were both cleared.
+    await supabase.from("health_connections").upsert(
+      {
+        user_id: userId,
+        provider: "health_connect",
+        status: "not_connected",
+        connected: false,
+        last_sync_at: null,
+        last_cursor: null,
+      },
+      { onConflict: "user_id,provider" },
+    );
+  } catch {
+    /* table may predate this build; the legacy row above is authoritative */
   }
 }
 
@@ -284,18 +383,24 @@ export async function resolveHealthStatus(
   supported: boolean,
 ): Promise<ResolvedStatus> {
   const consent = readConsent(userId);
-  // The account-level truth outranks this device's memory ONLY as a fallback
-  // for the connected question: a row written by another device (or surviving
-  // cleared storage) means the athlete is connected, and repeating the whole
-  // initial setup flow on them is the redundant setup this must prevent. A
-  // row that says NOT connected never overrides a locally-connected device's
-  // consent — the local side is stronger evidence of a live grant, and the
-  // disconnect path clears both.
-  if (!consent.connected) {
-    const serverConnected = await fetchServerConnected(userId);
-    if (serverConnected !== true) {
-      return { status: !supported ? "unavailable" : "not_connected", consentOutdated: false };
-    }
+  // The account-level truth is a FALLBACK for this device's memory, never an
+  // override of an explicit disconnect.
+  //
+  // It exists for the second device: a row written elsewhere means the athlete
+  // is connected, and replaying the whole initial setup flow on them is the
+  // redundant setup this must prevent. But it must never resurrect a
+  // connection this device just ended. "Disconnect" writes the local consent
+  // first and the account row second, and either write can fail or lag; if the
+  // row still says connected, trusting it here is exactly how the sheet kept
+  // offering Disconnect after the athlete had disconnected. The local
+  // `disconnected` flag is the tie-breaker: once this device has withdrawn
+  // consent, nothing re-grants it except an explicit Connect.
+  let accountConnected = consent.connected;
+  if (!consent.connected && !consent.disconnected) {
+    accountConnected = (await fetchServerConnected(userId)) === true;
+  }
+  if (!accountConnected) {
+    return { status: !supported ? "unavailable" : "not_connected", consentOutdated: false };
   }
   const consentOutdated = consent.connected && consent.version < HEALTH_PERMISSIONS_VERSION;
 
@@ -308,9 +413,7 @@ export async function resolveHealthStatus(
     // but on a supported build it is also not a state we can sync from, so
     // the honest reading is permission_required (reconnect path), never a
     // green "connected".
-    return consent.connected
-      ? { status: "permission_required", consentOutdated }
-      : { status: "not_connected", consentOutdated };
+    return { status: "permission_required", consentOutdated };
   }
 
   if (perms.missingCount > 0) {
@@ -353,6 +456,21 @@ export async function connectHealthConnect(userId: string): Promise<ConnectOutco
 
   writeConsent(userId, true, HEALTH_PERMISSIONS_VERSION);
   await saveConnectionToServer(userId, true);
+  try {
+    // Keep the unified wearables row in step, so a reconnect after a disconnect
+    // does not leave the HealthSync screen reading "not connected".
+    await supabase.from("health_connections").upsert(
+      {
+        user_id: userId,
+        provider: "health_connect",
+        status: "connected",
+        connected: true,
+      },
+      { onConflict: "user_id,provider" },
+    );
+  } catch {
+    /* table may predate this build; the legacy row still drives the sheet */
+  }
 
   // The first import. A failed first attempt is a retry state on the sheet,
   // not a lost connection: the grant stands, the cursor stays null, and the
@@ -423,7 +541,7 @@ async function performHealthSync(userId: string): Promise<SyncOutcome> {
         if (msg === "permission_revoked") {
           // Permissions were revoked between syncs: keep data, flip consent
           // off, and close the claim so no row stays in_progress forever.
-          writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION);
+          writeConsent(userId, false, HEALTH_PERMISSIONS_VERSION, true);
           await saveConnectionToServer(userId, false).catch(() => undefined);
           await persistServerSyncStatus(userId, { sync_status: "failed", sync_error: "permission_revoked" });
           writeLocalState(userId, { lastSyncAt: state.lastSyncAt, cursorMs: state.cursorMs, syncStatus: "failed" });
@@ -507,6 +625,9 @@ async function performHealthSync(userId: string): Promise<SyncOutcome> {
         syncStatus: "succeeded",
       };
       writeLocalState(userId, next);
+      // Survives a later disconnect: the rows this import created stay in the
+      // athlete's log, and the control that erases them has to stay reachable.
+      markImported(userId);
       await supabase
         .from("health_sync_state")
         .upsert({

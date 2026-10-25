@@ -26,6 +26,14 @@ describe("pbWall: the log-save flow's PB write is an improvement only", () => {
     expect(entry.history).toHaveLength(2);
   });
 
+  it("treats a hand-typed 5K and the event ladder's Running · 5K as one record", () => {
+    recordTimedPb("5K", 1500);
+    expect(recordTimedPb("Running · 5K", 1600)).toEqual({ isPb: false, previousSeconds: 1500 });
+    expect(recordTimedPb("Running · 5K", 1400).isPb).toBe(true);
+    expect(readWall()).toHaveLength(1);
+    expect(readWall()[0]).toMatchObject({ metric: "5K", value: 1400 });
+  });
+
   it("matching is case-insensitive on the metric label", () => {
     recordTimedPb("running · 5k", 1500);
     expect(recordTimedPb("Running · 5K", 1400).isPb).toBe(true);

@@ -81,11 +81,11 @@ function BriefForm({ format, onOpenChat }: { format: "image" | "video"; onOpenCh
             Campaign <span className="text-white">{created.name}</span> is stored with status{" "}
             <Badge variant="outline" className="border-white/20 text-white/80">{created.status}</Badge> on the real backend
             (campaign id <code className="text-[10px] text-white/50">{created.id}</code>). Asset generation for{" "}
-            {format === "image" ? "images" : "video shots, narration and assembly"} runs in the specialist workflow stage,
-            which quotes every paid call and waits for approval before spending anything.
+            {format === "image" ? "images" : "video shots, narration and assembly"} runs in the specialist workflow stage
+            when you press Run — there is no credit balance and nothing to approve first.
           </p>
           <div className="rounded-lg bg-white/5 p-3 text-xs text-white/60">
-            Plan on record: {format === "image" ? "image generation with brand layout and text-overlay pass" : "script → narration → shots → assembly"} — each step priced before it runs.
+            Plan on record: {format === "image" ? "image generation with brand layout and text-overlay pass" : "script → narration → shots → assembly"} — each step reports live progress.
           </div>
           <button onClick={onOpenChat} className={`rounded-lg px-3 py-2 text-sm ${ACCENT}`}>
             Discuss this campaign with the assistant

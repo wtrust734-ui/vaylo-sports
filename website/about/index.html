@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>About Vaylo Sports | Vaylo Sports</title>
-<meta name="description" content="What Vaylo Sports is, why it was built, why it works across every sport, who it is designed for, and which company details are not yet published." />
-<meta name="theme-color" content="#05070f" />
+<meta name="description" content="The story of Vaylo Sports: the idea in 2024, the first build in 2025, the long build through 2026, and the Android launch in 2027 — plus what the app is, and which company details are not yet published." />
+<meta name="theme-color" content="#07080c" />
 <meta name="color-scheme" content="dark light" />
 
 
@@ -13,7 +13,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Vaylo Sports" />
 <meta property="og:title" content="About Vaylo Sports | Vaylo Sports" />
-<meta property="og:description" content="What Vaylo Sports is, why it was built, why it works across every sport, who it is designed for, and which company details are not yet published." />
+<meta property="og:description" content="The story of Vaylo Sports: the idea in 2024, the first build in 2025, the long build through 2026, and the Android launch in 2027 — plus what the app is, and which company details are not yet published." />
 
 <meta property="og:image" content="/assets/og.png" />
 <meta property="og:image:type" content="image/png" />
@@ -25,10 +25,26 @@
 <meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
 <link rel="icon" href="/assets/logo.png" type="image/png" />
 <link rel="apple-touch-icon" href="/assets/logo.png" />
-<link rel="stylesheet" href="/assets/theme.css?v=52935e8d" />
+<!-- The one webfont, preloaded. Without the preload it is discovered only
+     after the stylesheet has parsed, which is exactly the half-second in which
+     the headline renders in the fallback and then reflows. crossorigin is
+     required on a font request even when it is same-origin. -->
+<link
+  rel="preload"
+  href="/assets/fonts/archivo-latin.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+<link rel="stylesheet" href="/assets/theme.css?v=v43707ad2" />
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com"}</script>
 </head>
 <body>
+  <!-- Reading progress. Decorative, hidden from the accessibility tree, and
+       driven by one transform in site.js rather than by a width change. -->
+  <div class="scroll-progress" aria-hidden="true">
+    <span data-scroll-progress></span>
+  </div>
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="site-header">
@@ -70,6 +86,10 @@
           <a href="/about/" aria-current="page">About</a>
           <a href="/contact/">Contact</a>
       </nav>
+
+      <a class="nav-cta" href="/waitlist/">
+        Join the waiting list
+      </a>
     </div>
 
     <div class="mobile-nav" id="mobile-nav" hidden>
@@ -94,15 +114,54 @@
     <div class="shell">
       <div style="padding-top:2.5rem">
         <p class="eyebrow">About</p>
-        <h1>What Vaylo Sports is, and what it is not</h1>
+        <h1 class="page-title">The story of Vaylo Sports</h1>
       </div>
 
       <p class="lead" style="margin-top:1rem;max-width:64ch">
-        Vaylo Sports is a training log with analysis attached. You record what you
-        train; the app works it back to you. That is the whole idea, and it is
-        deliberately narrower than what most apps in this category promise.
+        A training log with analysis attached, built by one person over four
+        years. You record what you train; the app works it back to you. That is
+        the whole idea, and it is deliberately narrower than what most apps in
+        this category promise.
       </p>
-    </div><section class="section reveal">
+    </div>
+
+  <section class="story" id="story" style="margin-top:2.5rem">
+    <div class="shell story-grid">
+      <div>
+        <p class="chapter-label"><b>01</b> 2024 &ndash; 2027</p>
+        <h2>Four years, one build.</h2>
+        <p class="story-lead" style="margin-top:1.25rem">
+          The idea arrived in 2024. Building started in 2025. It has been built
+          through 2026, and it launches in 2027.
+        </p>
+        <p>
+          Nothing about that timeline was planned as a marketing story. It is how
+          long it took to get the parts that matter right, and to stop adding the
+          parts that did not.
+        </p>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-rail" aria-hidden="true"><div class="timeline-fill"></div></div>
+        <div class="tl-item">
+          <p class="tl-year">2024</p>
+          <p style="margin-top:0.2rem"><strong>The idea.</strong> The starting point was a gap: a training log already knows every session you have done, and still shows you a calendar. The idea for Vaylo was to make the record answer back — load, readiness, recovery, and the single limiter worth working on.</p>
+        </div>
+        <div class="tl-item">
+          <p class="tl-year">2025</p>
+          <p style="margin-top:0.2rem"><strong>Building begins.</strong> The first year of writing the app: a log that is quick to fill in, metrics that are arithmetic on that log rather than guesses, and a plan that adapts to the week you actually had. The all-sport decision was made here, because the underlying maths does not care which sport produced the effort.</p>
+        </div>
+        <div class="tl-item is-now">
+          <p class="tl-year">2026<span class="tl-tag">Now</span></p>
+          <p style="margin-top:0.2rem"><strong>The long build.</strong> The year spent making the app safe to hand to someone: age caps and switched-off features for younger athletes, a refund and purchase path that works without emailing anyone, and twenty-six published documents behind every claim the product makes. Slower than adding features, and the reason it can launch at all.</p>
+        </div>
+        <div class="tl-item">
+          <p class="tl-year">2027</p>
+          <p style="margin-top:0.2rem"><strong>Launch.</strong> The Android release opens. Until then the app is not on the Play Store, and this site will not link to a listing that does not exist. The waiting list is the only place that changes.</p>
+        </div>
+      </div>
+    </div>
+  </section><section class="section reveal">
     <div class="shell">
       <div class="section-head">
         <p class="eyebrow">Purpose</p>
@@ -457,7 +516,7 @@
      scripts execute in document order before DOMContentLoaded — so with the
      reverse order, site.js ran first, found no config, and disabled every form
      on the site with "not available yet". -->
-<script src="/assets/config.js?v=e5e20b96" defer></script>
-<script src="/assets/site.js?v=f67590ac" defer></script>
+<script src="/assets/config.js?v=ve5e20b96" defer></script>
+<script src="/assets/site.js?v=va0e72686" defer></script>
 </body>
 </html>

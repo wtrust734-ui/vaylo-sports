@@ -1,36 +1,57 @@
-import { Zap, Repeat, Infinity as InfinityIcon, UserRound, Coins, KeyRound } from "lucide-react";
+// ============================================================================
+// marketSections — the Market's tabs, in one place
+// ----------------------------------------------------------------------------
+// Market.tsx renders one section at a time and MarketSectionNav switches between
+// them, so the list (and the order) lives here instead of being duplicated in
+// both files. A section whose feature flag is off is simply not offered: the
+// nav never shows a tab that would render nothing.
+// ============================================================================
+
+import { Crown, CreditCard, Sparkles, Users, type LucideIcon } from "lucide-react";
+
 import { isFlagOn } from "@/config/featureFlags";
 
-/**
- * Market section definitions — data, not UI.
- *
- * Lived inside MarketSectionNav.tsx originally; the audit's lint pass flagged
- * the mixed exports (a component file exporting constants breaks react fast
- * refresh), and Market.tsx needs the same list for its own section guard, so
- * the source of truth belongs in config with the rest of the app's catalogues.
- */
-export type MarketSection = "packs" | "unlocks" | "coins" | "subscriptions" | "lifetime" | "coaching";
+export type MarketSection = "packs" | "subscriptions" | "lifetime" | "coaching";
 
-export const MARKET_SECTIONS: { key: MarketSection; label: string; icon: typeof Zap; blurb: string }[] = [
-  { key: "packs", label: "Credit Packs", icon: Zap, blurb: "Buy credits once. They never expire." },
-  { key: "unlocks", label: "Unlocks", icon: KeyRound, blurb: "One credit payment, yours forever. Buy here — no need to hunt through tabs." },
-  { key: "coins", label: "Coins", icon: Coins, blurb: "Coins buy avatar cosmetics only — never features. Bundles, or convert credits (1 credit = 7.5 Coins)." },
-  { key: "subscriptions", label: "Subscriptions", icon: Repeat, blurb: "Credits every month, or unlimited credits." },
-  { key: "lifetime", label: "Lifetime", icon: InfinityIcon, blurb: "One payment. No renewal. Yours forever." },
-  { key: "coaching", label: "Coaches", icon: UserRound, blurb: "Real coaches who set their own prices, and their plans." },
+export interface MarketSectionDef {
+  key: MarketSection;
+  label: string;
+  icon: LucideIcon;
+  /** One line under the nav explaining what the section contains. */
+  blurb: string;
+  /** When set, the section only appears while this feature flag is on. */
+  requiresFlag?: Parameters<typeof isFlagOn>[0];
+}
+
+export const MARKET_SECTIONS: MarketSectionDef[] = [
+  {
+    key: "packs",
+    label: "Credits",
+    icon: Sparkles,
+    blurb: "Credit packs for AI features. Every purchase shows its price and what it adds before you confirm.",
+  },
+  {
+    key: "subscriptions",
+    label: "Plans",
+    icon: CreditCard,
+    blurb: "Recurring plans with a monthly credit allowance. Cancel any time from your account.",
+  },
+  {
+    key: "lifetime",
+    label: "Lifetime",
+    icon: Crown,
+    blurb: "One payment, no renewal. Lifetime access keeps its benefits for as long as the app runs.",
+  },
+  {
+    key: "coaching",
+    label: "Coaches",
+    icon: Users,
+    blurb: "Sessions and plans from verified coaches. Coaches set their own prices.",
+    requiresFlag: "coachMarketplace",
+  },
 ];
 
-/**
- * The sections this build actually shows.
- *
- * The Coaching tab used to be listed unconditionally while its contents were
- * hidden behind the flag, which meant a switched-off feature showed up as an
- * EMPTY TAB — the worst of both states: the feature is not available, and the
- * screen looks broken rather than switched off. Filtering here makes the hidden
- * state look like the feature is not part of the shop, which is what it is.
- *
- * The active section is derived from the unfiltered list in Market.tsx, so this
- * cannot produce an undefined section even if a flag changes.
- */
-export const visibleMarketSections = () =>
-  MARKET_SECTIONS.filter((s) => s.key !== "coaching" || isFlagOn("coachMarketplace"));
+/** The sections an athlete can actually reach right now. */
+export function visibleMarketSections(): MarketSectionDef[] {
+  return MARKET_SECTIONS.filter((s) => !s.requiresFlag || isFlagOn(s.requiresFlag));
+}

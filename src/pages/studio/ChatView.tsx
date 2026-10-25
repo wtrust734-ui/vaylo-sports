@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, ListPlus, AlertCircle, BrainCircuit } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Send, Loader2, ListPlus, AlertCircle, BrainCircuit, CheckCircle2, CircleDashed } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,16 @@ import {
   type ChatSession,
   type LibraryItem as _Unused,
 } from "./api";
+import {
+  isRunnable,
+  runChatBuild,
+  persistRunResult,
+  type PlanStep,
+  type RunDeliverable,
+  type RunEvent,
+} from "./chatRun";
+
+type Deliverable = Exclude<RunDeliverable, { kind: "failed" }>;
 
 interface Bubble {
   id: string;
@@ -18,6 +28,13 @@ interface Bubble {
   intent: string | null;
   plan: { type: string; options: Record<string, unknown> }[];
   classificationSource?: string;
+  // Live build state — never loaded from history; only the FINAL result is
+  // persisted (as a plain message with refs), progress lines stay local.
+  run?: {
+    status: "running" | "done" | "failed";
+    lines: RunEvent[];
+    deliverable?: Deliverable | null;
+  };
 }
 
 const STEP_LABEL: Record<string, string> = {
@@ -56,6 +73,27 @@ function optionsSummary(o: Record<string, unknown>): string {
   return parts.join(" · ");
 }
 
+function describeDeliverable(d: Deliverable): string {
+  if (d.kind === "video") {
+    return [
+      `Video ad complete — ${d.shotsDone} shot${d.shotsDone === 1 ? "" : "s"} generated${d.researchProjectId ? ", grounded in the research run above" : ""}.`,
+      d.notes.length ? d.notes[0] + ". " : "",
+      d.publicUrl
+        ? "The finished file is playing above and is stored in your private ads library."
+        : "The render stayed queued with the editor; the shots and narration are safe in the Video Ads workspace and the library — ask here again to check on it.",
+    ].filter(Boolean).join(" ");
+  }
+  return [
+    `Image ad complete${d.researchProjectId ? " — grounded in the research run above" : ""}.`,
+    ` Headline: “${d.headline}” · CTA: ${d.cta}.`,
+    d.previewUrl
+      ? " The finished ad is shown above; export it in the Image Ads workspace."
+      : d.notes.length
+        ? " The compose step failed, so the generated background is shown instead — retry compose in the Image Ads workspace."
+        : " The finished ad is in the Image Ads workspace.",
+  ].join("");
+}
+
 export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?: (brief: string) => void }) {
   const [sessions, setSessions] = useState<ChatSession[] | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -64,6 +102,7 @@ export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [runningIndex, setRunningIndex] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // A send response already carries the assistant reply locally; loading the
   // stored history right after arriving would replace those local bubbles
@@ -112,11 +151,16 @@ export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?
     // scrollIntoView exists in every browser but not under jsdom — guard it.
     const el = bottomRef.current;
     if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles.length, sending]);
+  }, [bubbles.length, sending, runningIndex]);
+
+  const patchBubble = useCallback((index: number, patch: (b: Bubble) => Bubble) => {
+    setBubbles((bs) => bs.map((b, i) => (i === index ? patch(b) : b)));
+  }, []);
 
   const submit = async () => {
     const content = input.trim();
     if (!content || sending) return; // duplicate-submission guard
+    if (runningIndex !== null) return; // one build at a time
     setSending(true);
     setError(null);
     setInput("");
@@ -150,6 +194,64 @@ export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?
     setSessionId(null);
     setBubbles([]);
     setError(null);
+  };
+
+  // ------------------------------------------------------------------ build
+  const startBuild = async (index: number, brief: string) => {
+    const bubble = bubbles[index];
+    if (!bubble || runningIndex !== null || !isRunnable(bubble.plan)) return;
+    setRunningIndex(index);
+    setError(null);
+    patchBubble(index, (b) => ({ ...b, run: { status: "running", lines: [{ level: "start", text: "Build started — everything now runs automatically, live updates below" }] } }));
+
+    const push = (event: RunEvent) => {
+      // Keep the timeline bounded so long shot polls do not flood the thread.
+      patchBubble(index, (b) => {
+        const lines = [...(b.run?.lines ?? []), event];
+        const trimmed = lines.length > 60 ? lines.slice(lines.length - 60) : lines;
+        return { ...b, run: { status: b.run?.status ?? "running", lines: trimmed, deliverable: b.run?.deliverable ?? null } };
+      });
+    };
+
+    try {
+      const outcome = await runChatBuild({ brief, steps: bubble.plan }, push);
+      if (outcome.kind === "failed") {
+        push({ level: "error", text: `Build stopped: ${outcome.reason}` });
+      }
+      if (sessionId) {
+        const intent = bubble.intent ?? outcome.kind;
+        const content =
+          outcome.kind === "failed" ? `Build finished with a stop: ${outcome.reason}` : describeDeliverable(outcome);
+        try {
+          await persistRunResult(sessionId, intent, content, {
+            steps: bubble.plan,
+            primary: intent,
+            run: {
+              brief,
+              deliverable: outcome.kind === "failed" ? null : { kind: outcome.kind, publicUrl: outcome.kind === "video" ? outcome.publicUrl : outcome.previewUrl },
+            },
+          });
+        } catch {
+          // The message still shows in the live thread; a persistence failure is
+          // surfaced as a small error without losing the deliverable.
+          setError("The build result could not be saved to the conversation history.");
+        }
+      }
+      patchBubble(index, (b) => ({
+        ...b,
+        run: {
+          status: outcome.kind === "failed" ? "failed" : "done",
+          lines: b.run?.lines ?? [],
+          deliverable: outcome.kind === "failed" ? null : outcome,
+        },
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "The build failed.";
+      push({ level: "error", text: msg });
+      patchBubble(index, (b) => ({ ...b, run: { status: "failed", lines: b.run?.lines ?? [], deliverable: null } }));
+    } finally {
+      setRunningIndex(null);
+    }
   };
 
   return (
@@ -186,58 +288,123 @@ export default function ChatView({ onOpenVideoWorkflow }: { onOpenVideoWorkflow?
           )}
           {!loadingHistory && bubbles.length === 0 && (
             <div className="flex h-40 items-center justify-center text-sm text-white/40">
-              Describe what you want — “Make a 15-second video ad for launch”.
+              Describe what you want — "Make a 15-second video ad for launch".
             </div>
           )}
           <div className="space-y-3">
-            {bubbles.map((b, i) => (
-              <div key={`${b.id}-${i}`} className={b.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                    b.role === "user" ? "bg-[#8505D5]/80 text-white" : "bg-white/10 text-white"
-                  }`}
-                >
-                  {b.role === "assistant" && b.intent && (
-                    <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px]">
-                      <Badge variant="outline" className="border-white/20 text-white/80">
-                        <BrainCircuit className="mr-1 h-3 w-3" />
-                        {STEP_LABEL[b.intent] ?? b.intent}
-                      </Badge>
-                      {b.classificationSource && (
-                        <span className="text-white/40">via {b.classificationSource === "model" ? "model" : "rules"}</span>
-                      )}
-                    </div>
-                  )}
-                  <p className="whitespace-pre-wrap">{b.content}</p>
-                  {b.plan.length > 0 && (
-                    <ol className="mt-2 space-y-1 border-t border-white/10 pt-2 text-xs text-white/70">
-                      {b.plan.map((s, si) => (
-                        <li key={si} className="flex items-center gap-2">
-                          <span className="rounded bg-white/10 px-1.5 py-0.5">planned</span>
-                          <span>{STEP_LABEL[s.type] ?? s.type}</span>
-                          {optionsSummary(s.options) && <span className="text-white/50">({optionsSummary(s.options)})</span>}
-                        </li>
-                      ))}
-                      {b.plan.some((s) => s.type === "video_ad") && onOpenVideoWorkflow && (
-                        <li>
-                          <button
-                            type="button"
-                            className="mt-1 rounded-lg bg-[#8505D5] px-2 py-1 text-[11px] text-white disabled:opacity-40"
-                            disabled={!userBriefBefore(bubbles, i)}
-                            onClick={() => {
-                              const brief = userBriefBefore(bubbles, i);
-                              if (brief) onOpenVideoWorkflow(brief);
-                            }}
+            {bubbles.map((b, i) => {
+              const runnable = isRunnable(b.plan);
+              return (
+                <div key={`${b.id}-${i}`} className={b.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
+                      b.role === "user" ? "bg-[#8505D5]/80 text-white" : "bg-white/10 text-white"
+                    }`}
+                  >
+                    {b.role === "assistant" && b.intent && (
+                      <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px]">
+                        <Badge variant="outline" className="border-white/20 text-white/80">
+                          <BrainCircuit className="mr-1 h-3 w-3" />
+                          {STEP_LABEL[b.intent] ?? b.intent}
+                        </Badge>
+                        {b.classificationSource && (
+                          <span className="text-white/40">via {b.classificationSource === "model" ? "model" : "rules"}</span>
+                        )}
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap">{b.content}</p>
+
+                    {/* ---- finished deliverable ---- */}
+                    {b.run?.status === "done" && b.run.deliverable?.kind === "video" && b.run.deliverable.publicUrl && (
+                      <video data-testid="chat-delivered-video" className="mt-2 w-full rounded-lg border border-white/10" controls src={b.run.deliverable.publicUrl} />
+                    )}
+                    {b.run?.status === "done" && b.run.deliverable?.kind === "image" && b.run.deliverable.previewUrl && (
+                      <img
+                        className="mt-2 w-full rounded-lg border border-white/10"
+                        src={b.run.deliverable.previewUrl}
+                        alt={b.run.deliverable.headline}
+                      />
+                    )}
+
+                    {/* ---- plan ---- */}
+                    {b.plan.length > 0 && (
+                      <ol className="mt-2 space-y-1 border-t border-white/10 pt-2 text-xs text-white/70">
+                        {b.plan.map((s, si) => (
+                          <li key={si} className="flex items-center gap-2">
+                            <span className="rounded bg-white/10 px-1.5 py-0.5">planned</span>
+                            <span>{STEP_LABEL[s.type] ?? s.type}</span>
+                            {optionsSummary(s.options) && <span className="text-white/50">({optionsSummary(s.options)})</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
+                    {/* ---- one-time approval card ---- */}
+                    {runnable && !b.run && i === bubbles.length - 1 && (
+                      <div className="mt-2 rounded-lg border border-white/10 bg-black/30 p-2 text-xs">
+                        <p className="text-white/70">Press Run and I'll build it end to end, posting live updates while I work:</p>
+                        <button
+                          type="button"
+                          disabled={runningIndex !== null || !userBriefBefore(bubbles, i)}
+                          className="mt-2 rounded-lg bg-[#8505D5] px-2.5 py-1 text-[11px] text-white disabled:opacity-40"
+                          onClick={() => {
+                            const brief = userBriefBefore(bubbles, i);
+                            if (brief) void startBuild(i, brief);
+                          }}
+                        >
+                          {runningIndex === null ? "Run it →" : "A build is running…"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ---- live build timeline ---- */}
+                    {b.run && (
+                      <div className="mt-2 space-y-1 rounded-lg border border-white/10 bg-black/30 p-2 text-xs">
+                        <div className="flex items-center gap-1.5 text-white/80">
+                          {b.run.status === "running" ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : b.run.status === "done" ? (
+                            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <CircleDashed className="h-3 w-3 text-amber-400" />
+                          )}
+                          {b.run.status === "running" ? "Building…" : b.run.status === "done" ? "Build complete" : "Build stopped early"}
+                        </div>
+                        {b.run.lines.map((line, li) => (
+                          <p
+                            key={li}
+                            className={`whitespace-pre-wrap ${
+                              line.level === "error" ? "text-red-300" : line.level === "done" ? "text-emerald-300/90" : "text-white/60"
+                            }`}
                           >
-                            Continue in Video Ads →
-                          </button>
-                        </li>
-                      )}
-                    </ol>
-                  )}
+                            {line.level === "error" ? "✕ " : line.level === "done" ? "✓ " : line.level === "start" ? "→ " : "· "}
+                            {line.text}
+                          </p>
+                        ))}
+                        {b.run.status === "done" && b.run.deliverable && (
+                          <p className="whitespace-pre-wrap text-white/80">{describeDeliverable(b.run.deliverable)}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ---- manual hand-off stays available ---- */}
+                    {b.plan.some((s) => s.type === "video_ad") && !b.run && onOpenVideoWorkflow && i === bubbles.length - 1 && (
+                      <button
+                        type="button"
+                        className="mt-1 text-[11px] text-white/50 underline hover:text-white"
+                        disabled={runningIndex !== null || !userBriefBefore(bubbles, i)}
+                        onClick={() => {
+                          const brief = userBriefBefore(bubbles, i);
+                          if (brief) onOpenVideoWorkflow(brief);
+                        }}
+                      >
+                        Open in the Video Ads workspace instead →
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {sending && (
               <div className="flex items-center gap-2 text-xs text-white/50">
                 <Loader2 className="h-3 w-3 animate-spin" /> Routing your request…

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { create } from "zustand";
 import { SUBSCRIPTION_PLANS, formatPence, PERIOD_LABEL } from "@/config/subscriptionPlans";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import TrialButton from "@/components/ads/TrialButton";
 
 // PHASE 2: the paywall offers the two real plans (Credit / Unlimited) plus
@@ -27,6 +28,7 @@ const ICONS = { credit: Repeat, unlimited: InfinityIcon } as const;
 export default function PaywallModal() {
   const { open, feature, hide } = usePaywall();
   const navigate = useNavigate();
+  const currency = useDisplayCurrency();
 
   return (
     <AnimatePresence>
@@ -77,7 +79,7 @@ export default function PaywallModal() {
                       <p className="text-xs text-muted-foreground">{plan.tagline}</p>
                     </div>
                     <span className="text-xs font-semibold shrink-0">
-                      {formatPence(monthly.price_pence)}
+                      {formatPence(monthly.price_pence, currency)}
                       <span className="text-muted-foreground font-normal">/{PERIOD_LABEL.month.toLowerCase().slice(0, 2)}</span>
                     </span>
                   </button>

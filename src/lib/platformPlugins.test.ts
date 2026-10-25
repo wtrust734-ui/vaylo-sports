@@ -87,6 +87,7 @@ const PLUGIN_HEADERS = [
       "checkPermissionsStatus",
       "requestPermissionsStatus",
       "openHealthConnectSettings",
+      "disconnect",
       "syncPull",
     ],
   },

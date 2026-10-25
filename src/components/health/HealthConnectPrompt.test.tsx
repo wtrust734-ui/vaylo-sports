@@ -64,6 +64,7 @@ function hookState(overrides: Partial<UseHealthConnect> = {}): UseHealthConnect 
     disconnecting: false,
     deleteImported: vi.fn().mockResolvedValue(true),
     deleting: false,
+    hasImported: false,
     managePermissions: vi.fn().mockResolvedValue(undefined),
     clearError: vi.fn(),
     ...overrides,
@@ -237,6 +238,55 @@ describe("once connected", () => {
     await act(async () => {});
 
     expect(state.deleteImported).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});
+
+describe("after disconnecting", () => {
+  it("confirms it, stops offering Disconnect and offers Connect again", async () => {
+    // The reported loop: the confirmation was approved, the revoke ran, and the
+    // sheet STILL offered Disconnect. Whatever the resolver's next answer is,
+    // the sheet must never keep the old action on screen after a successful
+    // disconnect — so this drives the whole transition through a re-render.
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const state = hookState({ status: "connected", hasImported: true });
+    const hook = useHealthConnect as unknown as ReturnType<typeof vi.fn>;
+    hook.mockReturnValue(state);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <HealthConnectPrompt open onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect Health Connect" }));
+    });
+    expect(state.disconnect).toHaveBeenCalledTimes(1);
+
+    // The hook has re-resolved by now: same sheet instance, new status.
+    hook.mockReturnValue({ ...state, status: "not_connected" });
+    rerender(
+      <MemoryRouter>
+        <HealthConnectPrompt open onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/Vaylo has withdrawn its Health Connect permissions/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Disconnect/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: HEALTH_CONNECT_CTA })).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("keeps Delete imported data reachable, because disconnecting does not erase it", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const state = hookState({ status: "not_connected", hasImported: true });
+    renderPrompt(state);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete imported data" }));
+    });
+    expect(state.deleteImported).toHaveBeenCalledTimes(1);
     confirmSpy.mockRestore();
   });
 });

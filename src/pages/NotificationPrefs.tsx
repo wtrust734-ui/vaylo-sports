@@ -6,7 +6,9 @@ import { motion } from "framer-motion";
 import { Bell, BellOff, CheckCircle2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { pushAvailability, registerPush } from "@/lib/push";
-import { deviceNotificationsSupported, enableDeviceNotifications, showDeviceNotification } from "@/lib/localNotifications";
+import { deviceNotificationsEnabled, deviceNotificationsSupported, enableDeviceNotifications } from "@/lib/localNotifications";
+import { scheduleMorningReminders, scheduleReengagementPing, scheduleStreakReminder, type PlanLike, type TriggerPrefs } from "@/lib/notificationTriggers";
+import { getCurrentStreak } from "@/lib/recoveryStreak";
 
 const KEYS: { key: string; label: string; desc: string }[] = [
   { key: "workout_reminders", label: "Workout reminders", desc: "Daily nudges to keep you on plan." },
@@ -74,6 +76,52 @@ export default function NotificationPrefs() {
       setLoading(false);
     })();
   }, [user]);
+
+  // Permission already granted is the durable "notifications are on" fact. It
+  // lives in the OS, not in this component, so reopening settings must read it
+  // rather than defaulting to "off" and asking the athlete to turn it on again.
+  useEffect(() => {
+    let cancelled = false;
+    void deviceNotificationsEnabled().then((enabled) => {
+      if (!cancelled) setLocalOn(enabled);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  /**
+   * Apply the settings that own OS-scheduled notifications immediately.
+   *
+   * The database row is the source of truth for every trigger, but the morning
+   * briefings and the next streak reminder are timers already handed to the OS.
+   * Saving a switch without rewriting those timers would leave yesterday's
+   * schedule running under today's setting — the athlete changes a toggle and
+   * nothing changes until the next app open. This is the "genuinely applies"
+   * half of the screen.
+   */
+  const applyDeviceSchedule = async (nextPrefs: TriggerPrefs) => {
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from("training_plans")
+        .select("id, title, sport, week_current, duration_weeks, plan_data")
+        .eq("user_id", user.id)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      const plan = (data as PlanLike) ?? null;
+      await scheduleMorningReminders(plan, nextPrefs, new Date(), true);
+      const streak = getCurrentStreak();
+      await scheduleStreakReminder(streak.current, streak.checkInToday, nextPrefs);
+      await scheduleReengagementPing(user.id, null);
+    } catch {
+      // The preferences are already saved; the next app open retries the timers.
+    }
+  };
+
+  const quietPrefs = (next: { start: string; end: string }): Pick<TriggerPrefs, "quiet_start" | "quiet_end"> => ({
+    quiet_start: next.start ? `${next.start}:00` : null,
+    quiet_end: next.end ? `${next.end}:00` : null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -158,22 +206,46 @@ export default function NotificationPrefs() {
 
   const toggle = async (key: string, value: boolean) => {
     if (!user) return;
+    const previous = prefs;
     const next = { ...prefs, [key]: value };
     setPrefs(next);
     const { error } = await supabase.from("notification_prefs").upsert({ user_id: user.id, ...next }, { onConflict: "user_id" });
-    if (error) toast.error(error.message); else toast.success("Saved");
+    if (error) {
+      // Put the switch back where it was: leaving it on a value the server did
+      // not save is the exact "it says on but nothing changed" failure.
+      setPrefs(previous);
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Saved");
+    await applyDeviceSchedule({ ...next, ...quietPrefs(quiet) });
   };
 
   const saveQuiet = async (next: { start: string; end: string }) => {
     if (!user) return;
+    const previous = quiet;
     setQuiet(next);
-    if (!next.start || !next.end) return;
+    // One missing end is not a no-op: an open-ended window is not a window, so
+    // it clears the stored quiet hours instead of leaving the old values running
+    // under an empty-looking form.
+    const clearing = !next.start || !next.end;
+    const quietValues = clearing
+      ? { quiet_start: null, quiet_end: null }
+      : quietPrefs(next);
     const { error } = await supabase.from("notification_prefs").upsert(
-      { user_id: user.id, quiet_start: `${next.start}:00`, quiet_end: `${next.end}:00` },
+      { user_id: user.id, quiet_start: quietValues.quiet_start, quiet_end: quietValues.quiet_end },
       { onConflict: "user_id" },
     );
-    if (error) toast.error(error.message); else toast.success("Quiet hours saved");
+    if (error) {
+      setQuiet(previous);
+      toast.error(error.message);
+      return;
+    }
+    toast.success(clearing ? "Quiet hours cleared" : "Quiet hours saved");
+    await applyDeviceSchedule({ ...prefs, ...quietValues });
   };
+
+  const clearQuiet = () => saveQuiet({ start: "", end: "" });
 
   return (
     <div className="px-5 pt-[var(--vaylo-screen-top)] pb-24 max-w-2xl mx-auto">
@@ -210,7 +282,7 @@ export default function NotificationPrefs() {
               {push.kind === "unsupported" &&
                 "Push delivery is only available in the Vaylo app on Android. In a browser these switches still control your in-app notifications."}
             </div>
-            {(push.kind === "ready") && (
+            {push.kind === "ready" && !localOn && (
               <button
                 onClick={enablePush}
                 disabled={registering}
@@ -233,32 +305,6 @@ export default function NotificationPrefs() {
             )}
             {localOn && (
               <p className="mt-2 text-xs font-semibold text-success">Reminders are on for this device.</p>
-            )}
-            {/* Immediate proof the shade path works, without waiting for 07:00.
-                Posts the same way the morning briefing does (same channel,
-                same permission), so a test that arrives means 07:10 arrives. */}
-            {deviceNotificationsSupported() && (
-              <button
-                onClick={async () => {
-                  setRegistering(true);
-                  try {
-                    const outcome = await showDeviceNotification({
-                      title: "Test from Vaylo ✅",
-                      body: "If you can read this, notifications reach this phone. The morning briefing arrives at 07:10.",
-                      link: "/training",
-                    });
-                    if (outcome === "shown") toast.success("Test sent — check your notification shade");
-                    else if (outcome === "denied") toast.error("Notifications are blocked for Vaylo in your device settings.");
-                    else if (outcome !== "unsupported") toast.error("Could not send the test. Try again later.");
-                  } finally {
-                    setRegistering(false);
-                  }
-                }}
-                disabled={registering}
-                className="mt-3 text-sm font-semibold text-electric-purple underline disabled:opacity-50"
-              >
-                {registering ? "Sending…" : "Send a test notification now"}
-              </button>
             )}
           </div>
         </div>
@@ -295,7 +341,7 @@ export default function NotificationPrefs() {
                 className="bg-muted border border-border rounded-lg px-3 py-2 text-sm" />
               {quiet.start && quiet.end && (
                 <button
-                  onClick={() => { setQuiet({ start: "", end: "" }); if (user) void supabase.from("notification_prefs").upsert({ user_id: user.id, quiet_start: null, quiet_end: null }, { onConflict: "user_id" }); }}
+                  onClick={clearQuiet}
                   className="ml-auto text-xs text-muted-foreground underline"
                 >
                   Clear

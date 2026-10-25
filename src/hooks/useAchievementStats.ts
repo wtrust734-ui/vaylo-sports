@@ -36,7 +36,7 @@ export function useAchievementStats() {
 
   const fetchAll = async () => {
     if (!user) return;
-    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes, streakRes] = await Promise.all([
+    const [achRes, chRes, purchRes, workRes, recRes, eventRes, rivalRes, planRes, friendRes, mealRes, waterRes, coachRes, mentalRes, cueRes, reviewRes, hrvRes, streakRes, nutRes, partRes] = await Promise.all([
       supabase.from("achievements").select("*").eq("user_id", user.id),
       supabase.from("challenges").select("*").order("created_at", { ascending: false }),
       supabase.from("user_purchases").select("product_id").eq("user_id", user.id),
@@ -58,6 +58,12 @@ export function useAchievementStats() {
       // never from a client-side guess. Without this the streak medals could
       // never fire: the old code passed a hardcoded 0.
       supabase.from("streaks" as never).select("current_streak").eq("user_id", user.id).maybeSingle() as never,
+      // Two counters the catalogue reads but never loaded, so the rules that
+      // depend on them ("Diet Planner", "Challenger", "Two Challenges"…) could
+      // never fire — a trophy on a rule nobody can complete. Both are plain
+      // counts of the athlete's own rows.
+      supabase.from("nutrition_plans").select("id", { count: "exact" }).eq("user_id", user.id),
+      supabase.from("challenge_participants").select("id", { count: "exact" }).eq("user_id", user.id).eq("status", "completed"),
     ]);
 
     setEarnedAchievements(achRes.data || []);
@@ -90,8 +96,8 @@ export function useAchievementStats() {
       firstPlace,
       podium,
       rivalBeats: 0,
-      nutritionPlans: 0,
-      completedChallenges: 0,
+      nutritionPlans: nutRes.count || 0,
+      completedChallenges: partRes.count || 0,
       createdChallenges,
       // Server streak: qualifying days (training, recovery, learning, weekly
       // goal, scheduled rest) computed by the backend; 0 when no streak row.

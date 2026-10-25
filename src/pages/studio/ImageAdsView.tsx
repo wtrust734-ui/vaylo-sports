@@ -35,6 +35,28 @@ import { listResearchProjects } from "./researchApi";
 
 const CARD = "bg-white/5 border border-white/10";
 const ACCENT = "bg-[#8505D5] text-white";
+// The open project survives a refresh: generating a background is the slow,
+// paid step, and losing the workspace on reload stranded the ad in storage with
+// no way back to it from this view.
+const PROJECT_KEY = "vaylo.ads.imageProject.v1";
+
+function readStoredProject(): string | null {
+  try {
+    const id = localStorage.getItem(PROJECT_KEY);
+    return id && id.length === 36 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeProject(id: string | null) {
+  try {
+    if (id) localStorage.setItem(PROJECT_KEY, id);
+    else localStorage.removeItem(PROJECT_KEY);
+  } catch {
+    /* storage disabled — the session simply starts fresh */
+  }
+}
 const SURFACE = "bg-white/5 border border-white/10";
 
 const PLACEMENT_LABELS: { id: string; label: string }[] = [
@@ -289,11 +311,50 @@ function ArtifactCard({
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4: finished ads
+// ---------------------------------------------------------------------------
+
+// The composed artifact is the thing the athlete actually ships, so it gets its
+// own card. Without this the flow ended on "composed" with only the raw
+// background on screen — the finished file existed in the library but could not
+// be seen or downloaded from the workspace.
+function FinishedAdCard({
+  artifact,
+  onExport,
+}: {
+  artifact: ArtifactView;
+  onExport: (a: ArtifactView) => void;
+}) {
+  return (
+    <Card className={CARD}>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">composed</Badge>
+            <Badge variant="outline" className="border-white/10 text-[10px] text-white/50">{artifact.placementId}</Badge>
+            <span className="text-white/40">{artifact.width}×{artifact.height}</span>
+          </div>
+          {artifact.bytes ? <span className="text-white/40">{Math.round(artifact.bytes / 1024)} KiB</span> : null}
+        </div>
+        {artifact.downloadUrl ? (
+          <img src={artifact.downloadUrl} alt={`Finished ad ${artifact.placementId}`} className="w-full rounded-lg border border-white/10" />
+        ) : (
+          <p className="text-xs text-white/50">Preparing the preview…</p>
+        )}
+        <button onClick={() => onExport(artifact)} className={`rounded-lg px-3 py-1.5 text-xs ${ACCENT}`}>
+          <Download className="mr-1 inline h-3.5 w-3.5" /> Download ad
+        </button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The workspace
 // ---------------------------------------------------------------------------
 
 export default function ImageAdsView({ onOpenChat }: { onOpenChat: () => void }) {
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(readStoredProject);
   const [status, setStatus] = useState<Awaited<ReturnType<typeof imageProjectStatus>> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -330,7 +391,7 @@ export default function ImageAdsView({ onOpenChat }: { onOpenChat: () => void })
   if (!projectId) {
     return (
       <div className="mx-auto max-w-3xl">
-        <BriefForm onCreated={(id) => { setProjectId(id); generateConcepts(id, 3).catch(() => {}); }} />
+        <BriefForm onCreated={(id) => { storeProject(id); setProjectId(id); generateConcepts(id, 3).catch(() => {}); }} />
       </div>
     );
   }
@@ -354,9 +415,14 @@ export default function ImageAdsView({ onOpenChat }: { onOpenChat: () => void })
               {selected ? ` · concept #${selected.concept_number} selected` : ""}
             </p>
           </div>
-          <button onClick={() => act("concepts", async () => { await generateConcepts(projectId, 3); await refresh(projectId); }, projectId)} disabled={busy !== null} className={`rounded-lg px-3 py-1.5 text-xs ${ACCENT} disabled:opacity-40`}>
-            {busy === "concepts" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 inline h-3.5 w-3.5" />} New concepts
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => act("concepts", async () => { await generateConcepts(projectId, 3); await refresh(projectId); }, projectId)} disabled={busy !== null} className={`rounded-lg px-3 py-1.5 text-xs ${ACCENT} disabled:opacity-40`}>
+              {busy === "concepts" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 inline h-3.5 w-3.5" />} New concepts
+            </button>
+            <button onClick={() => { storeProject(null); setStatus(null); setProjectId(null); setError(null); }} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white/80 hover:bg-white/20">
+              New ad
+            </button>
+          </div>
         </CardContent>
       </Card>
 
@@ -450,7 +516,22 @@ export default function ImageAdsView({ onOpenChat }: { onOpenChat: () => void })
       </div>
 
       {composed.length > 0 && (
-        <p className="text-xs text-white/50">Finished ads are composed to the exact placement size — the same background recomposed per format, never stretched.</p>
+        <div className="space-y-2">
+          <h3 className="flex items-center gap-2 text-sm text-white/70"><CheckCircle2 className="h-4 w-4" /> Finished ads</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {composed.map((a) => (
+              <FinishedAdCard key={a.id} artifact={a} onExport={async (art) => {
+                try {
+                  const out = await exportAd(art.id);
+                  if (out.downloadUrl) window.open(out.downloadUrl, "_blank");
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Export failed");
+                }
+              }} />
+            ))}
+          </div>
+          <p className="text-xs text-white/50">Finished ads are composed to the exact placement size — the same background recomposed per format, never stretched.</p>
+        </div>
       )}
 
       <div>

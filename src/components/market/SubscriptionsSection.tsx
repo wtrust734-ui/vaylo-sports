@@ -25,7 +25,7 @@ const META: Record<string, { icon: typeof Repeat; recommended?: boolean; designe
 };
 
 /** Subscriptions only. Lifetime options for these plans live in the Lifetime section. */
-export default function SubscriptionsSection() {
+export default function SubscriptionsSection({ currency = "GBP" }: { currency?: string }) {
   const navigate = useNavigate();
 
   const renderPlan = (plan: PlanDefinition, i: number) => {
@@ -76,7 +76,7 @@ export default function SubscriptionsSection() {
                 <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   {PERIOD_LABEL[opt.period]}
                 </p>
-                <p className="font-display text-xl font-bold text-foreground">{formatPence(opt.price_pence)}</p>
+                <p className="font-display text-xl font-bold text-foreground">{formatPence(opt.price_pence, currency)}</p>
                 <p className="text-[12px] text-muted-foreground">
                   {opt.period === "month" ? "billed monthly" : "billed yearly"}
                 </p>

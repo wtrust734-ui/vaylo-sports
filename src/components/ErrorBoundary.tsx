@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportError } from "@/lib/errorReporting";
+import { isNativeShell } from "@/lib/platform";
 
 interface Props {
   children: ReactNode;
@@ -38,6 +39,21 @@ class ErrorBoundary extends Component<Props, State> {
 
   private reset = () => this.setState({ error: null });
 
+  /**
+   * Leave the screen that failed, rather than reloading the whole app.
+   *
+   * A render error is usually local to one tab (a bad row, a chart library).
+   * `window.location.reload()` used to re-mount the same broken tab and throw
+   * the athlete straight back here — the button looked like an escape and was
+   * actually a loop. Going home is a real exit: the app re-mounts at a screen
+   * that works, with the session intact. HashRouter needs the `/#/` form in
+   * the native shell; BrowserRouter serves `/` on the web.
+   */
+  private exitTab = () => {
+    const home = isNativeShell() ? "/#/" : "/";
+    window.location.assign(home);
+  };
+
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
@@ -62,10 +78,10 @@ class ErrorBoundary extends Component<Props, State> {
             </button>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={this.exitTab}
               className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground hover:border-primary/40 transition-colors"
             >
-              Reload
+              Exit the tab
             </button>
           </div>
         </div>

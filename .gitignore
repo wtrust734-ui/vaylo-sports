@@ -114,3 +114,11 @@ supabase/functions/.bundles/
 # CI tees the Gradle output here to surface failures in the step summary
 # (job logs need a GitHub sign-in). Never produced by a local build.
 android/gradle-build.log
+
+# Local portable JDK used for Android builds (not committed)
+.jdk21/
+.jdk21.zip
+.apk-build.log
+
+# Local Android build toolchain (a JDK that matches this Gradle version)
+.toolchain/

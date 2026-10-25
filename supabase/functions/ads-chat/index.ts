@@ -172,7 +172,7 @@ function fallbackReply(c: Classification): string {
     return "Ads Studio helps you plan campaigns, research competitors and produce image and video advertising with the Vaylo brand settings. Describe what you want and I'll route it to the right workflow.";
   }
   const done = c.steps.map((s) => describeStep(s)).join(" → ");
-  return `Understood. Planned route: ${done}. Nothing has been generated yet — the specialist workflow will quote costs and wait for your approval before spending anything.`;
+  return `Understood. Planned route: ${done}. Nothing has been generated yet — press Run here, or open the specialist workflow, and it will build it end to end.`;
 }
 
 function describeStep(s: PlanStep): string {
@@ -305,7 +305,7 @@ Deno.serve(async (req) => {
         .single();
       if (!queuedErr && queued) {
         reply = `Research project queued (id ${queued.id.slice(0, 8)}…) — the Research workspace runs it against accessible sources (official pages, press, manual ingest). Meta/TikTok/Google ad-library APIs remain documented blockers until their owner approvals exist, and that limitation is disclosed in results, not hidden.${
-          hasCreation ? " Order is preserved: research completes and is stored before any concept generation; nothing spends without your approval." : ""
+          hasCreation ? " Order is preserved: research completes and is stored before any concept generation." : ""
         }`;
       }
     } else if (hasCreation) {

@@ -51,13 +51,22 @@ async function chatJson(system: string, user: string, maxTokens: number, timeout
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        temperature: 0.7,
+        // No temperature: the GPT-6 chat class accepts only its default (1) and
+        // rejects any other value. `max_completion_tokens` is likewise the only
+        // token-limit parameter it accepts. Both were 400s, so the request never
+        // reached the model and every concept build stopped as "unusable result".
         response_format: { type: "json_object" },
-        max_tokens: maxTokens,
+        max_completion_tokens: maxTokens,
       }),
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // The status and the provider's own message, so a failed concept call is
+      // diagnosable from the function log instead of a bare "unusable result".
+      // Never includes the request body or the key.
+      console.error(`[imageRun] concept chat HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 600)}`);
+      return null;
+    }
     const payload = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const raw = payload.choices?.[0]?.message?.content ?? "";
     const parsed = JSON.parse(raw) as unknown;

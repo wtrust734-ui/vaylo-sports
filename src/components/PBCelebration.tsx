@@ -18,7 +18,7 @@ import { formatRaceTime, TIER_META } from "@/lib/eventTrophies";
 // distance event, and this component is only mounted when there is something
 // to celebrate.
 //
-// Fired from the log-save flow in Training.tsx via `triggerPbCelebration`.
+// Fired from the log-save flow in Workouts.tsx via `triggerPbCelebration`.
 // ============================================================================
 
 export interface PbCelebrationTrophy {

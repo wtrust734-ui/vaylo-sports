@@ -86,6 +86,9 @@ import {
 export { fetchPage, retrieveScope, modelJson, coerceAnalysis, ANALYSIS_SYSTEM, OPPORTUNITY_SYSTEM } from "../_shared/researchRun.ts";
 
 async function handler(req: Request): Promise<Response> {
+  // CORS preflight. A 405 here stops the browser before the POST is sent, so
+  // every Competitor Research action failed at the network layer.
+  if (req.method === "OPTIONS") return corsOnly();
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const userId = await authenticate(req);
   if (!userId) return json({ error: "Unauthorized" }, 401);

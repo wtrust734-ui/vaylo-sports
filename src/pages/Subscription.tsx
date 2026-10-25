@@ -12,6 +12,7 @@ import {
   FAIR_USAGE_POLICY,
 } from "@/config/subscriptionPlans";
 import { useToast } from "@/hooks/use-toast";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
 
 const PLAN_ICON = { credit: Coins, unlimited: InfinityIcon } as const;
@@ -19,6 +20,7 @@ const PLAN_ICON = { credit: Coins, unlimited: InfinityIcon } as const;
 function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
   const { entitlements, isActive } = useSubscription();
   const { toast } = useToast();
+  const currency = useDisplayCurrency();
   const Icon = PLAN_ICON[plan.plan_key as "credit" | "unlimited"] ?? Coins;
   const isCurrent = isActive && entitlements.plan_key === plan.plan_key;
 
@@ -64,7 +66,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
             onClick={() =>
               toast({
                 title: "Checkout coming soon",
-                description: `${plan.name} · ${PERIOD_LABEL[o.period]} (${formatPence(o.price_pence)}) will be purchasable once billing is connected.`,
+                description: `${plan.name} · ${PERIOD_LABEL[o.period]} (${formatPence(o.price_pence, currency)}) will be purchasable once billing is connected.`,
               })
             }
             className={`w-full text-start rounded-2xl border px-4 py-3 flex items-center justify-between transition-colors ${
@@ -86,7 +88,7 @@ function PlanCard({ plan, index }: { plan: PlanDefinition; index: number }) {
             </span>
             <span className="text-right">
               <span className="text-base font-bold block leading-tight">
-                {formatPence(o.price_pence)}
+                {formatPence(o.price_pence, currency)}
               </span>
               <span className="text-[12px] text-muted-foreground">
                 {PERIOD_SUFFIX[o.period]}

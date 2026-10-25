@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { ChevronRight, Lock, type LucideIcon } from "lucide-react";
-import { useSubscription } from "@/contexts/SubscriptionContext";
-import { visibleByEntitlement } from "@/lib/personalization/nav";
+import { PageHeader } from "./PageShell";
 
 export interface HubLink {
   icon: LucideIcon;
@@ -12,26 +11,33 @@ export interface HubLink {
   description: string;
   path: string;
   /**
-   * True when the destination is a purchased unlock the athlete does not own
-   * yet (Mental Gym, Injury Management). A tile for a route in ROUTE_UNLOCKS is
-   * DROPPED from the hub until the unlock is owned — see HubGroup — so this flag
-   * is now only a belt-and-braces badge for a paid tile that no map knows about
-   * yet. Icon only, so no new strings are needed in any locale.
+   * True when this tile is still a purchase (Mental Gym, Injury Management etc.)
+   * and the athlete has not yet bought it. The tile is shown but marked with a
+   * lock so the athlete understands it is not yet fully open. With the credit
+   * system removed, every feature is free, so `locked` is now simply a visual
+   * hint for anything that still requires a purchase.
    */
   locked?: boolean;
 }
 
 export const HubHeader = ({ title, subtitle, icon: Icon }: { title: string; subtitle: string; icon: LucideIcon }) => {
   const { t } = useTranslation();
+  // The hub used to draw a fourth kind of page header: a bordered brand pill,
+  // a 30px title, a 32ch measure and 24px of trailing space. Every list screen
+  // drew the shared one — 11px eyebrow, 24px title, 20px trailing space — so
+  // leaving a hub for its own content moved the title down 3px, shrank it by a
+  // quarter and shifted the column. A hub is a screen like any other; it uses
+  // the same header as everything else.
   return (
-  <header className="px-5 pt-[var(--vaylo-screen-top)] pb-6">
-    <div className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur px-3 py-1">
-      <Icon size={12} className="text-primary" aria-hidden />
-      <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-primary">{t("hub.brand")}</span>
+    <div className="pt-[var(--vaylo-screen-top)]">
+      <PageHeader
+        className="px-5"
+        eyebrow={t("hub.brand")}
+        icon={Icon}
+        title={title}
+        subtitle={subtitle}
+      />
     </div>
-    <h1 className="mt-3 text-[30px] font-display font-bold tracking-tight leading-none">{title}</h1>
-    <p className="mt-2 text-sm leading-relaxed text-muted-foreground max-w-[32ch]">{subtitle}</p>
-  </header>
   );
 };
 
@@ -78,12 +84,11 @@ export const HubTile = ({ icon: Icon, label, description, path, locked }: HubLin
 };
 
 export const HubGroup = ({ title, links }: { title: string; links: HubLink[] }) => {
-  // Hiding, not badging. A hub is a menu, and a menu row whose only outcome is
-  // a paywall is an advert. The Market sells these; the hub lists what the
-  // athlete can actually open. `hasFeature` is true for a purchased unlock and
-  // for Unlimited, and false while entitlements load, so nothing flashes in.
-  const { hasFeature } = useSubscription();
-  const visible = visibleByEntitlement(links, hasFeature);
+  // With the credit system removed, nothing is gated by entitlement anymore.
+  // Every route in the hub is always visible; `locked` is purely cosmetic,
+  // meaning a purchase is still required (but that purchase is now cash, not
+  // credits).
+  const visible = links;
   if (visible.length === 0) return null;
   return (
   /* `cv-auto` + a size hint: every hub is 3–5 groups of static tiles, and only

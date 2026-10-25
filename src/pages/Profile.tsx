@@ -16,7 +16,6 @@ import {
   Trash2,
   MapPin,
   MessageCircle,
-  Palette,
 } from "lucide-react";
 import { discordInviteUrl } from "@/config/community";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,11 +24,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatSports } from "@/lib/profile";
 import AccountSubscriptionCard from "@/components/subscription/AccountSubscriptionCard";
+import XpSummaryCard from "@/components/xp/XpSummaryCard";
 import PersonalizationSetting from "@/components/settings/PersonalizationSetting";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CountrySelect from "@/components/geo/CountrySelect";
-import { setRegionCountry, sportDisplayName } from "@/i18n/region";
-import { refreshFormattingLocale } from "@/i18n/format";
 import LanguageSetting from "@/components/settings/LanguageSetting";
 import PasskeysSetting from "@/components/settings/PasskeysSetting";
 import {
@@ -38,12 +36,13 @@ import {
   currencyFor,
   normaliseCountryCode,
 } from "@/lib/geo";
-import { Bell, FileText, ReceiptText, Scale, ShieldCheck, Watch } from "lucide-react";
+import { Bell, FileText, Receipt, Scale, ShieldCheck, Watch } from "lucide-react";
 import { legalPath } from "@/lib/legalUrls";
 import { isAndroid } from "@/lib/platform";
 import { isFlagOn } from "@/config/featureFlags";
-import XpSummaryCard from "@/components/xp/XpSummaryCard";
 import HealthConnectPrompt from "@/components/health/HealthConnectPrompt";
+import { readDisplayCurrency, setDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { PageHeader } from "@/components/layout/PageShell";
 
 const currencies = [
   "USD",
@@ -185,11 +184,6 @@ const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showSettings, setShowSettings] = useState(false);
-
-  // Cosmetics graduated off this page entirely: the Collection page
-  // (/collection, sidebar + the Market side of the app) owns the full look
-  // editor. The profile hosts the XP summary and account settings only, so
-  // this screen's menu keeps a door to /collection rather than a wardrobe.
   // Health Connect is managed from here, in the sheet below. The separate
   // Wearables screen was removed; this row is the one door to it.
   const [showHealthConnect, setShowHealthConnect] = useState(false);
@@ -213,13 +207,20 @@ const Profile = () => {
 
   useEffect(() => {
     if (user) {
+      // Show the cached choice instantly; the database row below is the
+      // authority and overwrites a stale cache. This is what stops the
+      // Profile screen flashing USD over a GBP price.
+      setCurrency(readDisplayCurrency("USD"));
       supabase
         .from("user_settings")
         .select("currency, water_goal_ml")
         .eq("user_id", user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data?.currency) setCurrency(data.currency);
+          if (data?.currency) {
+            setCurrency(data.currency);
+            setDisplayCurrency(data.currency);
+          }
           if (data?.water_goal_ml) setWaterGoal(String(data.water_goal_ml));
         });
       supabase
@@ -228,15 +229,7 @@ const Profile = () => {
         .eq("user_id", user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data?.country) {
-            setCountry(data.country);
-            // The selected country drives regional everywhere: terminology
-            // (Football vs Soccer), units (km/mi, kg/lb) and date/number
-            // formatting. Setting it here — not only in saveCountry — is what
-            // makes the choice survive app restarts.
-            setRegionCountry(data.country);
-            refreshFormattingLocale();
-          }
+          if (data?.country) setCountry(data.country);
         });
     }
   }, [user]);
@@ -252,13 +245,19 @@ const Profile = () => {
     }
   }, [profile]);
 
-  const saveCurrency = async (val: string) => {
+  const saveCurrency = async (val: string, announce = true) => {
     if (!user) return;
+    const previous = currency;
     setCurrency(val);
+    // Persist the choice for price formatting immediately, before the network
+    // write finishes, and tell every mounted price surface to re-render.
+    setDisplayCurrency(val);
     const { error } = await supabase
       .from("user_settings")
       .upsert({ user_id: user.id, currency: val }, { onConflict: "user_id" });
     if (error) {
+      setCurrency(previous);
+      setDisplayCurrency(previous);
       toast({
         title: "Couldn't save your currency",
         description: error.message,
@@ -266,7 +265,12 @@ const Profile = () => {
       });
       return;
     }
-    toast({ title: `Currency set to ${val}` });
+    try {
+      localStorage.setItem(`vaylo:currency:${user.id}`, val);
+    } catch {
+      /* non-fatal */
+    }
+    if (announce) toast({ title: `Currency set to ${val}` });
   };
 
   const saveCountry = async (code: string | null) => {
@@ -278,10 +282,6 @@ const Profile = () => {
     }
     const previous = country;
     setCountry(normalised);
-    // The regional layer follows the new country immediately — terminology,
-    // units and formatting all re-derive from this one value.
-    setRegionCountry(normalised);
-    refreshFormattingLocale();
     // `currency` here is the pricing tier that follows the country, and is a
     // different thing from the display currency in Settings above.
     const { error } = await supabase
@@ -303,6 +303,13 @@ const Profile = () => {
         variant: "destructive",
       });
       return;
+    }
+    // The country owns the default display currency. Keep the two in step so
+    // choosing the United Kingdom shows GBP prices without a second trip to
+    // the currency picker; the currency row can still override it afterwards.
+    const countryCurrency = currencyFor(normalised);
+    if (countryCurrency && countryCurrency !== currency) {
+      await saveCurrency(countryCurrency, false);
     }
     toast({
       title: `${countryName(normalised)} saved`,
@@ -405,6 +412,12 @@ const Profile = () => {
     path?: string;
     onClick?: () => void;
   }[] = [
+    {
+      icon: Receipt,
+      label: "Purchases & refunds",
+      desc: "Receipts, credit charges and refund requests",
+      path: "/settings/purchases",
+    },
     // Written as an explicit handler rather than `path` so this one row is
     // greppable as the app's legal entry point — safetyCompliance.test.ts
     // asserts this exact call is present in this file, which is the cheapest
@@ -446,15 +459,6 @@ const Profile = () => {
       desc: "Connect, message and share sessions",
       path: "/friends",
     },
-    // The in-app half of the refund system. It sits with the account rows
-    // rather than inside Market: an athlete looking for what they were charged,
-    // or for a refund they already asked for, looks at their own account first.
-    {
-      icon: ReceiptText,
-      label: "Purchases & refunds",
-      desc: "Your transactions, requests and their status",
-      path: "/settings/purchases",
-    },
     // Achievements lived here until 2026-10-10. They now live in the Perform
     // hub's Trophy Room (/achievements, /challenges) — they are earned by
     // performing, so that is where an athlete looks for them. The sidebar
@@ -465,31 +469,18 @@ const Profile = () => {
       desc: "Credits, subscriptions & features",
       path: "/market",
     },
-    // The look editor. The full wardrobe (avatar, colours, borders, titles)
-    // lives at /collection with its own shop flow; this row is the door the
-    // profile keeps so the feature stays reachable from where athletes open
-    // their identity.
-    {
-      icon: Palette,
-      label: "Style & collection",
-      desc: "Avatar look, colours, borders and titles",
-      path: "/collection",
-    },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       {/* pt uses the shared top-gutter token: with the header row gone there is
           nothing above this title but the status bar inset, and the token is
-          what keeps that true on every screen rather than per-page guesswork. */}
-      <div className="px-5 pt-[var(--vaylo-screen-top)] pb-[var(--vaylo-title-gap)]">
-        <motion.h1
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-2xl font-display font-bold"
-        >
-          Profile
-        </motion.h1>
+          what keeps that true on every screen rather than per-page guesswork.
+          The title itself is the shared PageHeader — same eyebrow, same 24px
+          display title, same trailing space as every other screen, so the
+          Profile tab and the screens it opens align to the same column. */}
+      <div className="px-5 pt-[var(--vaylo-screen-top)]">
+        <PageHeader eyebrow="Athlete" icon={User} title="Profile" />
       </div>
 
       <motion.div
@@ -498,36 +489,35 @@ const Profile = () => {
         transition={{ duration: 0.5 }}
         className="mx-5 mb-5 border border-border rounded-2xl p-5 card-surface"
       >
-        <div className="flex flex-col gap-4">
-          {/* Your current look stays cosmetic-free here — the equipped look is
-              rendered on the Collection page, where it can be edited. */}
-          <div className="flex items-center gap-4">
-            <ProfileLook />
-            <div className="min-w-0">
-              <h2 className="font-display font-bold text-lg truncate">
-                {profile?.full_name || "Athlete"}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {formatSports(profile?.sport)} · {profile?.experience_level || "Intermediate"}
-              </p>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
-                  {entitlements.plan_label}
-                </span>
-                <span className="text-[12px] bg-energy/10 text-energy px-2 py-0.5 rounded-full font-semibold">
-                  {hasUnlimitedCredits
-                    ? "Unlimited credits"
-                    : `${profile?.credits ?? 0} credits`}
-                </span>
-              </div>
+        <div className="flex items-center gap-4">
+          {/* A plain identity mark. Cosmetics were removed entirely, so this
+              no longer previews a wardrobe or depends on a cosmetic table. */}
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xl font-bold text-muted-foreground">
+            {(profile?.full_name || "Athlete").trim().slice(0, 1).toUpperCase() || <User size={26} />}
+          </div>
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-lg font-bold">
+              {profile?.full_name || "Athlete"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {formatSports(profile?.sport)} · {profile?.experience_level || "Intermediate"}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-semibold text-primary">
+                {entitlements.plan_label}
+              </span>
+              <span className="rounded-full bg-energy/10 px-2 py-0.5 text-[12px] font-semibold text-energy">
+                {hasUnlimitedCredits ? "Unlimited credits" : `${profile?.credits ?? 0} credits`}
+              </span>
             </div>
           </div>
         </div>
       </motion.div>
 
-      <div className="px-5 mb-5">
-        <XpSummaryCard />
-      </div>
+      {/* Progression belongs on the athlete's own screen: the level, the XP
+          earned and what the next one needs. Self-contained, and deliberately
+          independent of cosmetics — earning XP never required buying anything. */}
+      <XpSummaryCard />
 
       <div className="px-5 mb-5">
         <AccountSubscriptionCard />
@@ -649,7 +639,7 @@ const Profile = () => {
                           : "bg-card border-border text-foreground"
                       }`}
                     >
-                      {sportDisplayName(s)}
+                      {s}
                     </button>
                   ))}
                 </div>
@@ -730,27 +720,27 @@ const Profile = () => {
                     </button>
                   ))}
                 </div>
+                {/* A converted price is only trustworthy if the athlete can see
+                    what it was converted at. Rates refresh daily and are cached
+                    for six hours; the source is named where the choice is made
+                    rather than buried in a price screen. */}
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Prices are converted at today's exchange rate. Rates by ExchangeRate-API.
+                </p>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1">
                   <Ruler size={12} /> Daily Water Goal (ml)
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="10"
-                    value={waterGoal}
-                    onChange={(e) => setWaterGoal(e.target.value)}
-                    className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none"
-                  />
-                  <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    onClick={saveWaterGoal}
-                    className="bg-primary text-primary-foreground px-4 rounded-xl text-sm font-semibold"
-                  >
-                    Save
-                  </motion.button>
-                </div>
+                <input
+                  type="number"
+                  step="10"
+                  value={waterGoal}
+                  onChange={(e) => setWaterGoal(e.target.value)}
+                  onBlur={() => void saveWaterGoal()}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 focus:outline-none"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">Saves automatically when you leave the field.</p>
               </div>
 
               {/* The two URLs Google Play names explicitly, kept as direct
@@ -836,16 +826,6 @@ const Profile = () => {
       </div>
 
       <HealthConnectPrompt open={showHealthConnect} onClose={() => setShowHealthConnect(false)} />
-    </div>
-  );
-};
-
-const ProfileLook = ({ className }: { className?: string }) => {
-  return (
-    <div className={className ?? ""}>
-      <span className="rounded-full flex items-center justify-center">
-        <User size={28} className="text-muted-foreground" />
-      </span>
     </div>
   );
 };

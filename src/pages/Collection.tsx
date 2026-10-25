@@ -19,7 +19,6 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import CoinTopUpSheet from "@/components/market/CoinTopUpSheet";
-import CoinQuickBuySheet from "@/components/market/CoinQuickBuySheet";
 import RewardBoxesPanel from "@/components/cosmetics/RewardBoxesPanel";
 import { Check, Coins, Loader2, Lock, Sparkles, X } from "lucide-react";
 
@@ -47,7 +46,6 @@ export default function Collection() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [topUp, setTopUp] = useState<{ gap: number; itemName: string } | null>(null);
-  const [quickBuy, setQuickBuy] = useState(false);
   /** The item waiting in the buy-confirm dialog, if any. */
   const [confirm, setConfirm] = useState<CosmeticDef | null>(null);
   /** What is being tried on the preview card right now. Nothing is equipped. */
@@ -152,9 +150,6 @@ export default function Collection() {
           <span className="inline-flex items-center gap-1 rounded-full border border-energy/30 bg-energy/10 px-3 py-1.5 text-sm font-bold text-energy">
             <Coins size={13} /> {formatNumber(coins)}
           </span>
-          <Button size="sm" className="bg-gradient-electric text-white" onClick={() => setQuickBuy(true)}>
-            <Coins size={13} className="mr-1" /> Buy Coins
-          </Button>
         </div>
       </div>
 
@@ -516,7 +511,6 @@ export default function Collection() {
         gap={topUp?.gap ?? 0}
         itemName={topUp?.itemName}
       />
-      <CoinQuickBuySheet open={quickBuy} onClose={() => setQuickBuy(false)} />
     </div>
   );
 }

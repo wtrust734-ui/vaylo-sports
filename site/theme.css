@@ -36,6 +36,22 @@
    emit should be removed, not kept "in case".
    ========================================================================== */
 
+/* ------------------------------------------------------------------- font -- */
+/* Self-hosted, subset to latin, variable weight. The woff2 ships with its OFL
+   licence in site/assets/fonts; every page preloads it. Declaring the range
+   rather than one weight is what lets the 800-weight headings use the real
+   outlines instead of a synthesised bold. */
+@font-face {
+  font-family: "Archivo";
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* ---------------------------------------------------------------- tokens -- */
 :root {
   /* Anchored to the values already hardcoded in this file: #05070f appears in
@@ -83,8 +99,8 @@
      rather than a set of numbers chosen one at a time. */
   --gap: clamp(1rem, 2.2vw, 1.35rem);
   --section-y: clamp(3rem, 7vw, 5.25rem);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-          Arial, "Noto Sans", sans-serif;
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, "Noto Sans", sans-serif;
 }
 
 /* The light scheme redefines the same names, so no component rule below needs
@@ -1357,6 +1373,400 @@ input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="
 .consent span { font-size: 0.91rem; color: var(--text); }
 .consent a { color: var(--accent); font-weight: 600; }
 
+/* ----------------------------------------------------- hero, 2026 rebuild -- */
+/* The homepage and About page were rebuilt around a drawn training week, a
+   four-number strip and a year-by-year timeline. The rules below are the
+   layout for that markup; before them the classes had no styling at all, which
+   is why scripts/audit-css-coverage.cjs fails the build when one is missing. */
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  margin: 0 0 1.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.hero-meta .dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 6.6vw, 4.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.hero-line { display: block; }
+
+.hero-sub {
+  margin: 1.4rem 0 0;
+  max-width: 46ch;
+  font-size: clamp(1rem, 2.2vw, 1.12rem);
+  line-height: 1.62;
+  color: var(--muted);
+}
+
+.hero-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1.5rem;
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+@media (min-width: 640px) {
+  .hero-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.hero-strip > div { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.stat-num {
+  font-size: clamp(1.5rem, 3.4vw, 2rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+@media (prefers-color-scheme: light) { .stat-num { color: var(--text); } }
+.stat-label {
+  max-width: 15ch;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--faint);
+}
+
+/* The drawn week. A surface, a caption and one accent line: the chart is an
+   illustration and the panel says so, so it must not look like a screenshot. */
+.signal {
+  padding: 1.15rem 1.2rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.signal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+.signal-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.signal-tag {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.signal svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grid-line { stroke: var(--border); stroke-width: 1; }
+.flag-line { stroke: color-mix(in srgb, var(--warn) 55%, transparent); stroke-width: 1; stroke-dasharray: 3 4; }
+.flag-dot { fill: var(--warn); }
+.load-fill { fill: color-mix(in srgb, var(--primary) 14%, transparent); }
+.load-line { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; }
+.axis-label {
+  fill: var(--faint);
+  font-family: var(--font);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+.signal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.9rem;
+  font-size: 0.78rem;
+  color: var(--faint);
+}
+.signal-foot b { font-weight: 650; color: var(--muted); }
+
+/* ------------------------------------------------------------ sport band -- */
+/* Two identical lists: translating the pair by exactly -50% loops the band
+   without a seam, and the second copy is aria-hidden in the markup. */
+.sport-band {
+  overflow: hidden;
+  padding: 0.85rem 0;
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  border-block: 1px solid var(--border);
+  background: var(--surface);
+}
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 38s linear infinite;
+}
+.marquee ul {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin: 0;
+  padding: 0 1rem;
+  list-style: none;
+}
+.marquee li {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.marquee li::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.sport-band:hover .marquee,
+.sport-band:focus-within .marquee { animation-play-state: paused; }
+@keyframes marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+/* ---------------------------------------------------------------- story -- */
+.story { padding: var(--section-y) 0; }
+.story-grid {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3rem);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .story-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(2.5rem, 5vw, 4.5rem);
+  }
+}
+.story h2 { margin-top: 0.25rem; }
+.story-lead {
+  font-size: clamp(1.02rem, 2.2vw, 1.12rem);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.chapter-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.chapter-label b {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.chapter-label::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+/* The timeline is a rail with a filled length and a marker per year. The fill
+   stops inside 2026 rather than running to the end, because the last item has
+   not happened yet. */
+.timeline { position: relative; padding-left: 1.75rem; }
+.timeline-rail {
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.timeline-fill {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 72%;
+  background: var(--primary-solid);
+}
+.tl-item { position: relative; padding-bottom: 1.6rem; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  left: calc(-1.75rem + 1px);
+  transform: translateX(-50%);
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg);
+}
+.tl-item.is-now::before {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.tl-year {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.tl-tag {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+}
+
+/* The capability ledger: numbered rows, not a grid of identical cards. */
+.caps { display: grid; margin-top: 1.5rem; border-top: 1px solid var(--border); }
+.cap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.9rem 1.1rem;
+  align-items: start;
+  padding: 1.15rem 0.5rem;
+  margin-inline: -0.5rem;
+  border-bottom: 1px solid var(--border);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.cap:hover { background: var(--surface); color: inherit; }
+.cap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.cap-num {
+  padding-top: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.cap h3 { margin: 0; font-size: 1.02rem; }
+.cap p { margin: 0.35rem 0 0; max-width: 62ch; font-size: 0.93rem; color: var(--muted); }
+.cap-arrow {
+  display: inline-flex;
+  padding-top: 0.15rem;
+  color: var(--faint);
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+.cap:hover .cap-arrow { color: var(--primary); transform: translate(2px, -2px); }
+
+/* The closing panel repeats the launch date rather than assuming the reader
+   reached the timeline, so it carries the same weight as a section. */
+.closing {
+  padding: clamp(3rem, 8vw, 5.5rem) 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.closing h2 { margin-top: 0.5rem; font-size: clamp(1.6rem, 4vw, 2.4rem); }
+.closing p { max-width: 56ch; }
+
+/* ------------------------------------------------- header extras, 2026 -- */
+.page-title {
+  font-size: clamp(2.1rem, 5.6vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+/* The waitlist is the one action in the header, so it is the only filled
+   element in the bar. Hidden on phones where the drawer already carries the
+   same link and the bar has no room for both. */
+.nav-cta {
+  display: none;
+  align-items: center;
+  height: 40px;
+  margin-left: auto;
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: var(--primary-solid);
+  font-size: 0.86rem;
+  font-weight: 650;
+  white-space: nowrap;
+  color: #fff;
+  text-decoration: none;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.nav-cta:hover { background: var(--primary); color: #fff; }
+.nav-cta:active { transform: translateY(1px); }
+.nav-cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (min-width: 640px) { .nav-cta { display: inline-flex; } }
+
+/* The reading line. site.js writes `--progress` on the span and the paint is a
+   transform, so scrolling never triggers layout. */
+.scroll-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 2px;
+  z-index: 60;
+  pointer-events: none;
+}
+.scroll-progress span {
+  /* Defined here rather than only written by site.js, so the bar has a value to
+     scale from before (or without) scripting, and the token audit can resolve
+     it. site.js overwrites it on every scroll frame. */
+  --progress: 0;
+  display: block;
+  height: 100%;
+  transform: scaleX(var(--progress));
+  transform-origin: 0 50%;
+  background: var(--primary);
+}
+
+/* -------------------------------------------------------------- timeline -- */
+/* The reveal itself is the scroll-driven `.reveal` block near the top of this
+   file. site.js also marks the element with `.in`; that is left unstyled on
+   purpose, because adding a second, time-based animation here would fight the
+   compositor-driven one for the same property. */
+
+/* The timeline rail fills once the story is on screen. Its default height is
+   already the end state, so this is decoration over a correct page. */
+@keyframes rail-fill {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+.timeline.is-in .timeline-fill {
+  transform-origin: top;
+  animation: rail-fill 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* -------------------------------------------------------- a11y / motion -- */
 /* See the `.reveal` block near the top of this file for how the reveals work.
    The section rule exists only so the marked elements are their own paint
@@ -1374,6 +1784,11 @@ input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="
     transform: none !important;
   }
   .hero::after { animation: none !important; }
+  .marquee { animation: none !important; }
+  /* Without the loop the band would clip the second half of the sports on a
+     narrow screen, so it becomes a plain horizontal scroller instead. */
+  .sport-band { overflow-x: auto; }
+  .timeline.is-in .timeline-fill { animation: none !important; }
   .card, .card:hover, .btn, .chip, .chip:hover, .choice, .choice:hover,
   .quiz-progress span, .consent {
     transition: none !important;

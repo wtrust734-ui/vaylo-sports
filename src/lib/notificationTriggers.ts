@@ -851,6 +851,11 @@ export async function scheduleMorningReminders(
   plan: PlanLike,
   prefs: TriggerPrefs,
   now: Date = new Date(),
+  /**
+   * Ignore the once-a-day throttle. The settings screen passes true: a toggle
+   * the athlete just flipped has to take effect now, not at the next app open.
+   */
+  force = false,
 ): Promise<number> {
   if (prefs.workout_reminders === false || !plan) {
     const stale = getScheduledMornings();
@@ -864,7 +869,7 @@ export async function scheduleMorningReminders(
     return 0;
   }
   const throttleKey = `${localDateKey(now)}:${plan.id}`;
-  if (lastMorningScheduleKey() === throttleKey) return getScheduledMornings().length;
+  if (!force && lastMorningScheduleKey() === throttleKey) return getScheduledMornings().length;
   let scheduled = 0;
   const days: string[] = [];
   // All seven days are computed first, then scheduled in ONE plugin call:

@@ -22,7 +22,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { supabase } from "@/integrations/supabase/client";
 import {
+  disconnectHealthConnect,
   fetchServerSyncState,
+  hasImportedData,
+  readConsent,
   readLocalState,
   resolveHealthStatus,
   runHealthSync,
@@ -30,8 +33,9 @@ import {
 } from "./sync";
 import {
   bridgeCheckPermissions,
-  bridgeSyncPull,
   bridgeRequestPermissions,
+  bridgeRevokePermissions,
+  bridgeSyncPull,
 } from "./bridge";
 import { HEALTH_PERMISSIONS_VERSION } from "./permissions";
 
@@ -43,11 +47,13 @@ vi.mock("./bridge", () => ({
   bridgeCheckPermissions: vi.fn(),
   bridgeSyncPull: vi.fn(function a() { return Promise.resolve({ workouts: [], samples: [], latestCursorMs: null, hasMore: false }); }),
   bridgeRequestPermissions: vi.fn(),
+  bridgeRevokePermissions: vi.fn(),
 }));
 
 const checkPerms = bridgeCheckPermissions as unknown as ReturnType<typeof vi.fn>;
 const syncPull = bridgeSyncPull as unknown as ReturnType<typeof vi.fn>;
 const requestPerms = bridgeRequestPermissions as unknown as ReturnType<typeof vi.fn>;
+const revokePerms = bridgeRevokePermissions as unknown as ReturnType<typeof vi.fn>;
 
 // The typed client's from() returns per-table generics; tests swap it for a
 // fake, and these helpers keep that swap free of casts against the library.
@@ -104,6 +110,7 @@ beforeEach(() => {
   setDefaultClient();
   checkPerms.mockResolvedValue({ grantedCount: 6, missingCount: 0 });
   requestPerms.mockResolvedValue({ grantedCount: 6, cancelled: false });
+  revokePerms.mockResolvedValue(true);
   syncPull.mockResolvedValue({ workouts: [], samples: [], latestCursorMs: null, hasMore: false });
 });
 
@@ -301,6 +308,24 @@ describe("cross-device state", () => {
     expect(resolution.status).toBe("permission_required");
   });
 
+  it("does not put a device that just disconnected back into connected", async () => {
+    // The reported bug: after Disconnect the sheet still offered Disconnect.
+    // The local consent and the account row are two writes, and the native
+    // grant is a third fact; if either of the first two lags or fails, the
+    // resolver used to keep answering "connected". The explicit disconnect
+    // marker is what settles it — and the account row is not even consulted.
+    localStorage.setItem(
+      consentKey,
+      JSON.stringify({ connected: false, version: HEALTH_PERMISSIONS_VERSION, disconnected: true }),
+    );
+    fromMock.mockImplementation(() => fakeFrom(() => Promise.resolve({ data: { connected: true } })));
+    checkPerms.mockResolvedValue({ grantedCount: 6, missingCount: 0 });
+
+    const resolution = await resolveHealthStatus(USER, true);
+    expect(resolution.status).toBe("not_connected");
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
   it("treats an unreadable account row as unresolved, not disconnected", async () => {
     fromMock.mockImplementation(() => {
       throw new Error("offline");
@@ -310,6 +335,39 @@ describe("cross-device state", () => {
       consentOutdated: false,
     });
     setDefaultClient();
+  });
+});
+
+describe("disconnect", () => {
+  it("records the marker, clears the cursor and keeps the imported-data memory", async () => {
+    localStorage.setItem(
+      consentKey,
+      JSON.stringify({ connected: true, version: HEALTH_PERMISSIONS_VERSION }),
+    );
+    writeLocalState(USER, state({ cursorMs: 5_000, lastSyncAt: "2026-10-01T00:00:00.000Z", syncStatus: "succeeded" }));
+    localStorage.setItem(`vaylo:hc:imported:${USER}`, "1");
+
+    await disconnectHealthConnect(USER);
+
+    expect(readConsent(USER)).toMatchObject({ connected: false, disconnected: true });
+    expect(localStorage.getItem(key)).toBeNull();
+    // Imported rows stay in the log; the UI needs to remember that so the
+    // delete control does not vanish with the connection.
+    expect(hasImportedData(USER)).toBe(true);
+
+    const stateWrite = fromMock.mock.calls.find((args) => args[0] === "health_sync_state");
+    expect(stateWrite).toBeTruthy();
+  });
+
+  it("leaves consent alone when the grant could not be withdrawn", async () => {
+    localStorage.setItem(
+      consentKey,
+      JSON.stringify({ connected: true, version: HEALTH_PERMISSIONS_VERSION }),
+    );
+    revokePerms.mockResolvedValue(false);
+
+    await expect(disconnectHealthConnect(USER)).rejects.toThrow(/Could not withdraw/);
+    expect(readConsent(USER).connected).toBe(true);
   });
 });
 

@@ -51,6 +51,21 @@ const isRating = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 10;
 
 /**
+ * The full-rest answers a week can actually hold.
+ *
+ * Seven days are either training or full rest, so the answers stop at what is
+ * left. Choosing six training days leaves exactly one, and one is the only
+ * answer that adds up — the questionnaire used to offer "None / 1 / 2 / 3"
+ * regardless, so a plan could total nine days in a seven-day week.
+ */
+export function recoveryDayOptions(plannedTrainingDays: number): number[] {
+  const trainingDays = Math.max(0, Math.min(7, plannedTrainingDays));
+  const remaining = 7 - trainingDays;
+  if (remaining === 1) return [1];
+  return [0, 1, 2, 3].filter((days) => days <= remaining);
+}
+
+/**
  * Ranks only categories the athlete actually answered. Available logged tests
  * contribute as stronger evidence, but a missing test is never coerced to zero
  * or a made-up mid-point. Self ratings remain visible as self ratings.

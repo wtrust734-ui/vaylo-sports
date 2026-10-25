@@ -290,9 +290,23 @@ const FALLBACK_DISCLAIMER =
  */
 export const PERSONALISED_PLAN_MARKER = "AI-written personalised plan";
 
-export function renderInjuryProtocol(plan: InjuryPlan): string {
+/**
+ * The first line of a stored mobility/rehab plan.
+ *
+ * The free, on-device plan is a different thing from the paid AI scaffold: it is
+ * three weeks of range, activation and gentle strength built from the logged
+ * injury, and nobody was charged for it. It therefore gets its own marker, so
+ * the screen never tells an athlete they paid for something they did not.
+ */
+export const MOBILITY_PLAN_MARKER = "Mobility & rehab plan (built on this device)";
+
+/** Which of the three stored kinds a `recovery_protocol` holds. */
+export type StoredPlanKind = "ai" | "mobility" | "generic";
+
+export function renderInjuryProtocol(plan: InjuryPlan, kind: "ai" | "mobility" = "ai"): string {
+  const marker = kind === "mobility" ? MOBILITY_PLAN_MARKER : PERSONALISED_PLAN_MARKER;
   const lines: string[] = [
-    `${PERSONALISED_PLAN_MARKER} — for a qualified professional to supervise.`,
+    `${marker} — for a qualified professional to supervise.`,
   ];
   if (plan.summary) lines.push(plan.summary);
   if (plan.disclaimer) lines.push(plan.disclaimer);
@@ -561,12 +575,20 @@ export function freeInjuryProtocol(input: {
  * and a plain generic scaffold (written before this feature, or by the free
  * path) comes back unmarked rather than being mislabelled as personalised.
  */
-export function splitStoredProtocol(stored: string): { personalised: boolean; lines: string[] } {
+export function splitStoredProtocol(stored: string): {
+  kind: StoredPlanKind;
+  personalised: boolean;
+  lines: string[];
+} {
   const lines = stored.split("\n");
-  if (lines.length > 0 && lines[0].startsWith(PERSONALISED_PLAN_MARKER)) {
-    return { personalised: true, lines: lines.slice(1) };
+  const first = lines[0] ?? "";
+  if (first.startsWith(PERSONALISED_PLAN_MARKER)) {
+    return { kind: "ai", personalised: true, lines: lines.slice(1) };
   }
-  return { personalised: false, lines };
+  if (first.startsWith(MOBILITY_PLAN_MARKER)) {
+    return { kind: "mobility", personalised: false, lines: lines.slice(1) };
+  }
+  return { kind: "generic", personalised: false, lines };
 }
 
 /** One line for a toast: the first thing the athlete should read. */

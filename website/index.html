@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Training log and analysis for athletes in every sport | Vaylo Sports</title>
-<meta name="description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Read how it handles your data and your safety." />
-<meta name="theme-color" content="#05070f" />
+<meta name="description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Building since 2025, launching on Android in 2027." />
+<meta name="theme-color" content="#07080c" />
 <meta name="color-scheme" content="dark light" />
 
 
@@ -13,7 +13,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Vaylo Sports" />
 <meta property="og:title" content="Training log and analysis for athletes in every sport | Vaylo Sports" />
-<meta property="og:description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Read how it handles your data and your safety." />
+<meta property="og:description" content="Vaylo Sports is an all-sports training app: log sessions, understand load and recovery, find your limiter and prepare for events. Building since 2025, launching on Android in 2027." />
 
 <meta property="og:image" content="/assets/og.png" />
 <meta property="og:image:type" content="image/png" />
@@ -25,12 +25,28 @@
 <meta name="twitter:image:alt" content="Vaylo Sports — a training log that works across every sport, showing the app name and the four facts the site leads with." />
 <link rel="icon" href="/assets/logo.png" type="image/png" />
 <link rel="apple-touch-icon" href="/assets/logo.png" />
-<link rel="stylesheet" href="/assets/theme.css?v=52935e8d" />
+<!-- The one webfont, preloaded. Without the preload it is discovered only
+     after the stylesheet has parsed, which is exactly the half-second in which
+     the headline renders in the fallback and then reflows. crossorigin is
+     required on a font request even when it is same-origin. -->
+<link
+  rel="preload"
+  href="/assets/fonts/archivo-latin.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+<link rel="stylesheet" href="/assets/theme.css?v=v43707ad2" />
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Vaylo Sports","email":"vaylosportssupport@gmail.com"}</script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Vaylo Sports","inLanguage":"en-GB"}</script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Vaylo Sports","applicationCategory":"SportsApplication","operatingSystem":"Android","inLanguage":"en-GB","description":"An all-sports training log with analysis attached: record what you train, and read load, recovery, readiness and the limiter most likely holding you back."}</script>
 </head>
 <body>
+  <!-- Reading progress. Decorative, hidden from the accessibility tree, and
+       driven by one transform in site.js rather than by a width change. -->
+  <div class="scroll-progress" aria-hidden="true">
+    <span data-scroll-progress></span>
+  </div>
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="site-header">
@@ -72,6 +88,10 @@
           <a href="/about/">About</a>
           <a href="/contact/">Contact</a>
       </nav>
+
+      <a class="nav-cta" href="/waitlist/">
+        Join the waiting list
+      </a>
     </div>
 
     <div class="mobile-nav" id="mobile-nav" hidden>
@@ -96,31 +116,213 @@
   <section class="hero">
     <div class="shell hero-grid hero-lift">
       <div>
-        <p class="eyebrow">For athletes in every sport</p>
-        <h1>A training log that tells you what your <span class="hl">own numbers</span> mean.</h1>
-        <p class="lead" style="margin-top:1.25rem">
-          Vaylo Sports records what you actually train, then works it back to you:
-          load, readiness, recovery, and the limiter most likely holding you
-          back. It works across running, cycling, swimming, team sports, racket
-          sports, combat sports and everything in between.
+        <p class="hero-meta">
+          <span class="dot" aria-hidden="true"></span>
+          <span>An independent build</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>Building since 2025</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>Android</span>
         </p>
-        <p class="lead" style="margin-top:1rem">
-          It is a tool for organising and understanding your own training. It is
-          not a doctor, not a physio, and not a coach — and it will tell you when
-          to stop rather than push on.
+
+        <h1>
+          <span class="hero-line">Your training,</span>
+          <span class="hero-line">read back</span>
+          <span class="hero-line">to you.</span>
+        </h1>
+
+        <p class="hero-sub">
+          Vaylo Sports is a training log that works across every sport you play,
+          and then does something with the record: load, readiness, recovery and
+          the one limiter most likely holding you back &mdash; calculated from
+          what you actually logged, not from a template.
         </p>
+
         <div class="btn-row">
           <a class="btn btn-primary" href="/features/">See what is in the app</a>
-          <a class="btn btn-secondary" href="/safety/">How we keep you safe</a>
+          <a class="btn btn-secondary" href="#story">Read the story</a>
         </div>
-      </div><div class="card hero-aside reveal">
-        <p class="eyebrow" style="margin-bottom:1.1rem">At a glance</p>
-        <ul class="prose-list">
-          <li><strong>Android only, for now.</strong> There is no iOS build, and no Play Store listing yet — we will not link to one that does not exist.</li>
-          <li><strong>26 features across 6 areas</strong> are working today, and the ones that are not are listed below rather than hidden.</li>
-          <li><strong>No advertising or analytics SDK</strong> and no advertising identifier. Sponsored placements are labelled and 18+.</li>
-          <li><strong>Private by default.</strong> Sharing is per activity and yours to withdraw, and a minor's profile cannot be public.</li>
-        </ul>
+
+        <div class="hero-strip">
+        <div>
+          <span class="stat-num" data-count="25">25</span>
+          <span class="stat-label">sports in the picker</span>
+        </div>
+        <div>
+          <span class="stat-num" data-count="26">26</span>
+          <span class="stat-label">features working today</span>
+        </div>
+        <div>
+          <span class="stat-num" data-count="0">0</span>
+          <span class="stat-label">ad or analytics SDKs</span>
+        </div>
+        <div>
+          <span class="stat-num" data-count="2027">2027</span>
+          <span class="stat-label">launch year</span>
+        </div>
+        </div>
+      </div>
+
+      <div>
+      <div class="signal" aria-hidden="true">
+        <div class="signal-head">
+          <span class="signal-title">A training week</span>
+          <span class="signal-tag">Illustration</span>
+        </div>
+        <svg viewBox="0 0 320 152" role="presentation" focusable="false">
+          <line class="grid-line" x1="0" y1="26" x2="320" y2="26" />
+          <line class="grid-line" x1="0" y1="66" x2="320" y2="66" />
+          <line class="grid-line" x1="0" y1="106" x2="320" y2="106" />
+          <line class="flag-line" x1="0" y1="42" x2="320" y2="42" />
+          <circle class="flag-dot" cx="268" cy="42" r="2.5" />
+          <path
+            class="load-fill"
+            d="M0 118 C 22 112, 38 98, 56 100 S 86 86, 106 88 S 138 62, 160 68 S 194 46, 214 54 S 248 32, 268 36 S 300 22, 320 26 L320 150 L0 150 Z"
+          />
+          <path
+            class="load-line"
+            d="M0 118 C 22 112, 38 98, 56 100 S 86 86, 106 88 S 138 62, 160 68 S 194 46, 214 54 S 248 32, 268 36 S 300 22, 320 26"
+          />
+          <text class="axis-label" x="0" y="150">MON</text>
+          <text class="axis-label" x="52" y="150">TUE</text>
+          <text class="axis-label" x="104" y="150">WED</text>
+          <text class="axis-label" x="156" y="150">THU</text>
+          <text class="axis-label" x="208" y="150">FRI</text>
+          <text class="axis-label" x="260" y="150">SAT</text>
+          <text class="axis-label" x="304" y="150">SUN</text>
+        </svg>
+        <div class="signal-foot">
+          <span><b>Acute load</b> and the ramp it flags</span>
+          <span><b>Arithmetic</b> on your own sessions</span>
+        </div>
+      </div>
+      <p class="visually-hidden">
+        Decorative illustration: a line rising across a seven-day week, with a
+        threshold marked on Saturday.
+      </p>
+      </div>
+    </div>
+  </section>
+  <div class="sport-band">
+    <div class="marquee" aria-label="Sports in the picker">
+      <ul><li>Running</li><li>Cycling</li><li>Swimming</li><li>Football</li><li>Basketball</li><li>Tennis</li><li>Rugby</li><li>Athletics</li><li>Triathlon</li><li>Boxing</li><li>MMA</li><li>Cricket</li><li>Gym / Weightlifting</li><li>CrossFit</li><li>Climbing</li><li>Rowing</li><li>Volleyball</li><li>Hockey</li><li>Badminton</li><li>Gymnastics</li><li>Wrestling</li><li>Golf</li><li>Combat Sports</li><li>Martial Arts</li><li>Other</li></ul>
+      <ul aria-hidden="true"><li>Running</li><li>Cycling</li><li>Swimming</li><li>Football</li><li>Basketball</li><li>Tennis</li><li>Rugby</li><li>Athletics</li><li>Triathlon</li><li>Boxing</li><li>MMA</li><li>Cricket</li><li>Gym / Weightlifting</li><li>CrossFit</li><li>Climbing</li><li>Rowing</li><li>Volleyball</li><li>Hockey</li><li>Badminton</li><li>Gymnastics</li><li>Wrestling</li><li>Golf</li><li>Combat Sports</li><li>Martial Arts</li><li>Other</li></ul>
+    </div>
+  </div>
+  <section class="story" id="story">
+    <div class="shell story-grid">
+      <div>
+        <p class="chapter-label"><b>01</b> The story</p>
+        <h2>Built in the open,<br />slowly on purpose.</h2>
+        <p class="story-lead" style="margin-top:1.25rem">
+          Vaylo Sports is not a studio's product. It is one build, started from
+          an idea in 2024, written through 2025 and 2026, and launching in 2027.
+        </p>
+        <p>
+          That pace is deliberate. A training app is trusted with the one thing
+          an athlete has least of &mdash; recovery capacity &mdash; so the
+          features that could do harm were the last ones added and the first
+          ones constrained.
+        </p>
+        <p class="muted" style="font-size:0.9rem">
+          The full account, including what is still missing, is on the
+          <a href="/about/">About page</a>.
+        </p>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-rail" aria-hidden="true"><div class="timeline-fill"></div></div>
+        <div class="tl-item">
+          <p class="tl-year">2024</p>
+          <p style="margin-top:0.2rem"><strong>The idea.</strong> Vaylo started as a question rather than a product: if a training log already knows every session you have done, why is it still only showing you a calendar? The idea was to make the record answer back.</p>
+        </div>
+        <div class="tl-item">
+          <p class="tl-year">2025</p>
+          <p style="margin-top:0.2rem"><strong>The first build.</strong> Building began, one screen at a time: log a session, read the load it added, keep the plan honest against the week that actually happened. Everything that could be arithmetic on your own data was built as arithmetic, not as a guess dressed up as AI.</p>
+        </div>
+        <div class="tl-item is-now">
+          <p class="tl-year">2026<span class="tl-tag">Now</span></p>
+          <p style="margin-top:0.2rem"><strong>Still building.</strong> The year spent turning a working app into a product that can be trusted: the safety rules for younger athletes, the documents behind every claim, the parts of the app that should say no. It is slower than adding features, and it is the reason the app can be launched at all.</p>
+        </div>
+        <div class="tl-item">
+          <p class="tl-year">2027</p>
+          <p style="margin-top:0.2rem"><strong>Launch.</strong> The Android release opens in 2027. The waiting list is open now, and it is used for one thing: telling you when that happens.</p>
+        </div>
+      </div>
+    </div>
+  </section><section class="section reveal">
+    <div class="shell">
+      <div class="section-head">
+        <p class="eyebrow">The app</p>
+        <h2>What it actually does</h2>
+
+        <p class="lead"><p class="chapter-label"><b>02</b> What it does</p>
+        <p>Six things, in the order an athlete meets them. The full inventory,
+        including what is built but not switched on, is on the
+        <a href="/features/">features page</a>.</p></p>
+      </div>
+<div class="caps">
+
+        <a class="cap" href="/features/#performance-log">
+          <span class="cap-num">01</span>
+          <span>
+            <h3>Log the session</h3>
+            <p>Sport, duration, RPE, notes, how it felt. The Performance Log is the record every other number is calculated from.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
+        <a class="cap" href="/features/#performance-dashboard">
+          <span class="cap-num">02</span>
+          <span>
+            <h3>Read the load</h3>
+            <p>Acute load, the acute-to-chronic ratio, readiness and recovery, read against your own history rather than a population average.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
+        <a class="cap" href="/features/#limiter-test">
+          <span class="cap-num">03</span>
+          <span>
+            <h3>Find the limiter</h3>
+            <p>A test that names the one thing most likely to be holding you back, so the next block of training has a target.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
+        <a class="cap" href="/features/#event-packs">
+          <span class="cap-num">04</span>
+          <span>
+            <h3>Prepare for the event</h3>
+            <p>Structured programmes towards a date, with a taper and race-day guidance, plus recurring routines for the weeks in between.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
+        <a class="cap" href="/features/#recovery-tracking">
+          <span class="cap-num">05</span>
+          <span>
+            <h3>Recover on purpose</h3>
+            <p>Sleep, soreness, mood and energy beside the load that produced them &mdash; and an injury scaffold that organises rehab you were already given, without diagnosing anything.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
+        <a class="cap" href="/features/#learning-hub">
+          <span class="cap-num">06</span>
+          <span>
+            <h3>Learn the sport</h3>
+            <p>Written lessons, drills and quizzes, including load management for growing athletes, plus tactical notes on the opponents you actually face.</p>
+          </span>
+          <span class="cap-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+          </span>
+        </a>
       </div>
     </div>
   </section><section class="section section-tight reveal">
@@ -136,117 +338,24 @@
     <div class="grid grid-3"><div class="card reveal">
         <h3 style="margin-top:0">Working today</h3>
         <p style="font-size:0.95rem">
-          <strong>26 features across 6 areas</strong> — logging,
-          metrics, the Limiter Test, injury scaffolding, nutrition, the Learning
-          Hub, event packs and the community side. Open the app and they run.
+          <strong>26 features across 6 areas</strong> &mdash;
+          logging, metrics, the Limiter Test, injury scaffolding, nutrition, the
+          Learning Hub, event packs and the community side. Open the app and they run.
         </p>
       </div><div class="card reveal">
         <h3 style="margin-top:0">Built, not yet switched on</h3>
         <p style="font-size:0.95rem">
-          <strong>6 AI features.</strong> The
-          server capability that runs them is not enabled, so the app says so when
-          you open them. We list them rather than pretend.
+          <strong>6 AI features.</strong> The server capability that runs them
+          is not enabled, so the app says so when you open them. We list them rather
+          than pretend.
         </p>
       </div><div class="card reveal">
         <h3 style="margin-top:0">Deliberately off</h3>
         <p style="font-size:0.95rem">
-          <strong>3 integrations.</strong> Wearable
-          sync, GPS and the coach marketplace are disabled for stated reasons. No
-          data moves to or from them.
+          <strong>3 integrations.</strong> Wearable sync, GPS and the coach
+          marketplace are disabled for stated reasons. No data moves to or from them.
         </p>
       </div>
-    </div>
-    </div>
-  </section><section class="section reveal">
-    <div class="shell">
-      <div class="section-head">
-        <p class="eyebrow">All sports</p>
-        <h2>Not a running app</h2>
-
-        <p class="lead"><p>Vaylo Sports was built around a training log, not around one sport.
-      You pick your sport — or more than one — and the app adapts. Here is the
-      list the app actually offers, which is a closed list because an
-      everything-for-everyone picker would be useless to you.</p></p>
-      </div>
-      <ul class="tag-list">
-        <li>Running</li>
-        <li>Cycling</li>
-        <li>Swimming</li>
-        <li>Football</li>
-        <li>Basketball</li>
-        <li>Tennis</li>
-        <li>Rugby</li>
-        <li>Athletics</li>
-        <li>Triathlon</li>
-        <li>Boxing</li>
-        <li>MMA</li>
-        <li>Cricket</li>
-        <li>Gym / Weightlifting</li>
-        <li>CrossFit</li>
-        <li>Climbing</li>
-        <li>Rowing</li>
-        <li>Volleyball</li>
-        <li>Hockey</li>
-        <li>Badminton</li>
-        <li>Gymnastics</li>
-        <li>Wrestling</li>
-        <li>Golf</li>
-        <li>Combat Sports</li>
-        <li>Martial Arts</li>
-        <li>Other</li>
-      </ul>
-      <div class="btn-row">
-        <a class="btn btn-secondary" href="/features/">All features</a>
-        <a class="btn btn-secondary" href="/legal/health-safety/">How Vaylo handles training load</a>
-      </div>
-    </div>
-  </section><section class="section reveal">
-    <div class="shell">
-      <div class="section-head">
-        <p class="eyebrow">The app</p>
-        <h2>What you actually get</h2>
-
-        <p class="lead"><p>A summary. The full list, with the honest status of each feature, is
-        on the <a href="/features/">features page</a>.</p></p>
-      </div>
-
-    <div class="grid grid-2"><div class="card reveal">
-        <h3 style="margin-top:0">Train and log</h3>
-        <ul class="prose-list">
-  <li><strong>Performance Log.</strong> Log sessions with RPE, duration, notes and form. It is the record everything else is calculated from.</li>
-  <li><strong>Training plans.</strong> Week-by-week plans built from what you have logged, your sport and your availability.</li>
-  <li><strong>Routines.</strong> Your own repeatable sessions, with history, so a good week is not rebuilt from memory.</li>
-  <li><strong>Goals and event preparation.</strong> Set goals, track them against your log, and work towards a specific event.</li>
-</ul>
-      </div><div class="card reveal">
-        <h3 style="margin-top:0">Understand your training</h3>
-        <ul class="prose-list">
-  <li><strong>Performance Dashboard.</strong> Readiness, acute load, A:C ratio, calories, protein and an injury-risk flag, calculated from your own entries.</li>
-  <li><strong>VPR performance rating.</strong> A single rating built from the metrics you log. Arithmetic on your data — not a prediction and not AI.</li>
-  <li><strong>Limiter Test.</strong> Find which limiter is holding you back, then work on that one rather than guessing.</li>
-  <li><strong>Development trajectory.</strong> A trend line across your own VPR history. It describes what happened; it does not forecast what will.</li>
-  <li><strong>Equipment Tracker.</strong> Log the gear you train on and rotate it before it becomes the problem.</li>
-</ul>
-      </div><div class="card reveal">
-        <h3 style="margin-top:0">Recovery, injury and the body</h3>
-        <ul class="prose-list">
-  <li><strong>Recovery tracking.</strong> Sleep, soreness, mood and energy, and how they read next to your training load.</li>
-  <li><strong>Injury Management.</strong> A generic return-to-play scaffold to organise a rehab you have already been given. It does not diagnose, and it carries a permanent notice telling you to see a physiotherapist or doctor.</li>
-  <li><strong>Nutrition.</strong> Calorie and protein tracking against your training. Restricted to athletes aged 18 and over.</li>
-  <li><strong>Form analysis.</strong> Upload video of a lift or movement and review it frame by frame against your own earlier sets.</li>
-</ul>
-      </div><div class="card reveal">
-        <h3 style="margin-top:0">Skill and tactics</h3>
-        <ul class="prose-list">
-  <li><strong>Learning Hub.</strong> Written lessons, drills and quizzes across sports, including load management for growing athletes.</li>
-  <li><strong>Tactical analysis.</strong> Organise opponents, read matchups and keep notes on what worked.</li>
-  <li><strong>Cross-training.</strong> Work out what a second sport is doing for your first one, and where the two are pulling against each other.</li>
-  <li><strong>Compare.</strong> Put two periods side by side and see what actually changed.</li>
-</ul>
-      </div>
-    </div>
-    <div class="btn-row">
-      <a class="btn btn-primary" href="/features/">See every feature</a>
     </div>
     </div>
   </section><section class="section reveal">
@@ -266,13 +375,13 @@
           <h3 style="margin-top:0">It will not feed your data to advertisers</h3>
           <p>There is no advertising SDK, no analytics SDK and no advertising
           identifier in the app. Sponsored placements are 18+, always labelled, and
-          report back to brands as anonymous counts — never your name, location or
+          report back to brands as anonymous counts &mdash; never your name, location or
           training data.</p>
           <p style="margin-bottom:0"><a href="/legal/advertising/">Advertising &amp; tracking disclosure</a></p>
         </div><div class="card reveal">
           <h3 style="margin-top:0">It will not hide a limitation</h3>
           <p>Where a number is plain arithmetic on what you logged, we say so. Where
-          a sentence was written by a language model, we say that too — and explain
+          a sentence was written by a language model, we say that too &mdash; and explain
           why it can be confidently wrong.</p>
           <p style="margin-bottom:0"><a href="/legal/ai-disclaimer/">AI &amp; coaching disclaimer</a></p>
         </div>
@@ -308,7 +417,7 @@
       <div class="grid grid-2"><div class="card reveal">
           <h3 style="margin-top:0">Your data</h3>
           <p>What is collected, why, which third parties process it, how long it is
-          kept, and how to get a copy or delete it — without emailing us.</p>
+          kept, and how to get a copy or delete it &mdash; without emailing us.</p>
           <p style="margin-bottom:0"><a href="/privacy/">Privacy &amp; data centre</a> &middot;
           <a href="/legal/privacy/">Privacy Policy</a></p>
         </div><div class="card reveal">
@@ -320,28 +429,20 @@
         </div>
       </div>
     </div>
-  </section><section class="section section-alt reveal">
+  </section>
+  <section class="closing">
     <div class="shell">
-      <div class="section-head">
-        <p class="eyebrow">Get started</p>
-        <h2>Try Vaylo Sports</h2>
-
-        <p class="lead"><p>Android only, at the moment.</p></p>
-      </div>
-      <div class="btn-row"><div class="card reveal" style="max-width: 34rem">
-  <h3 style="margin-top:0">Not on the Play Store yet</h3>
-  <p style="font-size:0.95rem">
-    Vaylo Sports has not been published to Google Play. There is no listing to
-    link to, and we are not going to put a dead button here. If you already
-    have it installed, everything in this website applies to your account.
-  </p>
-  <p style="font-size:0.95rem;margin-bottom:0">
-    <a href="/features/">See what is in the app</a> &middot;
-    <a href="/support/">Get support</a>
-  </p>
-</div>
-        <a class="btn btn-secondary" href="/support/">Support centre</a>
-        <a class="btn btn-secondary" href="/about/">About Vaylo</a>
+      <p class="chapter-label"><b>03</b> Launching 2027</p>
+      <h2>The app arrives in 2027.<br />The list opens now.</h2>
+      <p>
+        Android only, at least at first. Join the waiting list and you will get one
+        email: the one that says it is out. No newsletter, no marketing sequence,
+        and no sharing of your address with anyone.
+      </p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="/waitlist/">Join the waiting list</a>
+        <a class="btn btn-secondary" href="/features/">See every feature</a>
+        <a class="btn btn-secondary" href="/support/">Support</a>
       </div>
     </div>
   </section>
@@ -487,7 +588,7 @@
      scripts execute in document order before DOMContentLoaded — so with the
      reverse order, site.js ran first, found no config, and disabled every form
      on the site with "not available yet". -->
-<script src="/assets/config.js?v=e5e20b96" defer></script>
-<script src="/assets/site.js?v=f67590ac" defer></script>
+<script src="/assets/config.js?v=ve5e20b96" defer></script>
+<script src="/assets/site.js?v=va0e72686" defer></script>
 </body>
 </html>

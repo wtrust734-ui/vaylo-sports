@@ -315,8 +315,11 @@ android {
         // 55 / 1.44.55 is the next upload past the last shipped APK/AAB (54) —
         // Play refuses a reused versionCode, and the default must never sit
         // below an artifact already in apk/ (androidNative.test.ts enforces it).
-        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 59
-        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.48.59"
+        //
+        // 61 / 1.48.61 carries the injury rehab plans (built on device), the
+        // plan build screen, the faster nutrition request and the layout fixes.
+        versionCode project.hasProperty("versionCode") ? project.property("versionCode").toInteger() : 61
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.48.61"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

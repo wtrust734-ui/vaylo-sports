@@ -17,7 +17,6 @@ import {
 import { currentWeekOf } from "@/lib/planSchedule";
 import { formatDate } from "@/i18n/format";
 import { markCheckInDone } from "@/lib/recoveryStreak";
-import { pendingBoxes } from "@/lib/rewardBoxes";
 
 // ─── TYPES ───
 interface HrvBaseline { date: string; hrv_7day_avg: number | null; rhr_7day_avg: number | null; trend: string }
@@ -470,17 +469,7 @@ const Recovery = () => {
     setStep("result");
     // The streak is now driven by anonymous recovery check-ins, not by a sign-in.
     // Mark this check-in against the session key so the streak survives restarts.
-    const streakAfter = markCheckInDone();
-    // Crossing a streak milestone unlocks a surprise box (cosmetic-only — see
-    // src/lib/rewardBoxes.ts). Say so HERE, at the moment it is earned, rather
-    // than hoping the athlete finds it in Cosmetics.
-    const pending = pendingBoxes({ streak: streakAfter.current }, new Set());
-    if (pending.length > 0) {
-      toast({
-        title: "🎁 Surprise box unlocked",
-        description: `${pending[pending.length - 1].milestone.label} — open it in Cosmetics.`,
-      });
-    }
+    markCheckInDone();
     toast({ title: `${zone.emoji} Readiness: ${score}/100`, description: zone.title });
     setLoading(false);
   };
